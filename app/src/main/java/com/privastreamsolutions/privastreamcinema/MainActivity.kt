@@ -1,47 +1,36 @@
 package com.privastreamsolutions.privastreamcinema
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.privastreamsolutions.privastreamcinema.ui.theme.PrivastreamCinemaTheme
+import androidx.appcompat.app.AppCompatActivity
+import androidx.fragment.app.Fragment
+import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.privastreamsolutions.privastreamcinema.ui.HomeFragment
+import com.privastreamsolutions.privastreamcinema.ui.SearchFragment
+import com.privastreamsolutions.privastreamcinema.ui.PasteManagementFragment
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var bottomNav: BottomNavigationView
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            PrivastreamCinemaTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
+        setContentView(R.layout.activity_main)
+
+        bottomNav = findViewById(R.id.bottomNav)
+
+        bottomNav.setOnItemSelectedListener {
+            val selectedFragment: Fragment = when (it.itemId) {
+                R.id.nav_home -> HomeFragment()
+                R.id.nav_search -> SearchFragment()
+                R.id.nav_addons -> PasteManagementFragment()
+                else -> HomeFragment()
             }
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.fragment_container, selectedFragment)
+                .commit()
+            true
         }
-    }
-}
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    PrivastreamCinemaTheme {
-        Greeting("Android")
+        bottomNav.selectedItemId = R.id.nav_home
     }
 }

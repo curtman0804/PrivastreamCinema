@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="@color/black">
+
+    <EditText
+        android:id="@+id/pasteInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Paste manifest URL"
+        android:textColor="@android:color/white"
+        android:background="@android:color/darker_gray"
+        android:textColorHint="#cccccc"
+        android:inputType="textUri" />
+
+    <Button
+        android:id="@+id/installButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Install Add-on"
+        android:textColor="@android:color/white"
+        android:background="#333333"
+        android:layout_marginTop="16dp" />
+</LinearLayout>
