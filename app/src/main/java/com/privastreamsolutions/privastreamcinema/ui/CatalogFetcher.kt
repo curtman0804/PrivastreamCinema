@@ -30,8 +30,8 @@ object CatalogFetcher {
 
     private suspend fun fetchCatalogForAddon(addon: AddonManifest): CatalogSection? {
         val catalog = addon.catalogs?.firstOrNull() ?: return null
-        val type = catalog["type"] as? String ?: return null
-        val id = catalog["id"] as? String ?: return null
+        val type = catalog.type
+        val id = catalog.name // Or update if a separate `id` field is added later
 
         var baseUrl = addon.addonUrl?.removeSuffix("manifest.json") ?: return null
         if (!baseUrl.endsWith("/")) baseUrl += "/"
@@ -43,6 +43,7 @@ object CatalogFetcher {
 
         val service = retrofit.create(CatalogService::class.java)
         val response = service.getCatalogByType(type, id)
+        val url = "$baseUrl/catalog/$type/$id.json"
 
         return CatalogSection(addon.name, response.metas)
     }

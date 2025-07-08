@@ -1,15 +1,80 @@
 package com.privastreamsolutions.privastreamcinema.util
 
+import android.content.Context
+import android.content.SharedPreferences
+import android.util.Log
 import com.privastreamsolutions.privastreamcinema.model.AddonManifest
+import org.json.JSONObject
 
 object InstalledAddons {
-    private val installed = mutableListOf<AddonManifest>()
+    private val addons = mutableListOf<AddonManifest>()
 
-    fun add(manifest: AddonManifest) {
-        if (!installed.any { it.id == manifest.id }) {
-            installed.add(manifest)
+    lateinit var appContext: Context
+
+    fun all(): MutableList<AddonManifest> = addons
+
+    fun install(manifest: AddonManifest) {
+        if (!addons.any { it.addonUrl == manifest.addonUrl }) {
+            addons.add(manifest)
+            saveToPrefs(manifest)
+            Log.d("InstallDebug", "Installed: ${manifest.name} with ${manifest.catalogs?.size ?: 0} catalogs")
+        } else {
+            Log.d("InstallDebug", "Skipped: ${manifest.name} already installed")
         }
     }
 
-    fun getAll(): List<AddonManifest> = installed
+    fun remove(manifest: AddonManifest) {
+        addons.remove(manifest)
+        removeFromPrefs(manifest)
+    }
+
+    private fun saveToPrefs(manifest: AddonManifest) {
+        val prefs = getPrefs()
+        val rawSet = prefs.getStringSet("addonList", setOf())?.toMutableSet() ?: mutableSetOf()
+
+        val json = JSONObject().apply {
+            put("id", manifest.id)
+            put("name", manifest.name)
+            put("description", manifest.description)
+            put("version", manifest.version)
+            put("logo", manifest.logo)
+            put("addonUrl", manifest.addonUrl)
+        }
+
+        rawSet.add(json.toString())
+        prefs.edit().putStringSet("addonList", rawSet).apply()
+    }
+
+    private fun removeFromPrefs(manifest: AddonManifest) {
+        val prefs = getPrefs()
+        val rawSet = prefs.getStringSet("addonList", setOf())?.toMutableSet() ?: mutableSetOf()
+        rawSet.removeIf { it.contains("\"addonUrl\":\"${manifest.addonUrl}\"") }
+        prefs.edit().putStringSet("addonList", rawSet).apply()
+    }
+
+    fun loadFromPrefs(context: Context) {
+        val prefs = context.getSharedPreferences("addons", Context.MODE_PRIVATE)
+        val rawSet = prefs.getStringSet("addonList", emptySet()) ?: emptySet()
+        for (json in rawSet) {
+            try {
+                val obj = JSONObject(json)
+                val manifest = AddonManifest(
+                    id = obj.optString("id"),
+                    name = obj.optString("name"),
+                    description = obj.optString("description"),
+                    version = obj.optString("version"),
+                    logo = obj.optString("logo"),
+                    addonUrl = obj.optString("addonUrl"),
+                    catalogs = mutableListOf() // Optional: reload if needed
+                )
+                addons.add(manifest)
+            } catch (e: Exception) {
+                Log.e("InstallDebug", "Failed to restore addon from prefs", e)
+            }
+        }
+    }
+
+    private fun getPrefs(): SharedPreferences {
+        return appContext.getSharedPreferences("addons", Context.MODE_PRIVATE)
+    }
 }

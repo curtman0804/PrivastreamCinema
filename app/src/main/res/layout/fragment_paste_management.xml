@@ -1,27 +1,74 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="24dp"
     android:background="@color/black">
 
-    <EditText
-        android:id="@+id/pasteInput"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Paste manifest URL"
-        android:textColor="@android:color/white"
-        android:background="@android:color/darker_gray"
-        android:textColorHint="#cccccc"
-        android:inputType="textUri" />
+        android:orientation="vertical"
+        android:padding="24dp">
 
-    <Button
-        android:id="@+id/installButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Install Add-on"
-        android:textColor="@android:color/white"
-        android:background="#333333"
-        android:layout_marginTop="16dp" />
-</LinearLayout>
+        <!-- 🔗 Manifest Link Input -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Manifest URL"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/pasteInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="https://example.com/manifest.json"
+            android:inputType="textUri"
+            android:textColor="@android:color/white"
+            android:textColorHint="#cccccc"
+            android:background="@android:color/darker_gray"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 🟦 Install Button -->
+        <Button
+            android:id="@+id/pasteButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Install Add-on"
+            android:textColor="@android:color/white"
+            android:background="#444444"
+            android:padding="12dp"
+            android:textSize="16sp"
+            android:enabled="false"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 📋 Status Message -->
+        <TextView
+            android:id="@+id/pasteStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="@android:color/white"
+            android:textSize="14sp"
+            android:layout_marginBottom="24dp" />
+
+        <!-- 📋 Installed Add-ons Header -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Installed Add-ons"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- 📜 Add-on List Container -->
+        <LinearLayout
+            android:id="@+id/addonList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+    </LinearLayout>
+</ScrollView>

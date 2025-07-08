@@ -5,6 +5,8 @@ data class AddonManifest(
     val name: String,
     val description: String?,
     val version: String?,
-    val catalogs: List<Map<String, Any>>?,
-    var addonUrl: String? = null
+    var logo: String? = null,
+    var catalogs: List<AddonCatalog>? = null,
+    var addonUrl: String? = null,
+    var catalogSections: List<CatalogSection>? = null
 )
