@@ -22,12 +22,13 @@
         <EditText
             android:id="@+id/pasteInput"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:hint="https://example.com/manifest.json"
             android:inputType="textUri"
-            android:textColor="@android:color/white"
-            android:textColorHint="#cccccc"
-            android:background="@android:color/darker_gray"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#DDDDDD"
+            android:textSize="16sp"
+            android:background="@drawable/search_input_background"
             android:padding="12dp"
             android:layout_marginBottom="16dp" />
 
@@ -69,6 +70,5 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical" />
-
     </LinearLayout>
 </ScrollView>

@@ -1,4 +1,4 @@
-package com.privastreamsolutions.privastreamcinema.ui
+package com.privastreamsolutions.privastreamcinema.adapter
 
 import android.view.LayoutInflater
 import android.view.View

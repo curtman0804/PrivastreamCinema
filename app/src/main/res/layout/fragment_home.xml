@@ -1,8 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.recyclerview.widget.RecyclerView
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/catalogList"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/homeRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/black"
-    android:padding="12dp" />
+    android:orientation="vertical"
+    android:background="#000000">
+
+    <!-- 🔝 Header: Logo + Search -->
+    <LinearLayout
+        android:id="@+id/headerBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="16dp"
+        android:gravity="center_vertical">
+
+        <ImageView
+            android:id="@+id/logoTopLeft"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:layout_marginEnd="16dp"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:src="@drawable/logo_privastream"
+            android:contentDescription="Privastream Logo" />
+
+        <EditText
+            android:id="@+id/searchInput"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:hint="Search"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#DDDDDD"
+            android:background="@drawable/search_input_background"
+            android:padding="12dp"
+            android:inputType="text" />
+    </LinearLayout>
+
+    <!-- 🎬 Catalog Section Grid -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/catalogSectionList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="8dp"
+        android:clipToPadding="false"
+        android:overScrollMode="never" />
+</LinearLayout>

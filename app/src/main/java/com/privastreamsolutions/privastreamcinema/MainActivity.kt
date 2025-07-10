@@ -18,6 +18,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // ⛔ Remove default title bar
+        supportActionBar?.hide()
+
         // ✅ Initialize context for persistent add-ons
         InstalledAddons.appContext = applicationContext
         InstalledAddons.loadFromPrefs(applicationContext)
