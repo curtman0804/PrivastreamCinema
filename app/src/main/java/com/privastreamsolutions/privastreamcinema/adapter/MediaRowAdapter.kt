@@ -5,7 +5,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
-import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.privastreamsolutions.privastreamcinema.R
@@ -18,7 +17,6 @@ class MediaRowAdapter(
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val poster: ImageView = view.findViewById(R.id.posterImage)
-        val title: TextView = view.findViewById(R.id.posterTitle)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -29,7 +27,6 @@ class MediaRowAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val media = items[position]
-        holder.title.text = media.name
 
         Glide.with(activity)
             .load(media.poster)

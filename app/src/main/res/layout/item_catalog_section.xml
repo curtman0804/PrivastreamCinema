@@ -4,24 +4,30 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingTop="16dp">
+    android:paddingTop="16dp"
+    android:paddingBottom="8dp">
 
+    <!-- Tray header text will be set dynamically by SectionAdapter -->
     <TextView
         android:id="@+id/sectionTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Section Title"
-        android:textColor="@android:color/white"
-        android:textSize="18sp"
-        android:paddingStart="8dp" />
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/posterRecycler"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
+        android:textColor="@android:color/white"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:layout_marginBottom="6dp"
+        android:visibility="visible" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/mediaList"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:clipToPadding="false"
         android:overScrollMode="never"
-        android:clipToPadding="false" />
+        android:scrollbars="none" />
 </LinearLayout>
