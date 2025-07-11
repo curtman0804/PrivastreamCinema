@@ -16,23 +16,34 @@ object CatalogFetcher {
     suspend fun fetchCatalogsFrom(addons: List<AddonManifest>): Map<String, List<MediaItem>> {
         val finalSections = linkedMapOf<String, List<MediaItem>>() // preserves install order
 
-        // ✅ FIFO: oldest installed add-ons appear first
+        val blockedNames = setOf("last", "calendar", "last videos", "calendar videos")
+
         for (addon in addons.sortedBy { it.installedAt }) {
             val catalogs = addon.catalogs ?: continue
             val baseUrl = addon.addonUrl
                 ?.removeSuffix("manifest.json")
                 ?.removeSuffix("/") ?: continue
 
-            Log.d("CatalogDebug", "📦 Processing add-on: ${addon.name} with ${catalogs.size} catalogs")
+            Log.d("CatalogDebug", "📦 Add-on: ${addon.name} with ${catalogs.size} catalogs")
 
             for (catalog in catalogs) {
                 val type = catalog.type?.lowercase() ?: continue
                 val id = catalog.id?.lowercase() ?: continue
                 val name = catalog.name ?: continue
 
-                val label = "${addon.name} – ${name.replaceFirstChar { it.uppercase() }}"
-                val fullUrl = "$baseUrl/catalog/$type/$id.json"
+                val nameClean = name.trim().lowercase()
+                if (blockedNames.contains(nameClean)) {
+                    Log.d("CatalogDebug", "🚫 Skipping unwanted tray: $name")
+                    continue
+                }
 
+                val label = if (addon.name.equals("USA TV", ignoreCase = true)) {
+                    "USA TV"
+                } else {
+                    "${name.replaceFirstChar { it.uppercase() }} – ${type.replaceFirstChar { it.uppercase() }}"
+                }
+
+                val fullUrl = "$baseUrl/catalog/$type/$id.json"
                 Log.d("CatalogDebug", "📥 Fetching: $label → $fullUrl")
 
                 try {
