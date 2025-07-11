@@ -6,6 +6,7 @@ import com.privastreamsolutions.privastreamcinema.util.InstalledAddons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.Response
 import okhttp3.Request
 import org.json.JSONObject
 
@@ -54,7 +55,7 @@ object CatalogFetcher {
                     val rawJson = withContext(Dispatchers.IO) {
                         val request = Request.Builder().url(fullUrl).build()
                         val response = client.newCall(request).execute()
-                        val body = response.body()?.string() ?: ""
+                        val body = response.body?.string() ?: ""
 
                         if (body.trim().startsWith("<!DOCTYPE") || body.contains("<html")) {
                             throw Exception("HTML response detected")
