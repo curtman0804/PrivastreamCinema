@@ -1,12 +1,11 @@
-package com.privastreamsolutions.privastreamcinema.ui
+package com.privastreamsolutions.privastreamcinema.util
 
 import android.util.Log
+import com.privastreamsolutions.privastreamcinema.model.AddonManifest
 import com.privastreamsolutions.privastreamcinema.model.MediaItem
-import com.privastreamsolutions.privastreamcinema.util.InstalledAddons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.Response
 import okhttp3.Request
 import org.json.JSONObject
 
@@ -88,5 +87,64 @@ object CatalogFetcher {
         }
 
         return sectionMap
+    }
+
+    // ✅ Added method for HomeFragment line 51 support
+    suspend fun fetchCatalogsFrom(addons: List<AddonManifest>): Map<String, List<MediaItem>> {
+        val finalSections = mutableMapOf<String, List<MediaItem>>()
+
+        for (addon in addons) {
+            addon.catalogs?.forEach { catalog ->
+                val type = catalog.type?.lowercase() ?: return@forEach
+                val id = catalog.id?.lowercase() ?: return@forEach
+                val name = catalog.name ?: return@forEach
+
+                val baseUrl = addon.addonUrl
+                    ?.removeSuffix("manifest.json")
+                    ?.removeSuffix("/") ?: return@forEach
+
+                val label = "${addon.name} – ${name.replaceFirstChar { it.uppercase() }}"
+                val fullUrl = "$baseUrl/catalog/$type/$id.json"
+
+                try {
+                    val rawJson = withContext(Dispatchers.IO) {
+                        val request = Request.Builder().url(fullUrl).build()
+                        val response = client.newCall(request).execute()
+                        val body = response.body?.string() ?: ""
+
+                        if (body.trim().startsWith("<!DOCTYPE") || body.contains("<html")) {
+                            throw Exception("HTML response detected")
+                        }
+
+                        body
+                    }
+
+                    val json = JSONObject(rawJson)
+                    val metas = json.optJSONArray("metas") ?: return@forEach
+                    val items = mutableListOf<MediaItem>()
+
+                    for (i in 0 until metas.length()) {
+                        val obj = metas.optJSONObject(i) ?: continue
+                        val media = MediaItem(
+                            name = obj.optString("name"),
+                            poster = obj.optString("poster"),
+                            description = obj.optString("description"),
+                            streamUrl = obj.optString("id")
+                        )
+                        items.add(media)
+                    }
+
+                    if (items.isNotEmpty()) {
+                        finalSections[label] = items
+                        Log.d("CatalogDebug", "📦 $label: ${items.size} items")
+                    }
+
+                } catch (e: Exception) {
+                    Log.e("CatalogFetcher", "❌ Failed: $label", e)
+                }
+            }
+        }
+
+        return finalSections
     }
 }

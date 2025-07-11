@@ -1,7 +1,6 @@
 package com.privastreamsolutions.privastreamcinema.ui
 
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -11,6 +10,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.privastreamsolutions.privastreamcinema.R
 import com.privastreamsolutions.privastreamcinema.adapter.SectionAdapter
+import com.privastreamsolutions.privastreamcinema.model.AddonManifest
+import com.privastreamsolutions.privastreamcinema.util.CatalogFetcher
+import com.privastreamsolutions.privastreamcinema.util.InstalledAddons
 import kotlinx.coroutines.launch
 
 class HomeFragment : Fragment() {
@@ -43,7 +45,10 @@ class HomeFragment : Fragment() {
 
     private fun loadCatalogs() {
         lifecycleScope.launch {
-            val sections = CatalogFetcher.fetchAllCatalogs()
+            val sortedAddons: List<AddonManifest> = InstalledAddons.all()
+                .sortedByDescending { it.installedAt }
+
+            val sections = CatalogFetcher.fetchCatalogsFrom(sortedAddons)
             sectionAdapter.updateSections(sections)
         }
     }

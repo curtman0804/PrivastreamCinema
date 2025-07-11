@@ -69,33 +69,41 @@ class PasteManagementFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 val rawJson = withContext(Dispatchers.IO) {
-                    val request = Request.Builder().url(url).build()
+                    val request = Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Privastream/1.0") // Important for manifest servers
+                        .build()
                     val response = client.newCall(request).execute()
                     response.body?.string() ?: throw Exception("Empty response")
                 }
 
                 val json = JSONObject(rawJson)
+                val catalogArray = json.optJSONArray("catalogs")
+                val parsedCatalogs = mutableListOf<AddonCatalog>()
+
+                catalogArray?.let { array ->
+                    for (i in 0 until array.length()) {
+                        val obj = array.getJSONObject(i)
+                        val id = obj.optString("id", "")
+                        val type = obj.optString("type", "")
+                        val name = obj.optString("name", "Unnamed")
+                        if (id.isNotBlank() && type.isNotBlank()) {
+                            parsedCatalogs.add(AddonCatalog(name, type, id))
+                        }
+                    }
+                }
+
                 val manifest = AddonManifest(
                     id = url.hashCode().toString(),
                     name = json.optString("name", "Untitled Addon"),
                     description = json.optString("description", null),
                     version = json.optString("version", null),
                     logo = json.optString("logo", null),
-                    catalogs = json.optJSONArray("catalogs")?.let { array ->
-                        List(array.length()) {
-                            val obj = array.getJSONObject(it)
-                            AddonCatalog(
-                                name = obj.optString("name", "Unnamed"),
-                                type = obj.optString("type", ""),
-                                id = obj.optString("id", "")
-                            )
-                        }
-                    } ?: emptyList(),
+                    catalogs = parsedCatalogs,
                     addonUrl = url
                 )
 
                 InstalledAddons.install(manifest)
-
                 pasteStatus.text = "Installed: ${manifest.name} (${manifest.catalogs?.size ?: 0} catalogs)"
                 renderInstalledAddons()
 

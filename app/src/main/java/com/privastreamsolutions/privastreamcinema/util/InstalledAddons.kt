@@ -8,13 +8,13 @@ import org.json.JSONObject
 
 object InstalledAddons {
     private val addons = mutableListOf<AddonManifest>()
-
     lateinit var appContext: Context
 
     fun all(): MutableList<AddonManifest> = addons
 
     fun install(manifest: AddonManifest) {
         if (!addons.any { it.addonUrl == manifest.addonUrl }) {
+            manifest.installedAt = System.currentTimeMillis() // ✅ Add install timestamp
             addons.add(manifest)
             saveToPrefs(manifest)
             Log.d("InstallDebug", "Installed: ${manifest.name} with ${manifest.catalogs?.size ?: 0} catalogs")
@@ -39,6 +39,7 @@ object InstalledAddons {
             put("version", manifest.version)
             put("logo", manifest.logo)
             put("addonUrl", manifest.addonUrl)
+            put("installedAt", manifest.installedAt) // ✅ Save timestamp
         }
 
         rawSet.add(json.toString())
@@ -65,8 +66,11 @@ object InstalledAddons {
                     version = obj.optString("version"),
                     logo = obj.optString("logo"),
                     addonUrl = obj.optString("addonUrl"),
-                    catalogs = mutableListOf() // Optional: reload if needed
-                )
+                    catalogs = mutableListOf()
+                ).apply {
+                    installedAt = obj.optLong("installedAt", System.currentTimeMillis()) // ✅ Restore timestamp
+                }
+
                 addons.add(manifest)
             } catch (e: Exception) {
                 Log.e("InstallDebug", "Failed to restore addon from prefs", e)

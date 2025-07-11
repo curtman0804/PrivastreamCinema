@@ -8,5 +8,6 @@ data class AddonManifest(
     var logo: String? = null,
     var catalogs: List<AddonCatalog>? = null,
     var addonUrl: String? = null,
-    var catalogSections: List<CatalogSection>? = null
+    var catalogSections: List<CatalogSection>? = null,
+    var installedAt: Long = System.currentTimeMillis()
 )
