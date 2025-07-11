@@ -1,6 +1,7 @@
 package com.privastreamsolutions.privastreamcinema.ui
 
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -46,9 +47,20 @@ class HomeFragment : Fragment() {
     private fun loadCatalogs() {
         lifecycleScope.launch {
             val sortedAddons: List<AddonManifest> = InstalledAddons.all()
-                .sortedByDescending { it.installedAt }
+                .sortedBy { it.installedAt } // ✅ FIFO — first installed appears first
+
+            Log.d("TrayDebug", "Installed addons: ${sortedAddons.size}")
+            sortedAddons.forEach { addon ->
+                Log.d("TrayDebug", "🔎 ${addon.name} installedAt=${addon.installedAt}")
+            }
 
             val sections = CatalogFetcher.fetchCatalogsFrom(sortedAddons)
+
+            Log.d("TrayDebug", "Fetched section count: ${sections.size}")
+            sections.keys.forEach { title ->
+                Log.d("TrayDebug", "Rendering section: $title")
+            }
+
             sectionAdapter.updateSections(sections)
         }
     }

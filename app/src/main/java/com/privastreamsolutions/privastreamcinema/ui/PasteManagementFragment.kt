@@ -71,7 +71,7 @@ class PasteManagementFragment : Fragment() {
                 val rawJson = withContext(Dispatchers.IO) {
                     val request = Request.Builder()
                         .url(url)
-                        .header("User-Agent", "Privastream/1.0") // Important for manifest servers
+                        .header("User-Agent", "Privastream/1.0")
                         .build()
                     val response = client.newCall(request).execute()
                     response.body?.string() ?: throw Exception("Empty response")
@@ -100,7 +100,8 @@ class PasteManagementFragment : Fragment() {
                     version = json.optString("version", null),
                     logo = json.optString("logo", null),
                     catalogs = parsedCatalogs,
-                    addonUrl = url
+                    addonUrl = url,
+                    installedAt = System.currentTimeMillis() // ✅ Fix added here
                 )
 
                 InstalledAddons.install(manifest)

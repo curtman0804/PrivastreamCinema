@@ -3,7 +3,9 @@ package com.privastreamsolutions.privastreamcinema.util
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.privastreamsolutions.privastreamcinema.model.AddonCatalog
 import com.privastreamsolutions.privastreamcinema.model.AddonManifest
+import org.json.JSONArray
 import org.json.JSONObject
 
 object InstalledAddons {
@@ -14,7 +16,7 @@ object InstalledAddons {
 
     fun install(manifest: AddonManifest) {
         if (!addons.any { it.addonUrl == manifest.addonUrl }) {
-            manifest.installedAt = System.currentTimeMillis() // ✅ Add install timestamp
+            manifest.installedAt = System.currentTimeMillis()
             addons.add(manifest)
             saveToPrefs(manifest)
             Log.d("InstallDebug", "Installed: ${manifest.name} with ${manifest.catalogs?.size ?: 0} catalogs")
@@ -32,6 +34,16 @@ object InstalledAddons {
         val prefs = getPrefs()
         val rawSet = prefs.getStringSet("addonList", setOf())?.toMutableSet() ?: mutableSetOf()
 
+        val catalogsArray = JSONArray().apply {
+            manifest.catalogs?.forEach {
+                put(JSONObject().apply {
+                    put("name", it.name)
+                    put("type", it.type)
+                    put("id", it.id)
+                })
+            }
+        }
+
         val json = JSONObject().apply {
             put("id", manifest.id)
             put("name", manifest.name)
@@ -39,7 +51,8 @@ object InstalledAddons {
             put("version", manifest.version)
             put("logo", manifest.logo)
             put("addonUrl", manifest.addonUrl)
-            put("installedAt", manifest.installedAt) // ✅ Save timestamp
+            put("installedAt", manifest.installedAt)
+            put("catalogs", catalogsArray)
         }
 
         rawSet.add(json.toString())
@@ -59,6 +72,18 @@ object InstalledAddons {
         for (json in rawSet) {
             try {
                 val obj = JSONObject(json)
+
+                val catalogs = obj.optJSONArray("catalogs")?.let { array ->
+                    List(array.length()) { i ->
+                        val c = array.getJSONObject(i)
+                        AddonCatalog(
+                            name = c.optString("name", "Unnamed"),
+                            type = c.optString("type", ""),
+                            id = c.optString("id", "")
+                        )
+                    }
+                } ?: mutableListOf()
+
                 val manifest = AddonManifest(
                     id = obj.optString("id"),
                     name = obj.optString("name"),
@@ -66,10 +91,9 @@ object InstalledAddons {
                     version = obj.optString("version"),
                     logo = obj.optString("logo"),
                     addonUrl = obj.optString("addonUrl"),
-                    catalogs = mutableListOf()
-                ).apply {
-                    installedAt = obj.optLong("installedAt", System.currentTimeMillis()) // ✅ Restore timestamp
-                }
+                    catalogs = catalogs,
+                    installedAt = obj.optLong("installedAt", System.currentTimeMillis())
+                )
 
                 addons.add(manifest)
             } catch (e: Exception) {
