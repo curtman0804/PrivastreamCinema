@@ -138,6 +138,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
+  logo: {
+    width: 120,
+    height: 120,
+  },
   title: {
     fontSize: 28,
     fontWeight: '800',
