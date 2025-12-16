@@ -139,6 +139,10 @@ export const api = {
       const response = await apiClient.get(`/api/addons/${addonId}/stream/${type}/${id}`);
       return response.data;
     },
+    getAllStreams: async (type: string, id: string): Promise<{ streams: Stream[] }> => {
+      const response = await apiClient.get(`/api/streams/${type}/${id}`);
+      return response.data;
+    },
     install: async (manifestUrl: string): Promise<Addon> => {
       const response = await apiClient.post('/api/addons/install', { manifestUrl });
       return response.data;
