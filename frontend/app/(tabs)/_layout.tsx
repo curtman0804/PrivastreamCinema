@@ -8,8 +8,9 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   
   // Calculate proper bottom padding for devices with navigation buttons
-  const bottomPadding = Math.max(insets.bottom, 10);
-  const tabBarHeight = 60 + bottomPadding;
+  // Use minimum of 20 for Android devices with soft navigation buttons
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 20 : 10);
+  const tabBarHeight = 65 + bottomPadding;
 
   return (
     <Tabs
