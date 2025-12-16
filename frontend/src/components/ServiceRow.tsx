@@ -47,7 +47,9 @@ export const ServiceRow: React.FC<ServiceRowProps> = ({
   onItemPress,
   onSeeAll,
 }) => {
-  if (!items || items.length === 0) return null;
+  // Filter out undefined/null items
+  const validItems = (items || []).filter(Boolean);
+  if (validItems.length === 0) return null;
 
   const iconName = serviceIcons[serviceName] || 'film-outline';
   const color = serviceColors[serviceName] || '#8B5CF6';
