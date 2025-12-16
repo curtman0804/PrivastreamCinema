@@ -1,7 +1,9 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-const BASE_URL = 'https://cinehub-app-1.preview.emergentagent.com';
+// Use local backend API
+const BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || '/api';
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
@@ -22,10 +24,9 @@ apiClient.interceptors.request.use(async (config) => {
 export interface User {
   id: string;
   username: string;
-  email: string;
-  isAdmin: boolean;
-  createdAt: string;
-  updatedAt: string;
+  email: string | null;
+  is_admin: boolean;
+  created_at: string;
 }
 
 export interface AuthResponse {
