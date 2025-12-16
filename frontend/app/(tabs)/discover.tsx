@@ -112,11 +112,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginLeft: 10,
+  logo: {
+    width: 44,
+    height: 44,
   },
   scrollView: {
     flex: 1,
