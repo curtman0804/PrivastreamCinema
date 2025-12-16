@@ -150,9 +150,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+    paddingVertical: 8,
   },
   logoContainer: {
     flexDirection: 'row',
@@ -161,6 +159,42 @@ const styles = StyleSheet.create({
   logo: {
     width: 48,
     height: 48,
+  },
+  searchButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1a1a1a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tabsContainer: {
+    maxHeight: 44,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
+  },
+  tabsContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  serviceTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#1a1a1a',
+    marginRight: 8,
+  },
+  serviceTabActive: {
+    backgroundColor: '#8B5CF6',
+  },
+  serviceTabText: {
+    color: '#888888',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  serviceTabTextActive: {
+    color: '#FFFFFF',
   },
   scrollView: {
     flex: 1,
