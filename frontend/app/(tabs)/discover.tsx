@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,24 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
+  TouchableOpacity,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem } from '../../src/api/client';
 
+const SERVICES = ['All', 'Netflix', 'HBO Max', 'Disney+', 'Prime Video', 'Hulu', 'Paramount+', 'Apple TV+'];
+
 export default function DiscoverScreen() {
   const router = useRouter();
   const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons } = useContentStore();
-  const [refreshing, setRefreshing] = React.useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedService, setSelectedService] = useState('All');
 
   useEffect(() => {
     fetchDiscover();
@@ -34,6 +40,12 @@ export default function DiscoverScreen() {
     const id = item.imdb_id || item.id;
     router.push(`/details/${item.type}/${id}`);
   };
+
+  const filteredServices = useMemo(() => {
+    if (!discoverData?.services) return {};
+    if (selectedService === 'All') return discoverData.services;
+    return { [selectedService]: discoverData.services[selectedService] };
+  }, [discoverData, selectedService]);
 
   if (isLoadingDiscover && !discoverData) {
     return (
@@ -56,7 +68,41 @@ export default function DiscoverScreen() {
             contentFit="contain"
           />
         </View>
+        <Pressable 
+          style={styles.searchButton}
+          onPress={() => router.push('/(tabs)/search')}
+        >
+          <Ionicons name="search" size={22} color="#FFFFFF" />
+        </Pressable>
       </View>
+
+      {/* Service Filter Tabs */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabsContainer}
+        contentContainerStyle={styles.tabsContent}
+      >
+        {SERVICES.map((service) => (
+          <TouchableOpacity
+            key={service}
+            style={[
+              styles.serviceTab,
+              selectedService === service && styles.serviceTabActive,
+            ]}
+            onPress={() => setSelectedService(service)}
+          >
+            <Text
+              style={[
+                styles.serviceTabText,
+                selectedService === service && styles.serviceTabTextActive,
+              ]}
+            >
+              {service}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
       <ScrollView
         style={styles.scrollView}
@@ -70,16 +116,16 @@ export default function DiscoverScreen() {
           />
         }
       >
-        {discoverData?.services && Object.entries(discoverData.services).map(([serviceName, content]) => (
+        {Object.entries(filteredServices).map(([serviceName, content]) => (
           <View key={serviceName}>
-            {content.movies && content.movies.length > 0 && (
+            {content?.movies && content.movies.length > 0 && (
               <ServiceRow
                 serviceName={`${serviceName} Movies`}
                 items={content.movies}
                 onItemPress={handleItemPress}
               />
             )}
-            {content.series && content.series.length > 0 && (
+            {content?.series && content.series.length > 0 && (
               <ServiceRow
                 serviceName={`${serviceName} Series`}
                 items={content.series}
