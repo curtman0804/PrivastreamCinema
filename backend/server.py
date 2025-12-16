@@ -7,12 +7,13 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
 import hashlib
 import jwt
 import httpx
+import asyncio
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -20,9 +21,6 @@ load_dotenv(ROOT_DIR / '.env')
 # JWT Secret
 JWT_SECRET = os.environ.get('JWT_SECRET', 'privastream-cinema-secret-key-2025')
 JWT_ALGORITHM = "HS256"
-
-# External API Base URL
-EXTERNAL_API = "https://cinehub-app-1.preview.emergentagent.com"
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -82,11 +80,32 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     is_admin: Optional[bool] = None
 
+class AddonInstall(BaseModel):
+    manifestUrl: str
+
+class AddonManifest(BaseModel):
+    id: str
+    name: str
+    version: str
+    description: str = ""
+    logo: Optional[str] = None
+    types: List[str] = []
+    resources: List[Any] = []
+    catalogs: List[Dict] = []
+
+class Addon(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    userId: str
+    manifestUrl: str
+    manifest: AddonManifest
+    installed: bool = True
+    installedAt: datetime = Field(default_factory=datetime.utcnow)
+
 class LibraryItem(BaseModel):
     id: str
     imdb_id: Optional[str] = None
     name: str
-    type: str  # 'movie' or 'series'
+    type: str
     poster: str
     year: Optional[str] = None
     added_at: datetime = Field(default_factory=datetime.utcnow)
@@ -126,6 +145,12 @@ async def get_admin_user(current_user: User = Depends(get_current_user)) -> User
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 
+def get_base_url(manifest_url: str) -> str:
+    """Extract base URL from manifest URL"""
+    if manifest_url.endswith('/manifest.json'):
+        return manifest_url[:-14]
+    return manifest_url.rsplit('/', 1)[0]
+
 
 # ==================== INIT DEFAULT ADMIN ====================
 
@@ -143,7 +168,6 @@ async def create_default_admin():
         await db.users.insert_one(admin_user.dict())
         logger.info("Created default admin user: choyt")
     else:
-        # Ensure choyt is admin
         if not existing.get('is_admin'):
             await db.users.update_one(
                 {"username": "choyt"},
@@ -202,7 +226,6 @@ async def get_all_users(admin: User = Depends(get_admin_user)):
 
 @api_router.post("/admin/users", response_model=UserResponse)
 async def create_user(user_data: UserCreate, admin: User = Depends(get_admin_user)):
-    # Check if username exists
     existing = await db.users.find_one({"username": user_data.username})
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
@@ -223,35 +246,8 @@ async def create_user(user_data: UserCreate, admin: User = Depends(get_admin_use
         created_at=new_user.created_at
     )
 
-@api_router.put("/admin/users/{user_id}", response_model=UserResponse)
-async def update_user(user_id: str, user_update: UserUpdate, admin: User = Depends(get_admin_user)):
-    user_data = await db.users.find_one({"id": user_id})
-    if not user_data:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    update_dict = {}
-    if user_update.email is not None:
-        update_dict["email"] = user_update.email
-    if user_update.password is not None:
-        update_dict["password_hash"] = hash_password(user_update.password)
-    if user_update.is_admin is not None:
-        update_dict["is_admin"] = user_update.is_admin
-    
-    if update_dict:
-        await db.users.update_one({"id": user_id}, {"$set": update_dict})
-    
-    updated = await db.users.find_one({"id": user_id})
-    return UserResponse(
-        id=updated["id"],
-        username=updated["username"],
-        email=updated.get("email"),
-        is_admin=updated.get("is_admin", False),
-        created_at=updated.get("created_at", datetime.utcnow())
-    )
-
 @api_router.delete("/admin/users/{user_id}")
 async def delete_user(user_id: str, admin: User = Depends(get_admin_user)):
-    # Prevent deleting yourself
     if user_id == admin.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     
@@ -260,6 +256,304 @@ async def delete_user(user_id: str, admin: User = Depends(get_admin_user)):
         raise HTTPException(status_code=404, detail="User not found")
     
     return {"message": "User deleted successfully"}
+
+
+# ==================== ADDON ROUTES ====================
+
+@api_router.get("/addons")
+async def get_addons(current_user: User = Depends(get_current_user)):
+    """Get all user's installed addons"""
+    addons = await db.addons.find({"userId": current_user.id}).to_list(100)
+    return addons
+
+@api_router.post("/addons/install")
+async def install_addon(addon_data: AddonInstall, current_user: User = Depends(get_current_user)):
+    """Install an addon from manifest URL"""
+    try:
+        # Fetch manifest
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            response = await client.get(addon_data.manifestUrl)
+            if response.status_code != 200:
+                raise HTTPException(status_code=400, detail="Failed to fetch manifest")
+            manifest_data = response.json()
+        
+        # Validate manifest
+        if 'id' not in manifest_data or 'name' not in manifest_data:
+            raise HTTPException(status_code=400, detail="Invalid manifest format")
+        
+        # Check if already installed
+        existing = await db.addons.find_one({
+            "userId": current_user.id,
+            "manifest.id": manifest_data.get('id')
+        })
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Addon '{manifest_data.get('name')}' is already installed")
+        
+        # Create addon
+        addon = {
+            "id": str(uuid.uuid4()),
+            "userId": current_user.id,
+            "manifestUrl": addon_data.manifestUrl,
+            "manifest": {
+                "id": manifest_data.get('id'),
+                "name": manifest_data.get('name'),
+                "version": manifest_data.get('version', '1.0.0'),
+                "description": manifest_data.get('description', ''),
+                "logo": manifest_data.get('logo'),
+                "types": manifest_data.get('types', []),
+                "resources": manifest_data.get('resources', []),
+                "catalogs": manifest_data.get('catalogs', [])
+            },
+            "installed": True,
+            "installedAt": datetime.utcnow().isoformat()
+        }
+        
+        await db.addons.insert_one(addon)
+        return addon
+        
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch manifest: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error installing addon: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@api_router.delete("/addons/{addon_id}")
+async def uninstall_addon(addon_id: str, current_user: User = Depends(get_current_user)):
+    """Uninstall an addon"""
+    result = await db.addons.delete_one({"id": addon_id, "userId": current_user.id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Addon not found")
+    return {"success": True}
+
+@api_router.get("/addons/{addon_id}/stream/{content_type}/{content_id}")
+async def get_addon_streams(
+    addon_id: str,
+    content_type: str,
+    content_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch streams from addon"""
+    # Find addon by ID or manifest ID
+    addon = await db.addons.find_one({
+        "userId": current_user.id,
+        "$or": [{"id": addon_id}, {"manifest.id": addon_id}]
+    })
+    
+    if not addon:
+        raise HTTPException(status_code=404, detail="Addon not found")
+    
+    base_url = get_base_url(addon['manifestUrl'])
+    stream_url = f"{base_url}/stream/{content_type}/{content_id}.json"
+    
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+            response = await client.get(stream_url)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"streams": []}
+    except Exception as e:
+        logger.error(f"Error fetching streams: {str(e)}")
+        return {"streams": []}
+
+@api_router.get("/streams/{content_type}/{content_id}")
+async def get_all_streams(
+    content_type: str,
+    content_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch streams from ALL installed addons that support streaming"""
+    addons = await db.addons.find({"userId": current_user.id}).to_list(100)
+    
+    all_streams = []
+    
+    async def fetch_addon_streams(addon):
+        """Fetch streams from a single addon"""
+        try:
+            manifest = addon.get('manifest', {})
+            resources = manifest.get('resources', [])
+            
+            # Check if addon supports streams
+            has_stream = any(
+                r == 'stream' or (isinstance(r, dict) and r.get('name') == 'stream')
+                for r in resources
+            )
+            
+            if not has_stream:
+                return []
+            
+            base_url = get_base_url(addon['manifestUrl'])
+            stream_url = f"{base_url}/stream/{content_type}/{content_id}.json"
+            
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+                response = await client.get(stream_url)
+                if response.status_code == 200:
+                    data = response.json()
+                    streams = data.get('streams', [])
+                    # Add addon name to each stream
+                    for stream in streams:
+                        stream['addon'] = manifest.get('name', 'Unknown')
+                    return streams
+        except Exception as e:
+            logger.error(f"Error fetching streams from {addon.get('manifest', {}).get('name')}: {str(e)}")
+        return []
+    
+    # Fetch from all addons concurrently
+    tasks = [fetch_addon_streams(addon) for addon in addons]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    for result in results:
+        if isinstance(result, list):
+            all_streams.extend(result)
+    
+    return {"streams": all_streams}
+
+
+# ==================== CONTENT ROUTES ====================
+
+@api_router.get("/content/discover-organized")
+async def get_discover(current_user: User = Depends(get_current_user)):
+    """Get discover page content from installed addons"""
+    addons = await db.addons.find({"userId": current_user.id}).to_list(100)
+    
+    result = {
+        "continueWatching": [],
+        "services": {}
+    }
+    
+    # Find streaming catalogs addon or cinemeta
+    streaming_addon = None
+    cinemeta_addon = None
+    
+    for addon in addons:
+        manifest = addon.get('manifest', {})
+        name_lower = manifest.get('name', '').lower()
+        url_lower = addon.get('manifestUrl', '').lower()
+        
+        if 'streaming catalogs' in name_lower or 'netflix' in url_lower:
+            streaming_addon = addon
+        elif 'cinemeta' in name_lower:
+            cinemeta_addon = addon
+    
+    # Fetch catalogs
+    async def fetch_catalog(addon, catalog_type, catalog_id):
+        try:
+            base_url = get_base_url(addon['manifestUrl'])
+            url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+                response = await client.get(url)
+                if response.status_code == 200:
+                    return response.json().get('metas', [])
+        except Exception as e:
+            logger.error(f"Error fetching catalog: {str(e)}")
+        return []
+    
+    # Streaming services mapping
+    services = {
+        'Netflix': ('nfx.', 'nfx.'),
+        'HBO Max': ('hbm.', 'hbm.'),
+        'Disney+': ('dnp.', 'dnp.'),
+        'Prime Video': ('amp.', 'amp.'),
+        'Hulu': ('hlu.', 'hlu.'),
+        'Paramount+': ('pmp.', 'pmp.'),
+        'Apple TV+': ('atp.', 'atp.'),
+        'Peacock': ('pcp.', 'pcp.')
+    }
+    
+    if streaming_addon:
+        tasks = []
+        task_info = []
+        
+        for service_name, (movie_id, series_id) in services.items():
+            tasks.append(fetch_catalog(streaming_addon, 'movie', movie_id))
+            task_info.append((service_name, 'movies'))
+            tasks.append(fetch_catalog(streaming_addon, 'series', series_id))
+            task_info.append((service_name, 'series'))
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for i, res in enumerate(results):
+            if isinstance(res, list) and len(res) > 0:
+                service_name, content_type = task_info[i]
+                if service_name not in result['services']:
+                    result['services'][service_name] = {'movies': [], 'series': []}
+                result['services'][service_name][content_type] = res[:15]
+    
+    # If no streaming addon, use cinemeta
+    if not result['services'] and cinemeta_addon:
+        movies = await fetch_catalog(cinemeta_addon, 'movie', 'top')
+        series = await fetch_catalog(cinemeta_addon, 'series', 'top')
+        result['services']['Popular'] = {
+            'movies': movies[:15],
+            'series': series[:15]
+        }
+    
+    # Fallback mock data if no addons
+    if not result['services']:
+        result['services'] = {
+            "Netflix": {
+                "movies": [
+                    {"id": "tt14364480", "imdb_id": "tt14364480", "name": "Wake Up Dead Man: A Knives Out Mystery", "type": "movie", "poster": "https://images.justwatch.com/poster/319658825/s332/img", "year": "2025", "imdbRating": "7.9"},
+                    {"id": "tt0314331", "imdb_id": "tt0314331", "name": "Love Actually", "type": "movie", "poster": "https://images.justwatch.com/poster/175588666/s332/img", "year": "2003", "imdbRating": "7.6"},
+                ],
+                "series": []
+            },
+            "HBO Max": {
+                "movies": [
+                    {"id": "tt1160419", "imdb_id": "tt1160419", "name": "Dune", "type": "movie", "poster": "https://images.justwatch.com/poster/246339267/s332/img", "year": "2021", "imdbRating": "8.0"},
+                ],
+                "series": []
+            }
+        }
+    
+    return result
+
+@api_router.get("/content/search")
+async def search_content(q: str, current_user: User = Depends(get_current_user)):
+    """Search content via Cinemeta"""
+    if not q or len(q) < 2:
+        return {"movies": [], "series": []}
+    
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            # Search movies
+            movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/search={q}.json"
+            series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/search={q}.json"
+            
+            movie_resp, series_resp = await asyncio.gather(
+                client.get(movie_url),
+                client.get(series_url),
+                return_exceptions=True
+            )
+            
+            movies = []
+            series = []
+            
+            if not isinstance(movie_resp, Exception) and movie_resp.status_code == 200:
+                movies = movie_resp.json().get('metas', [])
+            
+            if not isinstance(series_resp, Exception) and series_resp.status_code == 200:
+                series = series_resp.json().get('metas', [])
+            
+            return {"movies": movies[:30], "series": series[:30]}
+    except Exception as e:
+        logger.error(f"Search error: {str(e)}")
+        return {"movies": [], "series": []}
+
+@api_router.get("/content/meta/{content_type}/{content_id}")
+async def get_meta(content_type: str, content_id: str, current_user: User = Depends(get_current_user)):
+    """Get metadata for content"""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+            url = f"https://v3-cinemeta.strem.io/meta/{content_type}/{content_id}.json"
+            response = await client.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('meta', {})
+    except Exception as e:
+        logger.error(f"Error fetching meta: {str(e)}")
+    
+    raise HTTPException(status_code=404, detail="Meta not found")
 
 
 # ==================== LIBRARY ROUTES ====================
@@ -276,7 +570,6 @@ async def add_to_library(item: LibraryItem, current_user: User = Depends(get_cur
     item_dict = item.dict()
     item_dict["user_id"] = current_user.id
     
-    # Check if already in library
     existing = await db.library.find_one({
         "user_id": current_user.id,
         "$or": [{"id": item.id}, {"imdb_id": item.imdb_id}]
@@ -296,93 +589,6 @@ async def remove_from_library(item_type: str, item_id: str, current_user: User =
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found in library")
     return {"message": "Removed from library"}
-
-
-# ==================== PROXY ROUTES TO EXTERNAL API ====================
-
-@api_router.get("/content/discover-organized")
-async def get_discover(current_user: User = Depends(get_current_user)):
-    """Proxy to external API for discover content"""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            # First try external API
-            response = await client.get(
-                f"{EXTERNAL_API}/api/content/discover-organized",
-                headers={"Authorization": f"Bearer dummy"}
-            )
-            if response.status_code == 200:
-                return response.json()
-        except Exception as e:
-            logger.warning(f"External API failed: {e}")
-    
-    # Return mock data if external API fails
-    return {
-        "continueWatching": [],
-        "services": {
-            "Netflix": {
-                "movies": [
-                    {"id": "tt14364480", "imdb_id": "tt14364480", "name": "Wake Up Dead Man: A Knives Out Mystery", "type": "movie", "poster": "https://images.justwatch.com/poster/319658825/s332/img", "year": "2025", "imdbRating": "7.9"},
-                    {"id": "tt0314331", "imdb_id": "tt0314331", "name": "Love Actually", "type": "movie", "poster": "https://images.justwatch.com/poster/175588666/s332/img", "year": "2003", "imdbRating": "7.6"},
-                ],
-                "series": []
-            },
-            "HBO Max": {
-                "movies": [
-                    {"id": "tt1160419", "imdb_id": "tt1160419", "name": "Dune", "type": "movie", "poster": "https://images.justwatch.com/poster/246339267/s332/img", "year": "2021", "imdbRating": "8.0"},
-                ],
-                "series": []
-            }
-        }
-    }
-
-@api_router.get("/content/search")
-async def search_content(q: str, current_user: User = Depends(get_current_user)):
-    """Proxy to external API for search"""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.get(
-                f"{EXTERNAL_API}/api/content/search",
-                params={"q": q},
-                headers={"Authorization": f"Bearer dummy"}
-            )
-            if response.status_code == 200:
-                return response.json()
-        except Exception as e:
-            logger.warning(f"External search API failed: {e}")
-    
-    # Return empty results if external API fails
-    return {"movies": [], "series": []}
-
-@api_router.get("/addons")
-async def get_addons(current_user: User = Depends(get_current_user)):
-    """Return user's addons"""
-    addons = await db.addons.find({"user_id": current_user.id}).to_list(100)
-    if not addons:
-        # Return default addons
-        return [
-            {
-                "id": str(uuid.uuid4()),
-                "userId": current_user.id,
-                "manifestUrl": "https://v3-cinemeta.strem.io/manifest.json",
-                "manifest": {
-                    "id": "com.linvo.cinemeta",
-                    "name": "Cinemeta",
-                    "version": "3.0.13",
-                    "description": "The official addon for movie and series catalogs",
-                    "logo": None,
-                    "types": ["movie", "series"],
-                    "resources": ["catalog", "meta"]
-                },
-                "installed": True,
-                "installedAt": datetime.utcnow().isoformat()
-            }
-        ]
-    return addons
-
-@api_router.get("/addons/{addon_id}/stream/{content_type}/{content_id}")
-async def get_streams(addon_id: str, content_type: str, content_id: str, current_user: User = Depends(get_current_user)):
-    """Get streams for content"""
-    return {"streams": []}
 
 
 # ==================== ROOT ====================
