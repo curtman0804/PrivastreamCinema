@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../src/store/authStore';
-import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 
 export default function Index() {
   const router = useRouter();
@@ -21,7 +21,11 @@ export default function Index() {
   return (
     <View style={styles.container}>
       <View style={styles.logoContainer}>
-        <Ionicons name="tv" size={64} color="#8B5CF6" />
+        <Image
+          source={require('../assets/images/logo.png')}
+          style={styles.logo}
+          contentFit="contain"
+        />
         <Text style={styles.title}>PrivastreamCinema</Text>
         <Text style={styles.subtitle}>Stream Privately</Text>
       </View>
@@ -39,6 +43,10 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
+  },
+  logo: {
+    width: 150,
+    height: 150,
   },
   title: {
     fontSize: 32,
