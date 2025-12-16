@@ -159,6 +159,23 @@ export const api = {
       await apiClient.delete(`/api/library/${type}/${id}`);
     },
   },
+  admin: {
+    getUsers: async (): Promise<User[]> => {
+      const response = await apiClient.get('/api/admin/users');
+      return response.data;
+    },
+    createUser: async (userData: { username: string; password: string; email?: string; is_admin?: boolean }): Promise<User> => {
+      const response = await apiClient.post('/api/admin/users', userData);
+      return response.data;
+    },
+    updateUser: async (userId: string, userData: { email?: string; password?: string; is_admin?: boolean }): Promise<User> => {
+      const response = await apiClient.put(`/api/admin/users/${userId}`, userData);
+      return response.data;
+    },
+    deleteUser: async (userId: string): Promise<void> => {
+      await apiClient.delete(`/api/admin/users/${userId}`);
+    },
+  },
 };
 
 export default apiClient;
