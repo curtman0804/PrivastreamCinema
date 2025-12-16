@@ -130,6 +130,21 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Admin Section - Only visible to admin users */}
+        {user?.is_admin && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Admin</Text>
+            <View style={styles.menuCard}>
+              <MenuItem
+                icon="people-outline"
+                title="User Management"
+                subtitle="Add or remove users"
+                onPress={() => router.push('/admin/users')}
+              />
+            </View>
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support</Text>
           <View style={styles.menuCard}>
