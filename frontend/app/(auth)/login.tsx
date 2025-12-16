@@ -82,13 +82,17 @@ export default function LoginScreen() {
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
                 <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888888" />
-              </TouchableOpacity>
+              </Pressable>
             </View>
 
-            <TouchableOpacity
-              style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
+            <Pressable
+              style={({ pressed }) => [
+                styles.loginButton,
+                isLoading && styles.loginButtonDisabled,
+                pressed && { opacity: 0.8 }
+              ]}
               onPress={handleLogin}
               disabled={isLoading}
             >
@@ -97,13 +101,13 @@ export default function LoginScreen() {
               ) : (
                 <Text style={styles.loginButtonText}>Sign In</Text>
               )}
-            </TouchableOpacity>
+            </Pressable>
 
             <View style={styles.registerContainer}>
               <Text style={styles.registerText}>Don't have an account?</Text>
-              <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
+              <Pressable onPress={() => router.push('/(auth)/register')}>
                 <Text style={styles.registerLink}>Sign Up</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
         </ScrollView>
