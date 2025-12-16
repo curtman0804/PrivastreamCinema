@@ -54,12 +54,10 @@ export default function LoginScreen() {
         >
           <View style={styles.header}>
             <Image
-              source={require('../../assets/images/logo.png')}
+              source={require('../../assets/images/logo_splash.png')}
               style={styles.logo}
               contentFit="contain"
             />
-            <Text style={styles.title}>PrivastreamCinema</Text>
-            <Text style={styles.subtitle}>Sign in to your account</Text>
           </View>
 
           <View style={styles.form}>
@@ -107,13 +105,6 @@ export default function LoginScreen() {
                 <Text style={styles.loginButtonText}>Sign In</Text>
               )}
             </Pressable>
-
-            <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>Don't have an account?</Text>
-              <Pressable onPress={() => router.push('/(auth)/register')}>
-                <Text style={styles.registerLink}>Sign Up</Text>
-              </Pressable>
-            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -139,19 +130,8 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   logo: {
-    width: 120,
-    height: 120,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginTop: 16,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#888888',
-    marginTop: 8,
+    width: 280,
+    height: 200,
   },
   form: {
     width: '100%',
@@ -191,21 +171,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
-  },
-  registerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  registerText: {
-    color: '#888888',
-    fontSize: 14,
-  },
-  registerLink: {
-    color: '#8B5CF6',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 6,
   },
 });
