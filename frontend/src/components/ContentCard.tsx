@@ -4,15 +4,11 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentItem, SearchResult } from '../api/client';
-
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48) / 3;
-const CARD_HEIGHT = CARD_WIDTH * 1.5;
 
 interface ContentCardProps {
   item: ContentItem | SearchResult;
@@ -27,6 +23,10 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   size = 'medium',
   showRating = true,
 }) => {
+  const { width } = useWindowDimensions();
+  const baseWidth = Math.min(width, 500); // Cap max width for web
+  const CARD_WIDTH = (baseWidth - 48) / 3;
+  
   const cardWidth = size === 'small' ? CARD_WIDTH * 0.8 : size === 'large' ? CARD_WIDTH * 1.2 : CARD_WIDTH;
   const cardHeight = cardWidth * 1.5;
 
