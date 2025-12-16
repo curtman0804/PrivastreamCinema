@@ -264,6 +264,9 @@ async def delete_user(user_id: str, admin: User = Depends(get_admin_user)):
 async def get_addons(current_user: User = Depends(get_current_user)):
     """Get all user's installed addons"""
     addons = await db.addons.find({"userId": current_user.id}).to_list(100)
+    # Remove MongoDB _id from each addon
+    for addon in addons:
+        addon.pop('_id', None)
     return addons
 
 @api_router.post("/addons/install")
