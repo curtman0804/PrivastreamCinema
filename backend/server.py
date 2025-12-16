@@ -309,6 +309,8 @@ async def install_addon(addon_data: AddonInstall, current_user: User = Depends(g
         }
         
         await db.addons.insert_one(addon)
+        # Remove MongoDB _id before returning
+        addon.pop('_id', None)
         return addon
         
     except httpx.RequestError as e:
