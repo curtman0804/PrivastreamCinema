@@ -113,8 +113,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
   },
   scrollView: {
     flex: 1,
