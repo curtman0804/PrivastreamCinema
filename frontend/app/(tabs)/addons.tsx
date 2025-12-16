@@ -281,6 +281,7 @@ export default function AddonsScreen() {
                   </View>
                 </View>
               ))}
+            </View>
 
             {/* Installed Addons */}
             <View style={styles.section}>
