@@ -23,18 +23,27 @@ import { Image } from 'expo-image';
 const RECOMMENDED_ADDONS = [
   {
     name: 'Cinemeta',
-    description: 'Official addon for movie and series metadata',
+    description: 'Official addon for movie and series metadata (Required)',
     url: 'https://v3-cinemeta.strem.io/manifest.json',
   },
   {
-    name: 'Streaming Catalogs',
-    description: 'Browse content from Netflix, HBO, Disney+, etc.',
-    url: 'https://1fe84bc728af-stremio-netflix-catalog-addon.baby-beamup.club/manifest.json',
+    name: 'OpenSubtitles',
+    description: 'Subtitles from OpenSubtitles.com',
+    url: 'https://opensubtitles-v3.strem.io/manifest.json',
   },
+];
+
+// Addons that need manual configuration (Cloudflare protected)
+const MANUAL_ADDONS = [
   {
     name: 'Torrentio',
-    description: 'Stream from multiple torrent sources',
-    url: 'https://torrentio.strem.fun/manifest.json',
+    description: 'Stream from multiple torrent sources - Get URL from torrentio.strem.fun',
+    configUrl: 'https://torrentio.strem.fun/configure',
+  },
+  {
+    name: 'Streaming Catalogs',
+    description: 'Netflix, HBO, Disney+ catalogs - May require custom URL',
+    configUrl: null,
   },
 ];
 
