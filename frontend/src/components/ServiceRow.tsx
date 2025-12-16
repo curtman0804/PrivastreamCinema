@@ -75,16 +75,13 @@ export const ServiceRow: React.FC<ServiceRowProps> = ({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {items.slice(0, 10).map((item, index) => {
-          if (!item) return null;
-          return (
-            <ContentCard
-              key={item.id || item.imdb_id || index}
-              item={item}
-              onPress={() => onItemPress(item)}
-            />
-          );
-        })}
+        {validItems.slice(0, 10).map((item, index) => (
+          <ContentCard
+            key={item.id || item.imdb_id || index}
+            item={item}
+            onPress={() => onItemPress(item)}
+          />
+        ))}
       </ScrollView>
     </View>
   );
