@@ -249,7 +249,7 @@ export default function AddonsScreen() {
           <>
             {/* Recommended Addons */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Recommended Addons</Text>
+              <Text style={styles.sectionTitle}>Quick Install</Text>
               <FlatList
                 data={RECOMMENDED_ADDONS}
                 renderItem={renderRecommended}
@@ -257,6 +257,30 @@ export default function AddonsScreen() {
                 scrollEnabled={false}
               />
             </View>
+
+            {/* Manual Configuration Addons */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Manual Setup Required</Text>
+              <Text style={styles.sectionSubtitle}>
+                Visit the config URL in your browser, configure the addon, then copy the manifest URL
+              </Text>
+              {MANUAL_ADDONS.map((item) => (
+                <View key={item.name} style={styles.manualCard}>
+                  <View style={styles.recommendedInfo}>
+                    <Text style={styles.recommendedName}>{item.name}</Text>
+                    <Text style={styles.recommendedDesc}>{item.description}</Text>
+                    {item.configUrl && (
+                      <TouchableOpacity
+                        onPress={() => Linking.openURL(item.configUrl)}
+                        style={styles.configLink}
+                      >
+                        <Ionicons name="open-outline" size={14} color="#8B5CF6" />
+                        <Text style={styles.configLinkText}>Open Config Page</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ))}
 
             {/* Installed Addons */}
             <View style={styles.section}>
