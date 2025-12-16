@@ -83,29 +83,18 @@ export const useContentStore = create<ContentState>((set, get) => ({
 
   fetchStreams: async (type: string, id: string) => {
     set({ isLoadingStreams: true, streams: [], error: null });
-    const { addons } = get();
-    const allStreams: Stream[] = [];
     
-    // Get streams from all stream-capable addons
-    const streamAddons = addons.filter(addon => 
-      addon.manifest.resources.includes('stream') ||
-      addon.manifest.resources.some((r: any) => r?.name === 'stream')
-    );
-
-    for (const addon of streamAddons) {
-      try {
-        const result = await api.addons.getStreams(addon.id, type, id);
-        if (result.streams) {
-          allStreams.push(...result.streams);
-        }
-      } catch (e) {
-        // Ignore errors from individual addons
-        console.log(`Failed to get streams from ${addon.manifest.name}`);
-      }
+    try {
+      // Use the unified streams endpoint that fetches from all addons
+      const result = await api.addons.getAllStreams(type, id);
+      const allStreams = result.streams || [];
+      set({ streams: allStreams, isLoadingStreams: false });
+      return allStreams;
+    } catch (error) {
+      console.log('Failed to fetch streams:', error);
+      set({ streams: [], isLoadingStreams: false });
+      return [];
     }
-
-    set({ streams: allStreams, isLoadingStreams: false });
-    return allStreams;
   },
 
   addToLibrary: async (item: ContentItem) => {
