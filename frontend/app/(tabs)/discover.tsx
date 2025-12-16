@@ -50,8 +50,11 @@ export default function DiscoverScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.logoContainer}>
-          <Ionicons name="tv" size={28} color="#8B5CF6" />
-          <Text style={styles.headerTitle}>PrivastreamCinema</Text>
+          <Image
+            source={require('../../assets/images/logo.png')}
+            style={styles.logo}
+            contentFit="contain"
+          />
         </View>
       </View>
 
