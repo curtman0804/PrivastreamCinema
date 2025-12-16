@@ -53,7 +53,11 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Ionicons name="tv" size={48} color="#8B5CF6" />
+            <Image
+              source={require('../../assets/images/logo.png')}
+              style={styles.logo}
+              contentFit="contain"
+            />
             <Text style={styles.title}>PrivastreamCinema</Text>
             <Text style={styles.subtitle}>Sign in to your account</Text>
           </View>
