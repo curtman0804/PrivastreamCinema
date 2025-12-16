@@ -1,16 +1,31 @@
-import { Text, View, StyleSheet, Image } from "react-native";
-
-const EXPO_PUBLIC_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useAuthStore } from '../src/store/authStore';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function Index() {
-  console.log(EXPO_PUBLIC_BACKEND_URL, "EXPO_PUBLIC_BACKEND_URL");
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuthStore();
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (isAuthenticated) {
+        router.replace('/(tabs)/discover');
+      } else {
+        router.replace('/(auth)/login');
+      }
+    }
+  }, [isAuthenticated, isLoading]);
 
   return (
     <View style={styles.container}>
-      <Image
-        source={require("../assets/images/app-image.png")}
-        style={styles.image}
-      />
+      <View style={styles.logoContainer}>
+        <Ionicons name="tv" size={64} color="#8B5CF6" />
+        <Text style={styles.title}>PrivastreamCinema</Text>
+        <Text style={styles.subtitle}>Stream Privately</Text>
+      </View>
+      <ActivityIndicator size="large" color="#8B5CF6" style={styles.loader} />
     </View>
   );
 }
@@ -18,13 +33,25 @@ export default function Index() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0c0c0c",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: '#0c0c0c',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  image: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "contain",
+  logoContainer: {
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: 16,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#8B5CF6',
+    marginTop: 8,
+  },
+  loader: {
+    marginTop: 40,
   },
 });
