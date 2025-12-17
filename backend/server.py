@@ -503,17 +503,16 @@ async def get_discover(current_user: User = Depends(get_current_user)):
         return []
     
     # Streaming services catalog IDs (for the streaming catalogs addon)
-    # Format: service_id for movies and series
     streaming_services = {
-        'Netflix': 'nfx.',
-        'HBO Max': 'hbm.',
-        'Disney+': 'dnp.',
-        'Prime Video': 'amp.',
-        'Hulu': 'hlu.',
-        'Paramount+': 'pmp.',
-        'Apple TV+': 'atp.',
-        'Peacock': 'pcp.',
-        'Discovery+': 'dpe.',
+        'Netflix': 'nfx',
+        'HBO Max': 'hbm',
+        'Disney+': 'dnp',
+        'Prime Video': 'amp',
+        'Hulu': 'hlu',
+        'Paramount+': 'pmp',
+        'Apple TV+': 'atp',
+        'Peacock': 'pcp',
+        'Discovery+': 'dpe',
     }
     
     # If we have the streaming catalogs addon, fetch from it
