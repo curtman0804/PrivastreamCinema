@@ -1049,16 +1049,28 @@ async def stream_status(info_hash: str, current_user: User = Depends(get_current
         logger.error(f"Error getting stream status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+from fastapi import Request, Header
+
 @api_router.get("/stream/video/{info_hash}")
-async def stream_video(info_hash: str, current_user: User = Depends(get_current_user)):
-    """Stream the video file as HTTP (like Stremio does)"""
+async def stream_video(
+    info_hash: str, 
+    request: Request,
+    range: Optional[str] = Header(None)
+):
+    """Stream the video file as HTTP with Range support (like Stremio does)"""
     try:
         video_path = torrent_streamer.get_video_path(info_hash)
         
-        if not video_path or not os.path.exists(video_path):
-            raise HTTPException(status_code=404, detail="Video not ready yet")
+        if not video_path:
+            raise HTTPException(status_code=404, detail="Video not found - torrent may still be starting")
+        
+        if not os.path.exists(video_path):
+            raise HTTPException(status_code=404, detail="Video file not ready yet")
         
         file_size = os.path.getsize(video_path)
+        
+        if file_size == 0:
+            raise HTTPException(status_code=404, detail="Video file is empty - still downloading")
         
         # Determine content type
         content_type = "video/mp4"
@@ -1069,18 +1081,43 @@ async def stream_video(info_hash: str, current_user: User = Depends(get_current_
         elif video_path.endswith('.webm'):
             content_type = "video/webm"
         
+        # Handle Range requests for seeking
+        start = 0
+        end = file_size - 1
+        
+        if range:
+            range_match = range.replace("bytes=", "").split("-")
+            start = int(range_match[0]) if range_match[0] else 0
+            end = int(range_match[1]) if range_match[1] else file_size - 1
+        
+        content_length = end - start + 1
+        
         def iterfile():
             with open(video_path, 'rb') as f:
-                while chunk := f.read(1024 * 1024):  # 1MB chunks
+                f.seek(start)
+                remaining = content_length
+                while remaining > 0:
+                    chunk_size = min(1024 * 1024, remaining)  # 1MB chunks
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
                     yield chunk
+        
+        headers = {
+            "Content-Length": str(content_length),
+            "Accept-Ranges": "bytes",
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Cache-Control": "no-cache",
+        }
+        
+        status_code = 206 if range else 200
         
         return StreamingResponse(
             iterfile(),
+            status_code=status_code,
             media_type=content_type,
-            headers={
-                "Content-Length": str(file_size),
-                "Accept-Ranges": "bytes",
-            }
+            headers=headers
         )
     except HTTPException:
         raise
