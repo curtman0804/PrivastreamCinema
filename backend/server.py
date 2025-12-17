@@ -1293,7 +1293,7 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                         async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
                             response = await client.get(url)
                             if response.status_code == 200:
-                                metas = response.json().get('metas', [])[:100]
+                                metas = response.json().get('metas', [])  # Get all channels
                                 result['services']['USA TV Channels'] = {'movies': [], 'series': [], 'channels': metas}
                                 logger.info(f"USA TV: {len(metas)} channels")
                     except Exception as e:
