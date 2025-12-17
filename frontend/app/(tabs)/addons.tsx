@@ -79,8 +79,10 @@ export default function AddonsScreen() {
     }
   };
 
+  const [isUninstalling, setIsUninstalling] = useState(false);
+  
   const handleUninstall = async (addon: Addon) => {
-    console.log('handleUninstall called for:', addon.manifest.name, 'ID:', addon.id);
+    if (isUninstalling) return; // Prevent double-tap
     
     Alert.alert(
       'Uninstall Addon',
@@ -91,20 +93,17 @@ export default function AddonsScreen() {
           text: 'Uninstall',
           style: 'destructive',
           onPress: async () => {
-            console.log('Uninstall confirmed for:', addon.id);
+            setIsUninstalling(true);
             try {
-              console.log('Calling API to uninstall...');
               await api.addons.uninstall(addon.id);
-              console.log('API call successful, refreshing addons list...');
+              // Force immediate UI update
               await fetchAddons();
-              console.log('Addons refreshed, refreshing discover...');
               await fetchDiscover();
-              console.log('All refreshed!');
               Alert.alert('Success', `${addon.manifest.name} has been uninstalled`);
             } catch (error: any) {
-              console.log('Uninstall error:', error);
-              console.log('Error details:', error?.response?.data || error?.message);
-              Alert.alert('Error', `Failed to uninstall addon: ${error?.message || 'Unknown error'}`);
+              Alert.alert('Error', `Failed to uninstall: ${error?.message || 'Unknown error'}`);
+            } finally {
+              setIsUninstalling(false);
             }
           },
         },
