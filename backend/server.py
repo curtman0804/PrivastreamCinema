@@ -803,7 +803,7 @@ async def get_all_streams(
             imdb_num = imdb_id.replace('tt', '') if imdb_id.startswith('tt') else imdb_id
             url = "https://eztv.re/api/get-torrents"
             params = {"imdb_id": imdb_num, "limit": 50}
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
                 response = await client.get(url, params=params)
                 if response.status_code == 200:
                     data = response.json()
