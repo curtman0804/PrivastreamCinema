@@ -30,6 +30,11 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   const cardWidth = size === 'small' ? CARD_WIDTH * 0.8 : size === 'large' ? CARD_WIDTH * 1.2 : CARD_WIDTH;
   const cardHeight = cardWidth * 1.5;
 
+  // Guard against undefined/null item
+  if (!item) {
+    return null;
+  }
+
   const rating = typeof item.imdbRating === 'string' 
     ? parseFloat(item.imdbRating) 
     : item.imdbRating;
