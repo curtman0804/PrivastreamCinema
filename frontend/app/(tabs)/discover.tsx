@@ -127,21 +127,23 @@ export default function DiscoverScreen() {
           />
         }
       >
-        {/* Empty State - No Addons */}
+        {/* Welcome Screen - No Addons */}
         {!hasContent && !isLoadingDiscover && (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconContainer}>
-              <Ionicons name="extension-puzzle-outline" size={64} color="#333333" />
-            </View>
-            <Text style={styles.emptyTitle}>No Addons Installed</Text>
-            <Text style={styles.emptySubtext}>
-              Install addons to browse movies, series, and live TV channels.
+          <View style={styles.welcomeState}>
+            <Text style={styles.welcomeText}>Welcome To</Text>
+            <Image
+              source={require('../../assets/images/logo_splash.png')}
+              style={styles.welcomeLogo}
+              contentFit="contain"
+            />
+            <Text style={styles.welcomeSubtext}>
+              Go to the Addons tab to get started
             </Text>
             <TouchableOpacity 
               style={styles.installButton}
               onPress={() => router.push('/(tabs)/addons')}
             >
-              <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+              <Ionicons name="extension-puzzle-outline" size={20} color="#FFFFFF" />
               <Text style={styles.installButtonText}>Go to Addons</Text>
             </TouchableOpacity>
           </View>
