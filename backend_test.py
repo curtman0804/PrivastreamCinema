@@ -38,14 +38,29 @@ class PrivastreamTester:
         self.token = None
         self.session = requests.Session()
         self.session.timeout = 30
+        self.test_results = []
+        
+    def log_test(self, test_name: str, success: bool, message: str, details: Any = None):
+        """Log test result"""
+        result = {
+            "test": test_name,
+            "success": success,
+            "message": message,
+            "details": details
+        }
+        self.test_results.append(result)
+        status = "✅ PASS" if success else "❌ FAIL"
+        print(f"{status} {test_name}: {message}")
+        if details and not success:
+            print(f"   Details: {details}")
         
     def test_login(self) -> bool:
         """Test user authentication"""
         print("\n=== Testing Authentication ===")
         
         login_data = {
-            "username": "choyt",
-            "password": "RFIDGuy1!"
+            "username": TEST_USERNAME,
+            "password": TEST_PASSWORD
         }
         
         try:
@@ -55,20 +70,19 @@ class PrivastreamTester:
                 headers={"Content-Type": "application/json"}
             )
             
-            print(f"Login Status: {response.status_code}")
-            
             if response.status_code == 200:
                 data = response.json()
-                print(f"Login Response Keys: {list(data.keys())}")
                 
                 # Check response structure
                 if 'user' in data and 'token' in data:
                     self.token = data['token']
                     user = data['user']
-                    print(f"✅ Login successful")
-                    print(f"   User: {user.get('username')}")
-                    print(f"   Admin: {user.get('is_admin')}")
-                    print(f"   Token: {self.token[:20]}...")
+                    self.log_test(
+                        "Authentication Login",
+                        True,
+                        f"Login successful for user {user.get('username')}",
+                        {"user_id": user.get("id"), "is_admin": user.get("is_admin")}
+                    )
                     
                     # Set authorization header for future requests
                     self.session.headers.update({
@@ -76,20 +90,29 @@ class PrivastreamTester:
                     })
                     return True
                 else:
-                    print(f"❌ Login failed - Invalid response structure")
-                    print(f"   Response: {data}")
+                    self.log_test(
+                        "Authentication Login",
+                        False,
+                        "Login response missing token or user data",
+                        data
+                    )
                     return False
             else:
-                print(f"❌ Login failed - Status {response.status_code}")
-                try:
-                    error_data = response.json()
-                    print(f"   Error: {error_data}")
-                except:
-                    print(f"   Error: {response.text}")
+                self.log_test(
+                    "Authentication Login",
+                    False,
+                    f"Login failed with status {response.status_code}",
+                    response.text
+                )
                 return False
                 
         except Exception as e:
-            print(f"❌ Login failed - Exception: {e}")
+            self.log_test(
+                "Authentication Login",
+                False,
+                f"Login request failed: {str(e)}",
+                None
+            )
             return False
     
     def test_streams_movie(self, imdb_id: str, movie_name: str) -> bool:
