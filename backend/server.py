@@ -1240,7 +1240,7 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                     async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
                         response = await client.get(url)
                         if response.status_code == 200:
-                            metas = response.json().get('metas', [])[:20]
+                            metas = response.json().get('metas', [])  # Get all items
                             
                             if section_name not in result['services']:
                                 result['services'][section_name] = {'movies': [], 'series': [], 'channels': []}
