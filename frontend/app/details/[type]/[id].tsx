@@ -338,8 +338,8 @@ export default function DetailsScreen() {
           </View>
         )}
 
-        {/* Streams Section - Only for movies OR episode pages */}
-        {(type === 'movie' || isEpisodePage) && (
+        {/* Streams Section - For movies, episode pages, OR TV channels */}
+        {(type === 'movie' || type === 'tv' || isEpisodePage) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Available Streams</Text>
 
