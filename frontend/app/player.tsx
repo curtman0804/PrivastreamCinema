@@ -14,13 +14,44 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/api/client';
 
-// Only import WebView on native platforms
+// Conditionally import WebView only on native
 let WebView: any = null;
 if (Platform.OS !== 'web') {
-  WebView = require('react-native-webview').WebView;
+  try {
+    WebView = require('react-native-webview').WebView;
+  } catch (e) {
+    console.log('WebView not available');
+  }
 }
 
 const { width, height } = Dimensions.get('window');
+
+// Web Video Component using dangerouslySetInnerHTML
+const WebVideoPlayer = ({ streamUrl, onLoad, onError }: { streamUrl: string; onLoad: () => void; onError: () => void }) => {
+  useEffect(() => {
+    // Notify that we've loaded
+    const timer = setTimeout(onLoad, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const html = `
+    <video 
+      controls 
+      autoplay 
+      playsinline 
+      style="width:100%;height:100%;background:#000;object-fit:contain;"
+    >
+      <source src="${streamUrl}" type="video/mp4">
+    </video>
+  `;
+
+  return (
+    <div 
+      style={{ width: '100%', height: '100%', background: '#000' }}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+};
 
 export default function PlayerScreen() {
   const { url, title, infoHash } = useLocalSearchParams<{
@@ -68,10 +99,8 @@ export default function PlayerScreen() {
     try {
       setLoadingStatus('Connecting to peers...');
       
-      // Start the torrent on backend
       await api.stream.start(infoHash);
       
-      // Poll for status until ready
       pollIntervalRef.current = setInterval(async () => {
         if (!continuePollingRef.current) return;
         
@@ -88,7 +117,7 @@ export default function PlayerScreen() {
             const speedMB = ((status.download_rate || 0) / 1024 / 1024).toFixed(1);
             setLoadingStatus(`Buffering ${(status.progress || 0).toFixed(1)}% (${speedMB} MB/s)`);
           } else if (status.status === 'ready') {
-            // Video ready - start playing
+            // Clear polling - video ready
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
             }
@@ -122,7 +151,7 @@ export default function PlayerScreen() {
     return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
   };
 
-  // HTML for video player
+  // HTML for native WebView video player
   const getVideoPlayerHTML = () => {
     if (!streamUrl) return '';
     
@@ -133,95 +162,40 @@ export default function PlayerScreen() {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body { 
-            width: 100%; 
-            height: 100%; 
-            background: #000; 
-            overflow: hidden;
-          }
-          video {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            background: #000;
-          }
-          .status {
-            color: #fff;
-            text-align: center;
-            padding: 20px;
-            font-family: -apple-system, sans-serif;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-          }
-          .spinner {
-            width: 30px;
-            height: 30px;
-            border: 3px solid rgba(139, 92, 246, 0.3);
-            border-top-color: #8B5CF6;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 12px;
-          }
+          html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+          video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+          .status { color: #fff; text-align: center; padding: 20px; font-family: sans-serif; 
+                   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+          .spinner { width: 30px; height: 30px; border: 3px solid rgba(139, 92, 246, 0.3);
+                    border-top-color: #8B5CF6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; }
           @keyframes spin { to { transform: rotate(360deg); } }
-          .error { color: #ff6b6b; }
         </style>
       </head>
       <body>
-        <div id="status" class="status">
-          <div class="spinner"></div>
-          <div>Loading video...</div>
-        </div>
+        <div id="status" class="status"><div class="spinner"></div><div>Loading...</div></div>
         <video id="player" controls playsinline style="display: none;">
           <source src="${streamUrl}" type="video/mp4">
         </video>
         <script>
           const video = document.getElementById('player');
           const status = document.getElementById('status');
-          
           video.addEventListener('loadeddata', function() {
             status.style.display = 'none';
             video.style.display = 'block';
             video.play().catch(e => console.log('Autoplay blocked:', e));
-            window.ReactNativeWebView.postMessage('playing');
           });
-          
           video.addEventListener('canplay', function() {
             status.style.display = 'none';
             video.style.display = 'block';
           });
-          
-          video.addEventListener('error', function(e) {
-            status.innerHTML = '<div class="error">Video error - try another stream</div>';
-            window.ReactNativeWebView.postMessage('error');
+          video.addEventListener('error', function() {
+            status.innerHTML = '<div style="color:#ff6b6b;">Error loading video</div>';
           });
-          
-          video.addEventListener('waiting', function() {
-            status.innerHTML = '<div class="spinner"></div><div>Buffering...</div>';
-            status.style.display = 'block';
-          });
-          
-          video.addEventListener('playing', function() {
-            status.style.display = 'none';
-            video.style.display = 'block';
-          });
-          
-          // Start loading
           video.load();
         </script>
       </body>
       </html>
     `;
-  };
-
-  const handleMessage = (event: any) => {
-    const data = event.nativeEvent.data;
-    if (data === 'playing') {
-      setIsLoading(false);
-    } else if (data === 'error') {
-      setError('Video playback failed');
-    }
   };
 
   return (
@@ -271,35 +245,43 @@ export default function PlayerScreen() {
         </View>
       )}
 
-      {/* Video Player - Platform specific */}
-      {streamUrl && !error && Platform.OS === 'web' && (
-        <View style={styles.webview}>
-          <iframe
-            src={`data:text/html,${encodeURIComponent(getVideoPlayerHTML())}`}
-            style={{ width: '100%', height: '100%', border: 'none' }}
-            allow="autoplay; fullscreen"
-            allowFullScreen
+      {/* Video Player - Web uses iframe, native uses WebView */}
+      {streamUrl && !error && !isLoading && (
+        Platform.OS === 'web' ? (
+          <View style={styles.webview}>
+            <iframe
+              srcDoc={getVideoPlayerHTML()}
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                border: 'none',
+                background: '#000'
+              } as any}
+              allow="autoplay; fullscreen"
+              allowFullScreen
+            />
+          </View>
+        ) : WebView ? (
+          <WebView
+            style={styles.webview}
+            source={{ html: getVideoPlayerHTML() }}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            allowsFullscreenVideo={true}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            mixedContentMode="always"
+            originWhitelist={['*']}
           />
-        </View>
-      )}
-      
-      {streamUrl && !error && Platform.OS !== 'web' && WebView && (
-        <WebView
-          style={styles.webview}
-          source={{ html: getVideoPlayerHTML() }}
-          onMessage={handleMessage}
-          allowsInlineMediaPlayback={true}
-          mediaPlaybackRequiresUserAction={false}
-          allowsFullscreenVideo={true}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          mixedContentMode="always"
-          originWhitelist={['*']}
-        />
+        ) : (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>Video player not available</Text>
+          </View>
+        )
       )}
 
       {/* Stats overlay when playing */}
-      {streamUrl && infoHash && !isLoading && (
+      {streamUrl && infoHash && !isLoading && !error && (
         <View style={styles.statsOverlay}>
           <Text style={styles.statsText}>
             {downloadProgress.toFixed(1)}% • {peers} peers • {formatSpeed(downloadSpeed)}
