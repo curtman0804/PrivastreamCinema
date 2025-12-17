@@ -121,6 +121,7 @@ export interface Stream {
 export interface LibraryResponse {
   movies: ContentItem[];
   series: ContentItem[];
+  channels: ContentItem[];
 }
 
 export interface SearchResult {
