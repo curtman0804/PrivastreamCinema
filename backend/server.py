@@ -942,6 +942,9 @@ async def get_all_streams(
     for addon in addons:
         tasks.append(fetch_addon_streams(addon))
     
+    # ALWAYS search Torrentio first - it's the best aggregator
+    tasks.append(search_torrentio(content_type, content_id))
+    
     # Add built-in torrent searches if we have content info
     if content_title:
         # Build search query
