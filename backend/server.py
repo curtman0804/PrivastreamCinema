@@ -1049,12 +1049,14 @@ async def stream_status(info_hash: str, current_user: User = Depends(get_current
         logger.error(f"Error getting stream status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+import subprocess
+
 @api_router.get("/stream/video/{info_hash}")
 async def stream_video(
     info_hash: str,
     request: Request
 ):
-    """Stream the video file as HTTP with Range support (like Stremio does)"""
+    """Stream the video file as MP4 using ffmpeg transcoding for browser compatibility"""
     try:
         video_path = torrent_streamer.get_video_path(info_hash)
         
@@ -1069,56 +1071,51 @@ async def stream_video(
         if file_size == 0:
             raise HTTPException(status_code=404, detail="Video file is empty - still downloading")
         
-        # Determine content type
-        content_type = "video/mp4"
-        if video_path.endswith('.mkv'):
-            content_type = "video/x-matroska"
-        elif video_path.endswith('.avi'):
-            content_type = "video/x-msvideo"
-        elif video_path.endswith('.webm'):
-            content_type = "video/webm"
-        
-        # Handle Range requests for seeking
-        start = 0
-        end = file_size - 1
-        range_header = request.headers.get("range")
-        
-        if range_header:
-            range_match = range_header.replace("bytes=", "").split("-")
-            start = int(range_match[0]) if range_match[0] else 0
-            end = int(range_match[1]) if range_match[1] else file_size - 1
-        
-        content_length = end - start + 1
-        
-        def iterfile():
-            with open(video_path, 'rb') as f:
-                f.seek(start)
-                remaining = content_length
-                while remaining > 0:
-                    chunk_size = min(1024 * 1024, remaining)  # 1MB chunks
-                    chunk = f.read(chunk_size)
+        # Use ffmpeg to transcode to browser-compatible MP4 format
+        # This enables playback in browsers that don't support MKV
+        def generate_stream():
+            # FFmpeg command to transcode to streamable MP4
+            # -movflags frag_keyframe+empty_moov enables streaming before file is complete
+            cmd = [
+                'ffmpeg',
+                '-i', video_path,
+                '-c:v', 'libx264',      # H.264 video codec (widely supported)
+                '-preset', 'ultrafast',  # Fast encoding for real-time streaming
+                '-tune', 'zerolatency', # Minimize latency
+                '-c:a', 'aac',          # AAC audio codec (widely supported)
+                '-b:a', '128k',         # Audio bitrate
+                '-movflags', 'frag_keyframe+empty_moov+faststart',  # Enable streaming
+                '-f', 'mp4',            # Output format
+                '-'                     # Output to stdout
+            ]
+            
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                bufsize=1024 * 1024
+            )
+            
+            try:
+                while True:
+                    chunk = process.stdout.read(64 * 1024)  # 64KB chunks
                     if not chunk:
                         break
-                    remaining -= len(chunk)
                     yield chunk
+            finally:
+                process.kill()
+                process.wait()
         
         headers = {
-            "Content-Length": str(content_length),
-            "Accept-Ranges": "bytes",
-            "Content-Range": f"bytes {start}-{end}/{file_size}",
             "Cache-Control": "no-cache",
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "Range",
-            "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+            "Access-Control-Expose-Headers": "Content-Type",
         }
         
-        status_code = 206 if range_header else 200
-        
         return StreamingResponse(
-            iterfile(),
-            status_code=status_code,
-            media_type=content_type,
+            generate_stream(),
+            media_type="video/mp4",
             headers=headers
         )
     except HTTPException:
