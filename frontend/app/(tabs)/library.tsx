@@ -19,7 +19,7 @@ import { ContentItem } from '../../src/api/client';
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 64) / 3;
 
-type FilterType = 'all' | 'movies' | 'series';
+type FilterType = 'all' | 'movies' | 'series' | 'tv';
 
 export default function LibraryScreen() {
   const router = useRouter();
@@ -49,8 +49,10 @@ export default function LibraryScreen() {
         return library.movies || [];
       case 'series':
         return library.series || [];
+      case 'tv':
+        return library.channels || [];
       default:
-        return [...(library.movies || []), ...(library.series || [])];
+        return [...(library.movies || []), ...(library.series || []), ...(library.channels || [])];
     }
   };
 
