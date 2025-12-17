@@ -859,39 +859,64 @@ async def get_all_streams(
     
     async def search_apibay(query: str, content_type: str):
         """Search PirateBay via apibay.org"""
-        try:
-            # Clean up query - remove special characters, use full title
-            import re
-            clean_query = re.sub(r'[^\w\s]', '', query)  # Remove apostrophes, etc.
-            simple_query = ' '.join(clean_query.split()[:5])  # Use up to 5 words
-            logger.info(f"ApiBay searching: '{simple_query}'")
-            url = f"https://apibay.org/q.php?q={simple_query}"
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                response = await client.get(url)
-                if response.status_code == 200:
-                    torrents = response.json()
-                    if isinstance(torrents, list) and len(torrents) > 0 and torrents[0].get('id') != '0':
-                        streams = []
-                        for torrent in torrents[:20]:
-                            name = torrent.get('name', '')
-                            size_bytes = int(torrent.get('size', 0))
-                            size_str = f"{size_bytes / (1024*1024*1024):.2f} GB" if size_bytes > 1024*1024*1024 else f"{size_bytes / (1024*1024):.0f} MB"
-                            seeds = int(torrent.get('seeders', 0))
-                            info_hash = torrent.get('info_hash', '').lower()
-                            quality = '4K' if '2160p' in name or '4K' in name else ('HD' if '1080p' in name or '720p' in name else 'SD')
-                            if info_hash and seeds > 0:
-                                streams.append({
-                                    "name": f"🏴‍☠️ TPB {quality}",
-                                    "title": f"ThePirateBay • {name[:60]}\n💾 {size_str} | 🌱 {seeds} | ⚡ {quality}",
-                                    "infoHash": info_hash,
-                                    "sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"],
-                                    "addon": "ThePirateBay",
-                                    "seeders": seeds
-                                })
-                        return streams
-        except Exception as e:
-            logger.warning(f"ApiBay search error: {e}")
-        return []
+        import re
+        
+        async def do_search(search_query: str) -> list:
+            try:
+                url = f"https://apibay.org/q.php?q={search_query}"
+                async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                    response = await client.get(url)
+                    if response.status_code == 200:
+                        torrents = response.json()
+                        if isinstance(torrents, list) and len(torrents) > 0 and torrents[0].get('id') != '0':
+                            streams = []
+                            for torrent in torrents[:20]:
+                                name = torrent.get('name', '')
+                                size_bytes = int(torrent.get('size', 0))
+                                size_str = f"{size_bytes / (1024*1024*1024):.2f} GB" if size_bytes > 1024*1024*1024 else f"{size_bytes / (1024*1024):.0f} MB"
+                                seeds = int(torrent.get('seeders', 0))
+                                info_hash = torrent.get('info_hash', '').lower()
+                                quality = '4K' if '2160p' in name or '4K' in name else ('HD' if '1080p' in name or '720p' in name else 'SD')
+                                if info_hash and seeds > 0:
+                                    streams.append({
+                                        "name": f"🏴‍☠️ TPB {quality}",
+                                        "title": f"ThePirateBay • {name[:60]}\n💾 {size_str} | 🌱 {seeds} | ⚡ {quality}",
+                                        "infoHash": info_hash,
+                                        "sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"],
+                                        "addon": "ThePirateBay",
+                                        "seeders": seeds
+                                    })
+                            return streams
+            except Exception as e:
+                logger.warning(f"ApiBay search error for '{search_query}': {e}")
+            return []
+        
+        # Clean up query - remove special characters
+        clean_query = re.sub(r'[^\w\s]', '', query)
+        words = clean_query.split()
+        
+        # Try with full query first (up to 5 words)
+        full_query = ' '.join(words[:5])
+        logger.info(f"ApiBay searching: '{full_query}'")
+        streams = await do_search(full_query)
+        
+        # If no results and query has year, try without year
+        if not streams and len(words) > 2:
+            # Check if last word is a year
+            if words[-1].isdigit() and len(words[-1]) == 4:
+                short_query = ' '.join(words[:-1][:4])
+                logger.info(f"ApiBay retry without year: '{short_query}'")
+                streams = await do_search(short_query)
+        
+        # If still no results, try with just first 3 words
+        if not streams and len(words) > 3:
+            shorter_query = ' '.join(words[:3])
+            logger.info(f"ApiBay retry shorter: '{shorter_query}'")
+            streams = await do_search(shorter_query)
+        
+        if streams:
+            logger.info(f"ApiBay found {len(streams)} streams")
+        return streams
     
     async def search_torrentio(content_type: str, content_id: str):
         """Search Torrentio addon for streams - aggregates YTS, RARBG, 1337x, etc."""
