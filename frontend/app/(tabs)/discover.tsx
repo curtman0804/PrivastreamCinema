@@ -1,9 +1,9 @@
-import React, { useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useCallback, useState, useMemo, memo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
@@ -16,6 +16,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem } from '../../src/api/client';
+
+// Memoized ServiceRow for better performance
+const MemoizedServiceRow = memo(ServiceRow);
 
 export default function DiscoverScreen() {
   const router = useRouter();
