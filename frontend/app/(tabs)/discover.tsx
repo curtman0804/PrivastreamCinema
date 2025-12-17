@@ -21,14 +21,25 @@ const SERVICES = ['All', 'Netflix', 'HBO Max', 'Disney+', 'Prime Video', 'Hulu',
 
 export default function DiscoverScreen() {
   const router = useRouter();
-  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons } = useContentStore();
+  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons, addons } = useContentStore();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedService, setSelectedService] = useState('All');
 
   useEffect(() => {
-    fetchDiscover();
     fetchAddons();
+    fetchDiscover();
   }, []);
+
+  // Check if there's any content to display
+  const hasContent = useMemo(() => {
+    if (!discoverData?.services) return false;
+    return Object.values(discoverData.services).some(
+      (content: any) => 
+        (content?.movies?.length > 0) || 
+        (content?.series?.length > 0) || 
+        (content?.channels?.length > 0)
+    );
+  }, [discoverData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
