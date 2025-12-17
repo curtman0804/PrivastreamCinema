@@ -468,10 +468,16 @@ async def get_all_streams(
     async def search_yts(query: str):
         """Search YTS/YIFY for movies"""
         try:
-            url = "https://yts.mx/api/v2/list_movies.json"
-            params = {"query_term": query, "limit": 20}
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(url, params=params)
+            # Use yts.torrentbay.to as it's more reliable
+            urls = ["https://yts.torrentbay.to/api/v2/list_movies.json", "https://yts.mx/api/v2/list_movies.json"]
+            # Simplify query - just first few words
+            simple_query = ' '.join(query.split()[:3])
+            params = {"query_term": simple_query, "limit": 20}
+            
+            for url in urls:
+                try:
+                    async with httpx.AsyncClient(timeout=8.0) as client:
+                        response = await client.get(url, params=params)
                 if response.status_code == 200:
                     data = response.json()
                     movies = data.get('data', {}).get('movies', [])
