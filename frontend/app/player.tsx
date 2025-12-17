@@ -95,17 +95,12 @@ export default function PlayerScreen() {
             const speedMB = ((status.download_rate || 0) / 1024 / 1024).toFixed(2);
             setLoadingStatus(`Buffering... ${(status.progress || 0).toFixed(1)}% (${speedMB} MB/s)`);
           } else if (status.status === 'ready') {
-            // Video is ready to play - need at least 3% buffer
-            if ((status.progress || 0) >= 3) {
-              const videoUrl = api.stream.getVideoUrl(infoHash);
-              setStreamUrl(videoUrl);
-              setIsLoading(false);
-              setVideoReady(true);
-              setLoadingStatus('Ready to play');
-            } else {
-              const speedMB = ((status.download_rate || 0) / 1024 / 1024).toFixed(2);
-              setLoadingStatus(`Buffering... ${(status.progress || 0).toFixed(1)}% (${speedMB} MB/s) - need 3%`);
-            }
+            // Video is ready to play immediately - no buffer wait needed
+            const videoUrl = api.stream.getVideoUrl(infoHash);
+            setStreamUrl(videoUrl);
+            setIsLoading(false);
+            setVideoReady(true);
+            setLoadingStatus('Ready to play');
           } else if (status.status === 'not_found' || status.status === 'invalid') {
             setError('Failed to start torrent. Please try another stream.');
             if (pollIntervalRef.current) {
