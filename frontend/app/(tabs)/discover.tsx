@@ -256,35 +256,30 @@ const styles = StyleSheet.create({
   bottomPadding: {
     height: 20,
   },
-  emptyState: {
+  welcomeState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
-    paddingVertical: 80,
+    paddingVertical: 60,
   },
-  emptyIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#1a1a1a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  emptyTitle: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  emptySubtext: {
+  welcomeText: {
     color: '#888888',
-    fontSize: 15,
+    fontSize: 18,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  welcomeLogo: {
+    width: 280,
+    height: 120,
+    marginBottom: 32,
+  },
+  welcomeSubtext: {
+    color: '#666666',
+    fontSize: 16,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
+    lineHeight: 24,
+    marginBottom: 32,
   },
   installButton: {
     flexDirection: 'row',
