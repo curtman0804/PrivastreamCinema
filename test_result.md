@@ -160,6 +160,23 @@ backend:
         agent: "testing"
         comment: "✅ COMPREHENSIVE TESTING PASSED - All stream endpoints working correctly."
 
+  - task: "Addon Management API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ ADDON MANAGEMENT TESTING PASSED:
+          • GET /api/addons: Successfully retrieved 5 installed addons
+          • DELETE /api/addons/{addon_id}: Successfully deleted addon 'Cinemeta'
+          • POST /api/addons/install: Successfully reinstalled addon 'Cinemeta'
+          • All addon management operations working correctly
+
   - task: "Torrent Streaming Backend (libtorrent + ffmpeg)"
     implemented: true
     working: true
