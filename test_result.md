@@ -239,3 +239,27 @@ agent_communication:
       - Better progress feedback showing MB downloaded vs threshold
       
       User should test playback with VPN to verify improvement.
+  - agent: "main"
+    message: |
+      DISCOVER PAGE UI AND CONTENT ORGANIZATION FIX:
+      
+      Backend changes (server.py):
+      1. Fixed Cinemeta catalog fetching - now correctly fetches:
+         - "Popular Movies" and "Popular Series" from 'top' catalog
+         - "New Movies" and "New Series" from 'year' catalog with genre=2025 param
+      2. Removed unwanted catalog entries (calendar-videos, last-videos)
+      3. Content is now properly organized by section name
+      
+      Frontend changes:
+      1. ServiceRow.tsx - Removed purple icons/badges next to category titles
+      2. Discover page header shows logo + "Privastream Cinema" title
+      
+      Please test:
+      1. POST /api/auth/login with {"username": "choyt", "password": "RFIDGuy1!"}
+      2. GET /api/content/discover-organized - verify sections:
+         - "New Movies", "New Series" (from Cinemeta year catalog)
+         - "Popular Movies", "Popular Series" (from Cinemeta top catalog)
+         - "Netflix Movies", "Netflix Series", "HBO Max Movies", etc. (from Streaming Catalogs)
+         - "USA TV Channels" (from USA TV addon)
+      3. DELETE /api/addons/{addon_id} - verify addon deletion works
+      4. GET /api/addons - verify addon list is returned
