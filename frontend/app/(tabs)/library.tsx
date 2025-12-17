@@ -99,6 +99,7 @@ export default function LibraryScreen() {
         {renderFilterButton('all', 'All')}
         {renderFilterButton('movies', 'Movies')}
         {renderFilterButton('series', 'Series')}
+        {renderFilterButton('tv', 'TV Channels')}
       </View>
 
       {filteredContent.length === 0 ? (
