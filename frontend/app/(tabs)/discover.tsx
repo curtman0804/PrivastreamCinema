@@ -132,6 +132,17 @@ export default function DiscoverScreen() {
                 onItemPress={handleItemPress}
               />
             )}
+            {/* USA TV Channels */}
+            {content?.channels && content.channels.length > 0 && (
+              <ServiceRow
+                serviceName={`${serviceName} Channels`}
+                items={content.channels.map((ch: any) => ({
+                  ...ch,
+                  type: 'tv' as const,
+                }))}
+                onItemPress={handleItemPress}
+              />
+            )}
           </View>
         ))}
         <View style={styles.bottomPadding} />
