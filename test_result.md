@@ -141,11 +141,14 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "Added Torrentio-style aggregation from YTS, PirateBay, EZTV. Tested with curl - returns 20 streams"
+      - working: true
+        agent: "testing"
+        comment: "✅ COMPREHENSIVE TESTING PASSED - All stream endpoints working correctly. Wake Up Dead Man (tt14364480): 20 streams found, properly sorted by seeders (4646→3174→896). The Holdovers (tt14849194): 20 streams found, properly sorted by seeders (429→108→69). All streams contain required fields: name, title, infoHash, seeders. Aggregation from ThePirateBay working via apibay.org API. Authentication and token-based access working properly."
 
 metadata:
   created_by: "main_agent"
