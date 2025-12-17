@@ -1159,7 +1159,8 @@ async def get_discover(current_user: User = Depends(get_current_user)):
     if usatv_addon:
         usa_channels = await fetch_catalog(usatv_addon, 'tv', 'usatv')
         if usa_channels:
-            result['services']['USA TV'] = {'channels': usa_channels[:20], 'movies': [], 'series': []}
+            # Return more channels (up to 100)
+            result['services']['USA TV'] = {'channels': usa_channels[:100], 'movies': [], 'series': []}
     
     # Add Popular content from Cinemeta
     if cinemeta_addon:
