@@ -1268,7 +1268,7 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                     async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
                         response = await client.get(url)
                         if response.status_code == 200:
-                            metas = response.json().get('metas', [])[:30]
+                            metas = response.json().get('metas', [])  # Get all items
                             type_label = 'Movies' if catalog_type == 'movie' else 'Series'
                             section_name = f"{service_name} {type_label}"
                             
