@@ -417,6 +417,17 @@ export default function PlayerScreen() {
           </Text>
         </View>
       )}
+
+      {/* External Player Button - always show on native when stream is ready */}
+      {streamUrl && !isLoading && !error && Platform.OS !== 'web' && (
+        <TouchableOpacity
+          style={styles.externalPlayerButton}
+          onPress={openInExternalPlayer}
+        >
+          <Ionicons name="open-outline" size={20} color="#FFFFFF" />
+          <Text style={styles.externalPlayerText}>Open in VLC/External Player</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
