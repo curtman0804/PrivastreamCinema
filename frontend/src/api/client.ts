@@ -50,6 +50,16 @@ export interface AuthResponse {
   token: string;
 }
 
+export interface Episode {
+  id: string;
+  season: number;
+  episode: number;
+  name: string;
+  thumbnail?: string;
+  overview?: string;
+  released?: string;
+}
+
 export interface ContentItem {
   id: string;
   imdb_id?: string;
@@ -66,6 +76,7 @@ export interface ContentItem {
   background?: string;
   logo?: string;
   trailerStreams?: { title: string; ytId: string }[];
+  videos?: Episode[];  // Episodes for series
 }
 
 export interface DiscoverResponse {
