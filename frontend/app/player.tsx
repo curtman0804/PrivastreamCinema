@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,287 +11,132 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { WebView } from 'react-native-webview';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { api } from '../src/api/client';
 
 const { width, height } = Dimensions.get('window');
 
 export default function PlayerScreen() {
-  const { url, title, infoHash, magnetLink } = useLocalSearchParams<{
+  const { url, title, infoHash } = useLocalSearchParams<{
     url?: string;
     title?: string;
     infoHash?: string;
-    magnetLink?: string;
   }>();
   const router = useRouter();
+  const videoRef = useRef<Video>(null);
+  
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState('Initializing...');
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [peers, setPeers] = useState(0);
+  const [downloadSpeed, setDownloadSpeed] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Build the WebTorrent player HTML
-  const getPlayerHTML = () => {
-    const magnet = magnetLink || (infoHash ? `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(title || 'Video')}` : null);
-    
+  useEffect(() => {
     if (url) {
-      // Direct HTTP stream - use simple video player
-      return `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { background: #000; overflow: hidden; }
-            video {
-              width: 100vw;
-              height: 100vh;
-              object-fit: contain;
-            }
-          </style>
-        </head>
-        <body>
-          <video controls autoplay playsinline>
-            <source src="${url}" type="video/mp4">
-            Your browser does not support video playback.
-          </video>
-        </body>
-        </html>
-      `;
+      // Direct HTTP stream - play immediately
+      setStreamUrl(url);
+      setIsLoading(false);
+    } else if (infoHash) {
+      // Torrent stream - start backend streaming
+      startTorrentStream();
+    } else {
+      setError('No stream source provided');
+      setIsLoading(false);
     }
 
-    if (magnet) {
-      // WebTorrent player for magnet links
-      return `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-          <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
-              background: #000; 
-              color: #fff; 
-              font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-              overflow: hidden;
-            }
-            #status {
-              position: absolute;
-              top: 50%;
-              left: 50%;
-              transform: translate(-50%, -50%);
-              text-align: center;
-              z-index: 10;
-              padding: 20px;
-            }
-            #status.hidden { display: none; }
-            .spinner {
-              width: 40px;
-              height: 40px;
-              border: 3px solid rgba(139, 92, 246, 0.3);
-              border-top-color: #8B5CF6;
-              border-radius: 50%;
-              animation: spin 1s linear infinite;
-              margin: 0 auto 16px;
-            }
-            @keyframes spin { to { transform: rotate(360deg); } }
-            #statusText { font-size: 14px; color: #aaa; margin-bottom: 8px; }
-            #progress { font-size: 12px; color: #666; }
-            #player {
-              width: 100vw;
-              height: 100vh;
-              display: none;
-            }
-            #player.active {
-              display: block;
-            }
-            video {
-              width: 100%;
-              height: 100%;
-              object-fit: contain;
-              background: #000;
-            }
-            #errorMsg {
-              color: #ff6b6b;
-              font-size: 14px;
-              padding: 20px;
-              text-align: center;
-            }
-            #controls {
-              position: absolute;
-              bottom: 20px;
-              left: 50%;
-              transform: translateX(-50%);
-              display: flex;
-              gap: 12px;
-              z-index: 20;
-            }
-            .control-btn {
-              background: rgba(139, 92, 246, 0.8);
-              border: none;
-              color: white;
-              padding: 10px 16px;
-              border-radius: 8px;
-              font-size: 14px;
-              cursor: pointer;
-            }
-          </style>
-        </head>
-        <body>
-          <div id="status">
-            <div class="spinner"></div>
-            <div id="statusText">Connecting to peers...</div>
-            <div id="progress"></div>
-          </div>
-          <div id="player"></div>
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, [url, infoHash]);
+
+  const startTorrentStream = async () => {
+    if (!infoHash) return;
+
+    try {
+      setLoadingStatus('Starting torrent download...');
+      
+      // Start the stream on backend
+      await api.stream.start(infoHash);
+      
+      // Poll for status
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const status = await api.stream.status(infoHash);
           
-          <script>
-            const magnet = "${magnet.replace(/"/g, '\\"')}";
-            const statusDiv = document.getElementById('status');
-            const statusText = document.getElementById('statusText');
-            const progressDiv = document.getElementById('progress');
-            const playerDiv = document.getElementById('player');
-            
-            // Send message to React Native
-            function sendMessage(type, data) {
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type, ...data }));
-              }
+          setDownloadProgress(status.progress || 0);
+          setPeers(status.peers || 0);
+          setDownloadSpeed(status.download_rate || 0);
+          
+          if (status.status === 'downloading_metadata') {
+            setLoadingStatus(`Connecting to peers... (${status.peers} peers)`);
+          } else if (status.status === 'buffering') {
+            const speedMB = (status.download_rate / 1024 / 1024).toFixed(2);
+            setLoadingStatus(`Buffering... ${status.progress?.toFixed(1)}% (${speedMB} MB/s)`);
+          } else if (status.status === 'ready') {
+            // Video is ready to play
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
             }
             
-            function updateStatus(text, progress = '') {
-              statusText.textContent = text;
-              progressDiv.textContent = progress;
-              sendMessage('status', { text, progress });
+            // Get the stream URL
+            const videoUrl = api.stream.getVideoUrl(infoHash);
+            setStreamUrl(videoUrl);
+            setIsLoading(false);
+            setLoadingStatus('Playing...');
+          } else if (status.status === 'not_found' || status.status === 'invalid') {
+            setError('Failed to start torrent. Please try another stream.');
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
             }
-            
-            function showError(msg) {
-              statusDiv.innerHTML = '<div id="errorMsg">' + msg + '</div>';
-              sendMessage('error', { message: msg });
-            }
-            
-            // Initialize WebTorrent
-            try {
-              updateStatus('Initializing WebTorrent...');
-              
-              const client = new WebTorrent();
-              
-              client.on('error', function(err) {
-                console.error('Client error:', err);
-                showError('WebTorrent error: ' + err.message);
-              });
-              
-              updateStatus('Adding torrent...');
-              
-              const torrent = client.add(magnet, {
-                announce: [
-                  'wss://tracker.openwebtorrent.com',
-                  'wss://tracker.btorrent.xyz',
-                  'wss://tracker.fastcast.nz'
-                ]
-              });
-              
-              torrent.on('error', function(err) {
-                console.error('Torrent error:', err);
-                showError('Torrent error: ' + err.message);
-              });
-              
-              torrent.on('warning', function(err) {
-                console.warn('Torrent warning:', err);
-              });
-              
-              torrent.on('metadata', function() {
-                updateStatus('Got metadata, finding video...');
-              });
-              
-              torrent.on('ready', function() {
-                updateStatus('Torrent ready, buffering...');
-                
-                // Find the largest video file
-                const videoFile = torrent.files.reduce((largest, file) => {
-                  const isVideo = /\\.(mp4|mkv|avi|webm|mov)$/i.test(file.name);
-                  if (isVideo && (!largest || file.length > largest.length)) {
-                    return file;
-                  }
-                  return largest;
-                }, null);
-                
-                if (videoFile) {
-                  updateStatus('Starting playback: ' + videoFile.name);
-                  
-                  videoFile.renderTo('video', { autoplay: true }, function(err, elem) {
-                    if (err) {
-                      showError('Render error: ' + err.message);
-                      return;
-                    }
-                    
-                    statusDiv.classList.add('hidden');
-                    playerDiv.classList.add('active');
-                    sendMessage('playing', { file: videoFile.name });
-                    
-                    elem.controls = true;
-                    elem.play().catch(function(e) {
-                      console.log('Autoplay blocked:', e);
-                    });
-                  });
-                } else {
-                  showError('No video file found in torrent');
-                }
-              });
-              
-              // Update progress
-              setInterval(function() {
-                if (torrent.progress > 0 && torrent.progress < 1) {
-                  const percent = (torrent.progress * 100).toFixed(1);
-                  const speed = (torrent.downloadSpeed / 1024 / 1024).toFixed(2);
-                  const peers = torrent.numPeers;
-                  updateStatus(
-                    'Downloading... ' + percent + '%',
-                    speed + ' MB/s • ' + peers + ' peers'
-                  );
-                }
-              }, 1000);
-              
-            } catch (err) {
-              showError('Failed to initialize: ' + err.message);
-            }
-          </script>
-          <div id="player">
-            <video controls playsinline></video>
-          </div>
-        </body>
-        </html>
-      `;
+          }
+        } catch (err) {
+          console.error('Status poll error:', err);
+        }
+      }, 1000);
+      
+    } catch (err: any) {
+      console.error('Stream start error:', err);
+      setError(err.message || 'Failed to start stream');
+      setIsLoading(false);
     }
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { background: #000; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; }
-        </style>
-      </head>
-      <body>
-        <div>No stream URL provided</div>
-      </body>
-      </html>
-    `;
   };
 
-  const handleMessage = (event: any) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'status') {
-        setLoadingStatus(data.text);
-      } else if (data.type === 'playing') {
-        setIsLoading(false);
-      } else if (data.type === 'error') {
-        setError(data.message);
+  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      setIsPlaying(status.isPlaying);
+      if (status.isPlaying) {
         setIsLoading(false);
       }
-    } catch (e) {
-      console.log('Message parse error:', e);
     }
+  };
+
+  const togglePlayPause = async () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        await videoRef.current.pauseAsync();
+      } else {
+        await videoRef.current.playAsync();
+      }
+    }
+  };
+
+  const handleVideoPress = () => {
+    setShowControls(!showControls);
+  };
+
+  const formatSpeed = (bytesPerSec: number) => {
+    if (bytesPerSec > 1024 * 1024) {
+      return `${(bytesPerSec / 1024 / 1024).toFixed(1)} MB/s`;
+    }
+    return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
   };
 
   return (
@@ -299,7 +144,7 @@ export default function PlayerScreen() {
       <StatusBar hidden />
       
       {/* Header */}
-      <SafeAreaView style={styles.header}>
+      <SafeAreaView style={[styles.header, showControls && styles.headerVisible]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -317,6 +162,23 @@ export default function PlayerScreen() {
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#8B5CF6" />
           <Text style={styles.loadingText}>{loadingStatus}</Text>
+          
+          {/* Progress info for torrents */}
+          {infoHash && downloadProgress > 0 && (
+            <View style={styles.progressInfo}>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${Math.min(downloadProgress, 100)}%` }]} />
+              </View>
+              <View style={styles.statsRow}>
+                <Text style={styles.statText}>
+                  <Ionicons name="people" size={12} color="#8B5CF6" /> {peers} peers
+                </Text>
+                <Text style={styles.statText}>
+                  <Ionicons name="download" size={12} color="#8B5CF6" /> {formatSpeed(downloadSpeed)}
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
       )}
 
@@ -331,27 +193,37 @@ export default function PlayerScreen() {
         </View>
       )}
 
-      {/* WebView Player */}
-      <WebView
-        style={styles.webview}
-        source={{ html: getPlayerHTML() }}
-        onMessage={handleMessage}
-        onLoad={() => {
-          if (url) setIsLoading(false);
-        }}
-        onError={(syntheticEvent) => {
-          const { nativeEvent } = syntheticEvent;
-          setError(nativeEvent.description || 'Failed to load player');
-          setIsLoading(false);
-        }}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        mediaPlaybackRequiresUserAction={false}
-        allowsInlineMediaPlayback={true}
-        allowsFullscreenVideo={true}
-        mixedContentMode="always"
-        originWhitelist={['*']}
-      />
+      {/* Video Player */}
+      {streamUrl && (
+        <TouchableOpacity 
+          style={styles.videoContainer} 
+          onPress={handleVideoPress}
+          activeOpacity={1}
+        >
+          <Video
+            ref={videoRef}
+            source={{ uri: streamUrl }}
+            style={styles.video}
+            useNativeControls
+            resizeMode={ResizeMode.CONTAIN}
+            shouldPlay
+            onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+            onError={(error) => {
+              console.error('Video error:', error);
+              setError('Failed to play video. Try another stream.');
+            }}
+          />
+        </TouchableOpacity>
+      )}
+
+      {/* Download Stats Overlay (for torrents) */}
+      {streamUrl && infoHash && showControls && (
+        <View style={styles.torrentStats}>
+          <Text style={styles.torrentStatText}>
+            {downloadProgress.toFixed(1)}% • {peers} peers • {formatSpeed(downloadSpeed)}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -373,6 +245,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     zIndex: 100,
+    opacity: 0,
+  },
+  headerVisible: {
+    opacity: 1,
   },
   backButton: {
     width: 40,
@@ -393,9 +269,14 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
-  webview: {
+  videoContainer: {
     flex: 1,
-    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  video: {
+    width: width,
+    height: height,
   },
   loadingOverlay: {
     position: 'absolute',
@@ -405,13 +286,40 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
     zIndex: 50,
   },
   loadingText: {
-    color: '#AAAAAA',
-    fontSize: 14,
+    color: '#FFFFFF',
+    fontSize: 16,
     marginTop: 16,
+    textAlign: 'center',
+  },
+  progressInfo: {
+    marginTop: 24,
+    width: '80%',
+    alignItems: 'center',
+  },
+  progressBar: {
+    width: '100%',
+    height: 4,
+    backgroundColor: '#333',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#8B5CF6',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+    marginTop: 12,
+  },
+  statText: {
+    color: '#888',
+    fontSize: 13,
   },
   errorContainer: {
     position: 'absolute',
@@ -442,5 +350,21 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  torrentStats: {
+    position: 'absolute',
+    bottom: 80,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 60,
+  },
+  torrentStatText: {
+    color: '#888',
+    fontSize: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
 });
