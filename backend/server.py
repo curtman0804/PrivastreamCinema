@@ -1257,24 +1257,26 @@ TORRENT_SERVER_URL = "http://localhost:8002"
 async def start_stream(info_hash: str, current_user: User = Depends(get_current_user)):
     """Start downloading a torrent via WebTorrent server"""
     try:
-        # Trigger the WebTorrent server to start downloading by making a request
-        # The /stream endpoint will add the torrent and start downloading
         logger.info(f"Starting torrent download for {info_hash}")
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            # Make a HEAD request to trigger torrent addition without waiting for full stream
+        # Trigger the WebTorrent server to start downloading
+        # We make a GET request to /stream which adds the torrent
+        # Use a background task so we don't block the response
+        async def trigger_torrent():
             try:
-                # Use a short timeout - we just want to trigger the torrent start
-                response = await client.head(
-                    f"{TORRENT_SERVER_URL}/stream/{info_hash}",
-                    timeout=5.0
-                )
-                logger.info(f"Torrent start response: {response.status_code}")
-            except httpx.ReadTimeout:
-                # This is expected - the server might be waiting for peers
-                logger.info(f"Torrent {info_hash} started (timeout expected)")
+                async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
+                    # Make a request to trigger torrent addition
+                    # The stream endpoint will add the torrent and start downloading
+                    response = await client.get(
+                        f"{TORRENT_SERVER_URL}/stream/{info_hash}",
+                        headers={"Range": "bytes=0-1024"}  # Request just first 1KB to trigger start
+                    )
+                    logger.info(f"Torrent trigger response: {response.status_code}")
             except Exception as e:
-                logger.warning(f"Start request exception (may be normal): {e}")
+                logger.info(f"Torrent {info_hash} triggered (exception: {type(e).__name__})")
+        
+        # Start in background
+        asyncio.create_task(trigger_torrent())
         
         return {"status": "started", "info_hash": info_hash}
     except Exception as e:
