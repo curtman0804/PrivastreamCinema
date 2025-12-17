@@ -92,8 +92,10 @@ export default function AddonsScreen() {
             try {
               await api.addons.uninstall(addon.id);
               await fetchAddons();
+              await fetchDiscover(); // Refresh discover page
               Alert.alert('Success', `${addon.manifest.name} has been uninstalled`);
             } catch (error) {
+              console.log('Uninstall error:', error);
               Alert.alert('Error', 'Failed to uninstall addon');
             }
           },
