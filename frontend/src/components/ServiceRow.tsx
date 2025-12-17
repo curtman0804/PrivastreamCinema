@@ -72,14 +72,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  iconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
   title: {
     color: '#FFFFFF',
     fontSize: 18,
