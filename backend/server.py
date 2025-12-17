@@ -1187,8 +1187,8 @@ async def get_all_streams(
 
 @api_router.get("/content/discover-organized")
 async def get_discover(current_user: User = Depends(get_current_user)):
-    """Get discover page content from installed addons in FIFO order"""
-    # Get addons sorted by installation time (FIFO)
+    """Get discover page content from installed addons ONLY - FIFO order"""
+    # Get addons sorted by installation time (FIFO - first installed shows first)
     addons = await db.addons.find({"userId": current_user.id}).sort("installedAt", 1).to_list(100)
     
     result = {
@@ -1196,96 +1196,68 @@ async def get_discover(current_user: User = Depends(get_current_user)):
         "services": {}
     }
     
-    # If no addons installed, return empty
+    # If no addons installed, return empty - let frontend show welcome screen
     if not addons:
+        logger.info("No addons installed for user - returning empty discover")
         return result
     
-    # Fetch catalog helper
-    async def fetch_catalog(addon, catalog_type, catalog_id, extra_path=""):
-        try:
-            base_url = get_base_url(addon['manifestUrl'])
-            url = f"{base_url}/catalog/{catalog_type}/{catalog_id}{extra_path}.json"
-            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                response = await client.get(url)
-                if response.status_code == 200:
-                    data = response.json()
-                    return data.get('metas', [])
-        except Exception as e:
-            logger.warning(f"Error fetching catalog {catalog_id}: {str(e)}")
-        return []
+    logger.info(f"Processing {len(addons)} installed addons for discover")
     
-    # Streaming services catalog IDs (for the streaming catalogs addon)
-    streaming_services = {
-        'Netflix': 'nfx',
-        'HBO Max': 'hbm',
-        'Disney+': 'dnp',
-        'Prime Video': 'amp',
-        'Hulu': 'hlu',
-        'Paramount+': 'pmp',
-        'Apple TV+': 'atp',
-        'Peacock': 'pcp',
-        'Discovery+': 'dpe',
-    }
-    
-    # If we have the streaming catalogs addon, fetch from it
-    if streaming_addon:
-        tasks = []
-        task_info = []
+    # Helper to fetch catalogs from an addon
+    async def fetch_addon_catalogs(addon):
+        """Fetch all catalogs from a single addon"""
+        addon_content = {'movies': [], 'series': [], 'channels': []}
+        manifest = addon.get('manifest', {})
+        addon_name = manifest.get('name', 'Unknown')
+        catalogs = manifest.get('catalogs', [])
         
-        for service_name, service_id in streaming_services.items():
-            # Movies
-            tasks.append(fetch_catalog(streaming_addon, 'movie', service_id))
-            task_info.append((service_name, 'movies'))
-            # Series
-            tasks.append(fetch_catalog(streaming_addon, 'series', service_id))
-            task_info.append((service_name, 'series'))
+        if not catalogs:
+            return addon_name, addon_content
         
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        base_url = get_base_url(addon['manifestUrl'])
         
-        for i, res in enumerate(results):
-            if isinstance(res, list) and len(res) > 0:
-                service_name, content_type = task_info[i]
-                if service_name not in result['services']:
-                    result['services'][service_name] = {'movies': [], 'series': []}
-                # Return all content, not limited
-                result['services'][service_name][content_type] = res
-    
-    # Add USA TV if addon installed
-    if usatv_addon:
-        usa_channels = await fetch_catalog(usatv_addon, 'tv', 'usatv')
-        if usa_channels:
-            # Return more channels (up to 100)
-            result['services']['USA TV'] = {'channels': usa_channels[:100], 'movies': [], 'series': []}
-    
-    # Add Popular content from Cinemeta
-    if cinemeta_addon:
-        popular_movies = await fetch_catalog(cinemeta_addon, 'movie', 'top')
-        popular_series = await fetch_catalog(cinemeta_addon, 'series', 'top')
-        featured_movies = await fetch_catalog(cinemeta_addon, 'movie', 'year', '/year=2024')
-        featured_series = await fetch_catalog(cinemeta_addon, 'series', 'year', '/year=2024')
+        for catalog in catalogs:
+            catalog_type = catalog.get('type', '')
+            catalog_id = catalog.get('id', '')
+            
+            if not catalog_type or not catalog_id:
+                continue
+            
+            try:
+                url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+                    response = await client.get(url)
+                    if response.status_code == 200:
+                        data = response.json()
+                        metas = data.get('metas', [])[:50]  # Limit per catalog
+                        
+                        if catalog_type == 'movie':
+                            addon_content['movies'].extend(metas)
+                        elif catalog_type == 'series':
+                            addon_content['series'].extend(metas)
+                        elif catalog_type == 'tv':
+                            addon_content['channels'].extend(metas)
+                        
+                        logger.info(f"Fetched {len(metas)} items from {addon_name}/{catalog_id}")
+            except Exception as e:
+                logger.warning(f"Error fetching {addon_name}/{catalog_id}: {e}")
         
-        if popular_movies or popular_series:
-            result['services']['Popular'] = {
-                'movies': popular_movies[:15],
-                'series': popular_series[:15]
-            }
-        if featured_movies or featured_series:
-            result['services']['Featured'] = {
-                'movies': featured_movies[:15],
-                'series': featured_series[:15]
-            }
+        return addon_name, addon_content
     
-    # Fallback mock data if no addons/content
-    if not result['services']:
-        result['services'] = {
-            "Popular": {
-                "movies": [
-                    {"id": "tt14364480", "imdb_id": "tt14364480", "name": "Wake Up Dead Man: A Knives Out Mystery", "type": "movie", "poster": "https://images.justwatch.com/poster/319658825/s332/img", "year": "2025", "imdbRating": "7.9"},
-                    {"id": "tt0314331", "imdb_id": "tt0314331", "name": "Love Actually", "type": "movie", "poster": "https://images.justwatch.com/poster/175588666/s332/img", "year": "2003", "imdbRating": "7.6"},
-                ],
-                "series": []
-            }
-        }
+    # Process each addon in FIFO order
+    for addon in addons:
+        addon_name, content = await fetch_addon_catalogs(addon)
+        
+        # Only add addon if it has content
+        has_content = (
+            len(content['movies']) > 0 or 
+            len(content['series']) > 0 or 
+            len(content['channels']) > 0
+        )
+        
+        if has_content:
+            result['services'][addon_name] = content
+            logger.info(f"Added {addon_name}: {len(content['movies'])} movies, {len(content['series'])} series, {len(content['channels'])} channels")
     
     return result
 
