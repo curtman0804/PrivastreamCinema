@@ -17,7 +17,7 @@ import { useContentStore } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem } from '../../src/api/client';
 
-const SERVICES = ['All', 'Netflix', 'HBO Max', 'Disney+', 'Prime Video', 'Hulu', 'Paramount+', 'Apple TV+'];
+const SERVICES = ['All', 'Netflix', 'HBO Max', 'Disney+', 'Prime Video', 'Hulu', 'Paramount+', 'Apple TV+', 'USA TV'];
 
 export default function DiscoverScreen() {
   const router = useRouter();
