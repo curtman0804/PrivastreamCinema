@@ -1187,30 +1187,18 @@ async def get_all_streams(
 
 @api_router.get("/content/discover-organized")
 async def get_discover(current_user: User = Depends(get_current_user)):
-    """Get discover page content from installed addons"""
-    addons = await db.addons.find({"userId": current_user.id}).to_list(100)
+    """Get discover page content from installed addons in FIFO order"""
+    # Get addons sorted by installation time (FIFO)
+    addons = await db.addons.find({"userId": current_user.id}).sort("installedAt", 1).to_list(100)
     
     result = {
         "continueWatching": [],
         "services": {}
     }
     
-    # Find streaming catalogs addon and cinemeta
-    streaming_addon = None
-    cinemeta_addon = None
-    usatv_addon = None
-    
-    for addon in addons:
-        manifest = addon.get('manifest', {})
-        manifest_url = addon.get('manifestUrl', '').lower()
-        addon_id = manifest.get('id', '').lower()
-        
-        if 'netflix-catalog' in manifest_url or 'streaming-catalogs' in addon_id:
-            streaming_addon = addon
-        elif 'cinemeta' in addon_id:
-            cinemeta_addon = addon
-        elif 'usatv' in manifest_url or 'usatv' in addon_id:
-            usatv_addon = addon
+    # If no addons installed, return empty
+    if not addons:
+        return result
     
     # Fetch catalog helper
     async def fetch_catalog(addon, catalog_type, catalog_id, extra_path=""):
