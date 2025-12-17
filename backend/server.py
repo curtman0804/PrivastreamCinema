@@ -702,7 +702,8 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 service_name, content_type = task_info[i]
                 if service_name not in result['services']:
                     result['services'][service_name] = {'movies': [], 'series': []}
-                result['services'][service_name][content_type] = res[:15]
+                # Return all content, not limited
+                result['services'][service_name][content_type] = res
     
     # Add USA TV if addon installed
     if usatv_addon:
