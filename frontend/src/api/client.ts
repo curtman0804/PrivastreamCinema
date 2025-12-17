@@ -156,8 +156,86 @@ export const api = {
       return response.data;
     },
     getAllStreams: async (type: string, id: string): Promise<{ streams: Stream[] }> => {
+      // Fetch from backend first
       const response = await apiClient.get(`/api/streams/${type}/${id}`);
-      return response.data;
+      let allStreams = response.data.streams || [];
+      
+      // Also fetch directly from Torrentio on the client (bypasses Cloudflare)
+      try {
+        const torrentioStreams = await api.addons.fetchTorrentioStreams(type, id);
+        if (torrentioStreams.length > 0) {
+          // Merge and dedupe by infoHash
+          const existingHashes = new Set(allStreams.map((s: Stream) => s.infoHash?.toLowerCase()).filter(Boolean));
+          const newStreams = torrentioStreams.filter((s: Stream) => 
+            s.infoHash && !existingHashes.has(s.infoHash.toLowerCase())
+          );
+          allStreams = [...allStreams, ...newStreams];
+        }
+      } catch (e) {
+        console.log('Client-side Torrentio fetch failed, using backend streams:', e);
+      }
+      
+      // Sort by seeders (highest first)
+      allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
+      
+      return { streams: allStreams };
+    },
+    
+    fetchTorrentioStreams: async (type: string, id: string): Promise<Stream[]> => {
+      // Direct client-side fetch from Torrentio (mobile apps bypass Cloudflare)
+      try {
+        const torrentioUrl = `https://torrentio.strem.fun/sort=seeders|qualityfilter=480p,scr,cam/stream/${type}/${id}.json`;
+        const response = await fetch(torrentioUrl, {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36',
+          },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const rawStreams = data.streams || [];
+          
+          // Parse Torrentio streams
+          return rawStreams.map((stream: any) => {
+            const name = stream.name || '';
+            const title = stream.title || '';
+            
+            // Extract infoHash
+            let infoHash = stream.infoHash;
+            if (!infoHash && stream.behaviorHints?.bingeGroup?.length === 40) {
+              infoHash = stream.behaviorHints.bingeGroup;
+            }
+            if (!infoHash && stream.url?.includes('magnet:')) {
+              const match = stream.url.match(/btih:([a-fA-F0-9]{40})/);
+              if (match) infoHash = match[1];
+            }
+            
+            // Parse seeders from title (format: "👤 123")
+            let seeders = 0;
+            const seederMatch = title.match(/👤\s*(\d+)/);
+            if (seederMatch) seeders = parseInt(seederMatch[1], 10);
+            
+            // Determine quality
+            const quality = name.toUpperCase().includes('4K') || name.includes('2160') ? '4K' :
+                           name.includes('1080') ? '1080p' :
+                           name.includes('720') ? '720p' : 'SD';
+            
+            return {
+              name: `⚡ ${name}`,
+              title: title,
+              infoHash: infoHash?.toLowerCase(),
+              sources: ['tracker:udp://tracker.opentrackr.org:1337/announce'],
+              addon: 'Torrentio',
+              seeders: seeders,
+              quality: quality,
+            };
+          }).filter((s: Stream) => s.infoHash);
+        }
+      } catch (e) {
+        console.log('Torrentio direct fetch error:', e);
+      }
+      return [];
     },
     install: async (manifestUrl: string): Promise<Addon> => {
       const response = await apiClient.post('/api/addons/install', { manifestUrl });
