@@ -1107,6 +1107,10 @@ async def stream_video(
             "Accept-Ranges": "bytes",
             "Content-Range": f"bytes {start}-{end}/{file_size}",
             "Cache-Control": "no-cache",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Range",
+            "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
         }
         
         status_code = 206 if range_header else 200
