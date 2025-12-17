@@ -165,12 +165,19 @@ export default function AddonsScreen() {
           ))}
         </View>
       </View>
-      <TouchableOpacity
-        style={styles.deleteButton}
-        onPress={() => handleUninstall(item)}
+      <Pressable
+        style={({ pressed }) => [
+          styles.deleteButton,
+          pressed && { opacity: 0.6, transform: [{ scale: 0.95 }] }
+        ]}
+        onPress={() => {
+          console.log('Delete button pressed for:', item.manifest.name);
+          handleUninstall(item);
+        }}
+        hitSlop={10}
       >
         <Ionicons name="trash-outline" size={22} color="#FF4444" />
-      </TouchableOpacity>
+      </Pressable>
     </View>
   );
 
