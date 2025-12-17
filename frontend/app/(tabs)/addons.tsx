@@ -269,29 +269,18 @@ export default function AddonsScreen() {
               />
             </View>
 
-            {/* Manual Configuration Addons */}
+            {/* Install All Button */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Manual Setup Required</Text>
-              <Text style={styles.sectionSubtitle}>
-                Visit the config URL in your browser, configure the addon, then copy the manifest URL
-              </Text>
-              {MANUAL_ADDONS.map((item) => (
-                <View key={item.name} style={styles.manualCard}>
-                  <View style={styles.recommendedInfo}>
-                    <Text style={styles.recommendedName}>{item.name}</Text>
-                    <Text style={styles.recommendedDesc}>{item.description}</Text>
-                    {item.configUrl && (
-                      <TouchableOpacity
-                        onPress={() => Linking.openURL(item.configUrl)}
-                        style={styles.configLink}
-                      >
-                        <Ionicons name="open-outline" size={14} color="#8B5CF6" />
-                        <Text style={styles.configLinkText}>Open Config Page</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              ))}
+              <TouchableOpacity
+                style={styles.installAllButton}
+                onPress={() => {
+                  setAddonUrl(RECOMMENDED_ADDON_URLS);
+                  setShowModal(true);
+                }}
+              >
+                <Ionicons name="download-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.installAllText}>Install All Recommended Addons</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Installed Addons */}
