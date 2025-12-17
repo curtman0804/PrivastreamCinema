@@ -1257,8 +1257,25 @@ TORRENT_SERVER_URL = "http://localhost:8002"
 async def start_stream(info_hash: str, current_user: User = Depends(get_current_user)):
     """Start downloading a torrent via WebTorrent server"""
     try:
-        # The WebTorrent server automatically starts torrents when you request a stream
-        # We just return success - the actual download starts on /stream/video request
+        # Trigger the WebTorrent server to start downloading by making a request
+        # The /stream endpoint will add the torrent and start downloading
+        logger.info(f"Starting torrent download for {info_hash}")
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            # Make a HEAD request to trigger torrent addition without waiting for full stream
+            try:
+                # Use a short timeout - we just want to trigger the torrent start
+                response = await client.head(
+                    f"{TORRENT_SERVER_URL}/stream/{info_hash}",
+                    timeout=5.0
+                )
+                logger.info(f"Torrent start response: {response.status_code}")
+            except httpx.ReadTimeout:
+                # This is expected - the server might be waiting for peers
+                logger.info(f"Torrent {info_hash} started (timeout expected)")
+            except Exception as e:
+                logger.warning(f"Start request exception (may be normal): {e}")
+        
         return {"status": "started", "info_hash": info_hash}
     except Exception as e:
         logger.error(f"Error starting stream: {e}")
