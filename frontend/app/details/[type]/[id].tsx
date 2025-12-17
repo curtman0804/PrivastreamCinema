@@ -282,6 +282,89 @@ export default function DetailsScreen() {
           </View>
         )}
 
+        {/* Season/Episode Selection for Series */}
+        {type === 'series' && seasons.length > 0 && (
+          <View style={styles.episodeSection}>
+            {/* Season Selector */}
+            <View style={styles.seasonSelector}>
+              <Text style={styles.sectionTitle}>Seasons</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.seasonScroll}>
+                {seasons.map((season) => (
+                  <TouchableOpacity
+                    key={season}
+                    style={[
+                      styles.seasonButton,
+                      selectedSeason === season && styles.seasonButtonActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedSeason(season);
+                      setSelectedEpisode(null);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.seasonButtonText,
+                        selectedSeason === season && styles.seasonButtonTextActive,
+                      ]}
+                    >
+                      S{season}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Episode List */}
+            <View style={styles.episodeList}>
+              <Text style={styles.sectionTitle}>
+                Episodes - Season {selectedSeason}
+              </Text>
+              {episodesForSeason.map((episode) => (
+                <TouchableOpacity
+                  key={`${episode.season}-${episode.episode}`}
+                  style={[
+                    styles.episodeItem,
+                    selectedEpisode?.id === episode.id && styles.episodeItemSelected,
+                  ]}
+                  onPress={() => setSelectedEpisode(episode)}
+                >
+                  <Image
+                    source={{ uri: episode.thumbnail || content?.poster }}
+                    style={styles.episodeThumbnail}
+                    contentFit="cover"
+                  />
+                  <View style={styles.episodeInfo}>
+                    <Text style={styles.episodeNumber}>
+                      E{episode.episode}
+                    </Text>
+                    <Text style={styles.episodeTitle} numberOfLines={1}>
+                      {episode.name || `Episode ${episode.episode}`}
+                    </Text>
+                    {episode.overview && (
+                      <Text style={styles.episodeOverview} numberOfLines={2}>
+                        {episode.overview}
+                      </Text>
+                    )}
+                  </View>
+                  {selectedEpisode?.id === episode.id && (
+                    <Ionicons name="checkmark-circle" size={24} color="#8B5CF6" />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Prompt to select episode */}
+            {!selectedEpisode && (
+              <View style={styles.selectEpisodePrompt}>
+                <Ionicons name="information-circle-outline" size={20} color="#888" />
+                <Text style={styles.selectEpisodeText}>
+                  Select an episode to see available streams
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Streams Section */}
         <View style={styles.streamsSection}>
           <View style={styles.streamHeader}>
