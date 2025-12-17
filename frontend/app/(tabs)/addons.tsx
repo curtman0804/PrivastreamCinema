@@ -19,33 +19,44 @@ import { useContentStore } from '../../src/store/contentStore';
 import { Addon, api } from '../../src/api/client';
 import { Image } from 'expo-image';
 
-// Recommended addons for users to install
+// Recommended addons for users to install - paste these URLs
+const RECOMMENDED_ADDON_URLS = `https://v3-cinemeta.strem.io/manifest.json;
+https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGRucCxhbXAsaGJtLGhsdSxwbXAsYXRwLHBjcCxkcGU6OnVzOjE3MzgxODc4Mzk1Njk%3D/manifest.json;
+https://848b3516657c-usatv.baby-beamup.club/manifest.json;
+https://thepiratebay-plus.strem.fun/manifest.json;
+https://torrentio.strem.fun/manifest.json`;
+
+// Quick install addons
 const RECOMMENDED_ADDONS = [
   {
     name: 'Cinemeta',
-    description: 'Official addon for movie and series metadata (Required)',
+    description: 'Movie & series metadata (Required)',
     url: 'https://v3-cinemeta.strem.io/manifest.json',
   },
   {
-    name: 'OpenSubtitles',
-    description: 'Subtitles from OpenSubtitles.com',
-    url: 'https://opensubtitles-v3.strem.io/manifest.json',
+    name: 'Streaming Catalogs',
+    description: 'Netflix, HBO, Disney+, Prime, Hulu & more',
+    url: 'https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGRucCxhbXAsaGJtLGhsdSxwbXAsYXRwLHBjcCxkcGU6OnVzOjE3MzgxODc4Mzk1Njk%3D/manifest.json',
+  },
+  {
+    name: 'USA TV',
+    description: 'Live USA TV channels',
+    url: 'https://848b3516657c-usatv.baby-beamup.club/manifest.json',
+  },
+  {
+    name: 'ThePirateBay+',
+    description: 'Torrent streams from ThePirateBay',
+    url: 'https://thepiratebay-plus.strem.fun/manifest.json',
+  },
+  {
+    name: 'Torrentio',
+    description: 'Multi-source torrent streams',
+    url: 'https://torrentio.strem.fun/manifest.json',
   },
 ];
 
-// Addons that need manual configuration (Cloudflare protected)
-const MANUAL_ADDONS = [
-  {
-    name: 'Torrentio',
-    description: 'Stream from multiple torrent sources - Get URL from torrentio.strem.fun',
-    configUrl: 'https://torrentio.strem.fun/configure',
-  },
-  {
-    name: 'Streaming Catalogs',
-    description: 'Netflix, HBO, Disney+ catalogs - May require custom URL',
-    configUrl: null,
-  },
-];
+// No more manual addons needed
+const MANUAL_ADDONS: any[] = [];
 
 export default function AddonsScreen() {
   const { addons, isLoadingAddons, fetchAddons } = useContentStore();
