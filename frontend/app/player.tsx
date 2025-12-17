@@ -101,7 +101,15 @@ export default function PlayerScreen() {
   useEffect(() => {
     continuePollingRef.current = true;
     
-    if (url) {
+    // Check if this is live TV
+    setIsLiveTV(isLive === 'true');
+    
+    if (directUrl) {
+      // Direct URL stream (USA TV, etc.) - play immediately
+      setStreamUrl(directUrl);
+      setIsLoading(false);
+      setLoadingStatus('');
+    } else if (url) {
       setStreamUrl(url);
       setIsLoading(false);
     } else if (infoHash) {
@@ -118,7 +126,7 @@ export default function PlayerScreen() {
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [url, infoHash]);
+  }, [url, infoHash, directUrl, isLive]);
 
   const startTorrentStream = async () => {
     if (!infoHash) return;
