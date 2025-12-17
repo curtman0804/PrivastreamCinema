@@ -161,17 +161,23 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    gap: 10,
   },
-  logoContainer: {
+  headerLogo: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+  },
+  headerTitle: {
     flex: 1,
-  },
-  logo: {
-    width: 140,
-    height: 36,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontFamily: 'System',
+    letterSpacing: 0.5,
   },
   searchButton: {
     width: 44,
