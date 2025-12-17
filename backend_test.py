@@ -419,53 +419,43 @@ class PrivastreamTester:
 def main():
     """Run all tests"""
     print("🎬 PrivastreamCinema Backend API Test Suite")
-    print("=" * 50)
+    print("=" * 60)
+    print(f"Backend URL: {BASE_URL}")
+    print(f"Test User: {TEST_USERNAME}")
     
     tester = PrivastreamTester()
-    results = {}
     
-    # Test 1: Authentication
-    results['login'] = tester.test_login()
-    
-    # Test 2: Auth verification
-    results['auth_me'] = tester.test_auth_me()
-    
-    # Test 3: Stream fetching for Wake Up Dead Man
-    results['streams_wake_up_dead_man'] = tester.test_streams_movie(
-        "tt14364480", 
-        "Wake Up Dead Man: A Knives Out Mystery"
-    )
-    
-    # Test 4: Stream fetching for The Holdovers
-    results['streams_holdovers'] = tester.test_streams_movie(
-        "tt14849194", 
-        "The Holdovers"
-    )
-    
-    # Test 5: Discover content
-    results['discover_content'] = tester.test_discover_content()
+    # Run tests in order
+    auth_success = tester.test_login()
+    discover_success = tester.test_discover_content_organization()
+    addon_success = tester.test_addon_management()
     
     # Summary
-    print("\n" + "=" * 50)
-    print("🎯 TEST SUMMARY")
-    print("=" * 50)
+    print("\n" + "="*60)
+    print("📊 TEST SUMMARY")
+    print("="*60)
     
-    passed = 0
-    total = len(results)
+    passed = sum(1 for r in tester.test_results if r["success"])
+    total = len(tester.test_results)
     
-    for test_name, result in results.items():
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{test_name.replace('_', ' ').title()}: {status}")
-        if result:
-            passed += 1
+    print(f"Total Tests: {total}")
+    print(f"Passed: {passed}")
+    print(f"Failed: {total - passed}")
+    print(f"Success Rate: {(passed/total)*100:.1f}%")
     
-    print(f"\nOverall: {passed}/{total} tests passed")
+    print("\nDetailed Results:")
+    for result in tester.test_results:
+        status = "✅" if result["success"] else "❌"
+        print(f"{status} {result['test']}: {result['message']}")
     
-    if passed == total:
-        print("🎉 All tests passed!")
+    # Overall result
+    overall_success = auth_success and discover_success and addon_success
+    
+    if overall_success:
+        print("\n🎉 ALL CRITICAL TESTS PASSED!")
         return 0
     else:
-        print("⚠️  Some tests failed - check logs above")
+        print("\n⚠️  SOME TESTS FAILED - See details above")
         return 1
 
 if __name__ == "__main__":
