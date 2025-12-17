@@ -73,6 +73,28 @@ export default function PlayerScreen() {
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
 
+  // Lock to landscape on mount, unlock on unmount
+  useEffect(() => {
+    const lockLandscape = async () => {
+      if (Platform.OS !== 'web') {
+        try {
+          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        } catch (e) {
+          console.log('Could not lock orientation:', e);
+        }
+      }
+    };
+    
+    lockLandscape();
+    
+    return () => {
+      // Unlock orientation when leaving player
+      if (Platform.OS !== 'web') {
+        ScreenOrientation.unlockAsync().catch(() => {});
+      }
+    };
+  }, []);
+
   useEffect(() => {
     continuePollingRef.current = true;
     
