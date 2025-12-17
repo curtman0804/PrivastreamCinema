@@ -101,3 +101,78 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  Build PrivastreamCinema streaming app with:
+  - User authentication (login)
+  - Discover page with movie/TV categories (Netflix, HBO, Disney+, etc.)
+  - Stream fetching from torrent sources (YTS, PirateBay, EZTV)
+  - Video player for streams
+  - Admin user management
+
+backend:
+  - task: "User Authentication (Login)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Login endpoint working with choyt/RFIDGuy1!"
+
+  - task: "Discover Page Content API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Returns Netflix, HBO, Disney+, etc. content from streaming catalogs addon"
+
+  - task: "Stream Fetching API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added Torrentio-style aggregation from YTS, PirateBay, EZTV. Tested with curl - returns 20 streams"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Stream Fetching API"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Implemented Torrentio-style stream aggregation in backend. The /api/streams/{type}/{id} endpoint now:
+      1. Searches YTS for movies
+      2. Searches EZTV for TV series (using IMDB ID)
+      3. Searches PirateBay via apibay.org
+      4. Also queries user's installed addons
+      
+      Tested with curl - returns 20+ streams for Wake Up Dead Man (tt14364480) and The Holdovers (tt14849194).
+      
+      Please test:
+      1. POST /api/auth/login with {"username": "choyt", "password": "RFIDGuy1!"}
+      2. GET /api/streams/movie/tt14364480 (should return streams with infoHash, seeders, title)
+      3. GET /api/streams/movie/tt14849194 (The Holdovers)
+      4. GET /api/streams/series/tt31314751 (a series)
