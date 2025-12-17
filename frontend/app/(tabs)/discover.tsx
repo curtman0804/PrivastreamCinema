@@ -87,33 +87,35 @@ export default function DiscoverScreen() {
         </Pressable>
       </View>
 
-      {/* Service Filter Tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabsContainer}
-        contentContainerStyle={styles.tabsContent}
-      >
-        {SERVICES.map((service) => (
-          <TouchableOpacity
-            key={service}
-            style={[
-              styles.serviceTab,
-              selectedService === service && styles.serviceTabActive,
-            ]}
-            onPress={() => setSelectedService(service)}
-          >
-            <Text
+      {/* Service Filter Tabs - Only show when there's content */}
+      {hasContent && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabsContainer}
+          contentContainerStyle={styles.tabsContent}
+        >
+          {SERVICES.map((service) => (
+            <TouchableOpacity
+              key={service}
               style={[
-                styles.serviceTabText,
-                selectedService === service && styles.serviceTabTextActive,
+                styles.serviceTab,
+                selectedService === service && styles.serviceTabActive,
               ]}
+              onPress={() => setSelectedService(service)}
             >
-              {service}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+              <Text
+                style={[
+                  styles.serviceTabText,
+                  selectedService === service && styles.serviceTabTextActive,
+                ]}
+              >
+                {service}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       <ScrollView
         style={styles.scrollView}
