@@ -1081,9 +1081,10 @@ async def stream_video(
         # Handle Range requests for seeking
         start = 0
         end = file_size - 1
+        range_header = request.headers.get("range")
         
-        if range:
-            range_match = range.replace("bytes=", "").split("-")
+        if range_header:
+            range_match = range_header.replace("bytes=", "").split("-")
             start = int(range_match[0]) if range_match[0] else 0
             end = int(range_match[1]) if range_match[1] else file_size - 1
         
