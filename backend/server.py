@@ -1051,8 +1051,8 @@ async def stream_status(info_hash: str, current_user: User = Depends(get_current
 
 @api_router.get("/stream/video/{info_hash}")
 async def stream_video(
-    info_hash: str, 
-    range: Optional[str] = None
+    info_hash: str,
+    request: Request
 ):
     """Stream the video file as HTTP with Range support (like Stremio does)"""
     try:
