@@ -863,6 +863,78 @@ async def get_all_streams(
             logger.warning(f"ApiBay search error: {e}")
         return []
     
+    async def search_torrentio(content_type: str, content_id: str):
+        """Search Torrentio addon for streams - aggregates YTS, RARBG, 1337x, etc."""
+        try:
+            # Torrentio URL with optimized settings
+            # sort=seeders - sort by most seeders
+            # qualityfilter=480p,scr,cam - filter out low quality
+            torrentio_config = "sort=seeders|qualityfilter=480p,scr,cam"
+            base_url = f"https://torrentio.strem.fun/{torrentio_config}"
+            url = f"{base_url}/stream/{content_type}/{content_id}.json"
+            
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                response = await client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    raw_streams = data.get('streams', [])
+                    streams = []
+                    
+                    for stream in raw_streams:
+                        # Parse Torrentio stream format
+                        name = stream.get('name', '')
+                        title = stream.get('title', '')
+                        
+                        # Extract infoHash from various formats
+                        info_hash = None
+                        behavior_hints = stream.get('behaviorHints', {})
+                        
+                        if 'infoHash' in stream:
+                            info_hash = stream['infoHash'].lower()
+                        elif behavior_hints.get('bingeGroup'):
+                            # Try to extract from bingeGroup
+                            binge = behavior_hints.get('bingeGroup', '')
+                            if len(binge) == 40:
+                                info_hash = binge.lower()
+                        
+                        # Also check URL for magnet
+                        stream_url = stream.get('url', '')
+                        if not info_hash and 'magnet:' in stream_url:
+                            import re
+                            hash_match = re.search(r'btih:([a-fA-F0-9]{40})', stream_url)
+                            if hash_match:
+                                info_hash = hash_match.group(1).lower()
+                        
+                        # Parse seeders from title (Torrentio format: "👤 123")
+                        seeders = 0
+                        if '👤' in title:
+                            import re
+                            seeder_match = re.search(r'👤\s*(\d+)', title)
+                            if seeder_match:
+                                seeders = int(seeder_match.group(1))
+                        
+                        if info_hash:
+                            # Determine quality from name
+                            quality = '4K' if any(q in name.upper() for q in ['2160P', '4K', 'UHD']) else \
+                                     '1080p' if '1080P' in name.upper() else \
+                                     '720p' if '720P' in name.upper() else 'SD'
+                            
+                            streams.append({
+                                "name": f"⚡ {name}",
+                                "title": title,
+                                "infoHash": info_hash,
+                                "sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"],
+                                "addon": "Torrentio",
+                                "seeders": seeders,
+                                "quality": quality
+                            })
+                    
+                    logger.info(f"Torrentio found {len(streams)} streams for {content_type}/{content_id}")
+                    return streams
+        except Exception as e:
+            logger.warning(f"Torrentio search error: {e}")
+        return []
+    
     # Build tasks
     tasks = []
     
