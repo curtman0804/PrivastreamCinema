@@ -57,8 +57,8 @@ export default function DetailsScreen() {
     loadContent();
     fetchLibrary();
     
-    // Only fetch streams for movies or episode pages
-    if (type && id && (type === 'movie' || isEpisodePage)) {
+    // Fetch streams for movies, episode pages, or TV channels
+    if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
       fetchStreams(type, id);
     }
   }, [id, type]);
