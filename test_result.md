@@ -211,9 +211,7 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Discover Page Content Organization"
-    - "Addon Deletion API"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
