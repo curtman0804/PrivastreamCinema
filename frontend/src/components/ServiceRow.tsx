@@ -51,16 +51,10 @@ export const ServiceRow: React.FC<ServiceRowProps> = ({
   const validItems = (items || []).filter(Boolean);
   if (validItems.length === 0) return null;
 
-  const iconName = serviceIcons[serviceName] || 'film-outline';
-  const color = serviceColors[serviceName] || '#8B5CF6';
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.titleContainer}>
-          <View style={[styles.iconContainer, { backgroundColor: color }]}>
-            <Ionicons name={iconName as any} size={16} color="#FFFFFF" />
-          </View>
           <Text style={styles.title}>{serviceName}</Text>
         </View>
         {onSeeAll && (
