@@ -245,20 +245,21 @@ export default function PlayerScreen() {
         </View>
       )}
 
-      {/* Video Player - Web uses iframe, native uses WebView */}
+      {/* Video Player - Web uses native video, native uses WebView */}
       {streamUrl && !error && !isLoading && (
         Platform.OS === 'web' ? (
           <View style={styles.webview}>
-            <iframe
-              srcDoc={getVideoPlayerHTML()}
+            <video
+              src={streamUrl}
+              controls
+              autoPlay
+              playsInline
               style={{ 
                 width: '100%', 
                 height: '100%', 
-                border: 'none',
-                background: '#000'
+                backgroundColor: '#000',
+                objectFit: 'contain'
               } as any}
-              allow="autoplay; fullscreen"
-              allowFullScreen
             />
           </View>
         ) : WebView ? (
