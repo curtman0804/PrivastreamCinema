@@ -8,8 +8,6 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
-  Linking,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -18,7 +16,6 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useContentStore } from '../../../src/store/contentStore';
 import { api, ContentItem, Stream } from '../../../src/api/client';
-import * as Clipboard from 'expo-clipboard';
 
 const { width, height } = Dimensions.get('window');
 
