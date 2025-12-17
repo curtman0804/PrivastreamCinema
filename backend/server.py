@@ -1071,19 +1071,25 @@ async def stream_video(
         if file_size == 0:
             raise HTTPException(status_code=404, detail="Video file is empty - still downloading")
         
-        # Use ffmpeg to remux (not transcode) to MP4 - much faster
-        # This just repackages the video without re-encoding
+        # Use ffmpeg to transcode to MP4 with error tolerance for incomplete files
         def generate_stream():
             cmd = [
                 'ffmpeg',
+                '-err_detect', 'ignore_err',  # Ignore errors in source
+                '-fflags', '+genpts+igndts',  # Generate PTS, ignore DTS errors
                 '-i', video_path,
-                '-c', 'copy',           # Copy streams without re-encoding (fast!)
-                '-movflags', 'frag_keyframe+empty_moov+faststart',
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-crf', '28',                  # Faster encoding with reasonable quality
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-movflags', 'frag_keyframe+empty_moov',
+                '-max_muxing_queue_size', '1024',
                 '-f', 'mp4',
                 '-'
             ]
             
-            logger.info(f"Starting ffmpeg remux for {video_path}")
+            logger.info(f"Starting ffmpeg transcode for {video_path}")
             
             process = subprocess.Popen(
                 cmd,
@@ -1097,6 +1103,10 @@ async def stream_video(
                 while True:
                     chunk = process.stdout.read(256 * 1024)  # 256KB chunks
                     if not chunk:
+                        # Check stderr for errors
+                        stderr = process.stderr.read()
+                        if stderr:
+                            logger.warning(f"ffmpeg stderr: {stderr[-500:].decode('utf-8', errors='ignore')}")
                         break
                     bytes_sent += len(chunk)
                     yield chunk
