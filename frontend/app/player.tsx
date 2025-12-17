@@ -120,49 +120,77 @@ export default function PlayerScreen() {
     if (!infoHash) return;
 
     try {
-      setLoadingStatus('Connecting to peers...');
+      setLoadingStatus('Starting torrent engine...');
       
       await api.stream.start(infoHash);
       
-      pollIntervalRef.current = setInterval(async () => {
+      // Start with fast polling (500ms) for quicker response during initial buffering
+      let pollInterval = 500;
+      let pollCount = 0;
+      
+      const pollStatus = async () => {
         if (!continuePollingRef.current) return;
         
         try {
           const status = await api.stream.status(infoHash);
+          pollCount++;
           
           setDownloadProgress(status.progress || 0);
           setPeers(status.peers || 0);
           setDownloadSpeed(status.download_rate || 0);
           
           if (status.status === 'downloading_metadata') {
-            setLoadingStatus(`Finding peers... (${status.peers || 0} connected)`);
+            const peerCount = status.peers || 0;
+            if (peerCount === 0) {
+              setLoadingStatus('Searching for peers...');
+            } else {
+              setLoadingStatus(`Found ${peerCount} peers, getting file info...`);
+            }
           } else if (status.status === 'buffering') {
             const speedMB = ((status.download_rate || 0) / 1024 / 1024).toFixed(1);
-            setLoadingStatus(`Buffering ${(status.progress || 0).toFixed(1)}% (${speedMB} MB/s)`);
+            const downloaded = status.downloaded ? (status.downloaded / (1024 * 1024)).toFixed(1) : '0';
+            const threshold = status.ready_threshold_mb ? status.ready_threshold_mb.toFixed(1) : '3';
+            setLoadingStatus(`Buffering ${downloaded}MB / ${threshold}MB (${speedMB} MB/s)`);
+            
+            // Slow down polling once we're buffering (save resources)
+            if (pollInterval < 1000) {
+              pollInterval = 1000;
+            }
           } else if (status.status === 'ready') {
-            // Clear polling - video ready
+            // Video ready - start playback immediately!
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
             }
             
+            setLoadingStatus('Starting playback...');
             const videoUrl = api.stream.getVideoUrl(infoHash);
             setStreamUrl(videoUrl);
             setIsLoading(false);
+            return; // Stop polling
           } else if (status.status === 'not_found' || status.status === 'invalid') {
-            setError('Failed to start. Try another stream.');
+            setError('Failed to start. Try selecting a different stream with more seeders.');
             setIsLoading(false);
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
             }
+            return;
           }
+          
+          // Continue polling
+          pollIntervalRef.current = setTimeout(pollStatus, pollInterval) as any;
         } catch (err) {
           console.error('Status poll error:', err);
+          // Retry on error
+          pollIntervalRef.current = setTimeout(pollStatus, 2000) as any;
         }
-      }, 1000);
+      };
+      
+      // Start polling immediately
+      pollStatus();
       
     } catch (err: any) {
       console.error('Stream start error:', err);
-      setError(err.message || 'Failed to start');
+      setError(err.message || 'Failed to start stream');
       setIsLoading(false);
     }
   };
