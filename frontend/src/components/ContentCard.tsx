@@ -56,7 +56,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
 const styles = StyleSheet.create({
   container: {
     marginRight: 12,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   imageContainer: {
     borderRadius: 8,
@@ -66,34 +66,5 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
-  },
-  ratingBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  ratingText: {
-    color: '#FFD700',
-    fontSize: 11,
-    fontWeight: '600',
-    marginLeft: 3,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '500',
-    marginTop: 8,
-    lineHeight: 18,
-  },
-  year: {
-    color: '#888888',
-    fontSize: 11,
-    marginTop: 2,
   },
 });
