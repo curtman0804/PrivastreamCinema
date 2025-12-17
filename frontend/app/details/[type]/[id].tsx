@@ -116,13 +116,11 @@ export default function DetailsScreen() {
         },
       });
     } else if (stream.infoHash) {
-      // Torrent stream - play with WebTorrent in-app player
-      const magnetLink = buildMagnetLink(stream.infoHash, content?.name || 'Video');
+      // Torrent stream - use backend libtorrent streaming (like Stremio)
       router.push({
         pathname: '/player',
         params: { 
           infoHash: stream.infoHash,
-          magnetLink: magnetLink,
           title: content?.name || 'Video',
         },
       });
