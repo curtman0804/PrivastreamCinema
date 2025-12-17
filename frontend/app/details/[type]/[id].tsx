@@ -657,4 +657,99 @@ const styles = StyleSheet.create({
   bottomPadding: {
     height: 100,
   },
+  // Episode Section Styles
+  episodeSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  seasonSelector: {
+    marginBottom: 16,
+  },
+  seasonScroll: {
+    marginTop: 8,
+  },
+  seasonButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  seasonButtonActive: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
+  seasonButtonText: {
+    color: '#AAAAAA',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  seasonButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  episodeList: {
+    marginTop: 8,
+  },
+  episodeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 10,
+    marginBottom: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  episodeItemSelected: {
+    borderColor: '#8B5CF6',
+    backgroundColor: '#1f1a2e',
+  },
+  episodeThumbnail: {
+    width: 120,
+    height: 68,
+    borderRadius: 6,
+    backgroundColor: '#333',
+  },
+  episodeInfo: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+  episodeNumber: {
+    fontSize: 12,
+    color: '#8B5CF6',
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  episodeTitle: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  episodeOverview: {
+    fontSize: 12,
+    color: '#888888',
+    lineHeight: 16,
+  },
+  selectEpisodePrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    marginTop: 8,
+  },
+  selectEpisodeText: {
+    fontSize: 14,
+    color: '#888888',
+  },
 });
