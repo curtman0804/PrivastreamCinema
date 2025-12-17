@@ -32,19 +32,17 @@ export default function PlayerScreen() {
       return url;
     }
     if (infoHash) {
-      // Use webtor.io for torrent streaming - this is a public service that converts torrents to HTTP
-      // Build magnet link
+      // Use instant.io for torrent streaming - WebTorrent based, works in browsers
       const trackers = [
-        'udp://tracker.opentrackr.org:1337/announce',
-        'udp://open.stealth.si:80/announce',
-        'udp://tracker.torrent.eu.org:451/announce',
-        'udp://exodus.desync.com:6969/announce',
+        'wss://tracker.openwebtorrent.com',
+        'wss://tracker.btorrent.xyz',
+        'wss://tracker.fastcast.nz',
       ];
       const trackersParam = trackers.map(t => `&tr=${encodeURIComponent(t)}`).join('');
       const magnetLink = `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(title || 'Video')}${trackersParam}`;
       
-      // Return embed URL for webtor.io - they handle the streaming
-      return `https://webtor.io/show?magnet=${encodeURIComponent(magnetLink)}`;
+      // Return instant.io URL
+      return `https://instant.io/#${magnetLink}`;
     }
     return null;
   };
