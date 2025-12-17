@@ -98,9 +98,44 @@ export default function PlayerScreen() {
   const [peers, setPeers] = useState(0);
   const [downloadSpeed, setDownloadSpeed] = useState(0);
   const [isLiveTV, setIsLiveTV] = useState(false);
+  const [hasAudioError, setHasAudioError] = useState(false);
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
+
+  // Open stream in external player (VLC, MX Player, etc.)
+  const openInExternalPlayer = async () => {
+    if (!streamUrl) return;
+    
+    try {
+      // Try VLC first
+      const vlcUrl = `vlc://${streamUrl}`;
+      const canOpenVLC = await Linking.canOpenURL(vlcUrl);
+      
+      if (canOpenVLC) {
+        await Linking.openURL(vlcUrl);
+        return;
+      }
+      
+      // Try MX Player
+      const mxUrl = `intent:${streamUrl}#Intent;package=com.mxtech.videoplayer.ad;end`;
+      
+      // Fallback to generic video intent
+      const supported = await Linking.canOpenURL(streamUrl);
+      if (supported) {
+        await Linking.openURL(streamUrl);
+      } else {
+        Alert.alert(
+          'External Player',
+          'Install VLC or MX Player for better audio codec support.\n\nVLC: https://play.google.com/store/apps/details?id=org.videolan.vlc',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (err) {
+      console.log('Error opening external player:', err);
+      Alert.alert('Error', 'Could not open external player');
+    }
+  };
 
   // Lock to landscape on mount, unlock on unmount
   useEffect(() => {
