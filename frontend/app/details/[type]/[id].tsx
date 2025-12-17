@@ -105,59 +105,6 @@ export default function DetailsScreen() {
     return `magnet:?xt=urn:btih:${infoHash}&dn=${encodedName}${trackerParams}`;
   };
 
-  // Try to open with external player
-  const openWithExternalPlayer = async (magnetLink: string, streamName: string) => {
-    // Try different player intents for Android/Fire TV
-    const playerOptions = [
-      { name: 'VLC', scheme: `vlc://${magnetLink}` },
-      { name: 'MX Player', scheme: `intent:${magnetLink}#Intent;package=com.mxtech.videoplayer.ad;end` },
-      { name: 'Just Video Player', scheme: `intent:${magnetLink}#Intent;package=com.brouken.player;end` },
-    ];
-
-    // On Android/Fire TV, try to open magnet link directly
-    // Most torrent-capable players will register to handle magnet: scheme
-    try {
-      const canOpen = await Linking.canOpenURL(magnetLink);
-      if (canOpen) {
-        await Linking.openURL(magnetLink);
-        return true;
-      }
-    } catch (e) {
-      console.log('Cannot open magnet directly:', e);
-    }
-
-    // Show options to user
-    Alert.alert(
-      'Play Stream',
-      `Selected: ${streamName}\n\nTo play this stream on Fire TV/Android:\n\n1. Install VLC or MX Player from your app store\n2. Copy the magnet link below\n3. Open VLC → Media → Open Network Stream → Paste link`,
-      [
-        {
-          text: 'Copy Magnet Link',
-          onPress: async () => {
-            await Clipboard.setStringAsync(magnetLink);
-            Alert.alert('Copied!', 'Magnet link copied to clipboard. Paste it in VLC or your preferred player.');
-          }
-        },
-        {
-          text: 'Open VLC',
-          onPress: async () => {
-            try {
-              // Try VLC URL scheme
-              const vlcUrl = Platform.OS === 'android' 
-                ? `vlc://${magnetLink}`
-                : `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(magnetLink)}`;
-              await Linking.openURL(vlcUrl);
-            } catch (e) {
-              Alert.alert('VLC Not Found', 'Please install VLC from your app store, then try again.');
-            }
-          }
-        },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
-    return false;
-  };
-
   const handleStreamSelect = async (stream: Stream) => {
     if (stream.url) {
       // Direct HTTP stream - play in app
