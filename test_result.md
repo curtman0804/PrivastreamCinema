@@ -134,6 +134,16 @@ backend:
       - working: true
         agent: "main"
         comment: "Returns Netflix, HBO, Disney+, etc. content from streaming catalogs addon"
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ COMPREHENSIVE DISCOVER CONTENT TESTING PASSED:
+          • Required sections present: New Movies, New Series, Popular Movies, Popular Series
+          • Streaming services found: Netflix Movies/Series, HBO Max Movies/Series, Disney+ Movies/Series
+          • USA TV Channels section present with content
+          • No unwanted sections (Calendar-Videos, Last-Videos) found
+          • Total: 690 content items across 22 sections
+          • All content properly organized by service
 
   - task: "Stream Fetching API"
     implemented: true
