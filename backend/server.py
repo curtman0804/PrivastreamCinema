@@ -1179,25 +1179,52 @@ async def stream_video(
         if file_size == 0:
             raise HTTPException(status_code=404, detail="Video file is empty - still downloading")
         
-        # Use ffmpeg to transcode to MP4 with error tolerance for incomplete files
+        # Use ffmpeg to transcode to MP4 - OPTIMIZED FOR FAST STARTUP
         def generate_stream():
-            cmd = [
-                'ffmpeg',
-                '-err_detect', 'ignore_err',  # Ignore errors in source
-                '-fflags', '+genpts+igndts',  # Generate PTS, ignore DTS errors
-                '-i', video_path,
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-crf', '28',                  # Faster encoding with reasonable quality
-                '-c:a', 'aac',
-                '-b:a', '128k',
-                '-movflags', 'frag_keyframe+empty_moov',
-                '-max_muxing_queue_size', '1024',
-                '-f', 'mp4',
-                '-'
-            ]
+            # Check if it's already MP4 - can use copy codec (much faster)
+            is_mp4 = video_path.lower().endswith('.mp4')
             
-            logger.info(f"Starting ffmpeg transcode for {video_path}")
+            if is_mp4:
+                # For MP4 files: try to copy streams (fastest possible)
+                cmd = [
+                    'ffmpeg',
+                    '-hide_banner', '-loglevel', 'warning',
+                    '-err_detect', 'ignore_err',
+                    '-fflags', '+genpts+igndts+fastseek',
+                    '-i', video_path,
+                    '-c:v', 'copy',                    # Copy video (no transcode)
+                    '-c:a', 'aac',                     # Re-encode audio to ensure compatibility  
+                    '-b:a', '128k',
+                    '-movflags', 'frag_keyframe+empty_moov+faststart',
+                    '-max_muxing_queue_size', '2048',
+                    '-f', 'mp4',
+                    '-'
+                ]
+            else:
+                # For MKV/other: need to transcode but use fastest settings
+                cmd = [
+                    'ffmpeg',
+                    '-hide_banner', '-loglevel', 'warning',
+                    '-err_detect', 'ignore_err',
+                    '-fflags', '+genpts+igndts+fastseek',
+                    '-probesize', '5M',               # Smaller probe = faster start
+                    '-analyzeduration', '3M',          # Less analysis = faster start
+                    '-i', video_path,
+                    '-c:v', 'libx264',
+                    '-preset', 'ultrafast',           # Fastest encoding
+                    '-tune', 'zerolatency',           # Optimize for streaming
+                    '-crf', '28',                     # Reasonable quality
+                    '-g', '30',                       # More frequent keyframes for seeking
+                    '-sc_threshold', '0',             # Disable scene detection
+                    '-c:a', 'aac',
+                    '-b:a', '128k',
+                    '-movflags', 'frag_keyframe+empty_moov+faststart',
+                    '-max_muxing_queue_size', '2048',
+                    '-f', 'mp4',
+                    '-'
+                ]
+            
+            logger.info(f"Starting ffmpeg {'copy' if is_mp4 else 'transcode'} for {video_path}")
             
             process = subprocess.Popen(
                 cmd,
