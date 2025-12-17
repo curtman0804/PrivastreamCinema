@@ -19,12 +19,12 @@ import { ContentItem } from '../../src/api/client';
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 64) / 3;
 
-type FilterType = 'all' | 'movies' | 'series' | 'tv';
+type FilterType = 'movies' | 'series' | 'tv';
 
 export default function LibraryScreen() {
   const router = useRouter();
   const { library, isLoadingLibrary, fetchLibrary } = useContentStore();
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [filter, setFilter] = useState<FilterType>('movies');
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
