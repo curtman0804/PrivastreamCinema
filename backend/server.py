@@ -412,10 +412,27 @@ async def get_all_streams(
     content_id: str,
     current_user: User = Depends(get_current_user)
 ):
-    """Fetch streams from ALL installed addons that support streaming"""
+    """Fetch streams from ALL installed addons + built-in Torrentio-style aggregation"""
     addons = await db.addons.find({"userId": current_user.id}).to_list(100)
     
     all_streams = []
+    
+    # Get content title for torrent search
+    content_title = ""
+    content_year = ""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=5.0) as client:
+            base_id = content_id.split(':')[0]
+            meta_url = f"https://v3-cinemeta.strem.io/meta/{content_type}/{base_id}.json"
+            meta_resp = await client.get(meta_url)
+            if meta_resp.status_code == 200:
+                meta = meta_resp.json().get('meta', {})
+                content_title = meta.get('name', '')
+                content_year = str(meta.get('year', ''))
+                if '–' in content_year:
+                    content_year = content_year.split('–')[0]
+    except Exception as e:
+        logger.warning(f"Failed to fetch meta for streams: {e}")
     
     async def fetch_addon_streams(addon):
         """Fetch streams from a single addon"""
@@ -448,15 +465,165 @@ async def get_all_streams(
             logger.warning(f"Error fetching streams from {addon.get('manifest', {}).get('name')}: {str(e)}")
         return []
     
-    # Fetch from all addons concurrently
-    tasks = [fetch_addon_streams(addon) for addon in addons]
+    async def search_yts(query: str):
+        """Search YTS/YIFY for movies"""
+        try:
+            url = "https://yts.mx/api/v2/list_movies.json"
+            params = {"query_term": query, "limit": 20}
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url, params=params)
+                if response.status_code == 200:
+                    data = response.json()
+                    movies = data.get('data', {}).get('movies', [])
+                    streams = []
+                    for movie in movies:
+                        for torrent in movie.get('torrents', []):
+                            streams.append({
+                                "name": f"🎬 YTS {torrent['quality']}",
+                                "title": f"YTS • {movie['title']} ({movie.get('year', '')})\n💾 {torrent['size']} | 🌱 {torrent['seeds']} | ⚡ {torrent['quality']}",
+                                "infoHash": torrent['hash'].lower(),
+                                "sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"],
+                                "addon": "YTS",
+                                "seeders": torrent['seeds']
+                            })
+                    return streams
+        except Exception as e:
+            logger.warning(f"YTS search error: {e}")
+        return []
+    
+    async def search_eztv(imdb_id: str):
+        """Search EZTV for TV series"""
+        try:
+            imdb_num = imdb_id.replace('tt', '') if imdb_id.startswith('tt') else imdb_id
+            url = "https://eztv.re/api/get-torrents"
+            params = {"imdb_id": imdb_num, "limit": 50}
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url, params=params)
+                if response.status_code == 200:
+                    data = response.json()
+                    torrents = data.get('torrents', [])
+                    streams = []
+                    for torrent in torrents:
+                        title = torrent.get('title', '')
+                        quality = '4K' if '2160p' in title or '4K' in title else ('HD' if '1080p' in title or '720p' in title else 'SD')
+                        size_bytes = int(torrent.get('size_bytes', 0))
+                        size_str = f"{size_bytes / (1024*1024*1024):.2f} GB" if size_bytes > 1024*1024*1024 else f"{size_bytes / (1024*1024):.0f} MB"
+                        seeds = torrent.get('seeds', 0)
+                        info_hash = torrent.get('hash', '').lower()
+                        if info_hash:
+                            streams.append({
+                                "name": f"📺 EZTV {quality}",
+                                "title": f"EZTV • {title}\n💾 {size_str} | 🌱 {seeds} | ⚡ {quality}",
+                                "infoHash": info_hash,
+                                "sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"],
+                                "addon": "EZTV",
+                                "seeders": seeds
+                            })
+                    return streams
+        except Exception as e:
+            logger.warning(f"EZTV search error: {e}")
+        return []
+    
+    async def search_apibay(query: str, content_type: str):
+        """Search PirateBay via apibay.org"""
+        try:
+            url = f"https://apibay.org/q.php?q={query}"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url)
+                if response.status_code == 200:
+                    torrents = response.json()
+                    if isinstance(torrents, list) and len(torrents) > 0 and torrents[0].get('id') != '0':
+                        streams = []
+                        for torrent in torrents[:20]:
+                            name = torrent.get('name', '')
+                            size_bytes = int(torrent.get('size', 0))
+                            size_str = f"{size_bytes / (1024*1024*1024):.2f} GB" if size_bytes > 1024*1024*1024 else f"{size_bytes / (1024*1024):.0f} MB"
+                            seeds = int(torrent.get('seeders', 0))
+                            info_hash = torrent.get('info_hash', '').lower()
+                            quality = '4K' if '2160p' in name or '4K' in name else ('HD' if '1080p' in name or '720p' in name else 'SD')
+                            if info_hash and seeds > 0:
+                                streams.append({
+                                    "name": f"🏴‍☠️ TPB {quality}",
+                                    "title": f"ThePirateBay • {name[:60]}\n💾 {size_str} | 🌱 {seeds} | ⚡ {quality}",
+                                    "infoHash": info_hash,
+                                    "sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"],
+                                    "addon": "ThePirateBay",
+                                    "seeders": seeds
+                                })
+                        return streams
+        except Exception as e:
+            logger.warning(f"ApiBay search error: {e}")
+        return []
+    
+    # Build tasks
+    tasks = []
+    
+    # Add addon stream fetches
+    for addon in addons:
+        tasks.append(fetch_addon_streams(addon))
+    
+    # Add built-in torrent searches if we have content info
+    if content_title:
+        # Build search query
+        base_id = content_id.split(':')[0]
+        
+        if content_type == 'movie':
+            search_query = f"{content_title} {content_year}" if content_year else content_title
+            tasks.append(search_yts(search_query))
+            tasks.append(search_apibay(search_query, content_type))
+        elif content_type == 'series':
+            # For series, check if we have season/episode
+            if ':' in content_id:
+                parts = content_id.split(':')
+                if len(parts) >= 3:
+                    season = parts[1].zfill(2)
+                    episode = parts[2].zfill(2)
+                    search_query = f"{content_title} S{season}E{episode}"
+                else:
+                    search_query = content_title
+            else:
+                search_query = content_title
+            
+            tasks.append(search_eztv(base_id))
+            tasks.append(search_apibay(search_query, content_type))
+    
+    # Execute all tasks concurrently
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
     for result in results:
         if isinstance(result, list):
             all_streams.extend(result)
     
-    return {"streams": all_streams}
+    # Remove duplicates based on infoHash
+    seen_hashes = set()
+    unique_streams = []
+    for stream in all_streams:
+        hash_val = stream.get('infoHash', '').lower()
+        if hash_val:
+            if hash_val not in seen_hashes:
+                seen_hashes.add(hash_val)
+                unique_streams.append(stream)
+        else:
+            # Streams without hash (direct URLs)
+            unique_streams.append(stream)
+    
+    # Sort by seeders (highest first)
+    def get_seeders(stream):
+        if 'seeders' in stream:
+            return int(stream['seeders']) if stream['seeders'] else 0
+        title = stream.get('title', '')
+        try:
+            if '🌱' in title:
+                seeds_part = title.split('🌱')[1].split('|')[0].strip()
+                return int(seeds_part)
+        except:
+            pass
+        return 0
+    
+    unique_streams.sort(key=get_seeders, reverse=True)
+    
+    logger.info(f"Found {len(unique_streams)} total streams for {content_type}/{content_id}")
+    return {"streams": unique_streams}
 
 
 # ==================== CONTENT ROUTES ====================
