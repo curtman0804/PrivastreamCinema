@@ -148,7 +148,34 @@ backend:
         comment: "Added Torrentio-style aggregation from YTS, PirateBay, EZTV. Tested with curl - returns 20 streams"
       - working: true
         agent: "testing"
-        comment: "✅ COMPREHENSIVE TESTING PASSED - All stream endpoints working correctly. Wake Up Dead Man (tt14364480): 20 streams found, properly sorted by seeders (4646→3174→896). The Holdovers (tt14849194): 20 streams found, properly sorted by seeders (429→108→69). All streams contain required fields: name, title, infoHash, seeders. Aggregation from ThePirateBay working via apibay.org API. Authentication and token-based access working properly."
+        comment: "✅ COMPREHENSIVE TESTING PASSED - All stream endpoints working correctly."
+
+  - task: "Torrent Streaming Backend (libtorrent + ffmpeg)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Initial implementation with libtorrent and ffmpeg transcoding"
+      - working: "NA"
+        agent: "user"
+        comment: "User reported playback is slow to start, especially with VPN"
+      - working: true
+        agent: "main"
+        comment: |
+          MAJOR OPTIMIZATION - Implemented streaming-optimized settings:
+          1. Sequential download mode enabled for streaming
+          2. Aggressive peer discovery (500 conn/sec, 800 max, torrent_connect_boost=50)
+          3. Faster timeouts (peer_connect=7s, handshake=7s)
+          4. Extended tracker list (22 trackers including Tier 1 fast trackers)
+          5. Optimized piece prioritization (5MB header priority 7, next 10MB priority 6)
+          6. Lower ready threshold (3MB minimum instead of 5%)
+          7. ffmpeg optimization: copy codec for MP4, zerolatency for MKV
+          8. Increased cache to 128MB, 8 async IO threads
 
 metadata:
   created_by: "main_agent"
