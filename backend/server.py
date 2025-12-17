@@ -215,9 +215,9 @@ class TorrentStreamer:
         
         # Calculate progress
         video_file = data.get('video_file')
-        if video_file and s.progress > 0.01:  # At least 1% downloaded
+        if video_file and s.progress > 0.005:  # At least 0.5% downloaded
             return {
-                "status": "ready" if s.progress > 0.02 else "buffering",
+                "status": "ready" if s.progress > 0.01 else "buffering",  # Ready at 1%
                 "progress": s.progress * 100,
                 "peers": s.num_peers,
                 "download_rate": s.download_rate,
