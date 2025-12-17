@@ -103,37 +103,28 @@ export default function DiscoverScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        /* Content ScrollView */
-        <ScrollView
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor="#B8A05C"
-              colors={['#B8A05C']}
-            />
-          }
-        >
-          {Object.entries(discoverData?.services || {}).map(([serviceName, content]) => (
-            <View key={serviceName}>
+        /* Content FlatList - optimized for performance */
+        <FlatList
+          data={Object.entries(discoverData?.services || {})}
+          keyExtractor={([serviceName]) => serviceName}
+          renderItem={({ item: [serviceName, content] }) => (
+            <View>
               {content?.movies && content.movies.length > 0 && (
-                <ServiceRow
+                <MemoizedServiceRow
                   serviceName={serviceName}
                   items={content.movies}
                   onItemPress={handleItemPress}
                 />
               )}
               {content?.series && content.series.length > 0 && (
-                <ServiceRow
+                <MemoizedServiceRow
                   serviceName={serviceName}
                   items={content.series}
                   onItemPress={handleItemPress}
                 />
               )}
               {content?.channels && content.channels.length > 0 && (
-                <ServiceRow
+                <MemoizedServiceRow
                   serviceName={serviceName}
                   items={content.channels.map((ch: any) => ({
                     ...ch,
@@ -143,9 +134,22 @@ export default function DiscoverScreen() {
                 />
               )}
             </View>
-          ))}
-          <View style={styles.bottomPadding} />
-        </ScrollView>
+          )}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={4}
+          maxToRenderPerBatch={3}
+          windowSize={5}
+          removeClippedSubviews={true}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#B8A05C"
+              colors={['#B8A05C']}
+            />
+          }
+          ListFooterComponent={<View style={styles.bottomPadding} />}
+        />
       )}
     </SafeAreaView>
   );
