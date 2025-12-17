@@ -64,9 +64,14 @@ export default function AddonsScreen() {
     setAddonUrl('');
     setShowModal(false);
     await fetchAddons();
+    
+    // Refresh discover page content after addon install
+    if (successCount > 0) {
+      await fetchDiscover();
+    }
 
     if (successCount > 0 && failedUrls.length === 0) {
-      Alert.alert('Success', `${successCount} addon(s) installed successfully`);
+      Alert.alert('Success', `${successCount} addon(s) installed successfully. Go to Discover tab to see content.`);
     } else if (successCount > 0 && failedUrls.length > 0) {
       Alert.alert('Partial Success', `${successCount} installed, ${failedUrls.length} failed:\n${failedUrls.join('\n')}`);
     } else {
