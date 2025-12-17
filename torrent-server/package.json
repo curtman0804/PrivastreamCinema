@@ -1,14 +1,15 @@
 {
   "name": "torrent-server",
   "version": "1.0.0",
-  "main": "index.js",
+  "type": "module",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "WebTorrent streaming server for PrivastreamCinema",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.2.1",
