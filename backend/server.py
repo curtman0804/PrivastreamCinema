@@ -1049,13 +1049,10 @@ async def stream_status(info_hash: str, current_user: User = Depends(get_current
         logger.error(f"Error getting stream status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-from fastapi import Request, Header
-
 @api_router.get("/stream/video/{info_hash}")
 async def stream_video(
     info_hash: str, 
-    request: Request,
-    range: Optional[str] = Header(None)
+    range: Optional[str] = None
 ):
     """Stream the video file as HTTP with Range support (like Stremio does)"""
     try:
