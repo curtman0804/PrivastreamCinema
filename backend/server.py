@@ -118,43 +118,62 @@ class TorrentStreamer:
         logger.info(f"TorrentStreamer initialized. Download dir: {self.download_dir}")
     
     def get_session(self, info_hash: str):
-        """Get or create a libtorrent session for a torrent"""
+        """Get or create a libtorrent session for a torrent - OPTIMIZED FOR STREAMING"""
         info_hash = info_hash.lower()
         
         if info_hash in self.sessions:
             return self.sessions[info_hash]
         
-        # Create new session with optimized settings for faster downloads
+        # Create new session with STREAMING-OPTIMIZED settings
+        # Key optimizations: Fast peer connection, aggressive piece requests, high cache
         settings = {
-            'listen_interfaces': '0.0.0.0:6881',
+            'listen_interfaces': '0.0.0.0:6881,[::]:6881',
             'enable_dht': True,
             'enable_lsd': True,
             'enable_upnp': True,
             'enable_natpmp': True,
             'announce_to_all_trackers': True,
             'announce_to_all_tiers': True,
-            # Connection settings for faster downloads
-            'connection_speed': 1000,           # Faster connection establishment
-            'connections_limit': 500,           # More connections allowed
-            'download_rate_limit': 0,           # Unlimited download
-            'upload_rate_limit': 200000,        # 200 KB/s upload (share more to get more)
-            # Peer settings
-            'max_peerlist_size': 5000,          # Larger peer list
-            'max_paused_peerlist_size': 5000,
-            # Performance settings
-            'cache_size': 4096,                 # 64MB cache (4096 * 16KB blocks)
-            'use_read_cache': True,
-            'coalesce_reads': True,
-            'coalesce_writes': True,
-            # Request settings
-            'request_queue_time': 3,            # Request 3 seconds ahead
-            'max_out_request_queue': 500,       # More outstanding requests
-            'whole_pieces_threshold': 5,        # Download whole pieces faster
+            
+            # ===== AGGRESSIVE CONNECTION SETTINGS (Critical for VPN) =====
+            'connection_speed': 500,              # Connections per second to attempt
+            'connections_limit': 800,             # Max total connections
+            'download_rate_limit': 0,             # Unlimited download
+            'upload_rate_limit': 500000,          # 500 KB/s upload (helps reciprocation)
+            'unchoke_slots_limit': 20,            # More upload slots = more download reciprocity
+            
+            # ===== PEER DISCOVERY (Critical for fast startup) =====
+            'max_peerlist_size': 8000,
+            'max_paused_peerlist_size': 8000,
+            'peer_connect_timeout': 7,            # Faster peer timeout (default 15)
+            'handshake_timeout': 7,               # Faster handshake timeout
+            'torrent_connect_boost': 50,          # Extra connections for new torrents
+            'peer_timeout': 60,                   # Keep peers longer
+            'inactivity_timeout': 60,
+            
+            # ===== DISK I/O OPTIMIZATION =====
+            'cache_size': 8192,                   # 128MB cache (8192 * 16KB blocks)
+            'disk_io_read_mode': 0,               # Enable OS cache
+            'disk_io_write_mode': 0,              # Enable OS cache
+            'aio_threads': 8,                     # More async IO threads
+            
+            # ===== STREAMING-SPECIFIC SETTINGS =====
+            'request_queue_time': 1,              # Reduced - request only 1 sec ahead (faster starts)
+            'max_out_request_queue': 1000,        # Large request queue
+            'whole_pieces_threshold': 2,          # Smaller threshold for faster piece completion
+            'max_allowed_in_request_queue': 2000, # Allow more incoming requests
+            'send_buffer_watermark': 512 * 1024,  # 512KB send buffer
+            'send_buffer_watermark_factor': 150,  # Aggressive sending
+            
+            # ===== PROTOCOL SETTINGS =====
+            'mixed_mode_algorithm': 0,            # Prefer TCP (more reliable)
+            'rate_limit_ip_overhead': False,      # Don't count protocol overhead in limits
+            'allow_multiple_connections_per_ip': True,  # Important for some seedboxes
         }
         
         ses = lt.session(settings)
         
-        # Add torrent
+        # Build magnet link with all trackers for faster peer discovery
         magnet = f"magnet:?xt=urn:btih:{info_hash}"
         for tracker in self.trackers:
             magnet += f"&tr={tracker}"
@@ -166,6 +185,9 @@ class TorrentStreamer:
         
         handle = lt.add_magnet_uri(ses, magnet, params)
         
+        # CRITICAL: Enable sequential download for streaming
+        handle.set_sequential_download(True)
+        
         self.sessions[info_hash] = {
             'session': ses,
             'handle': handle,
@@ -174,7 +196,7 @@ class TorrentStreamer:
             'video_path': None,
         }
         
-        logger.info(f"Started torrent session for {info_hash}")
+        logger.info(f"Started STREAMING-OPTIMIZED session for {info_hash}")
         return self.sessions[info_hash]
     
     def get_status(self, info_hash: str) -> dict:
