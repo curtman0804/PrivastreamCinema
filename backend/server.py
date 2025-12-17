@@ -1109,7 +1109,7 @@ async def stream_video(
             "Cache-Control": "no-cache",
         }
         
-        status_code = 206 if range else 200
+        status_code = 206 if range_header else 200
         
         return StreamingResponse(
             iterfile(),
