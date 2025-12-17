@@ -535,7 +535,9 @@ async def get_all_streams(
     async def search_apibay(query: str, content_type: str):
         """Search PirateBay via apibay.org"""
         try:
-            url = f"https://apibay.org/q.php?q={query}"
+            # Use simple query - first 3 words only
+            simple_query = ' '.join(query.split()[:3])
+            url = f"https://apibay.org/q.php?q={simple_query}"
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(url)
                 if response.status_code == 200:
