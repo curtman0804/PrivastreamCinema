@@ -111,6 +111,7 @@ export default function PlayerScreen() {
     return () => {
       continuePollingRef.current = false;
       if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current);
         clearInterval(pollIntervalRef.current);
       }
     };
