@@ -249,7 +249,7 @@ export default function DetailsScreen() {
         )}
 
         {/* Genres */}
-        {content?.genre && content.genre.length > 0 && (
+        {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Genres</Text>
             <View style={styles.pillContainer}>
@@ -263,7 +263,7 @@ export default function DetailsScreen() {
         )}
 
         {/* Cast */}
-        {content?.cast && content.cast.length > 0 && (
+        {content?.cast && Array.isArray(content.cast) && content.cast.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Cast</Text>
             <View style={styles.pillContainer}>
