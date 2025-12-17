@@ -1135,13 +1135,16 @@ async def remove_from_library(item_type: str, item_id: str, current_user: User =
     return {"message": "Removed from library"}
 
 
-# ==================== TORRENT STREAMING ENDPOINTS ====================
+# ==================== TORRENT STREAMING ENDPOINTS (WebTorrent Proxy) ====================
+
+TORRENT_SERVER_URL = "http://localhost:8002"
 
 @api_router.post("/stream/start/{info_hash}")
 async def start_stream(info_hash: str, current_user: User = Depends(get_current_user)):
-    """Start downloading a torrent and prepare for streaming"""
+    """Start downloading a torrent via WebTorrent server"""
     try:
-        torrent_streamer.get_session(info_hash)
+        # The WebTorrent server automatically starts torrents when you request a stream
+        # We just return success - the actual download starts on /stream/video request
         return {"status": "started", "info_hash": info_hash}
     except Exception as e:
         logger.error(f"Error starting stream: {e}")
@@ -1149,13 +1152,25 @@ async def start_stream(info_hash: str, current_user: User = Depends(get_current_
 
 @api_router.get("/stream/status/{info_hash}")
 async def stream_status(info_hash: str, current_user: User = Depends(get_current_user)):
-    """Get the status of a torrent download"""
+    """Get the status of a torrent download from WebTorrent server"""
     try:
-        status = torrent_streamer.get_status(info_hash)
-        return status
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{TORRENT_SERVER_URL}/status/{info_hash}")
+            if response.status_code == 200:
+                data = response.json()
+                # Map WebTorrent response to our expected format
+                return {
+                    "status": "ready" if data.get("ready") else "buffering",
+                    "progress": data.get("progress", 0),
+                    "peers": data.get("peers", 0),
+                    "download_rate": data.get("downloadSpeed", 0),
+                    "downloaded": data.get("downloaded", 0),
+                    "name": data.get("name", ""),
+                }
+            return {"status": "buffering", "progress": 0, "peers": 0}
     except Exception as e:
         logger.error(f"Error getting stream status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "buffering", "progress": 0, "peers": 0, "error": str(e)}
 
 import subprocess
 
