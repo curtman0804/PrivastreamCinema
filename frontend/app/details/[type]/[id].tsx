@@ -519,13 +519,13 @@ const styles = StyleSheet.create({
   genrePill: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
+    borderColor: 'rgba(184, 160, 92, 0.3)',
   },
   genrePillText: {
-    color: '#A78BFA',
+    color: '#D4C78A',
     fontSize: 13,
   },
   castPill: {
@@ -635,7 +635,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,

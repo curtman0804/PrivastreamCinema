@@ -252,7 +252,7 @@ export default function PlayerScreen() {
           video { width: 100%; height: 100%; object-fit: contain; background: #000; }
           .status { color: #fff; text-align: center; padding: 20px; font-family: sans-serif; 
                    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
-          .spinner { width: 30px; height: 30px; border: 3px solid rgba(139, 92, 246, 0.3);
+          .spinner { width: 30px; height: 30px; border: 3px solid rgba(184, 160, 92, 0.3);
                     border-top-color: #B8A05C; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; }
           @keyframes spin { to { transform: rotate(360deg); } }
         </style>

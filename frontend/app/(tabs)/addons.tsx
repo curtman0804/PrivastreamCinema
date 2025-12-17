@@ -336,13 +336,13 @@ const styles = StyleSheet.create({
   disclaimer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    backgroundColor: 'rgba(184, 160, 92, 0.1)',
     marginHorizontal: 16,
     marginTop: 12,
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.2)',
+    borderColor: 'rgba(184, 160, 92, 0.2)',
   },
   disclaimerText: {
     flex: 1,
@@ -446,14 +446,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   typeBadge: {
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
   },
   typeBadgeText: {
     fontSize: 11,
-    color: '#A78BFA',
+    color: '#D4C78A',
     fontWeight: '600',
     textTransform: 'capitalize',
   },
