@@ -106,7 +106,7 @@ class TorrentStreamer:
         if info_hash in self.sessions:
             return self.sessions[info_hash]
         
-        # Create new session
+        # Create new session with optimized settings for faster downloads
         settings = {
             'listen_interfaces': '0.0.0.0:6881',
             'enable_dht': True,
@@ -115,9 +115,23 @@ class TorrentStreamer:
             'enable_natpmp': True,
             'announce_to_all_trackers': True,
             'announce_to_all_tiers': True,
-            'connection_speed': 500,
-            'download_rate_limit': 0,  # Unlimited
-            'upload_rate_limit': 100000,  # 100 KB/s upload
+            # Connection settings for faster downloads
+            'connection_speed': 1000,           # Faster connection establishment
+            'connections_limit': 500,           # More connections allowed
+            'download_rate_limit': 0,           # Unlimited download
+            'upload_rate_limit': 200000,        # 200 KB/s upload (share more to get more)
+            # Peer settings
+            'max_peerlist_size': 5000,          # Larger peer list
+            'max_paused_peerlist_size': 5000,
+            # Performance settings
+            'cache_size': 4096,                 # 64MB cache (4096 * 16KB blocks)
+            'use_read_cache': True,
+            'coalesce_reads': True,
+            'coalesce_writes': True,
+            # Request settings
+            'request_queue_time': 3,            # Request 3 seconds ahead
+            'max_out_request_queue': 500,       # More outstanding requests
+            'whole_pieces_threshold': 5,        # Download whole pieces faster
         }
         
         ses = lt.session(settings)
