@@ -271,8 +271,19 @@ export default function PlayerScreen() {
         </View>
       )}
 
-      {/* Video Player */}
-      {streamUrl && !error && (
+      {/* Video Player - Platform specific */}
+      {streamUrl && !error && Platform.OS === 'web' && (
+        <View style={styles.webview}>
+          <iframe
+            src={`data:text/html,${encodeURIComponent(getVideoPlayerHTML())}`}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            allow="autoplay; fullscreen"
+            allowFullScreen
+          />
+        </View>
+      )}
+      
+      {streamUrl && !error && Platform.OS !== 'web' && WebView && (
         <WebView
           style={styles.webview}
           source={{ html: getVideoPlayerHTML() }}
