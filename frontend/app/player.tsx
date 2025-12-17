@@ -28,14 +28,37 @@ if (Platform.OS !== 'web') {
 const { width, height } = Dimensions.get('window');
 
 // Web Video Component using dangerouslySetInnerHTML
-const WebVideoPlayer = ({ streamUrl, onLoad, onError }: { streamUrl: string; onLoad: () => void; onError: () => void }) => {
+const WebVideoPlayer = ({ streamUrl, onLoad, onError, isHLS = false }: { streamUrl: string; onLoad: () => void; onError: () => void; isHLS?: boolean }) => {
   useEffect(() => {
     // Notify that we've loaded
     const timer = setTimeout(onLoad, 2000);
     return () => clearTimeout(timer);
   }, []);
 
-  const html = `
+  // Check if this is an HLS stream
+  const isHLSStream = isHLS || streamUrl.includes('.m3u8');
+  
+  // For HLS streams, we need HLS.js on web
+  const html = isHLSStream ? `
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <video 
+      id="video"
+      controls 
+      autoplay 
+      playsinline 
+      style="width:100%;height:100%;background:#000;object-fit:contain;"
+    ></video>
+    <script>
+      var video = document.getElementById('video');
+      if (Hls.isSupported()) {
+        var hls = new Hls();
+        hls.loadSource('${streamUrl}');
+        hls.attachMedia(video);
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = '${streamUrl}';
+      }
+    </script>
+  ` : `
     <video 
       controls 
       autoplay 
