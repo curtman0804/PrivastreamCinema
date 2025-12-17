@@ -733,7 +733,7 @@ async def get_all_streams(
         logger.warning(f"Failed to fetch meta for streams: {e}")
     
     async def fetch_addon_streams(addon):
-        """Fetch streams from a single addon"""
+        """Fetch streams from a single addon - with Cloudflare bypass for protected addons"""
         try:
             manifest = addon.get('manifest', {})
             resources = manifest.get('resources', [])
@@ -750,15 +750,42 @@ async def get_all_streams(
             base_url = get_base_url(addon['manifestUrl'])
             stream_url = f"{base_url}/stream/{content_type}/{content_id}.json"
             
-            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                response = await client.get(stream_url)
-                if response.status_code == 200:
-                    data = response.json()
-                    streams = data.get('streams', [])
-                    # Add addon name to each stream
-                    for stream in streams:
-                        stream['addon'] = manifest.get('name', 'Unknown')
-                    return streams
+            # Check if this is a Cloudflare-protected domain
+            cf_protected_domains = ['torrentio.strem.fun', 'strem.fun']
+            needs_bypass = any(domain in base_url for domain in cf_protected_domains)
+            
+            if needs_bypass:
+                # Use cloudscraper for Cloudflare bypass
+                try:
+                    import cloudscraper
+                    scraper = cloudscraper.create_scraper(
+                        browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+                    )
+                    response = await asyncio.to_thread(
+                        lambda: scraper.get(stream_url, timeout=30)
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        streams = data.get('streams', [])
+                        for stream in streams:
+                            stream['addon'] = manifest.get('name', 'Torrentio')
+                        logger.info(f"Got {len(streams)} streams from {manifest.get('name')} via cloudscraper")
+                        return streams
+                    else:
+                        logger.warning(f"Cloudscraper got status {response.status_code} for {stream_url}")
+                except Exception as e:
+                    logger.warning(f"Cloudscraper failed for {manifest.get('name')}: {e}")
+                return []
+            else:
+                # Standard fetch for non-protected addons
+                async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+                    response = await client.get(stream_url)
+                    if response.status_code == 200:
+                        data = response.json()
+                        streams = data.get('streams', [])
+                        for stream in streams:
+                            stream['addon'] = manifest.get('name', 'Unknown')
+                        return streams
         except Exception as e:
             logger.warning(f"Error fetching streams from {addon.get('manifest', {}).get('name')}: {str(e)}")
         return []
