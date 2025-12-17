@@ -1,15 +1,31 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-// Use local backend API - routes already include /api prefix
-const BASE_URL = '';
+// Get the backend URL based on environment
+const getBaseUrl = () => {
+  // For web, use relative URL (proxied through same domain)
+  if (Platform.OS === 'web') {
+    return '';
+  }
+  // For mobile (Expo Go), use the full backend URL
+  const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl;
+  if (backendUrl) {
+    return backendUrl;
+  }
+  // Fallback - try the packager hostname
+  return 'https://torrentview.preview.emergentagent.com';
+};
+
+const BASE_URL = getBaseUrl();
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000,
 });
 
 // Add auth token to requests
