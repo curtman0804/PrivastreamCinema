@@ -332,7 +332,7 @@ export default function PlayerScreen() {
         </View>
       )}
 
-      {/* Video Player - Web uses native video, native uses WebView */}
+      {/* Video Player - Web uses native video, native uses expo-av Video */}
       {streamUrl && !error && !isLoading && (
         Platform.OS === 'web' ? (
           <View style={styles.webview}>
@@ -349,22 +349,26 @@ export default function PlayerScreen() {
               } as any}
             />
           </View>
-        ) : WebView ? (
-          <WebView
-            style={styles.webview}
-            source={{ html: getVideoPlayerHTML() }}
-            allowsInlineMediaPlayback={true}
-            mediaPlaybackRequiresUserAction={false}
-            allowsFullscreenVideo={true}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            mixedContentMode="always"
-            originWhitelist={['*']}
-          />
         ) : (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>Video player not available</Text>
-          </View>
+          <Video
+            source={{ uri: streamUrl }}
+            style={styles.videoPlayer}
+            useNativeControls
+            resizeMode={ResizeMode.CONTAIN}
+            shouldPlay
+            isLooping={false}
+            volume={1.0}
+            isMuted={false}
+            onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
+              if (status.isLoaded && status.isPlaying) {
+                // Video is playing
+              }
+            }}
+            onError={(error) => {
+              console.log('Video error:', error);
+              setError('Failed to play video. The audio codec may not be supported.');
+            }}
+          />
         )
       )}
 
