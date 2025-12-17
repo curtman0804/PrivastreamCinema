@@ -173,12 +173,17 @@ export default function AddonsScreen() {
           pressed && { opacity: 0.6, transform: [{ scale: 0.95 }] }
         ]}
         onPress={() => {
-          console.log('Delete button pressed for:', item.manifest.name);
+          console.log('Delete button pressed for:', item.manifest.name, 'ID:', item.id);
           handleUninstall(item);
         }}
         hitSlop={10}
+        disabled={deletingAddonId === item.id}
       >
-        <Ionicons name="trash-outline" size={22} color="#FF4444" />
+        {deletingAddonId === item.id ? (
+          <ActivityIndicator size="small" color="#FF4444" />
+        ) : (
+          <Ionicons name="trash-outline" size={22} color="#FF4444" />
+        )}
       </Pressable>
     </View>
   );
