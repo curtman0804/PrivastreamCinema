@@ -1258,6 +1258,22 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
 async def get_meta(content_type: str, content_id: str, current_user: User = Depends(get_current_user)):
     """Get metadata for content including episodes for series"""
     try:
+        # For TV channels, try USA TV addon first
+        if content_type == 'tv' and content_id.startswith('ustv'):
+            try:
+                async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+                    url = f"https://848b3516657c-usatv.baby-beamup.club/meta/{content_type}/{content_id}.json"
+                    response = await client.get(url)
+                    if response.status_code == 200:
+                        data = response.json()
+                        meta = data.get('meta', {})
+                        if meta:
+                            logger.info(f"Got TV channel meta for {meta.get('name', content_id)}")
+                            return meta
+            except Exception as e:
+                logger.warning(f"USA TV meta error: {e}")
+        
+        # For movies/series, use Cinemeta
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
             url = f"https://v3-cinemeta.strem.io/meta/{content_type}/{content_id}.json"
             response = await client.get(url)
