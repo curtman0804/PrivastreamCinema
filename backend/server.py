@@ -194,7 +194,7 @@ class TorrentStreamer:
                 data['video_file'] = largest_video
                 data['video_path'] = os.path.join(self.download_dir, largest_video['path'])
                 
-                # Prioritize video file pieces
+                # Prioritize video file pieces - critical for streaming
                 num_pieces = ti.num_pieces()
                 piece_length = ti.piece_length()
                 
@@ -203,15 +203,24 @@ class TorrentStreamer:
                 start_piece = file_offset // piece_length
                 end_piece = (file_offset + largest_video['size']) // piece_length
                 
-                # Set high priority for first and last pieces (for seeking)
-                priorities = [1] * num_pieces
-                # First 5% of video - highest priority
-                first_chunk = int((end_piece - start_piece) * 0.05)
-                for i in range(start_piece, min(start_piece + first_chunk, end_piece)):
-                    priorities[i] = 7
+                # Set priorities - lower = less important, higher = more important (max 7)
+                priorities = [0] * num_pieces  # Don't download other files
+                
+                # Set priority for video file pieces
+                for i in range(start_piece, end_piece + 1):
+                    priorities[i] = 1  # Normal priority
+                
+                # CRITICAL: First 50 pieces get highest priority (for file header)
+                header_pieces = min(50, end_piece - start_piece)
+                for i in range(start_piece, start_piece + header_pieces):
+                    priorities[i] = 7  # Highest priority
+                
+                # Also prioritize last few pieces (for seeking)
+                for i in range(max(start_piece, end_piece - 5), end_piece + 1):
+                    priorities[i] = 4
                 
                 handle.prioritize_pieces(priorities)
-                logger.info(f"Found video file: {largest_video['path']} ({largest_size / 1024 / 1024:.1f} MB)")
+                logger.info(f"Found video file: {largest_video['path']} ({largest_size / 1024 / 1024:.1f} MB) - prioritizing first {header_pieces} pieces")
         
         # Calculate progress
         video_file = data.get('video_file')
