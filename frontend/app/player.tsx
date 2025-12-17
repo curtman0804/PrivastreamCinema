@@ -8,11 +8,14 @@ import {
   Dimensions,
   StatusBar,
   Platform,
+  Linking,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
+import * as Clipboard from 'expo-clipboard';
 import { api } from '../src/api/client';
 
 const { width, height } = Dimensions.get('window');
@@ -32,14 +35,20 @@ export default function PlayerScreen() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [peers, setPeers] = useState(0);
   const [downloadSpeed, setDownloadSpeed] = useState(0);
+  const [videoReady, setVideoReady] = useState(false);
+  const [videoFile, setVideoFile] = useState<string | null>(null);
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const continuePollingRef = useRef(true);
 
   useEffect(() => {
+    continuePollingRef.current = true;
+    
     if (url) {
       // Direct HTTP stream - play immediately
       setStreamUrl(url);
       setIsLoading(false);
+      setVideoReady(true);
     } else if (infoHash) {
       // Torrent stream - start backend streaming
       startTorrentStream();
@@ -49,6 +58,7 @@ export default function PlayerScreen() {
     }
 
     return () => {
+      continuePollingRef.current = false;
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
       }
@@ -66,6 +76,8 @@ export default function PlayerScreen() {
       
       // Poll for status
       pollIntervalRef.current = setInterval(async () => {
+        if (!continuePollingRef.current) return;
+        
         try {
           const status = await api.stream.status(infoHash);
           
@@ -73,23 +85,26 @@ export default function PlayerScreen() {
           setPeers(status.peers || 0);
           setDownloadSpeed(status.download_rate || 0);
           
+          if (status.video_file) {
+            setVideoFile(status.video_file);
+          }
+          
           if (status.status === 'downloading_metadata') {
             setLoadingStatus(`Connecting to peers... (${status.peers} peers)`);
           } else if (status.status === 'buffering') {
-            const speedMB = (status.download_rate / 1024 / 1024).toFixed(2);
-            setLoadingStatus(`Buffering... ${status.progress?.toFixed(1)}% (${speedMB} MB/s)`);
+            const speedMB = ((status.download_rate || 0) / 1024 / 1024).toFixed(2);
+            setLoadingStatus(`Buffering... ${(status.progress || 0).toFixed(1)}% (${speedMB} MB/s)`);
           } else if (status.status === 'ready') {
-            // Video is ready to play - wait a bit more for buffer
-            if (status.progress && status.progress >= 2) {
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-              }
-              
-              // Get the stream URL
+            // Video is ready to play - need at least 3% buffer
+            if ((status.progress || 0) >= 3) {
               const videoUrl = api.stream.getVideoUrl(infoHash);
               setStreamUrl(videoUrl);
               setIsLoading(false);
-              setLoadingStatus('Playing...');
+              setVideoReady(true);
+              setLoadingStatus('Ready to play');
+            } else {
+              const speedMB = ((status.download_rate || 0) / 1024 / 1024).toFixed(2);
+              setLoadingStatus(`Buffering... ${(status.progress || 0).toFixed(1)}% (${speedMB} MB/s) - need 3%`);
             }
           } else if (status.status === 'not_found' || status.status === 'invalid') {
             setError('Failed to start torrent. Please try another stream.');
@@ -116,9 +131,50 @@ export default function PlayerScreen() {
     return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
   };
 
-  // Generate HTML for video player with better codec support
+  const openInExternalPlayer = async () => {
+    if (!streamUrl) return;
+    
+    // Try different player schemes for Android/Fire TV
+    const schemes = [
+      `vlc://${streamUrl}`,
+      `intent:${streamUrl}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end`,
+      `intent:${streamUrl}#Intent;package=com.brouken.player;type=video/*;end`,
+    ];
+    
+    for (const scheme of schemes) {
+      try {
+        const canOpen = await Linking.canOpenURL(scheme);
+        if (canOpen) {
+          await Linking.openURL(scheme);
+          return;
+        }
+      } catch (e) {
+        console.log('Scheme not available:', scheme);
+      }
+    }
+    
+    // Fallback - copy URL to clipboard
+    Alert.alert(
+      'Open in External Player',
+      'Install VLC or MX Player, then copy the stream URL and paste it in the player.',
+      [
+        {
+          text: 'Copy Stream URL',
+          onPress: async () => {
+            await Clipboard.setStringAsync(streamUrl);
+            Alert.alert('Copied!', 'Stream URL copied to clipboard');
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  // Generate HTML for video player
   const getVideoPlayerHTML = () => {
     if (!streamUrl) return '';
+    
+    const isMKV = videoFile?.toLowerCase().endsWith('.mkv');
     
     return `
       <!DOCTYPE html>
@@ -132,6 +188,7 @@ export default function PlayerScreen() {
             height: 100%; 
             background: #000; 
             overflow: hidden;
+            font-family: -apple-system, sans-serif;
           }
           video {
             width: 100%;
@@ -139,67 +196,97 @@ export default function PlayerScreen() {
             object-fit: contain;
             background: #000;
           }
-          .error {
-            color: #ff6b6b;
-            text-align: center;
-            padding: 20px;
-            font-family: sans-serif;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-          }
-          .loading {
+          .message {
             color: #fff;
             text-align: center;
             padding: 20px;
-            font-family: sans-serif;
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            width: 90%;
+          }
+          .error { color: #ff6b6b; }
+          .title { font-size: 18px; margin-bottom: 16px; }
+          .subtitle { font-size: 14px; color: #888; margin-bottom: 24px; }
+          .btn {
+            background: #8B5CF6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 8px;
+          }
+          .btn-secondary {
+            background: #333;
           }
         </style>
       </head>
       <body>
-        <div id="loading" class="loading">Loading video...</div>
-        <video id="player" controls autoplay playsinline style="display: none;">
+        <video id="player" controls autoplay playsinline>
           <source src="${streamUrl}" type="video/mp4">
           <source src="${streamUrl}" type="video/x-matroska">
           <source src="${streamUrl}" type="video/webm">
-          Your browser does not support video playback.
         </video>
+        
+        <div id="fallback" class="message" style="display: none;">
+          <div class="title">Video format not supported in browser</div>
+          <div class="subtitle">${isMKV ? 'MKV files require an external player' : 'Try opening in an external player'}</div>
+          <button class="btn" onclick="window.ReactNativeWebView.postMessage('open_external')">
+            Open in VLC / MX Player
+          </button>
+          <button class="btn btn-secondary" onclick="window.ReactNativeWebView.postMessage('copy_url')">
+            Copy Stream URL
+          </button>
+        </div>
+        
         <script>
           const video = document.getElementById('player');
-          const loading = document.getElementById('loading');
-          
-          video.addEventListener('loadeddata', function() {
-            loading.style.display = 'none';
-            video.style.display = 'block';
-            video.play().catch(e => console.log('Autoplay blocked:', e));
-          });
+          const fallback = document.getElementById('fallback');
+          let hasError = false;
           
           video.addEventListener('error', function(e) {
-            loading.innerHTML = '<div class="error">Video playback error. The format may not be supported.<br><br>Try a different stream.</div>';
-            console.error('Video error:', e);
+            if (!hasError) {
+              hasError = true;
+              video.style.display = 'none';
+              fallback.style.display = 'block';
+            }
           });
           
-          video.addEventListener('waiting', function() {
-            loading.textContent = 'Buffering...';
-            loading.style.display = 'block';
+          video.addEventListener('loadeddata', function() {
+            video.play().catch(e => {
+              console.log('Autoplay blocked:', e);
+            });
           });
           
-          video.addEventListener('playing', function() {
-            loading.style.display = 'none';
-            video.style.display = 'block';
-          });
-          
-          // Try to load the video
+          // Try to load
           video.load();
+          
+          // Timeout fallback
+          setTimeout(function() {
+            if (video.readyState < 2 && !hasError) {
+              hasError = true;
+              video.style.display = 'none';
+              fallback.style.display = 'block';
+            }
+          }, 10000);
         </script>
       </body>
       </html>
     `;
+  };
+
+  const handleWebViewMessage = async (event: any) => {
+    const message = event.nativeEvent.data;
+    
+    if (message === 'open_external') {
+      openInExternalPlayer();
+    } else if (message === 'copy_url' && streamUrl) {
+      await Clipboard.setStringAsync(streamUrl);
+      Alert.alert('Copied!', 'Stream URL copied to clipboard');
+    }
   };
 
   return (
@@ -217,7 +304,14 @@ export default function PlayerScreen() {
         <Text style={styles.title} numberOfLines={1}>
           {title || 'Video Player'}
         </Text>
-        <View style={styles.placeholder} />
+        {streamUrl && (
+          <TouchableOpacity
+            style={styles.externalButton}
+            onPress={openInExternalPlayer}
+          >
+            <Ionicons name="open-outline" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
       </SafeAreaView>
 
       {/* Loading Overlay */}
@@ -227,19 +321,27 @@ export default function PlayerScreen() {
           <Text style={styles.loadingText}>{loadingStatus}</Text>
           
           {/* Progress info for torrents */}
-          {infoHash && downloadProgress > 0 && (
+          {infoHash && (
             <View style={styles.progressInfo}>
               <View style={styles.progressBar}>
                 <View style={[styles.progressFill, { width: `${Math.min(downloadProgress, 100)}%` }]} />
               </View>
               <View style={styles.statsRow}>
                 <Text style={styles.statText}>
-                  <Ionicons name="people" size={12} color="#8B5CF6" /> {peers} peers
+                  {peers} peers
                 </Text>
                 <Text style={styles.statText}>
-                  <Ionicons name="download" size={12} color="#8B5CF6" /> {formatSpeed(downloadSpeed)}
+                  {formatSpeed(downloadSpeed)}
+                </Text>
+                <Text style={styles.statText}>
+                  {downloadProgress.toFixed(1)}%
                 </Text>
               </View>
+              {videoFile && (
+                <Text style={styles.fileInfo} numberOfLines={1}>
+                  {videoFile.split('/').pop()}
+                </Text>
+              )}
             </View>
           )}
         </View>
@@ -257,10 +359,11 @@ export default function PlayerScreen() {
       )}
 
       {/* WebView Video Player */}
-      {streamUrl && !isLoading && (
+      {videoReady && streamUrl && !isLoading && (
         <WebView
           style={styles.webview}
           source={{ html: getVideoPlayerHTML() }}
+          onMessage={handleWebViewMessage}
           allowsInlineMediaPlayback={true}
           mediaPlaybackRequiresUserAction={false}
           allowsFullscreenVideo={true}
@@ -268,15 +371,11 @@ export default function PlayerScreen() {
           domStorageEnabled={true}
           mixedContentMode="always"
           originWhitelist={['*']}
-          onError={(syntheticEvent) => {
-            const { nativeEvent } = syntheticEvent;
-            console.error('WebView error:', nativeEvent);
-          }}
         />
       )}
 
       {/* Download Stats Overlay (for torrents) */}
-      {streamUrl && infoHash && (
+      {videoReady && infoHash && (
         <View style={styles.torrentStats}>
           <Text style={styles.torrentStatText}>
             {downloadProgress.toFixed(1)}% • {peers} peers • {formatSpeed(downloadSpeed)}
@@ -313,6 +412,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  externalButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(139, 92, 246, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   title: {
     flex: 1,
     fontSize: 16,
@@ -320,9 +427,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     marginHorizontal: 12,
-  },
-  placeholder: {
-    width: 40,
   },
   webview: {
     flex: 1,
@@ -370,6 +474,12 @@ const styles = StyleSheet.create({
   statText: {
     color: '#888',
     fontSize: 13,
+  },
+  fileInfo: {
+    color: '#666',
+    fontSize: 11,
+    marginTop: 8,
+    maxWidth: '90%',
   },
   errorContainer: {
     position: 'absolute',
