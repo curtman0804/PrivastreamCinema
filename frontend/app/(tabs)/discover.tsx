@@ -65,13 +65,12 @@ export default function DiscoverScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Image
-            source={require('../../assets/images/logo_splash.png')}
-            style={styles.logo}
-            contentFit="contain"
-          />
-        </View>
+        <Image
+          source={require('../../assets/images/logo_launcher.png')}
+          style={styles.headerLogo}
+          contentFit="contain"
+        />
+        <Text style={styles.headerTitle}>Privastream Cinema</Text>
         <Pressable 
           style={styles.searchButton}
           onPress={() => router.push('/(tabs)/search')}
