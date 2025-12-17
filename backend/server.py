@@ -711,6 +711,31 @@ async def get_all_streams(
     current_user: User = Depends(get_current_user)
 ):
     """Fetch streams from ALL installed addons + built-in Torrentio-style aggregation"""
+    
+    # For TV channels (USA TV), fetch directly from the addon
+    if content_type == 'tv' and content_id.startswith('ustv'):
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+                stream_url = f"https://848b3516657c-usatv.baby-beamup.club/stream/tv/{content_id}.json"
+                response = await client.get(stream_url)
+                if response.status_code == 200:
+                    data = response.json()
+                    streams = data.get('streams', [])
+                    # Format streams for display
+                    formatted_streams = []
+                    for stream in streams:
+                        formatted_streams.append({
+                            "name": f"📺 {stream.get('name', 'HD')}",
+                            "title": f"{stream.get('description', 'Live TV')} - {stream.get('name', 'HD')}",
+                            "url": stream.get('url'),
+                            "addon": "USA TV",
+                        })
+                    logger.info(f"Found {len(formatted_streams)} USA TV streams for {content_id}")
+                    return {"streams": formatted_streams}
+        except Exception as e:
+            logger.error(f"USA TV streams error: {e}")
+        return {"streams": []}
+    
     addons = await db.addons.find({"userId": current_user.id}).to_list(100)
     
     all_streams = []
