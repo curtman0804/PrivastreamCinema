@@ -15,7 +15,7 @@ const getBaseUrl = () => {
     return backendUrl;
   }
   // Fallback - try the packager hostname
-  return 'https://torrentview.preview.emergentagent.com';
+  return 'https://cineflux-5.preview.emergentagent.com';
 };
 
 const BASE_URL = getBaseUrl();
