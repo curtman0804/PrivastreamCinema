@@ -860,10 +860,13 @@ async def get_all_streams(
     async def search_apibay(query: str, content_type: str):
         """Search PirateBay via apibay.org"""
         try:
-            # Use simple query - first 3 words only
-            simple_query = ' '.join(query.split()[:3])
+            # Clean up query - remove special characters, use full title
+            import re
+            clean_query = re.sub(r'[^\w\s]', '', query)  # Remove apostrophes, etc.
+            simple_query = ' '.join(clean_query.split()[:5])  # Use up to 5 words
+            logger.info(f"ApiBay searching: '{simple_query}'")
             url = f"https://apibay.org/q.php?q={simple_query}"
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
                 response = await client.get(url)
                 if response.status_code == 200:
                     torrents = response.json()
