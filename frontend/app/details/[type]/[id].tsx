@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Alert,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -15,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useContentStore } from '../../../src/store/contentStore';
-import { api, ContentItem, Stream } from '../../../src/api/client';
+import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 
 const { width, height } = Dimensions.get('window');
 
@@ -35,16 +36,41 @@ export default function DetailsScreen() {
   const [content, setContent] = useState<ContentItem | null>(null);
   const [isLoadingContent, setIsLoadingContent] = useState(true);
   const [inLibrary, setInLibrary] = useState(false);
+  const [selectedSeason, setSelectedSeason] = useState<number>(1);
+  const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
+
+  // Get seasons from episodes
+  const seasons = useMemo(() => {
+    if (!content?.videos) return [];
+    const seasonSet = new Set(content.videos.map(ep => ep.season).filter(s => s > 0));
+    return Array.from(seasonSet).sort((a, b) => a - b);
+  }, [content?.videos]);
+
+  // Get episodes for selected season
+  const episodesForSeason = useMemo(() => {
+    if (!content?.videos) return [];
+    return content.videos
+      .filter(ep => ep.season === selectedSeason)
+      .sort((a, b) => a.episode - b.episode);
+  }, [content?.videos, selectedSeason]);
 
   // Load content and streams immediately
   useEffect(() => {
     loadContent();
     fetchLibrary();
-    // Auto-fetch streams when page loads
-    if (type && id) {
+    // Auto-fetch streams when page loads (for movies)
+    if (type && id && type === 'movie') {
       fetchStreams(type, id);
     }
   }, [id, type]);
+
+  // When episode is selected, fetch streams for that episode
+  useEffect(() => {
+    if (selectedEpisode && type === 'series') {
+      const episodeId = `${id}:${selectedEpisode.season}:${selectedEpisode.episode}`;
+      fetchStreams(type, episodeId);
+    }
+  }, [selectedEpisode]);
 
   useEffect(() => {
     if (content && library) {
