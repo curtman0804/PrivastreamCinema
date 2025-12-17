@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useCallback, memo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,15 +17,27 @@ interface ServiceRowProps {
   onSeeAll?: () => void;
 }
 
-export const ServiceRow: React.FC<ServiceRowProps> = ({
+const MemoizedContentCard = memo(ContentCard);
+
+export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   serviceName,
   items,
   onItemPress,
   onSeeAll,
 }) => {
-  // Filter out undefined/null items
-  const validItems = (items || []).filter(Boolean);
+  // Filter out undefined/null items and limit to 30 for performance
+  const validItems = (items || []).filter(Boolean).slice(0, 30);
   if (validItems.length === 0) return null;
+
+  const renderItem = useCallback(({ item }: { item: ContentItem }) => (
+    <MemoizedContentCard
+      item={item}
+      onPress={() => onItemPress(item)}
+    />
+  ), [onItemPress]);
+
+  const keyExtractor = useCallback((item: ContentItem, index: number) => 
+    item.id || item.imdb_id || `${serviceName}-${index}`, [serviceName]);
 
   return (
     <View style={styles.container}>
@@ -40,22 +52,26 @@ export const ServiceRow: React.FC<ServiceRowProps> = ({
           </TouchableOpacity>
         )}
       </View>
-      <ScrollView
+      <FlatList
+        data={validItems}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-      >
-        {validItems.map((item, index) => (
-          <ContentCard
-            key={item.id || item.imdb_id || index}
-            item={item}
-            onPress={() => onItemPress(item)}
-          />
-        ))}
-      </ScrollView>
+        initialNumToRender={5}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        removeClippedSubviews={true}
+        getItemLayout={(data, index) => ({
+          length: 120,
+          offset: 120 * index,
+          index,
+        })}
+      />
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
