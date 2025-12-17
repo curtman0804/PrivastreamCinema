@@ -91,23 +91,6 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <View style={styles.menuCard}>
-            <MenuItem
-              icon="person-outline"
-              title="Edit Profile"
-              subtitle="Update your information"
-            />
-            <View style={styles.menuDivider} />
-            <MenuItem
-              icon="key-outline"
-              title="Change Password"
-              subtitle="Update your password"
-            />
-          </View>
-        </View>
-
-        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Preferences</Text>
           <View style={styles.menuCard}>
             <MenuItem
