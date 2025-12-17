@@ -180,6 +180,30 @@ export const api = {
       await apiClient.delete(`/api/admin/users/${userId}`);
     },
   },
+  stream: {
+    start: async (infoHash: string): Promise<{ status: string; info_hash: string }> => {
+      const response = await apiClient.post(`/api/stream/start/${infoHash}`);
+      return response.data;
+    },
+    status: async (infoHash: string): Promise<{
+      status: string;
+      progress?: number;
+      peers?: number;
+      download_rate?: number;
+      upload_rate?: number;
+      video_file?: string;
+      video_size?: number;
+      downloaded?: number;
+    }> => {
+      const response = await apiClient.get(`/api/stream/status/${infoHash}`);
+      return response.data;
+    },
+    getVideoUrl: (infoHash: string): string => {
+      // Return the full URL for the video stream
+      const baseUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+      return `${baseUrl}/api/stream/video/${infoHash}`;
+    },
+  },
 };
 
 export default apiClient;
