@@ -96,7 +96,6 @@ export default function LibraryScreen() {
       </View>
 
       <View style={styles.filterContainer}>
-        {renderFilterButton('all', 'All')}
         {renderFilterButton('movies', 'Movies')}
         {renderFilterButton('series', 'Series')}
         {renderFilterButton('tv', 'TV Channels')}
