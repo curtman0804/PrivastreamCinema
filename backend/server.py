@@ -300,19 +300,39 @@ class TorrentStreamer:
                 logger.info(f"Found video: {largest_video['path']} ({largest_size / 1024 / 1024:.1f} MB)")
                 logger.info(f"Piece info: {video_pieces} pieces @ {piece_length // 1024}KB each, prioritizing first {header_pieces} + {buffer_pieces} buffer")
         
-        # Calculate progress
+        # Calculate progress and readiness
         video_file = data.get('video_file')
-        if video_file and s.progress > 0.005:  # At least 0.5% downloaded
-            # Need at least 5% buffer before ready (ensures header is downloaded)
+        if video_file:
+            video_size = video_file['size']
+            downloaded_bytes = int(s.progress * video_size) if s.progress > 0 else 0
+            
+            # FAST START: Need only ~3MB downloaded to start playback
+            # This is enough for ffmpeg to parse headers and begin streaming
+            min_bytes_for_playback = 3 * 1024 * 1024  # 3MB minimum
+            
+            # For very small files, use percentage instead
+            min_for_small_files = int(video_size * 0.02)  # 2% for small files
+            ready_threshold = max(min_bytes_for_playback, min_for_small_files)
+            
+            # Check if file exists and has content
+            video_path = data.get('video_path')
+            file_exists = video_path and os.path.exists(video_path)
+            file_size_on_disk = os.path.getsize(video_path) if file_exists else 0
+            
+            # Ready when: enough data downloaded AND file exists on disk
+            is_ready = file_size_on_disk >= min_bytes_for_playback or downloaded_bytes >= ready_threshold
+            
             return {
-                "status": "ready" if s.progress > 0.05 else "buffering",  # Ready at 5%
+                "status": "ready" if is_ready else "buffering",
                 "progress": s.progress * 100,
                 "peers": s.num_peers,
                 "download_rate": s.download_rate,
                 "upload_rate": s.upload_rate,
                 "video_file": video_file['path'],
-                "video_size": video_file['size'],
-                "downloaded": int(s.progress * video_file['size']),
+                "video_size": video_size,
+                "downloaded": downloaded_bytes,
+                "file_ready": file_exists,
+                "ready_threshold_mb": ready_threshold / (1024 * 1024),
             }
         
         return {
