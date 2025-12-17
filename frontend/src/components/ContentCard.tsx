@@ -21,7 +21,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   item,
   onPress,
   size = 'medium',
-  showRating = true,
+  showRating = false, // Default to false - cleaner look
 }) => {
   const { width } = useWindowDimensions();
   const baseWidth = Math.min(width, 500); // Cap max width for web
@@ -34,10 +34,6 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   if (!item) {
     return null;
   }
-
-  const rating = typeof item.imdbRating === 'string' 
-    ? parseFloat(item.imdbRating) 
-    : item.imdbRating;
 
   return (
     <TouchableOpacity
@@ -52,19 +48,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
           contentFit="cover"
           transition={200}
         />
-        {showRating && rating && rating > 0 && (
-          <View style={styles.ratingBadge}>
-            <Ionicons name="star" size={10} color="#FFD700" />
-            <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
-          </View>
-        )}
       </View>
-      <Text style={styles.title} numberOfLines={2}>
-        {item.name}
-      </Text>
-      {item.year && (
-        <Text style={styles.year}>{item.year}</Text>
-      )}
     </TouchableOpacity>
   );
 };
