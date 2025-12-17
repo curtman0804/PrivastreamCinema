@@ -24,7 +24,7 @@ export const StreamList: React.FC<StreamListProps> = ({
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#8B5CF6" />
+        <ActivityIndicator size="large" color="#B8A05C" />
         <Text style={styles.loadingText}>Finding streams...</Text>
       </View>
     );
@@ -61,7 +61,7 @@ export const StreamList: React.FC<StreamListProps> = ({
             activeOpacity={0.7}
           >
             <View style={styles.streamIcon}>
-              <Ionicons name="play-circle" size={32} color="#8B5CF6" />
+              <Ionicons name="play-circle" size={32} color="#B8A05C" />
             </View>
             <View style={styles.streamInfo}>
               <Text style={styles.streamQuality}>{quality}</Text>

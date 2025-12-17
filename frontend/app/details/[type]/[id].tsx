@@ -166,7 +166,7 @@ export default function DetailsScreen() {
   if (isLoadingContent) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#8B5CF6" />
+        <ActivityIndicator size="large" color="#B8A05C" />
       </View>
     );
   }
@@ -345,7 +345,7 @@ export default function DetailsScreen() {
 
             {isLoadingStreams ? (
               <View style={styles.streamLoading}>
-                <ActivityIndicator size="small" color="#8B5CF6" />
+                <ActivityIndicator size="small" color="#B8A05C" />
                 <Text style={styles.streamLoadingText}>Finding streams...</Text>
               </View>
             ) : streams.length === 0 ? (
@@ -364,7 +364,7 @@ export default function DetailsScreen() {
                       onPress={() => handleStreamSelect(stream)}
                     >
                       <View style={styles.streamIcon}>
-                        <Ionicons name="play" size={18} color="#8B5CF6" />
+                        <Ionicons name="play" size={18} color="#B8A05C" />
                       </View>
                       <View style={styles.streamInfo}>
                         <Text style={styles.streamSource} numberOfLines={1}>{source}</Text>
@@ -555,8 +555,8 @@ const styles = StyleSheet.create({
     borderColor: '#333',
   },
   seasonButtonActive: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
+    backgroundColor: '#B8A05C',
+    borderColor: '#B8A05C',
   },
   seasonButtonText: {
     color: '#AAAAAA',

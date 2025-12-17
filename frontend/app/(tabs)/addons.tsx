@@ -149,7 +149,7 @@ export default function AddonsScreen() {
           <Ionicons
             name={getAddonIcon(item.manifest.types) as any}
             size={32}
-            color="#8B5CF6"
+            color="#B8A05C"
           />
         )}
       </View>
@@ -192,7 +192,7 @@ export default function AddonsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color="#B8A05C" />
         </View>
       </SafeAreaView>
     );
@@ -204,13 +204,13 @@ export default function AddonsScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Addons</Text>
         <TouchableOpacity style={styles.addButton} onPress={() => setShowModal(true)}>
-          <Ionicons name="add-circle" size={32} color="#8B5CF6" />
+          <Ionicons name="add-circle" size={32} color="#B8A05C" />
         </TouchableOpacity>
       </View>
 
       {/* Disclaimer */}
       <View style={styles.disclaimer}>
-        <Ionicons name="shield-checkmark" size={18} color="#8B5CF6" />
+        <Ionicons name="shield-checkmark" size={18} color="#B8A05C" />
         <Text style={styles.disclaimerText}>
           You are responsible for the addons you install. The app does not host or distribute any content.
         </Text>
@@ -224,7 +224,7 @@ export default function AddonsScreen() {
           </View>
           <Text style={styles.emptyTitle}>No Addons Installed</Text>
           <Text style={styles.emptySubtext}>
-            Tap the <Ionicons name="add-circle" size={18} color="#8B5CF6" /> button in the top right to install addons.
+            Tap the <Ionicons name="add-circle" size={18} color="#B8A05C" /> button in the top right to install addons.
           </Text>
           <Text style={styles.emptyHint}>
             You'll need to find addon manifest URLs from Stremio addon sources.
@@ -241,8 +241,8 @@ export default function AddonsScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#8B5CF6"
-              colors={['#8B5CF6']}
+              tintColor="#B8A05C"
+              colors={['#B8A05C']}
             />
           }
           ListHeaderComponent={
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     flexDirection: 'row',
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#B8A05C',
     borderRadius: 12,
     height: 54,
     justifyContent: 'center',

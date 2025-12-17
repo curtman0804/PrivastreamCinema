@@ -36,7 +36,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = ({
         {onSeeAll && (
           <TouchableOpacity onPress={onSeeAll} style={styles.seeAllButton}>
             <Text style={styles.seeAllText}>See All</Text>
-            <Ionicons name="chevron-forward" size={16} color="#8B5CF6" />
+            <Ionicons name="chevron-forward" size={16} color="#B8A05C" />
           </TouchableOpacity>
         )}
       </View>
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   seeAllText: {
-    color: '#8B5CF6',
+    color: '#B8A05C',
     fontSize: 14,
     fontWeight: '500',
   },

@@ -253,7 +253,7 @@ export default function PlayerScreen() {
           .status { color: #fff; text-align: center; padding: 20px; font-family: sans-serif; 
                    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
           .spinner { width: 30px; height: 30px; border: 3px solid rgba(139, 92, 246, 0.3);
-                    border-top-color: #8B5CF6; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; }
+                    border-top-color: #B8A05C; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; }
           @keyframes spin { to { transform: rotate(360deg); } }
         </style>
       </head>
@@ -302,7 +302,7 @@ export default function PlayerScreen() {
       {/* Loading Overlay */}
       {isLoading && !error && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color="#B8A05C" />
           <Text style={styles.loadingText}>{loadingStatus}</Text>
           
           {infoHash && (
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#B8A05C',
   },
   statsRow: {
     flexDirection: 'row',
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   button: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#B8A05C',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,

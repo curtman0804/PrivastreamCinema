@@ -115,7 +115,7 @@ export default function AdminUsersScreen() {
           <Ionicons 
             name={item.is_admin ? 'shield' : 'person'} 
             size={24} 
-            color={item.is_admin ? '#8B5CF6' : '#888888'} 
+            color={item.is_admin ? '#B8A05C' : '#888888'} 
           />
         </View>
         <View style={styles.userDetails}>
@@ -145,7 +145,7 @@ export default function AdminUsersScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color="#B8A05C" />
         </View>
       </SafeAreaView>
     );
@@ -159,7 +159,7 @@ export default function AdminUsersScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>User Management</Text>
         <TouchableOpacity style={styles.addButton} onPress={() => setShowModal(true)}>
-          <Ionicons name="add" size={28} color="#8B5CF6" />
+          <Ionicons name="add" size={28} color="#B8A05C" />
         </TouchableOpacity>
       </View>
 
@@ -172,8 +172,8 @@ export default function AdminUsersScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#8B5CF6"
-            colors={['#8B5CF6']}
+            tintColor="#B8A05C"
+            colors={['#B8A05C']}
           />
         }
         ListEmptyComponent={
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   adminBadge: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#B8A05C',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
@@ -424,15 +424,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
+    backgroundColor: '#B8A05C',
+    borderColor: '#B8A05C',
   },
   adminToggleText: {
     fontSize: 15,
     color: '#FFFFFF',
   },
   submitButton: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#B8A05C',
     borderRadius: 12,
     height: 52,
     justifyContent: 'center',

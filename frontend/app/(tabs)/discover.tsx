@@ -55,7 +55,7 @@ export default function DiscoverScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color="#B8A05C" />
         </View>
       </SafeAreaView>
     );
@@ -108,8 +108,8 @@ export default function DiscoverScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#8B5CF6"
-              colors={['#8B5CF6']}
+              tintColor="#B8A05C"
+              colors={['#B8A05C']}
             />
           }
         >
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   goToAddonsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#B8A05C',
     paddingHorizontal: 28,
     paddingVertical: 16,
     borderRadius: 14,

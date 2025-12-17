@@ -23,7 +23,7 @@ export default function TabsLayout() {
             paddingBottom: bottomPadding,
           }
         ],
-        tabBarActiveTintColor: '#8B5CF6',
+        tabBarActiveTintColor: '#B8A05C',
         tabBarInactiveTintColor: '#888888',
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,

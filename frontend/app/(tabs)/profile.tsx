@@ -58,7 +58,7 @@ export default function ProfileScreen() {
         <Ionicons
           name={icon as any}
           size={22}
-          color={danger ? '#FF4444' : '#8B5CF6'}
+          color={danger ? '#FF4444' : '#B8A05C'}
         />
       </View>
       <View style={styles.menuTextContainer}>
@@ -82,7 +82,7 @@ export default function ProfileScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
-            <Ionicons name="person" size={40} color="#8B5CF6" />
+            <Ionicons name="person" size={40} color="#B8A05C" />
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.username}>{user?.username || 'User'}</Text>

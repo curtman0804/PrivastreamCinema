@@ -57,7 +57,7 @@ export default function SearchScreen() {
 
       {isLoadingSearch ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color="#B8A05C" />
           <Text style={styles.loadingText}>Searching...</Text>
         </View>
       ) : hasSearched && searchResults.length === 0 ? (

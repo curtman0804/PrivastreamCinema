@@ -81,7 +81,7 @@ export default function LibraryScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color="#B8A05C" />
         </View>
       </SafeAreaView>
     );
@@ -118,8 +118,8 @@ export default function LibraryScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#8B5CF6"
-              colors={['#8B5CF6']}
+              tintColor="#B8A05C"
+              colors={['#B8A05C']}
             />
           }
         />
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
   },
   filterButtonActive: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#B8A05C',
   },
   filterText: {
     color: '#888888',

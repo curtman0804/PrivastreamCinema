@@ -29,7 +29,7 @@ export default function Index() {
         <Text style={styles.title}>PrivastreamCinema</Text>
         <Text style={styles.subtitle}>Stream Privately</Text>
       </View>
-      <ActivityIndicator size="large" color="#8B5CF6" style={styles.loader} />
+      <ActivityIndicator size="large" color="#B8A05C" style={styles.loader} />
     </View>
   );
 }
@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: '#8B5CF6',
+    color: '#B8A05C',
     marginTop: 8,
   },
   loader: {
