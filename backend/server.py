@@ -1056,7 +1056,7 @@ async def stream_video(
     info_hash: str,
     request: Request
 ):
-    """Stream the video file as MP4 using ffmpeg transcoding for browser compatibility"""
+    """Stream the video file with ffmpeg remuxing to MP4 for browser compatibility"""
     try:
         video_path = torrent_streamer.get_video_path(info_hash)
         
@@ -1071,37 +1071,38 @@ async def stream_video(
         if file_size == 0:
             raise HTTPException(status_code=404, detail="Video file is empty - still downloading")
         
-        # Use ffmpeg to transcode to browser-compatible MP4 format
-        # This enables playback in browsers that don't support MKV
+        # Use ffmpeg to remux (not transcode) to MP4 - much faster
+        # This just repackages the video without re-encoding
         def generate_stream():
-            # FFmpeg command to transcode to streamable MP4
-            # -movflags frag_keyframe+empty_moov enables streaming before file is complete
             cmd = [
                 'ffmpeg',
                 '-i', video_path,
-                '-c:v', 'libx264',      # H.264 video codec (widely supported)
-                '-preset', 'ultrafast',  # Fast encoding for real-time streaming
-                '-tune', 'zerolatency', # Minimize latency
-                '-c:a', 'aac',          # AAC audio codec (widely supported)
-                '-b:a', '128k',         # Audio bitrate
-                '-movflags', 'frag_keyframe+empty_moov+faststart',  # Enable streaming
-                '-f', 'mp4',            # Output format
-                '-'                     # Output to stdout
+                '-c', 'copy',           # Copy streams without re-encoding (fast!)
+                '-movflags', 'frag_keyframe+empty_moov+faststart',
+                '-f', 'mp4',
+                '-'
             ]
+            
+            logger.info(f"Starting ffmpeg remux for {video_path}")
             
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
                 bufsize=1024 * 1024
             )
             
             try:
+                bytes_sent = 0
                 while True:
-                    chunk = process.stdout.read(64 * 1024)  # 64KB chunks
+                    chunk = process.stdout.read(256 * 1024)  # 256KB chunks
                     if not chunk:
                         break
+                    bytes_sent += len(chunk)
                     yield chunk
+                logger.info(f"ffmpeg sent {bytes_sent} bytes")
+            except GeneratorExit:
+                logger.info("Client disconnected")
             finally:
                 process.kill()
                 process.wait()
