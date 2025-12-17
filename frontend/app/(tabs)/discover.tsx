@@ -117,22 +117,21 @@ export default function DiscoverScreen() {
             <View key={serviceName}>
               {content?.movies && content.movies.length > 0 && (
                 <ServiceRow
-                  serviceName={`${serviceName} Movies`}
+                  serviceName={serviceName}
                   items={content.movies}
                   onItemPress={handleItemPress}
                 />
               )}
               {content?.series && content.series.length > 0 && (
                 <ServiceRow
-                  serviceName={`${serviceName} Series`}
+                  serviceName={serviceName}
                   items={content.series}
                   onItemPress={handleItemPress}
                 />
               )}
-              {/* USA TV Channels */}
               {content?.channels && content.channels.length > 0 && (
                 <ServiceRow
-                  serviceName={`${serviceName} Channels`}
+                  serviceName={serviceName}
                   items={content.channels.map((ch: any) => ({
                     ...ch,
                     type: 'tv' as const,
