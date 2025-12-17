@@ -78,6 +78,190 @@ FALLBACK_MANIFESTS = {
     }
 }
 
+# ==================== TORRENT STREAMING SERVER ====================
+# This provides Stremio-like torrent streaming capabilities
+
+class TorrentStreamer:
+    """Handles torrent downloading and HTTP streaming like Stremio"""
+    
+    def __init__(self):
+        self.sessions = {}  # infoHash -> session data
+        self.download_dir = tempfile.mkdtemp(prefix="privastream_")
+        self.trackers = [
+            "udp://tracker.opentrackr.org:1337/announce",
+            "udp://open.stealth.si:80/announce",
+            "udp://tracker.torrent.eu.org:451/announce",
+            "udp://exodus.desync.com:6969/announce",
+            "udp://tracker.coppersurfer.tk:6969/announce",
+            "udp://tracker.leechers-paradise.org:6969/announce",
+            "udp://p4p.arenabg.com:1337/announce",
+            "udp://tracker.internetwarriors.net:1337/announce",
+        ]
+        logger.info(f"TorrentStreamer initialized. Download dir: {self.download_dir}")
+    
+    def get_session(self, info_hash: str):
+        """Get or create a libtorrent session for a torrent"""
+        info_hash = info_hash.lower()
+        
+        if info_hash in self.sessions:
+            return self.sessions[info_hash]
+        
+        # Create new session
+        settings = {
+            'listen_interfaces': '0.0.0.0:6881',
+            'enable_dht': True,
+            'enable_lsd': True,
+            'enable_upnp': True,
+            'enable_natpmp': True,
+            'announce_to_all_trackers': True,
+            'announce_to_all_tiers': True,
+            'connection_speed': 500,
+            'download_rate_limit': 0,  # Unlimited
+            'upload_rate_limit': 100000,  # 100 KB/s upload
+        }
+        
+        ses = lt.session(settings)
+        
+        # Add torrent
+        magnet = f"magnet:?xt=urn:btih:{info_hash}"
+        for tracker in self.trackers:
+            magnet += f"&tr={tracker}"
+        
+        params = {
+            'save_path': self.download_dir,
+            'storage_mode': lt.storage_mode_t.storage_mode_sparse,
+        }
+        
+        handle = lt.add_magnet_uri(ses, magnet, params)
+        
+        self.sessions[info_hash] = {
+            'session': ses,
+            'handle': handle,
+            'created': time.time(),
+            'video_file': None,
+            'video_path': None,
+        }
+        
+        logger.info(f"Started torrent session for {info_hash}")
+        return self.sessions[info_hash]
+    
+    def get_status(self, info_hash: str) -> dict:
+        """Get download status for a torrent"""
+        info_hash = info_hash.lower()
+        
+        if info_hash not in self.sessions:
+            return {"status": "not_found"}
+        
+        data = self.sessions[info_hash]
+        handle = data['handle']
+        
+        if not handle.is_valid():
+            return {"status": "invalid"}
+        
+        s = handle.status()
+        
+        # Check if we have metadata
+        if not handle.has_metadata():
+            return {
+                "status": "downloading_metadata",
+                "progress": 0,
+                "peers": s.num_peers,
+                "download_rate": s.download_rate,
+            }
+        
+        # Find video file if not already found
+        if not data['video_file']:
+            ti = handle.get_torrent_info()
+            files = ti.files()
+            largest_video = None
+            largest_size = 0
+            
+            for i in range(files.num_files()):
+                file_path = files.file_path(i)
+                file_size = files.file_size(i)
+                
+                # Check if it's a video file
+                if any(file_path.lower().endswith(ext) for ext in ['.mp4', '.mkv', '.avi', '.webm', '.mov']):
+                    if file_size > largest_size:
+                        largest_size = file_size
+                        largest_video = {
+                            'index': i,
+                            'path': file_path,
+                            'size': file_size,
+                        }
+            
+            if largest_video:
+                data['video_file'] = largest_video
+                data['video_path'] = os.path.join(self.download_dir, largest_video['path'])
+                
+                # Prioritize video file pieces
+                num_pieces = ti.num_pieces()
+                piece_length = ti.piece_length()
+                
+                # Calculate piece range for video file
+                file_offset = files.file_offset(largest_video['index'])
+                start_piece = file_offset // piece_length
+                end_piece = (file_offset + largest_video['size']) // piece_length
+                
+                # Set high priority for first and last pieces (for seeking)
+                priorities = [1] * num_pieces
+                # First 5% of video - highest priority
+                first_chunk = int((end_piece - start_piece) * 0.05)
+                for i in range(start_piece, min(start_piece + first_chunk, end_piece)):
+                    priorities[i] = 7
+                
+                handle.prioritize_pieces(priorities)
+                logger.info(f"Found video file: {largest_video['path']} ({largest_size / 1024 / 1024:.1f} MB)")
+        
+        # Calculate progress
+        video_file = data.get('video_file')
+        if video_file and s.progress > 0.01:  # At least 1% downloaded
+            return {
+                "status": "ready" if s.progress > 0.02 else "buffering",
+                "progress": s.progress * 100,
+                "peers": s.num_peers,
+                "download_rate": s.download_rate,
+                "upload_rate": s.upload_rate,
+                "video_file": video_file['path'],
+                "video_size": video_file['size'],
+                "downloaded": int(s.progress * video_file['size']),
+            }
+        
+        return {
+            "status": "buffering",
+            "progress": s.progress * 100,
+            "peers": s.num_peers,
+            "download_rate": s.download_rate,
+        }
+    
+    def get_video_path(self, info_hash: str) -> Optional[str]:
+        """Get the path to the video file"""
+        info_hash = info_hash.lower()
+        if info_hash in self.sessions:
+            return self.sessions[info_hash].get('video_path')
+        return None
+    
+    def cleanup_old_sessions(self, max_age_hours=2):
+        """Remove old torrent sessions"""
+        current_time = time.time()
+        to_remove = []
+        
+        for info_hash, data in self.sessions.items():
+            if current_time - data['created'] > max_age_hours * 3600:
+                to_remove.append(info_hash)
+        
+        for info_hash in to_remove:
+            try:
+                data = self.sessions[info_hash]
+                data['session'].remove_torrent(data['handle'])
+                del self.sessions[info_hash]
+                logger.info(f"Cleaned up session for {info_hash}")
+            except Exception as e:
+                logger.error(f"Error cleaning up session {info_hash}: {e}")
+
+# Global torrent streamer instance
+torrent_streamer = TorrentStreamer()
+
 
 # ==================== MODELS ====================
 
