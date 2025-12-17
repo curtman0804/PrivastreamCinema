@@ -721,15 +721,68 @@ async def get_all_streams(
                 if response.status_code == 200:
                     data = response.json()
                     streams = data.get('streams', [])
-                    # Format streams for display
+                    
+                    # Provider name mapping
+                    provider_names = {
+                        'AX': 'A1XS Network',
+                        'CV': 'CValley TV',
+                        'MJ': 'MoveOnJoy',
+                        'MJI': 'MoveOnJoy Intl',
+                        'TP': 'TVPass',
+                        'PL': 'Pluto',
+                        'ST': 'Stirr',
+                    }
+                    
+                    # Format streams for display with location extraction
                     formatted_streams = []
                     for stream in streams:
+                        url = stream.get('url', '')
+                        desc = stream.get('description', '')
+                        quality = stream.get('name', 'HD')
+                        
+                        # Try to extract location from URL
+                        location = ''
+                        import re
+                        # Patterns like "FL_West_Palm_Beach_CBS" or "Los_Angeles"
+                        loc_match = re.search(r'(?:FL_|CA_|TX_|NY_)?([A-Z][a-z]+(?:_[A-Z][a-z]+)*)', url)
+                        if loc_match:
+                            loc = loc_match.group(1).replace('_', ' ')
+                            # Filter out generic words
+                            if loc not in ['East', 'West', 'North', 'South', 'Index', 'Live', 'Hls']:
+                                location = loc
+                        
+                        # Also check for call sign patterns like KSMO, KRCG (FCC call signs indicate region)
+                        call_match = re.search(r'/([KW][A-Z]{2,4})(?:CBS|NBC|ABC|FOX|IND)?/', url)
+                        call_sign = call_match.group(1) if call_match else ''
+                        
+                        # Get provider full name
+                        provider = provider_names.get(desc, desc)
+                        
+                        # Build display name
+                        if location:
+                            display_name = f"📺 {quality} • {location}"
+                        elif call_sign:
+                            display_name = f"📺 {quality} • {call_sign}"
+                        else:
+                            display_name = f"📺 {quality}"
+                        
+                        # Build title with provider info
+                        title_parts = [provider]
+                        if location:
+                            title_parts.append(location)
+                        if call_sign and location:
+                            title_parts.append(f"({call_sign})")
+                        elif call_sign:
+                            title_parts.append(call_sign)
+                        
                         formatted_streams.append({
-                            "name": f"📺 {stream.get('name', 'HD')}",
-                            "title": f"{stream.get('description', 'Live TV')} - {stream.get('name', 'HD')}",
-                            "url": stream.get('url'),
+                            "name": display_name,
+                            "title": ' • '.join(title_parts),
+                            "url": url,
                             "addon": "USA TV",
+                            "quality": quality,
                         })
+                    
                     logger.info(f"Found {len(formatted_streams)} USA TV streams for {content_id}")
                     return {"streams": formatted_streams}
         except Exception as e:
