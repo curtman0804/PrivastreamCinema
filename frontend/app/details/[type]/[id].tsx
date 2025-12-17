@@ -163,23 +163,25 @@ export default function DetailsScreen() {
 
   const handleStreamSelect = async (stream: Stream) => {
     if (stream.url) {
-      // Direct HTTP stream - try to open in external player or in-app
-      try {
-        await Linking.openURL(stream.url);
-      } catch (e) {
-        router.push({
-          pathname: '/player',
-          params: { 
-            url: stream.url,
-            title: content?.name || 'Video',
-          },
-        });
-      }
+      // Direct HTTP stream - play in app
+      router.push({
+        pathname: '/player',
+        params: { 
+          url: stream.url,
+          title: content?.name || 'Video',
+        },
+      });
     } else if (stream.infoHash) {
-      // Torrent stream - build magnet link and open with external player
+      // Torrent stream - play with WebTorrent in-app player
       const magnetLink = buildMagnetLink(stream.infoHash, content?.name || 'Video');
-      const streamName = stream.title?.split('\n')[0] || stream.name || 'Unknown';
-      await openWithExternalPlayer(magnetLink, streamName);
+      router.push({
+        pathname: '/player',
+        params: { 
+          infoHash: stream.infoHash,
+          magnetLink: magnetLink,
+          title: content?.name || 'Video',
+        },
+      });
     } else {
       Alert.alert('Error', 'This stream cannot be played');
     }
