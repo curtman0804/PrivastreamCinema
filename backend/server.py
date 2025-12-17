@@ -82,30 +82,38 @@ FALLBACK_MANIFESTS = {
 # This provides Stremio-like torrent streaming capabilities
 
 class TorrentStreamer:
-    """Handles torrent downloading and HTTP streaming like Stremio"""
+    """Handles torrent downloading and HTTP streaming like Stremio - OPTIMIZED FOR FAST STARTUP"""
     
     def __init__(self):
         self.sessions = {}  # infoHash -> session data
         self.download_dir = tempfile.mkdtemp(prefix="privastream_")
+        # Extensive tracker list for maximum peer discovery (critical for VPN users)
         self.trackers = [
-            # High-performance trackers
+            # Tier 1 - Fastest/Most reliable
             "udp://tracker.opentrackr.org:1337/announce",
             "udp://open.stealth.si:80/announce",
             "udp://tracker.torrent.eu.org:451/announce",
             "udp://exodus.desync.com:6969/announce",
+            "udp://tracker.openbittorrent.com:6969/announce",
+            "udp://open.demonii.com:1337/announce",
+            "udp://tracker.moeking.me:6969/announce",
+            "udp://explodie.org:6969/announce",
+            # Tier 2 - Good reliability
             "udp://tracker.coppersurfer.tk:6969/announce",
             "udp://tracker.leechers-paradise.org:6969/announce",
             "udp://p4p.arenabg.com:1337/announce",
             "udp://tracker.internetwarriors.net:1337/announce",
-            # Additional fast trackers
-            "udp://tracker.openbittorrent.com:6969/announce",
             "udp://9.rarbg.to:2710/announce",
             "udp://tracker.pirateparty.gr:6969/announce",
             "udp://tracker.cyberia.is:6969/announce",
+            "udp://tracker.tiny-vps.com:6969/announce",
+            "udp://tracker.sbsub.com:2710/announce",
             "udp://retracker.lanta-net.ru:2710/announce",
-            "udp://bt.xxx-tracker.com:2710/announce",
+            # HTTP trackers (backup)
             "http://tracker.openbittorrent.com:80/announce",
             "http://tracker3.itzmx.com:6961/announce",
+            "http://tracker2.itzmx.com:6961/announce",
+            "http://tracker.bt4g.com:2095/announce",
         ]
         logger.info(f"TorrentStreamer initialized. Download dir: {self.download_dir}")
     
