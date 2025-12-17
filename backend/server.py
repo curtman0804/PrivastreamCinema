@@ -1172,27 +1172,87 @@ async def stream_status(info_hash: str, current_user: User = Depends(get_current
         logger.error(f"Error getting stream status: {e}")
         return {"status": "buffering", "progress": 0, "peers": 0, "error": str(e)}
 
-import subprocess
-
 @api_router.get("/stream/video/{info_hash}")
 async def stream_video(
     info_hash: str,
     request: Request
 ):
-    """Stream the video file with ffmpeg remuxing to MP4 for browser compatibility"""
+    """Proxy video stream from WebTorrent server"""
     try:
-        video_path = torrent_streamer.get_video_path(info_hash)
+        # Forward range headers for video seeking
+        headers = {}
+        if "range" in request.headers:
+            headers["range"] = request.headers["range"]
         
-        if not video_path:
-            raise HTTPException(status_code=404, detail="Video not found - torrent may still be starting")
+        logger.info(f"Streaming request for {info_hash}, range: {headers.get('range', 'none')}")
         
-        if not os.path.exists(video_path):
-            raise HTTPException(status_code=404, detail="Video file not ready yet")
+        # Create persistent client for streaming
+        client = httpx.AsyncClient(
+            timeout=httpx.Timeout(None, connect=30.0),  # No read timeout for streaming
+            follow_redirects=True
+        )
         
-        file_size = os.path.getsize(video_path)
-        
-        if file_size == 0:
-            raise HTTPException(status_code=404, detail="Video file is empty - still downloading")
+        try:
+            # Request stream from WebTorrent server
+            torrent_url = f"{TORRENT_SERVER_URL}/stream/{info_hash}"
+            req = client.build_request("GET", torrent_url, headers=headers)
+            response = await client.send(req, stream=True)
+            
+            if response.status_code not in [200, 206]:
+                await response.aclose()
+                await client.aclose()
+                logger.error(f"WebTorrent server returned {response.status_code}")
+                raise HTTPException(status_code=response.status_code, detail="Stream unavailable")
+            
+            logger.info(f"Stream response: status={response.status_code}, content-length={response.headers.get('content-length', 'unknown')}")
+            
+            # Forward headers from WebTorrent server
+            response_headers = {
+                k: v for k, v in response.headers.items()
+                if k.lower() not in ['transfer-encoding', 'content-encoding', 'connection']
+            }
+            
+            # Stream the response
+            async def stream_generator():
+                try:
+                    chunk_count = 0
+                    total_bytes = 0
+                    async for chunk in response.aiter_bytes(chunk_size=2 * 1024 * 1024):  # 2MB chunks
+                        chunk_count += 1
+                        total_bytes += len(chunk)
+                        if chunk_count == 1:
+                            logger.info(f"First chunk: {len(chunk)} bytes")
+                        yield chunk
+                    logger.info(f"Stream complete: {total_bytes / (1024*1024):.1f} MB")
+                except asyncio.CancelledError:
+                    logger.info("Stream cancelled")
+                except Exception as e:
+                    logger.error(f"Stream error: {e}")
+                finally:
+                    try:
+                        await response.aclose()
+                        await client.aclose()
+                    except:
+                        pass
+            
+            return StreamingResponse(
+                stream_generator(),
+                status_code=response.status_code,
+                headers=response_headers,
+                media_type=response.headers.get("content-type", "video/mp4")
+            )
+        except HTTPException:
+            await client.aclose()
+            raise
+        except Exception as e:
+            await client.aclose()
+            raise
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error streaming video: {e}")
+        raise HTTPException(status_code=503, detail=f"Stream unavailable: {str(e)}")
         
         # Use ffmpeg to transcode to MP4 - OPTIMIZED FOR FAST STARTUP
         def generate_stream():
