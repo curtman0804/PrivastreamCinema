@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PrivastreamCinema Backend API Test Suite
-Tests authentication, stream fetching, and content discovery endpoints
+Tests authentication, discover content organization, and addon management APIs
 """
 
 import requests
@@ -27,6 +27,10 @@ def get_backend_url():
 
 BASE_URL = get_backend_url()
 print(f"Testing backend at: {BASE_URL}")
+
+# Test credentials
+TEST_USERNAME = "choyt"
+TEST_PASSWORD = "RFIDGuy1!"
 
 class PrivastreamTester:
     def __init__(self):
