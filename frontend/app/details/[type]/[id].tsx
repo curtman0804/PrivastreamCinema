@@ -96,6 +96,7 @@ export default function DetailsScreen() {
 
   const handleStreamSelect = (stream: Stream) => {
     if (stream.url) {
+      // Direct HTTP stream - play in app
       router.push({
         pathname: '/player',
         params: { 
@@ -104,10 +105,36 @@ export default function DetailsScreen() {
         },
       });
     } else if (stream.infoHash) {
+      // Torrent stream - show magnet link options
+      const magnetLink = `magnet:?xt=urn:btih:${stream.infoHash}&dn=${encodeURIComponent(content?.name || 'Video')}`;
+      
+      // Add common trackers
+      const trackers = [
+        'udp://tracker.opentrackr.org:1337/announce',
+        'udp://open.stealth.si:80/announce',
+        'udp://tracker.torrent.eu.org:451/announce',
+        'udp://tracker.coppersurfer.tk:6969/announce',
+      ];
+      const magnetWithTrackers = magnetLink + trackers.map(t => `&tr=${encodeURIComponent(t)}`).join('');
+      
       Alert.alert(
         'Torrent Stream',
-        'This is a torrent stream. You need a torrent client or debrid service to play this.',
-        [{ text: 'OK' }]
+        `Found: ${stream.title?.split('\n')[0] || stream.name}\n\nTo play this stream:\n\n1. Use a torrent streaming app (Stremio, VLC with torrent plugin)\n2. Or use a debrid service (Real-Debrid, Premiumize)\n3. Or copy the magnet link to a torrent client`,
+        [
+          { 
+            text: 'Copy Magnet Link', 
+            onPress: async () => {
+              try {
+                const Clipboard = await import('expo-clipboard');
+                await Clipboard.setStringAsync(magnetWithTrackers);
+                Alert.alert('Copied!', 'Magnet link copied to clipboard');
+              } catch (e) {
+                console.log('Clipboard error:', e);
+              }
+            }
+          },
+          { text: 'Cancel', style: 'cancel' }
+        ]
       );
     } else {
       Alert.alert('Error', 'This stream cannot be played directly');
