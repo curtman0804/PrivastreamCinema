@@ -80,15 +80,17 @@ export default function AddonsScreen() {
     }
   };
 
-  const [isUninstalling, setIsUninstalling] = useState(false);
+  const [deletingAddonId, setDeletingAddonId] = useState<string | null>(null);
   
   const handleUninstall = async (addon: Addon) => {
-    if (isUninstalling) return; // Prevent double-tap
+    if (deletingAddonId) return; // Prevent double-tap
     
     const doUninstall = async () => {
-      setIsUninstalling(true);
+      setDeletingAddonId(addon.id);
       try {
+        console.log('Calling API to delete addon:', addon.id);
         await api.addons.uninstall(addon.id);
+        console.log('API call successful');
         // Force immediate UI update
         await fetchAddons();
         await fetchDiscover();
@@ -98,6 +100,7 @@ export default function AddonsScreen() {
           Alert.alert('Success', `${addon.manifest.name} has been uninstalled`);
         }
       } catch (error: any) {
+        console.log('Uninstall error:', error);
         const errorMsg = `Failed to uninstall: ${error?.message || 'Unknown error'}`;
         if (Platform.OS === 'web') {
           alert(errorMsg);
@@ -105,15 +108,14 @@ export default function AddonsScreen() {
           Alert.alert('Error', errorMsg);
         }
       } finally {
-        setIsUninstalling(false);
+        setDeletingAddonId(null);
       }
     };
     
     // Use different confirmation for web vs native
     if (Platform.OS === 'web') {
-      const confirmed = window.confirm(`Are you sure you want to uninstall ${addon.manifest.name}?`);
-      if (confirmed) {
-        await doUninstall();
+      if (window.confirm(`Are you sure you want to uninstall ${addon.manifest.name}?`)) {
+        doUninstall();
       }
     } else {
       Alert.alert(
