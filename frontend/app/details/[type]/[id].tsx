@@ -91,20 +91,6 @@ export default function DetailsScreen() {
     setIsLoadingContent(false);
   };
 
-  // Build magnet link with trackers
-  const buildMagnetLink = (infoHash: string, name: string) => {
-    const trackers = [
-      'udp://tracker.opentrackr.org:1337/announce',
-      'udp://open.stealth.si:80/announce',
-      'udp://tracker.torrent.eu.org:451/announce',
-      'udp://exodus.desync.com:6969/announce',
-      'udp://tracker.coppersurfer.tk:6969/announce',
-    ];
-    const encodedName = encodeURIComponent(name);
-    const trackerParams = trackers.map(t => `&tr=${encodeURIComponent(t)}`).join('');
-    return `magnet:?xt=urn:btih:${infoHash}&dn=${encodedName}${trackerParams}`;
-  };
-
   const handleStreamSelect = async (stream: Stream) => {
     if (stream.url) {
       // Direct HTTP stream - play in app
