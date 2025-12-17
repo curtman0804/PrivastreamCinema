@@ -14,8 +14,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/api/client';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 
-// Conditionally import WebView only on native
+// Conditionally import WebView only on native (fallback for HLS)
 let WebView: any = null;
 if (Platform.OS !== 'web') {
   try {
