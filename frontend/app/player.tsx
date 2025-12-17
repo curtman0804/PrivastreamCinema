@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/api/client';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 // Conditionally import WebView only on native
 let WebView: any = null;
