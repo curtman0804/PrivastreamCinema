@@ -1226,14 +1226,32 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
 
 @api_router.get("/content/meta/{content_type}/{content_id}")
 async def get_meta(content_type: str, content_id: str, current_user: User = Depends(get_current_user)):
-    """Get metadata for content"""
+    """Get metadata for content including episodes for series"""
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
             url = f"https://v3-cinemeta.strem.io/meta/{content_type}/{content_id}.json"
             response = await client.get(url)
             if response.status_code == 200:
                 data = response.json()
-                return data.get('meta', {})
+                meta = data.get('meta', {})
+                
+                # For series, ensure videos (episodes) are included and properly formatted
+                if content_type == 'series' and 'videos' in meta:
+                    episodes = []
+                    for video in meta.get('videos', []):
+                        episodes.append({
+                            'id': video.get('id', ''),
+                            'season': video.get('season', 0),
+                            'episode': video.get('episode', 0),
+                            'name': video.get('name') or video.get('title', f"Episode {video.get('episode', 0)}"),
+                            'thumbnail': video.get('thumbnail'),
+                            'overview': video.get('overview'),
+                            'released': video.get('released'),
+                        })
+                    meta['videos'] = episodes
+                    logger.info(f"Returning {len(episodes)} episodes for {meta.get('name', 'Unknown')}")
+                
+                return meta
     except Exception as e:
         logger.error(f"Error fetching meta: {str(e)}")
     
