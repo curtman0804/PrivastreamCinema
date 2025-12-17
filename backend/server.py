@@ -1416,9 +1416,10 @@ async def get_library(current_user: User = Depends(get_current_user)):
     library_items = await db.library.find({"user_id": current_user.id}).to_list(1000)
     movies = [item for item in library_items if item.get("type") == "movie"]
     series = [item for item in library_items if item.get("type") == "series"]
-    for item in movies + series:
+    channels = [item for item in library_items if item.get("type") == "tv"]
+    for item in movies + series + channels:
         item.pop('_id', None)
-    return {"movies": movies, "series": series}
+    return {"movies": movies, "series": series, "channels": channels}
 
 @api_router.post("/library")
 async def add_to_library(item: LibraryItem, current_user: User = Depends(get_current_user)):
