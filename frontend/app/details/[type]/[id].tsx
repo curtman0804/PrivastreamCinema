@@ -102,6 +102,7 @@ export default function DetailsScreen() {
 
   const handleStreamSelect = async (stream: Stream) => {
     if (stream.infoHash) {
+      // Torrent stream - use torrent player
       router.push({
         pathname: '/player',
         params: { 
@@ -110,11 +111,13 @@ export default function DetailsScreen() {
         },
       });
     } else if (stream.url) {
+      // Direct URL stream (USA TV, etc.) - play directly
       router.push({
         pathname: '/player',
         params: { 
-          url: stream.url,
-          title: content?.name || 'Video',
+          directUrl: stream.url,
+          title: content?.name || 'Live TV',
+          isLive: type === 'tv' ? 'true' : 'false',
         },
       });
     }
