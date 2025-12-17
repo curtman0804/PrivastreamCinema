@@ -1057,20 +1057,49 @@ async def get_all_streams(
             # Streams without hash (direct URLs)
             unique_streams.append(stream)
     
-    # Sort by seeders (highest first)
-    def get_seeders(stream):
+    # Sort by quality tier + seeders (best streams first)
+    def get_sort_score(stream):
+        # Extract seeders
+        seeders = 0
         if 'seeders' in stream:
-            return int(stream['seeders']) if stream['seeders'] else 0
+            try:
+                seeders = int(stream['seeders']) if stream['seeders'] else 0
+            except:
+                seeders = 0
         title = stream.get('title', '')
+        name = stream.get('name', '')
         try:
             if '🌱' in title:
                 seeds_part = title.split('🌱')[1].split('|')[0].strip()
-                return int(seeds_part)
+                seeders = int(seeds_part)
+            elif '👤' in title:
+                # Torrentio format
+                import re
+                match = re.search(r'👤\s*(\d+)', title)
+                if match:
+                    seeders = int(match.group(1))
         except:
             pass
-        return 0
+        
+        # Quality tier (higher is better)
+        quality_score = 0
+        combined_text = (name + ' ' + title).upper()
+        if '2160P' in combined_text or '4K' in combined_text or 'UHD' in combined_text:
+            quality_score = 4
+        elif '1080P' in combined_text:
+            quality_score = 3
+        elif '720P' in combined_text:
+            quality_score = 2
+        elif 'SD' in combined_text or '480P' in combined_text:
+            quality_score = 1
+        else:
+            quality_score = 2  # Default to 720p tier
+        
+        # Combined score: quality tier * 10000 + seeders
+        # This ensures higher quality streams come first, with seeder count as tiebreaker
+        return (quality_score * 10000) + min(seeders, 9999)
     
-    unique_streams.sort(key=get_seeders, reverse=True)
+    unique_streams.sort(key=get_sort_score, reverse=True)
     
     logger.info(f"Found {len(unique_streams)} total streams for {content_type}/{content_id}")
     return {"streams": unique_streams}
