@@ -290,98 +290,130 @@ class PrivastreamTester:
             )
             return False
     
-    def test_discover_content(self) -> bool:
-        """Test discover page content API"""
-        print(f"\n=== Testing Discover Content ===")
+    def test_addon_management(self) -> bool:
+        """Test addon management APIs"""
+        print("\n=== Testing Addon Management ===")
         
         if not self.token:
-            print("❌ No authentication token - login first")
+            self.log_test(
+                "Addon Management",
+                False,
+                "No authentication token available",
+                None
+            )
             return False
         
         try:
-            response = self.session.get(f"{self.base_url}/content/discover-organized")
-            
-            print(f"Discover Status: {response.status_code}")
+            # Test GET /api/addons
+            response = self.session.get(f"{self.base_url}/addons", timeout=30)
             
             if response.status_code == 200:
-                data = response.json()
-                print(f"Response Keys: {list(data.keys())}")
+                addons = response.json()
+                self.log_test(
+                    "Get Addons List",
+                    True,
+                    f"Retrieved {len(addons)} installed addons",
+                    {"addon_count": len(addons), "addon_names": [a.get("manifest", {}).get("name", "Unknown") for a in addons]}
+                )
                 
-                if 'services' in data:
-                    services = data['services']
-                    print(f"✅ Discover content found")
-                    print(f"   Services: {len(services)} services")
+                # Test addon deletion if we have addons
+                if addons:
+                    # Pick the first addon to test deletion
+                    test_addon = addons[0]
+                    addon_id = test_addon.get("id")
+                    addon_name = test_addon.get("manifest", {}).get("name", "Unknown")
+                    addon_manifest_url = test_addon.get("manifestUrl")
                     
-                    for service_name, service_data in services.items():
-                        movies_count = len(service_data.get('movies', []))
-                        series_count = len(service_data.get('series', []))
-                        channels_count = len(service_data.get('channels', []))
+                    if addon_id:
+                        # Test DELETE /api/addons/{addon_id}
+                        delete_response = self.session.delete(
+                            f"{self.base_url}/addons/{addon_id}",
+                            timeout=30
+                        )
                         
-                        print(f"   {service_name}: {movies_count} movies, {series_count} series", end="")
-                        if channels_count > 0:
-                            print(f", {channels_count} channels")
+                        if delete_response.status_code == 200:
+                            self.log_test(
+                                "Delete Addon",
+                                True,
+                                f"Successfully deleted addon '{addon_name}'",
+                                {"addon_id": addon_id}
+                            )
+                            
+                            # Test POST /api/addons/install to reinstall
+                            if addon_manifest_url:
+                                install_data = {"manifestUrl": addon_manifest_url}
+                                install_response = self.session.post(
+                                    f"{self.base_url}/addons/install",
+                                    json=install_data,
+                                    timeout=30
+                                )
+                                
+                                if install_response.status_code == 200:
+                                    installed_addon = install_response.json()
+                                    self.log_test(
+                                        "Reinstall Addon",
+                                        True,
+                                        f"Successfully reinstalled addon '{addon_name}'",
+                                        {"new_addon_id": installed_addon.get("id")}
+                                    )
+                                    return True
+                                else:
+                                    self.log_test(
+                                        "Reinstall Addon",
+                                        False,
+                                        f"Failed to reinstall addon: {install_response.status_code}",
+                                        install_response.text
+                                    )
+                                    return False
+                            else:
+                                self.log_test(
+                                    "Reinstall Addon",
+                                    False,
+                                    "No manifest URL available for reinstallation",
+                                    None
+                                )
+                                return False
                         else:
-                            print()
-                    
-                    # Check if we have some content
-                    total_content = sum(
-                        len(service.get('movies', [])) + len(service.get('series', []))
-                        for service in services.values()
-                    )
-                    
-                    if total_content > 0:
-                        print(f"✅ Total content items: {total_content}")
-                        return True
+                            self.log_test(
+                                "Delete Addon",
+                                False,
+                                f"Failed to delete addon: {delete_response.status_code}",
+                                delete_response.text
+                            )
+                            return False
                     else:
-                        print(f"⚠️  No content found in any service")
-                        return True  # Still valid response structure
+                        self.log_test(
+                            "Delete Addon",
+                            False,
+                            "No addon ID available for deletion test",
+                            None
+                        )
+                        return False
                 else:
-                    print(f"❌ Invalid response structure - missing 'services' key")
-                    print(f"   Response: {data}")
+                    self.log_test(
+                        "Addon Deletion Test",
+                        False,
+                        "No addons available to test deletion",
+                        None
+                    )
                     return False
+                    
             else:
-                print(f"❌ Discover request failed - Status {response.status_code}")
-                try:
-                    error_data = response.json()
-                    print(f"   Error: {error_data}")
-                except:
-                    print(f"   Error: {response.text}")
+                self.log_test(
+                    "Get Addons List",
+                    False,
+                    f"Failed to get addons: {response.status_code}",
+                    response.text
+                )
                 return False
                 
         except Exception as e:
-            print(f"❌ Discover request failed - Exception: {e}")
-            return False
-    
-    def test_auth_me(self) -> bool:
-        """Test /auth/me endpoint to verify token works"""
-        print(f"\n=== Testing Auth Me ===")
-        
-        if not self.token:
-            print("❌ No authentication token - login first")
-            return False
-        
-        try:
-            response = self.session.get(f"{self.base_url}/auth/me")
-            
-            print(f"Auth Me Status: {response.status_code}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                print(f"✅ Auth verification successful")
-                print(f"   User: {data.get('username')}")
-                print(f"   Admin: {data.get('is_admin')}")
-                return True
-            else:
-                print(f"❌ Auth verification failed - Status {response.status_code}")
-                try:
-                    error_data = response.json()
-                    print(f"   Error: {error_data}")
-                except:
-                    print(f"   Error: {response.text}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Auth verification failed - Exception: {e}")
+            self.log_test(
+                "Addon Management",
+                False,
+                f"Request failed: {str(e)}",
+                None
+            )
             return False
 
 def main():
