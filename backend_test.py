@@ -115,88 +115,179 @@ class PrivastreamTester:
             )
             return False
     
-    def test_streams_movie(self, imdb_id: str, movie_name: str) -> bool:
-        """Test stream fetching for a movie"""
-        print(f"\n=== Testing Streams for {movie_name} ({imdb_id}) ===")
+    def test_discover_content_organization(self) -> bool:
+        """Test GET /api/content/discover-organized"""
+        print("\n=== Testing Discover Content Organization ===")
         
         if not self.token:
-            print("❌ No authentication token - login first")
+            self.log_test(
+                "Discover Content Organization",
+                False,
+                "No authentication token available",
+                None
+            )
             return False
         
         try:
-            response = self.session.get(f"{self.base_url}/streams/movie/{imdb_id}")
-            
-            print(f"Streams Status: {response.status_code}")
+            response = self.session.get(
+                f"{self.base_url}/content/discover-organized",
+                timeout=60  # Longer timeout for content fetching
+            )
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"Response Keys: {list(data.keys())}")
                 
-                if 'streams' in data:
-                    streams = data['streams']
-                    print(f"✅ Streams found: {len(streams)} streams")
-                    
-                    if len(streams) > 0:
-                        # Check first few streams structure
-                        for i, stream in enumerate(streams[:3]):
-                            print(f"\n   Stream {i+1}:")
-                            print(f"     Name: {stream.get('name', 'N/A')}")
-                            print(f"     Title: {stream.get('title', 'N/A')[:80]}...")
-                            print(f"     InfoHash: {stream.get('infoHash', 'N/A')}")
-                            print(f"     Seeders: {stream.get('seeders', 'N/A')}")
-                            print(f"     Addon: {stream.get('addon', 'N/A')}")
-                        
-                        # Verify required fields
-                        missing_fields = []
-                        for stream in streams[:5]:  # Check first 5 streams
-                            if not stream.get('name'):
-                                missing_fields.append('name')
-                            if not stream.get('title'):
-                                missing_fields.append('title')
-                            if not stream.get('infoHash'):
-                                missing_fields.append('infoHash')
-                            if 'seeders' not in stream:
-                                missing_fields.append('seeders')
-                        
-                        if missing_fields:
-                            print(f"⚠️  Some streams missing fields: {set(missing_fields)}")
-                        
-                        # Check if streams are sorted by seeders
-                        seeders_list = []
-                        for stream in streams[:10]:
-                            seeders = stream.get('seeders', 0)
-                            if isinstance(seeders, (int, str)):
-                                try:
-                                    seeders_list.append(int(seeders))
-                                except:
-                                    seeders_list.append(0)
-                        
-                        if len(seeders_list) > 1:
-                            is_sorted = all(seeders_list[i] >= seeders_list[i+1] for i in range(len(seeders_list)-1))
-                            if is_sorted:
-                                print(f"✅ Streams properly sorted by seeders (highest first)")
-                            else:
-                                print(f"⚠️  Streams not sorted by seeders: {seeders_list[:5]}")
-                        
-                        return True
-                    else:
-                        print(f"⚠️  No streams found for {movie_name}")
-                        return True  # Not necessarily an error
-                else:
-                    print(f"❌ Invalid response structure - missing 'streams' key")
-                    print(f"   Response: {data}")
+                # Check basic structure
+                if "services" not in data:
+                    self.log_test(
+                        "Discover Content Structure",
+                        False,
+                        "Response missing 'services' field",
+                        data
+                    )
                     return False
+                
+                services = data["services"]
+                
+                # Check for required sections
+                required_sections = [
+                    "New Movies", "New Series",  # From Cinemeta
+                    "Popular Movies", "Popular Series"  # From Cinemeta
+                ]
+                
+                # Check for streaming service sections
+                streaming_services = [
+                    "Netflix Movies", "Netflix Series",
+                    "HBO Max Movies", "HBO Max Series", 
+                    "Disney+ Movies", "Disney+ Series"
+                ]
+                
+                # Check for USA TV Channels
+                tv_channels = ["USA TV Channels"]
+                
+                # Verify required sections exist
+                missing_required = []
+                for section in required_sections:
+                    if section not in services:
+                        missing_required.append(section)
+                
+                if missing_required:
+                    self.log_test(
+                        "Discover Required Sections",
+                        False,
+                        f"Missing required sections: {missing_required}",
+                        {"available_sections": list(services.keys())}
+                    )
+                else:
+                    self.log_test(
+                        "Discover Required Sections",
+                        True,
+                        f"All required sections present: {required_sections}",
+                        None
+                    )
+                
+                # Check for streaming services (at least some should be present)
+                found_streaming = [s for s in streaming_services if s in services]
+                if found_streaming:
+                    self.log_test(
+                        "Discover Streaming Services",
+                        True,
+                        f"Found streaming services: {found_streaming}",
+                        None
+                    )
+                else:
+                    self.log_test(
+                        "Discover Streaming Services",
+                        False,
+                        "No streaming service sections found",
+                        {"available_sections": list(services.keys())}
+                    )
+                
+                # Check for USA TV Channels
+                found_tv = [s for s in tv_channels if s in services]
+                if found_tv:
+                    self.log_test(
+                        "Discover TV Channels",
+                        True,
+                        f"Found TV channels: {found_tv}",
+                        None
+                    )
+                else:
+                    self.log_test(
+                        "Discover TV Channels",
+                        False,
+                        "No USA TV Channels section found",
+                        {"available_sections": list(services.keys())}
+                    )
+                
+                # Check for unwanted sections (bugs)
+                unwanted_sections = ["Calendar-Videos Series", "Last-Videos Series"]
+                found_unwanted = [s for s in unwanted_sections if s in services]
+                if found_unwanted:
+                    self.log_test(
+                        "Discover Unwanted Sections Check",
+                        False,
+                        f"Found unwanted sections (bugs): {found_unwanted}",
+                        None
+                    )
+                else:
+                    self.log_test(
+                        "Discover Unwanted Sections Check",
+                        True,
+                        "No unwanted sections found",
+                        None
+                    )
+                
+                # Check content in sections
+                total_content = 0
+                section_details = {}
+                for section_name, section_data in services.items():
+                    if isinstance(section_data, dict):
+                        movies = len(section_data.get("movies", []))
+                        series = len(section_data.get("series", []))
+                        channels = len(section_data.get("channels", []))
+                        section_total = movies + series + channels
+                        total_content += section_total
+                        section_details[section_name] = {
+                            "movies": movies,
+                            "series": series, 
+                            "channels": channels,
+                            "total": section_total
+                        }
+                
+                if total_content > 0:
+                    self.log_test(
+                        "Discover Content Population",
+                        True,
+                        f"Found {total_content} total content items across {len(services)} sections",
+                        {"section_breakdown": section_details}
+                    )
+                    return True
+                else:
+                    self.log_test(
+                        "Discover Content Population",
+                        False,
+                        "No content found in any sections",
+                        {"section_breakdown": section_details}
+                    )
+                    return False
+                    
             else:
-                print(f"❌ Streams request failed - Status {response.status_code}")
-                try:
-                    error_data = response.json()
-                    print(f"   Error: {error_data}")
-                except:
-                    print(f"   Error: {response.text}")
+                self.log_test(
+                    "Discover Content Organization",
+                    False,
+                    f"Request failed with status {response.status_code}",
+                    response.text
+                )
                 return False
                 
         except Exception as e:
-            print(f"❌ Streams request failed - Exception: {e}")
+            self.log_test(
+                "Discover Content Organization",
+                False,
+                f"Request failed: {str(e)}",
+                None
+            )
             return False
     
     def test_discover_content(self) -> bool:
