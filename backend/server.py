@@ -235,7 +235,7 @@ class TorrentStreamer:
                 file_size = files.file_size(i)
                 
                 # Check if it's a video file
-                if any(file_path.lower().endswith(ext) for ext in ['.mp4', '.mkv', '.avi', '.webm', '.mov']):
+                if any(file_path.lower().endswith(ext) for ext in ['.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v', '.ts']):
                     if file_size > largest_size:
                         largest_size = file_size
                         largest_video = {
@@ -248,7 +248,7 @@ class TorrentStreamer:
                 data['video_file'] = largest_video
                 data['video_path'] = os.path.join(self.download_dir, largest_video['path'])
                 
-                # Prioritize video file pieces - critical for streaming
+                # ===== STREAMING-OPTIMIZED PIECE PRIORITIZATION =====
                 num_pieces = ti.num_pieces()
                 piece_length = ti.piece_length()
                 
@@ -256,25 +256,49 @@ class TorrentStreamer:
                 file_offset = files.file_offset(largest_video['index'])
                 start_piece = file_offset // piece_length
                 end_piece = (file_offset + largest_video['size']) // piece_length
+                video_pieces = end_piece - start_piece + 1
                 
-                # Set priorities - lower = less important, higher = more important (max 7)
-                priorities = [0] * num_pieces  # Don't download other files
+                # Set priorities - 0 = don't download, 7 = highest
+                priorities = [0] * num_pieces  # Don't download non-video files
                 
-                # Set priority for video file pieces
+                # Calculate how many pieces we need for fast start (aim for ~3-5MB)
+                # This is enough for ffmpeg to analyze the file and start transcoding
+                bytes_for_header = 5 * 1024 * 1024  # 5MB header
+                header_pieces = max(20, min(bytes_for_header // piece_length, video_pieces // 4))
+                
+                # PRIORITY STRATEGY FOR STREAMING:
+                # 1. First ~5MB (header/moov atom): CRITICAL (priority 7)
+                # 2. Next ~10MB: HIGH (priority 6) - for buffer
+                # 3. Last 2MB: MEDIUM (priority 4) - for duration/seeking
+                # 4. Rest of video: NORMAL (priority 1) - sequential download handles this
+                
+                # Set base priority for all video pieces
                 for i in range(start_piece, end_piece + 1):
-                    priorities[i] = 1  # Normal priority
+                    priorities[i] = 1
                 
-                # CRITICAL: First 50 pieces get highest priority (for file header)
-                header_pieces = min(50, end_piece - start_piece)
-                for i in range(start_piece, start_piece + header_pieces):
-                    priorities[i] = 7  # Highest priority
+                # CRITICAL: First header_pieces get highest priority
+                for i in range(start_piece, min(start_piece + header_pieces, end_piece + 1)):
+                    priorities[i] = 7
                 
-                # Also prioritize last few pieces (for seeking)
-                for i in range(max(start_piece, end_piece - 5), end_piece + 1):
+                # HIGH: Next buffer pieces
+                buffer_pieces = header_pieces * 2
+                for i in range(start_piece + header_pieces, min(start_piece + header_pieces + buffer_pieces, end_piece + 1)):
+                    priorities[i] = 6
+                
+                # MEDIUM: Last few pieces (for seeking/duration detection)
+                last_piece_count = max(5, 2 * 1024 * 1024 // piece_length)  # ~2MB
+                for i in range(max(start_piece, end_piece - last_piece_count), end_piece + 1):
                     priorities[i] = 4
                 
                 handle.prioritize_pieces(priorities)
-                logger.info(f"Found video file: {largest_video['path']} ({largest_size / 1024 / 1024:.1f} MB) - prioritizing first {header_pieces} pieces")
+                
+                # Also set file priority to only download the video file
+                file_priorities = [0] * files.num_files()
+                file_priorities[largest_video['index']] = 7
+                handle.prioritize_files(file_priorities)
+                
+                logger.info(f"Found video: {largest_video['path']} ({largest_size / 1024 / 1024:.1f} MB)")
+                logger.info(f"Piece info: {video_pieces} pieces @ {piece_length // 1024}KB each, prioritizing first {header_pieces} + {buffer_pieces} buffer")
         
         # Calculate progress
         video_file = data.get('video_file')
