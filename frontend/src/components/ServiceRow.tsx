@@ -17,30 +17,6 @@ interface ServiceRowProps {
   onSeeAll?: () => void;
 }
 
-const serviceIcons: { [key: string]: string } = {
-  'Netflix': 'logo-youtube',
-  'HBO Max': 'film-outline',
-  'Disney+': 'star-outline',
-  'Prime Video': 'play-circle-outline',
-  'Hulu': 'tv-outline',
-  'Paramount+': 'videocam-outline',
-  'Apple TV+': 'logo-apple',
-  'Peacock': 'leaf-outline',
-  'Discovery+': 'globe-outline',
-};
-
-const serviceColors: { [key: string]: string } = {
-  'Netflix': '#E50914',
-  'HBO Max': '#B19CD9',
-  'Disney+': '#113CCF',
-  'Prime Video': '#00A8E1',
-  'Hulu': '#1CE783',
-  'Paramount+': '#0064FF',
-  'Apple TV+': '#000000',
-  'Peacock': '#FFD700',
-  'Discovery+': '#003087',
-};
-
 export const ServiceRow: React.FC<ServiceRowProps> = ({
   serviceName,
   items,
