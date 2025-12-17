@@ -1207,10 +1207,14 @@ async def get_discover(current_user: User = Depends(get_current_user)):
         'hlu': 'Hulu', 'pmp': 'Paramount+', 'atp': 'Apple TV+', 'pcp': 'Peacock', 'dpe': 'Discovery+'
     }
     
-    # Cinemeta catalog display names
-    cinemeta_names = {
-        'top': 'Popular', 'year': 'New', 'imdbRating': 'Top Rated', 'trending': 'Trending'
-    }
+    # Cinemeta catalogs to fetch - only the ones that work without required params
+    # 'top' = Popular, 'year' requires genre=year param, 'imdbRating' = Featured/Top Rated
+    cinemeta_fetch = [
+        ('movie', 'top', 'Popular Movies'),
+        ('series', 'top', 'Popular Series'),
+        ('movie', 'year', 'New Movies', 'genre=2025'),  # Fetch 2025 movies
+        ('series', 'year', 'New Series', 'genre=2025'),  # Fetch 2025 series
+    ]
     
     for addon in addons:
         manifest = addon.get('manifest', {})
@@ -1219,23 +1223,24 @@ async def get_discover(current_user: User = Depends(get_current_user)):
         base_url = get_base_url(addon['manifestUrl'])
         catalogs = manifest.get('catalogs', [])
         
-        # Handle Cinemeta addon specially - organize by category
+        # Handle Cinemeta addon specially - fetch specific catalogs
         if 'cinemeta' in addon_id:
-            for catalog in catalogs:
-                catalog_type = catalog.get('type', '')
-                catalog_id = catalog.get('id', '')
-                if catalog_type not in ['movie', 'series'] or not catalog_id:
-                    continue
+            for fetch_config in cinemeta_fetch:
+                catalog_type = fetch_config[0]
+                catalog_id = fetch_config[1]
+                section_name = fetch_config[2]
+                extra_param = fetch_config[3] if len(fetch_config) > 3 else None
                 
                 try:
-                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                    if extra_param:
+                        url = f"{base_url}/catalog/{catalog_type}/{catalog_id}/{extra_param}.json"
+                    else:
+                        url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                    
                     async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
                         response = await client.get(url)
                         if response.status_code == 200:
-                            metas = response.json().get('metas', [])[:30]
-                            display_name = cinemeta_names.get(catalog_id, catalog_id.title())
-                            type_label = 'Movies' if catalog_type == 'movie' else 'Series'
-                            section_name = f"{display_name} {type_label}"
+                            metas = response.json().get('metas', [])[:20]
                             
                             if section_name not in result['services']:
                                 result['services'][section_name] = {'movies': [], 'series': [], 'channels': []}
@@ -1246,7 +1251,7 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                                 result['services'][section_name]['series'].extend(metas)
                             logger.info(f"Cinemeta: {len(metas)} items for {section_name}")
                 except Exception as e:
-                    logger.warning(f"Error fetching Cinemeta {catalog_id}: {e}")
+                    logger.warning(f"Error fetching Cinemeta {section_name}: {e}")
         
         # Handle Streaming Catalogs addon - organize by streaming service
         elif 'netflix-catalog' in addon['manifestUrl'].lower() or 'streaming-catalogs' in addon_id:
