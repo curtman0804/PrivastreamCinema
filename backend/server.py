@@ -1027,6 +1027,67 @@ async def remove_from_library(item_type: str, item_id: str, current_user: User =
     return {"message": "Removed from library"}
 
 
+# ==================== TORRENT STREAMING ENDPOINTS ====================
+
+@api_router.post("/stream/start/{info_hash}")
+async def start_stream(info_hash: str, current_user: User = Depends(get_current_user)):
+    """Start downloading a torrent and prepare for streaming"""
+    try:
+        torrent_streamer.get_session(info_hash)
+        return {"status": "started", "info_hash": info_hash}
+    except Exception as e:
+        logger.error(f"Error starting stream: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/stream/status/{info_hash}")
+async def stream_status(info_hash: str, current_user: User = Depends(get_current_user)):
+    """Get the status of a torrent download"""
+    try:
+        status = torrent_streamer.get_status(info_hash)
+        return status
+    except Exception as e:
+        logger.error(f"Error getting stream status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/stream/video/{info_hash}")
+async def stream_video(info_hash: str, current_user: User = Depends(get_current_user)):
+    """Stream the video file as HTTP (like Stremio does)"""
+    try:
+        video_path = torrent_streamer.get_video_path(info_hash)
+        
+        if not video_path or not os.path.exists(video_path):
+            raise HTTPException(status_code=404, detail="Video not ready yet")
+        
+        file_size = os.path.getsize(video_path)
+        
+        # Determine content type
+        content_type = "video/mp4"
+        if video_path.endswith('.mkv'):
+            content_type = "video/x-matroska"
+        elif video_path.endswith('.avi'):
+            content_type = "video/x-msvideo"
+        elif video_path.endswith('.webm'):
+            content_type = "video/webm"
+        
+        def iterfile():
+            with open(video_path, 'rb') as f:
+                while chunk := f.read(1024 * 1024):  # 1MB chunks
+                    yield chunk
+        
+        return StreamingResponse(
+            iterfile(),
+            media_type=content_type,
+            headers={
+                "Content-Length": str(file_size),
+                "Accept-Ranges": "bytes",
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error streaming video: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ==================== ROOT ====================
 
 @api_router.get("/")
