@@ -52,7 +52,7 @@ export default function LibraryScreen() {
       case 'tv':
         return library.channels || [];
       default:
-        return [...(library.movies || []), ...(library.series || []), ...(library.channels || [])];
+        return library.movies || [];
     }
   };
 
