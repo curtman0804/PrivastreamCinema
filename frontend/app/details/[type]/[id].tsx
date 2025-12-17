@@ -7,10 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
-  Alert,
-  FlatList,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -24,11 +21,9 @@ export default function DetailsScreen() {
   const { type, id } = useLocalSearchParams<{ type: string; id: string }>();
   const router = useRouter();
   const { 
-    discoverData, 
     streams, 
     isLoadingStreams, 
     fetchStreams, 
-    addToLibrary,
     library,
     fetchLibrary,
   } = useContentStore();
@@ -37,7 +32,10 @@ export default function DetailsScreen() {
   const [isLoadingContent, setIsLoadingContent] = useState(true);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
-  const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
+
+  // Check if this is an episode page (id contains season:episode)
+  const isEpisodePage = id?.includes(':');
+  const baseId = id?.split(':')[0];
 
   // Get seasons from episodes
   const seasons = useMemo(() => {
@@ -54,23 +52,23 @@ export default function DetailsScreen() {
       .sort((a, b) => a.episode - b.episode);
   }, [content?.videos, selectedSeason]);
 
-  // Load content and streams immediately
+  // Load content
   useEffect(() => {
     loadContent();
     fetchLibrary();
-    // Auto-fetch streams when page loads (for movies)
-    if (type && id && type === 'movie') {
+    
+    // Only fetch streams for movies or episode pages
+    if (type && id && (type === 'movie' || isEpisodePage)) {
       fetchStreams(type, id);
     }
   }, [id, type]);
 
-  // When episode is selected, fetch streams for that episode
+  // Set first available season
   useEffect(() => {
-    if (selectedEpisode && type === 'series') {
-      const episodeId = `${id}:${selectedEpisode.season}:${selectedEpisode.episode}`;
-      fetchStreams(type, episodeId);
+    if (seasons.length > 0 && !seasons.includes(selectedSeason)) {
+      setSelectedSeason(seasons[0]);
     }
-  }, [selectedEpisode]);
+  }, [seasons]);
 
   useEffect(() => {
     if (content && library) {
@@ -84,25 +82,10 @@ export default function DetailsScreen() {
 
   const loadContent = async () => {
     setIsLoadingContent(true);
-    
-    // First try to find in discover data
-    if (discoverData?.services) {
-      for (const service of Object.values(discoverData.services)) {
-        const items = type === 'movie' ? service.movies : service.series;
-        const found = items?.find((item) => 
-          item.id === id || item.imdb_id === id
-        );
-        if (found) {
-          setContent(found);
-          setIsLoadingContent(false);
-          return;
-        }
-      }
-    }
-
-    // If not found, fetch from API
     try {
-      const data = await api.content.getMeta(type!, id!);
+      // Always fetch from API to get full metadata including episodes
+      const contentId = isEpisodePage ? baseId : id;
+      const data = await api.content.getMeta(type!, contentId!);
       setContent(data);
     } catch (error) {
       console.log('Failed to fetch meta:', error);
@@ -118,17 +101,7 @@ export default function DetailsScreen() {
   };
 
   const handleStreamSelect = async (stream: Stream) => {
-    if (stream.url) {
-      // Direct HTTP stream - play in app
-      router.push({
-        pathname: '/player',
-        params: { 
-          url: stream.url,
-          title: content?.name || 'Video',
-        },
-      });
-    } else if (stream.infoHash) {
-      // Torrent stream - use backend libtorrent streaming (like Stremio)
+    if (stream.infoHash) {
       router.push({
         pathname: '/player',
         params: { 
@@ -136,39 +109,62 @@ export default function DetailsScreen() {
           title: content?.name || 'Video',
         },
       });
-    } else {
-      Alert.alert('Error', 'This stream cannot be played');
+    } else if (stream.url) {
+      router.push({
+        pathname: '/player',
+        params: { 
+          url: stream.url,
+          title: content?.name || 'Video',
+        },
+      });
     }
   };
 
-  const handleAddToLibrary = async () => {
+  const handleEpisodePress = (episode: Episode) => {
+    // Navigate to episode detail page
+    const episodeId = `${baseId || id}:${episode.season}:${episode.episode}`;
+    router.push({
+      pathname: `/details/${type}/${episodeId}`,
+    });
+  };
+
+  const toggleLibrary = async () => {
     if (!content) return;
     try {
-      await addToLibrary(content);
-      setInLibrary(true);
-      Alert.alert('Success', 'Added to library');
+      if (inLibrary) {
+        await api.library.remove(type!, content.id);
+        setInLibrary(false);
+      } else {
+        await api.library.add({
+          id: content.id,
+          imdb_id: content.imdb_id || content.id,
+          name: content.name,
+          type: type as 'movie' | 'series',
+          poster: content.poster,
+          year: content.year,
+          imdbRating: typeof content.imdbRating === 'string' ? parseFloat(content.imdbRating) : content.imdbRating,
+        });
+        setInLibrary(true);
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to add to library');
+      console.log('Failed to toggle library:', error);
     }
   };
 
-  // Parse stream info for display
   const parseStreamInfo = (stream: Stream) => {
-    const title = stream.title || stream.name || 'Unknown Stream';
-    const lines = title.split('\n');
+    const name = stream.name || '';
+    const title = stream.title || '';
     return {
-      source: lines[0] || 'Stream',
-      details: lines[1] || '',
+      source: name,
+      details: title,
     };
   };
 
   if (isLoadingContent) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
-        </View>
-      </SafeAreaView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#8B5CF6" />
+      </View>
     );
   }
 
@@ -178,7 +174,7 @@ export default function DetailsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Hero Background with Title Overlay */}
+      {/* Hero Section */}
       <View style={styles.heroContainer}>
         <Image
           source={{ uri: content?.background || content?.poster }}
@@ -186,35 +182,20 @@ export default function DetailsScreen() {
           contentFit="cover"
         />
         <LinearGradient
-          colors={['transparent', 'rgba(12, 12, 12, 0.6)', '#0c0c0c']}
+          colors={['transparent', 'rgba(15,15,17,0.8)', '#0f0f11']}
           style={styles.heroGradient}
         />
         
         {/* Back Button */}
-        <SafeAreaView style={styles.headerOverlay}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          
-          {/* Library Button */}
-          <TouchableOpacity
-            style={[styles.libraryButton, inLibrary && styles.libraryButtonActive]}
-            onPress={handleAddToLibrary}
-            disabled={inLibrary}
-          >
-            <Ionicons
-              name={inLibrary ? 'bookmark' : 'bookmark-outline'}
-              size={22}
-              color={inLibrary ? '#8B5CF6' : '#FFFFFF'}
-            />
-          </TouchableOpacity>
-        </SafeAreaView>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
 
-        {/* Title Overlay on Hero */}
-        <View style={styles.titleOverlay}>
+        {/* Logo or Title */}
+        <View style={styles.heroContent}>
           {content?.logo ? (
             <Image
               source={{ uri: content.logo }}
@@ -224,109 +205,114 @@ export default function DetailsScreen() {
           ) : (
             <Text style={styles.heroTitle}>{content?.name}</Text>
           )}
-          
-          {/* Meta info */}
-          <View style={styles.metaRow}>
-            {rating && rating > 0 && (
-              <View style={styles.ratingBadge}>
-                <Ionicons name="star" size={12} color="#FFD700" />
-                <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
-              </View>
-            )}
-            {content?.year && (
-              <Text style={styles.metaText}>{content.year}</Text>
-            )}
-            {content?.runtime && (
-              <Text style={styles.metaText}>{content.runtime}</Text>
-            )}
-          </View>
-
-          {/* Genres */}
-          {content?.genre && content.genre.length > 0 && (
-            <View style={styles.genreRow}>
-              {content.genre.slice(0, 3).map((g, i) => (
-                <View key={i} style={styles.genreBadge}>
-                  <Text style={styles.genreText}>{g}</Text>
-                </View>
-              ))}
-            </View>
-          )}
         </View>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Metadata Row */}
+        <View style={styles.metaRow}>
+          {rating && rating > 0 && (
+            <View style={styles.imdbBadge}>
+              <Text style={styles.imdbLabel}>IMDb</Text>
+              <Text style={styles.imdbRating}>{rating.toFixed(1)}/10</Text>
+            </View>
+          )}
+          {content?.year && (
+            <Text style={styles.metaText}>{content.year}</Text>
+          )}
+          {content?.runtime && (
+            <Text style={styles.metaText}>{content.runtime}</Text>
+          )}
+        </View>
+
+        {/* Add to Library Button */}
+        <TouchableOpacity 
+          style={styles.libraryButton}
+          onPress={toggleLibrary}
+        >
+          <Ionicons 
+            name={inLibrary ? "checkmark" : "add"} 
+            size={20} 
+            color="#FFFFFF" 
+          />
+          <Text style={styles.libraryButtonText}>
+            {inLibrary ? 'In Library' : 'Add to Library'}
+          </Text>
+        </TouchableOpacity>
+
         {/* Description */}
         {content?.description && (
-          <View style={styles.section}>
-            <Text style={styles.description} numberOfLines={4}>
-              {content.description}
-            </Text>
-          </View>
+          <Text style={styles.description}>{content.description}</Text>
         )}
 
-        {/* Cast & Crew */}
-        {(content?.cast?.length > 0 || content?.director?.length > 0) && (
+        {/* Genres */}
+        {content?.genre && content.genre.length > 0 && (
           <View style={styles.section}>
-            {content?.director && content.director.length > 0 && (
-              <Text style={styles.crewText}>
-                <Text style={styles.crewLabel}>Director: </Text>
-                {content.director.join(', ')}
-              </Text>
-            )}
-            {content?.cast && content.cast.length > 0 && (
-              <Text style={styles.crewText}>
-                <Text style={styles.crewLabel}>Cast: </Text>
-                {content.cast.slice(0, 5).join(', ')}
-              </Text>
-            )}
-          </View>
-        )}
-
-        {/* Season/Episode Selection for Series */}
-        {type === 'series' && seasons.length > 0 && (
-          <View style={styles.episodeSection}>
-            {/* Season Selector */}
-            <View style={styles.seasonSelector}>
-              <Text style={styles.sectionTitle}>Seasons</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.seasonScroll}>
-                {seasons.map((season) => (
-                  <TouchableOpacity
-                    key={season}
-                    style={[
-                      styles.seasonButton,
-                      selectedSeason === season && styles.seasonButtonActive,
-                    ]}
-                    onPress={() => {
-                      setSelectedSeason(season);
-                      setSelectedEpisode(null);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.seasonButtonText,
-                        selectedSeason === season && styles.seasonButtonTextActive,
-                      ]}
-                    >
-                      S{season}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+            <Text style={styles.sectionTitle}>Genres</Text>
+            <View style={styles.pillContainer}>
+              {content.genre.map((g, i) => (
+                <View key={i} style={styles.genrePill}>
+                  <Text style={styles.genrePillText}>{g}</Text>
+                </View>
+              ))}
             </View>
+          </View>
+        )}
+
+        {/* Cast */}
+        {content?.cast && content.cast.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Cast</Text>
+            <View style={styles.pillContainer}>
+              {content.cast.slice(0, 6).map((actor, i) => (
+                <View key={i} style={styles.castPill}>
+                  <Text style={styles.castPillText}>{actor}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Episodes Section - Only for series main page */}
+        {type === 'series' && !isEpisodePage && seasons.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Episodes</Text>
+
+            {/* Season Selector */}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.seasonScroll}
+              contentContainerStyle={styles.seasonScrollContent}
+            >
+              {seasons.map((season) => (
+                <TouchableOpacity
+                  key={season}
+                  style={[
+                    styles.seasonButton,
+                    selectedSeason === season && styles.seasonButtonActive,
+                  ]}
+                  onPress={() => setSelectedSeason(season)}
+                >
+                  <Text
+                    style={[
+                      styles.seasonButtonText,
+                      selectedSeason === season && styles.seasonButtonTextActive,
+                    ]}
+                  >
+                    Season {season}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
             {/* Episode List */}
             <View style={styles.episodeList}>
-              <Text style={styles.sectionTitle}>
-                Episodes - Season {selectedSeason}
-              </Text>
               {episodesForSeason.map((episode) => (
                 <TouchableOpacity
                   key={`${episode.season}-${episode.episode}`}
-                  style={[
-                    styles.episodeItem,
-                    selectedEpisode?.id === episode.id && styles.episodeItemSelected,
-                  ]}
-                  onPress={() => setSelectedEpisode(episode)}
+                  style={styles.episodeCard}
+                  onPress={() => handleEpisodePress(episode)}
                 >
                   <Image
                     source={{ uri: episode.thumbnail || content?.poster }}
@@ -334,11 +320,8 @@ export default function DetailsScreen() {
                     contentFit="cover"
                   />
                   <View style={styles.episodeInfo}>
-                    <Text style={styles.episodeNumber}>
-                      E{episode.episode}
-                    </Text>
-                    <Text style={styles.episodeTitle} numberOfLines={1}>
-                      {episode.name || `Episode ${episode.episode}`}
+                    <Text style={styles.episodeTitle} numberOfLines={2}>
+                      Episode {episode.episode}: {episode.name || `Episode ${episode.episode}`}
                     </Text>
                     {episode.overview && (
                       <Text style={styles.episodeOverview} numberOfLines={2}>
@@ -346,83 +329,54 @@ export default function DetailsScreen() {
                       </Text>
                     )}
                   </View>
-                  {selectedEpisode?.id === episode.id && (
-                    <Ionicons name="checkmark-circle" size={24} color="#8B5CF6" />
-                  )}
                 </TouchableOpacity>
               ))}
             </View>
+          </View>
+        )}
 
-            {/* Prompt to select episode */}
-            {!selectedEpisode && (
-              <View style={styles.selectEpisodePrompt}>
-                <Ionicons name="information-circle-outline" size={20} color="#888" />
-                <Text style={styles.selectEpisodeText}>
-                  Select an episode to see available streams
-                </Text>
+        {/* Streams Section - Only for movies OR episode pages */}
+        {(type === 'movie' || isEpisodePage) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Available Streams</Text>
+
+            {isLoadingStreams ? (
+              <View style={styles.streamLoading}>
+                <ActivityIndicator size="small" color="#8B5CF6" />
+                <Text style={styles.streamLoadingText}>Finding streams...</Text>
+              </View>
+            ) : streams.length === 0 ? (
+              <View style={styles.noStreams}>
+                <Ionicons name="cloud-offline-outline" size={32} color="#666" />
+                <Text style={styles.noStreamsText}>No streams found</Text>
+              </View>
+            ) : (
+              <View style={styles.streamList}>
+                {streams.map((stream, index) => {
+                  const { source, details } = parseStreamInfo(stream);
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.streamItem}
+                      onPress={() => handleStreamSelect(stream)}
+                    >
+                      <View style={styles.streamIcon}>
+                        <Ionicons name="play" size={18} color="#8B5CF6" />
+                      </View>
+                      <View style={styles.streamInfo}>
+                        <Text style={styles.streamSource} numberOfLines={1}>{source}</Text>
+                        {details && (
+                          <Text style={styles.streamDetails} numberOfLines={2}>{details}</Text>
+                        )}
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color="#666" />
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
           </View>
         )}
-
-        {/* Streams Section */}
-        <View style={styles.streamsSection}>
-          <View style={styles.streamHeader}>
-            <Ionicons name="play-circle" size={20} color="#8B5CF6" />
-            <Text style={styles.streamHeaderText}>Available Streams</Text>
-            {!isLoadingStreams && streams.length > 0 && (
-              <Text style={styles.streamCount}>({streams.length})</Text>
-            )}
-          </View>
-
-          {isLoadingStreams ? (
-            <View style={styles.streamLoading}>
-              <ActivityIndicator size="small" color="#8B5CF6" />
-              <Text style={styles.streamLoadingText}>Finding streams...</Text>
-            </View>
-          ) : streams.length === 0 ? (
-            <View style={styles.noStreams}>
-              <Ionicons name="cloud-offline-outline" size={32} color="#666" />
-              <Text style={styles.noStreamsText}>No streams found</Text>
-              <Text style={styles.noStreamsSubtext}>Try installing more addons</Text>
-            </View>
-          ) : (
-            <View style={styles.streamList}>
-              {streams.map((stream, index) => {
-                const { source, details } = parseStreamInfo(stream);
-                return (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.streamItem}
-                    onPress={() => handleStreamSelect(stream)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.streamIcon}>
-                      <Ionicons name="play" size={18} color="#8B5CF6" />
-                    </View>
-                    <View style={styles.streamInfo}>
-                      <Text style={styles.streamSource} numberOfLines={1}>{source}</Text>
-                      {details && (
-                        <Text style={styles.streamDetails} numberOfLines={1}>{details}</Text>
-                      )}
-                    </View>
-                    <Ionicons name="open-outline" size={18} color="#666" />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-
-          {/* Player Instructions */}
-          {streams.length > 0 && (
-            <View style={styles.playerInfo}>
-              <Ionicons name="information-circle-outline" size={16} color="#888" />
-              <Text style={styles.playerInfoText}>
-                Tap a stream to play in VLC or MX Player
-              </Text>
-            </View>
-          )}
-        </View>
 
         <View style={styles.bottomPadding} />
       </ScrollView>
@@ -433,12 +387,13 @@ export default function DetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: '#0f0f11',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#0f0f11',
   },
   heroContainer: {
     height: height * 0.45,
@@ -455,134 +410,191 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: '70%',
   },
-  headerOverlay: {
+  backButton: {
     position: 'absolute',
-    top: 0,
+    top: 50,
+    left: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroContent: {
+    position: 'absolute',
+    bottom: 20,
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  libraryButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  libraryButtonActive: {
-    backgroundColor: 'rgba(139, 92, 246, 0.3)',
-  },
-  titleOverlay: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
   },
   logoImage: {
-    width: width * 0.6,
-    height: 60,
-    marginBottom: 8,
+    width: width * 0.7,
+    height: 100,
   },
   heroTitle: {
     fontSize: 28,
-    fontWeight: '800',
+    fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 8,
-  },
-  ratingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    gap: 4,
-  },
-  ratingText: {
-    color: '#FFD700',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  metaText: {
-    color: '#CCCCCC',
-    fontSize: 13,
-  },
-  genreRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  genreBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  genreText: {
-    color: '#DDDDDD',
-    fontSize: 11,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   scrollView: {
     flex: 1,
   },
-  section: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 16,
   },
-  description: {
-    fontSize: 14,
-    color: '#AAAAAA',
-    lineHeight: 21,
-  },
-  crewText: {
-    fontSize: 13,
-    color: '#888888',
-    marginBottom: 4,
-  },
-  crewLabel: {
-    color: '#AAAAAA',
-    fontWeight: '600',
-  },
-  streamsSection: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  streamHeader: {
+  imdbBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+  },
+  imdbLabel: {
+    backgroundColor: '#F5C518',
+    color: '#000000',
+    fontSize: 10,
+    fontWeight: 'bold',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 2,
+  },
+  imdbRating: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  metaText: {
+    color: '#AAAAAA',
+    fontSize: 14,
+  },
+  libraryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
+    marginHorizontal: 60,
+    marginBottom: 20,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  libraryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  description: {
+    fontSize: 15,
+    color: '#AAAAAA',
+    lineHeight: 24,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  section: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
     marginBottom: 12,
   },
-  streamHeaderText: {
-    fontSize: 16,
-    fontWeight: '700',
+  pillContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  genrePill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.3)',
+  },
+  genrePillText: {
+    color: '#A78BFA',
+    fontSize: 13,
+  },
+  castPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  castPillText: {
+    color: '#AAAAAA',
+    fontSize: 13,
+  },
+  seasonScroll: {
+    marginBottom: 16,
+  },
+  seasonScrollContent: {
+    gap: 8,
+  },
+  seasonButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  seasonButtonActive: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
+  seasonButtonText: {
+    color: '#AAAAAA',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  seasonButtonTextActive: {
     color: '#FFFFFF',
   },
-  streamCount: {
+  episodeList: {
+    gap: 12,
+  },
+  episodeCard: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  episodeThumbnail: {
+    width: 130,
+    height: 75,
+    borderRadius: 6,
+    backgroundColor: '#333',
+  },
+  episodeInfo: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'center',
+  },
+  episodeTitle: {
     fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  episodeOverview: {
+    fontSize: 12,
     color: '#888888',
+    lineHeight: 16,
   },
   streamLoading: {
     flexDirection: 'row',
@@ -600,15 +612,9 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   noStreamsText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  noStreamsSubtext: {
     color: '#666666',
-    fontSize: 13,
-    marginTop: 4,
+    fontSize: 15,
+    marginTop: 8,
   },
   streamList: {
     gap: 8,
@@ -616,140 +622,35 @@ const styles = StyleSheet.create({
   streamItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    padding: 12,
-    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#222',
   },
   streamIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 12,
   },
   streamInfo: {
     flex: 1,
   },
   streamSource: {
     fontSize: 14,
-    fontWeight: '600',
     color: '#FFFFFF',
+    fontWeight: '600',
   },
   streamDetails: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#888888',
     marginTop: 2,
   },
-  playerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 16,
-    paddingVertical: 8,
-  },
-  playerInfoText: {
-    fontSize: 12,
-    color: '#888888',
-  },
   bottomPadding: {
     height: 100,
-  },
-  // Episode Section Styles
-  episodeSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 12,
-  },
-  seasonSelector: {
-    marginBottom: 16,
-  },
-  seasonScroll: {
-    marginTop: 8,
-  },
-  seasonButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 20,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  seasonButtonActive: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
-  },
-  seasonButtonText: {
-    color: '#AAAAAA',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  seasonButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  episodeList: {
-    marginTop: 8,
-  },
-  episodeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 10,
-    marginBottom: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#222',
-  },
-  episodeItemSelected: {
-    borderColor: '#8B5CF6',
-    backgroundColor: '#1f1a2e',
-  },
-  episodeThumbnail: {
-    width: 120,
-    height: 68,
-    borderRadius: 6,
-    backgroundColor: '#333',
-  },
-  episodeInfo: {
-    flex: 1,
-    marginLeft: 12,
-    marginRight: 8,
-  },
-  episodeNumber: {
-    fontSize: 12,
-    color: '#8B5CF6',
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  episodeTitle: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  episodeOverview: {
-    fontSize: 12,
-    color: '#888888',
-    lineHeight: 16,
-  },
-  selectEpisodePrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    marginTop: 8,
-  },
-  selectEpisodeText: {
-    fontSize: 14,
-    color: '#888888',
   },
 });
