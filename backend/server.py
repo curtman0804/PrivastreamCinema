@@ -900,8 +900,16 @@ async def get_all_streams(
             base_url = f"https://torrentio.strem.fun/{torrentio_config}"
             url = f"{base_url}/stream/{content_type}/{content_id}.json"
             
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                response = await client.get(url)
+            # Use cloudscraper for Cloudflare bypass
+            try:
+                import cloudscraper
+                scraper = cloudscraper.create_scraper(
+                    browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+                )
+                response = await asyncio.to_thread(
+                    lambda: scraper.get(url, timeout=30)
+                )
+                
                 if response.status_code == 200:
                     data = response.json()
                     raw_streams = data.get('streams', [])
@@ -958,6 +966,10 @@ async def get_all_streams(
                     
                     logger.info(f"Torrentio found {len(streams)} streams for {content_type}/{content_id}")
                     return streams
+                else:
+                    logger.warning(f"Torrentio returned status {response.status_code}")
+            except Exception as e:
+                logger.warning(f"Torrentio cloudscraper error: {e}")
         except Exception as e:
             logger.warning(f"Torrentio search error: {e}")
         return []
