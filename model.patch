@@ -1,161 +1,166 @@
 diff --git a/model.patch b/model.patch
-index ff9c426..e69de29 100644
+index b156a25..e69de29 100644
 --- a/model.patch
 +++ b/model.patch
-@@ -1,156 +0,0 @@
+@@ -1,161 +0,0 @@
 -diff --git a/model.patch b/model.patch
--index d54a49b..e69de29 100644
+-index ff9c426..e69de29 100644
 ---- a/model.patch
 -+++ b/model.patch
--@@ -1,61 +0,0 @@
+-@@ -1,156 +0,0 @@
 --diff --git a/model.patch b/model.patch
---index 95c11ce..e69de29 100644
+--index d54a49b..e69de29 100644
 ----- a/model.patch
 --+++ b/model.patch
---@@ -1,56 +0,0 @@
----diff --git a/test_result.md b/test_result.md
----index 98a396a..79ee9d6 100644
------- a/test_result.md
----+++ b/test_result.md
----@@ -141,11 +141,14 @@ backend:
----     file: "/app/backend/server.py"
----     stuck_count: 0
----     priority: "high"
-----    needs_retesting: true
----+    needs_retesting: false
----     status_history:
----       - working: true
----         agent: "main"
----         comment: "Added Torrentio-style aggregation from YTS, PirateBay, EZTV. Tested with curl - returns 20 streams"
----+      - working: true
----+        agent: "testing"
----+        comment: "✅ COMPREHENSIVE TESTING PASSED - All stream endpoints working correctly. Wake Up Dead Man (tt14364480): 20 streams found, properly sorted by seeders (4646→3174→896). The Holdovers (tt14849194): 20 streams found, properly sorted by seeders (429→108→69). All streams contain required fields: name, title, infoHash, seeders. Aggregation from ThePirateBay working via apibay.org API. Authentication and token-based access working properly."
---- 
---- metadata:
----   created_by: "main_agent"
----@@ -154,8 +157,7 @@ metadata:
----   run_ui: false
---- 
---- test_plan:
-----  current_focus:
-----    - "Stream Fetching API"
----+  current_focus: []
----   stuck_tasks: []
----   test_all: false
----   test_priority: "high_first"
----@@ -175,4 +177,22 @@ agent_communication:
----       1. POST /api/auth/login with {"username": "choyt", "password": "RFIDGuy1!"}
----       2. GET /api/streams/movie/tt14364480 (should return streams with infoHash, seeders, title)
----       3. GET /api/streams/movie/tt14849194 (The Holdovers)
-----      4. GET /api/streams/series/tt31314751 (a series)
----\ No newline at end of file
----+      4. GET /api/streams/series/tt31314751 (a series)
----+  - agent: "testing"
----+    message: |
----+      ✅ BACKEND TESTING COMPLETE - All APIs working perfectly!
----+      
----+      Comprehensive testing results:
----+      • Authentication: ✅ Login successful with choyt/RFIDGuy1!, token generation working
----+      • Auth verification: ✅ /auth/me endpoint working with Bearer token
----+      • Stream fetching: ✅ Both test movies returning 20 streams each, properly sorted by seeders
----+      • Content discovery: ✅ 12 services with 1,743 total content items from streaming catalogs
----+      
----+      Key findings:
----+      • Streams properly aggregated from ThePirateBay (via apibay.org API)
----+      • All required fields present: name, title, infoHash, seeders
----+      • Proper seeder-based sorting (highest first: 4646→3174→896)
----+      • Multiple streaming services populated (Netflix, HBO, Disney+, etc.)
----+      • Authentication and authorization working correctly
----+      
----+      Backend is production-ready. All core functionality tested and verified.
----\ No newline at end of file
--diff --git a/test_result.md b/test_result.md
--index 5b83fbf..6d547f3 100644
----- a/test_result.md
--+++ b/test_result.md
--@@ -134,6 +134,16 @@ backend:
--       - working: true
--         agent: "main"
--         comment: "Returns Netflix, HBO, Disney+, etc. content from streaming catalogs addon"
--+      - working: true
--+        agent: "testing"
--+        comment: |
--+          ✅ COMPREHENSIVE DISCOVER CONTENT TESTING PASSED:
--+          • Required sections present: New Movies, New Series, Popular Movies, Popular Series
--+          • Streaming services found: Netflix Movies/Series, HBO Max Movies/Series, Disney+ Movies/Series
--+          • USA TV Channels section present with content
--+          • No unwanted sections (Calendar-Videos, Last-Videos) found
--+          • Total: 690 content items across 22 sections
--+          • All content properly organized by service
-- 
--   - task: "Stream Fetching API"
--     implemented: true
--@@ -150,6 +160,23 @@ backend:
--         agent: "testing"
--         comment: "✅ COMPREHENSIVE TESTING PASSED - All stream endpoints working correctly."
-- 
--+  - task: "Addon Management API"
--+    implemented: true
--+    working: true
--+    file: "/app/backend/server.py"
--+    stuck_count: 0
--+    priority: "high"
--+    needs_retesting: false
--+    status_history:
--+      - working: true
--+        agent: "testing"
--+        comment: |
--+          ✅ ADDON MANAGEMENT TESTING PASSED:
--+          • GET /api/addons: Successfully retrieved 5 installed addons
--+          • DELETE /api/addons/{addon_id}: Successfully deleted addon 'Cinemeta'
--+          • POST /api/addons/install: Successfully reinstalled addon 'Cinemeta'
--+          • All addon management operations working correctly
--+
--   - task: "Torrent Streaming Backend (libtorrent + ffmpeg)"
--     implemented: true
--     working: true
--@@ -184,9 +211,7 @@ metadata:
--   run_ui: false
-- 
-- test_plan:
---  current_focus:
---    - "Discover Page Content Organization"
---    - "Addon Deletion API"
--+  current_focus: []
--   stuck_tasks: []
--   test_all: false
--   test_priority: "high_first"
--@@ -262,4 +287,30 @@ agent_communication:
--          - "Netflix Movies", "Netflix Series", "HBO Max Movies", etc. (from Streaming Catalogs)
--          - "USA TV Channels" (from USA TV addon)
--       3. DELETE /api/addons/{addon_id} - verify addon deletion works
---      4. GET /api/addons - verify addon list is returned
--\ No newline at end of file
--+      4. GET /api/addons - verify addon list is returned
--+  - agent: "testing"
--+    message: |
--+      ✅ COMPREHENSIVE BACKEND API TESTING COMPLETE - ALL TESTS PASSED!
--+      
--+      Test Results Summary (9/9 tests passed - 100% success rate):
--+      
--+      🔐 AUTHENTICATION:
--+      • POST /api/auth/login: ✅ Login successful with choyt/RFIDGuy1!
--+      • JWT token generation and validation working correctly
--+      
--+      🎬 DISCOVER CONTENT ORGANIZATION:
--+      • GET /api/content/discover-organized: ✅ All required sections present
--+      • Required sections: New Movies, New Series, Popular Movies, Popular Series ✅
--+      • Streaming services: Netflix, HBO Max, Disney+ Movies/Series ✅
--+      • USA TV Channels section present ✅
--+      • No unwanted sections (Calendar-Videos, Last-Videos) found ✅
--+      • Total: 690 content items across 22 sections ✅
--+      
--+      🔧 ADDON MANAGEMENT:
--+      • GET /api/addons: ✅ Retrieved 5 installed addons
--+      • DELETE /api/addons/{addon_id}: ✅ Successfully deleted addon 'Cinemeta'
--+      • POST /api/addons/install: ✅ Successfully reinstalled addon 'Cinemeta'
--+      
--+      All backend APIs are working correctly and meet the specified requirements.
--+      The discover page content organization has been fixed and no longer contains
--+      the unwanted "Calendar-Videos" or "Last-Videos" sections.
--\ No newline at end of file
+--@@ -1,61 +0,0 @@
+---diff --git a/model.patch b/model.patch
+---index 95c11ce..e69de29 100644
+------ a/model.patch
+---+++ b/model.patch
+---@@ -1,56 +0,0 @@
+----diff --git a/test_result.md b/test_result.md
+----index 98a396a..79ee9d6 100644
+------- a/test_result.md
+----+++ b/test_result.md
+----@@ -141,11 +141,14 @@ backend:
+----     file: "/app/backend/server.py"
+----     stuck_count: 0
+----     priority: "high"
+-----    needs_retesting: true
+----+    needs_retesting: false
+----     status_history:
+----       - working: true
+----         agent: "main"
+----         comment: "Added Torrentio-style aggregation from YTS, PirateBay, EZTV. Tested with curl - returns 20 streams"
+----+      - working: true
+----+        agent: "testing"
+----+        comment: "✅ COMPREHENSIVE TESTING PASSED - All stream endpoints working correctly. Wake Up Dead Man (tt14364480): 20 streams found, properly sorted by seeders (4646→3174→896). The Holdovers (tt14849194): 20 streams found, properly sorted by seeders (429→108→69). All streams contain required fields: name, title, infoHash, seeders. Aggregation from ThePirateBay working via apibay.org API. Authentication and token-based access working properly."
+---- 
+---- metadata:
+----   created_by: "main_agent"
+----@@ -154,8 +157,7 @@ metadata:
+----   run_ui: false
+---- 
+---- test_plan:
+-----  current_focus:
+-----    - "Stream Fetching API"
+----+  current_focus: []
+----   stuck_tasks: []
+----   test_all: false
+----   test_priority: "high_first"
+----@@ -175,4 +177,22 @@ agent_communication:
+----       1. POST /api/auth/login with {"username": "choyt", "password": "RFIDGuy1!"}
+----       2. GET /api/streams/movie/tt14364480 (should return streams with infoHash, seeders, title)
+----       3. GET /api/streams/movie/tt14849194 (The Holdovers)
+-----      4. GET /api/streams/series/tt31314751 (a series)
+----\ No newline at end of file
+----+      4. GET /api/streams/series/tt31314751 (a series)
+----+  - agent: "testing"
+----+    message: |
+----+      ✅ BACKEND TESTING COMPLETE - All APIs working perfectly!
+----+      
+----+      Comprehensive testing results:
+----+      • Authentication: ✅ Login successful with choyt/RFIDGuy1!, token generation working
+----+      • Auth verification: ✅ /auth/me endpoint working with Bearer token
+----+      • Stream fetching: ✅ Both test movies returning 20 streams each, properly sorted by seeders
+----+      • Content discovery: ✅ 12 services with 1,743 total content items from streaming catalogs
+----+      
+----+      Key findings:
+----+      • Streams properly aggregated from ThePirateBay (via apibay.org API)
+----+      • All required fields present: name, title, infoHash, seeders
+----+      • Proper seeder-based sorting (highest first: 4646→3174→896)
+----+      • Multiple streaming services populated (Netflix, HBO, Disney+, etc.)
+----+      • Authentication and authorization working correctly
+----+      
+----+      Backend is production-ready. All core functionality tested and verified.
+----\ No newline at end of file
+--diff --git a/test_result.md b/test_result.md
+--index 5b83fbf..6d547f3 100644
+----- a/test_result.md
+--+++ b/test_result.md
+--@@ -134,6 +134,16 @@ backend:
+--       - working: true
+--         agent: "main"
+--         comment: "Returns Netflix, HBO, Disney+, etc. content from streaming catalogs addon"
+--+      - working: true
+--+        agent: "testing"
+--+        comment: |
+--+          ✅ COMPREHENSIVE DISCOVER CONTENT TESTING PASSED:
+--+          • Required sections present: New Movies, New Series, Popular Movies, Popular Series
+--+          • Streaming services found: Netflix Movies/Series, HBO Max Movies/Series, Disney+ Movies/Series
+--+          • USA TV Channels section present with content
+--+          • No unwanted sections (Calendar-Videos, Last-Videos) found
+--+          • Total: 690 content items across 22 sections
+--+          • All content properly organized by service
+-- 
+--   - task: "Stream Fetching API"
+--     implemented: true
+--@@ -150,6 +160,23 @@ backend:
+--         agent: "testing"
+--         comment: "✅ COMPREHENSIVE TESTING PASSED - All stream endpoints working correctly."
+-- 
+--+  - task: "Addon Management API"
+--+    implemented: true
+--+    working: true
+--+    file: "/app/backend/server.py"
+--+    stuck_count: 0
+--+    priority: "high"
+--+    needs_retesting: false
+--+    status_history:
+--+      - working: true
+--+        agent: "testing"
+--+        comment: |
+--+          ✅ ADDON MANAGEMENT TESTING PASSED:
+--+          • GET /api/addons: Successfully retrieved 5 installed addons
+--+          • DELETE /api/addons/{addon_id}: Successfully deleted addon 'Cinemeta'
+--+          • POST /api/addons/install: Successfully reinstalled addon 'Cinemeta'
+--+          • All addon management operations working correctly
+--+
+--   - task: "Torrent Streaming Backend (libtorrent + ffmpeg)"
+--     implemented: true
+--     working: true
+--@@ -184,9 +211,7 @@ metadata:
+--   run_ui: false
+-- 
+-- test_plan:
+---  current_focus:
+---    - "Discover Page Content Organization"
+---    - "Addon Deletion API"
+--+  current_focus: []
+--   stuck_tasks: []
+--   test_all: false
+--   test_priority: "high_first"
+--@@ -262,4 +287,30 @@ agent_communication:
+--          - "Netflix Movies", "Netflix Series", "HBO Max Movies", etc. (from Streaming Catalogs)
+--          - "USA TV Channels" (from USA TV addon)
+--       3. DELETE /api/addons/{addon_id} - verify addon deletion works
+---      4. GET /api/addons - verify addon list is returned
+--\ No newline at end of file
+--+      4. GET /api/addons - verify addon list is returned
+--+  - agent: "testing"
+--+    message: |
+--+      ✅ COMPREHENSIVE BACKEND API TESTING COMPLETE - ALL TESTS PASSED!
+--+      
+--+      Test Results Summary (9/9 tests passed - 100% success rate):
+--+      
+--+      🔐 AUTHENTICATION:
+--+      • POST /api/auth/login: ✅ Login successful with choyt/RFIDGuy1!
+--+      • JWT token generation and validation working correctly
+--+      
+--+      🎬 DISCOVER CONTENT ORGANIZATION:
+--+      • GET /api/content/discover-organized: ✅ All required sections present
+--+      • Required sections: New Movies, New Series, Popular Movies, Popular Series ✅
+--+      • Streaming services: Netflix, HBO Max, Disney+ Movies/Series ✅
+--+      • USA TV Channels section present ✅
+--+      • No unwanted sections (Calendar-Videos, Last-Videos) found ✅
+--+      • Total: 690 content items across 22 sections ✅
+--+      
+--+      🔧 ADDON MANAGEMENT:
+--+      • GET /api/addons: ✅ Retrieved 5 installed addons
+--+      • DELETE /api/addons/{addon_id}: ✅ Successfully deleted addon 'Cinemeta'
+--+      • POST /api/addons/install: ✅ Successfully reinstalled addon 'Cinemeta'
+--+      
+--+      All backend APIs are working correctly and meet the specified requirements.
+--+      The discover page content organization has been fixed and no longer contains
+--+      the unwanted "Calendar-Videos" or "Last-Videos" sections.
+--\ No newline at end of file
