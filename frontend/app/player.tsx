@@ -55,10 +55,12 @@ const WebVideoPlayer = ({ streamUrl, onLoad, onError }: { streamUrl: string; onL
 };
 
 export default function PlayerScreen() {
-  const { url, title, infoHash } = useLocalSearchParams<{
+  const { url, title, infoHash, directUrl, isLive } = useLocalSearchParams<{
     url?: string;
     title?: string;
     infoHash?: string;
+    directUrl?: string;
+    isLive?: string;
   }>();
   const router = useRouter();
   
@@ -69,6 +71,7 @@ export default function PlayerScreen() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [peers, setPeers] = useState(0);
   const [downloadSpeed, setDownloadSpeed] = useState(0);
+  const [isLiveTV, setIsLiveTV] = useState(false);
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
