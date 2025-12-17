@@ -19,7 +19,7 @@ import { Addon, api } from '../../src/api/client';
 import { Image } from 'expo-image';
 
 export default function AddonsScreen() {
-  const { addons, isLoadingAddons, fetchAddons } = useContentStore();
+  const { addons, isLoadingAddons, fetchAddons, fetchDiscover } = useContentStore();
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [addonUrl, setAddonUrl] = useState('');
