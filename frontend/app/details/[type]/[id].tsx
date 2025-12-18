@@ -107,17 +107,27 @@ export default function DetailsScreen() {
     const contentTitle = content?.name || 'Video';
     const cType = type as string || 'movie';
     
-    // Save content info to AsyncStorage for subtitles
+    console.log('[DETAILS] handleStreamSelect - preparing to save:', { cType, imdbId, contentTitle });
+    
+    // Save content info to AsyncStorage for subtitles BEFORE navigating
     try {
-      await AsyncStorage.setItem('currentPlaying', JSON.stringify({
+      const dataToSave = {
         contentType: cType,
         contentId: imdbId,
         title: contentTitle,
-      }));
-      console.log('Saved to AsyncStorage:', cType, imdbId);
+      };
+      await AsyncStorage.setItem('currentPlaying', JSON.stringify(dataToSave));
+      console.log('[DETAILS] Successfully saved to AsyncStorage:', JSON.stringify(dataToSave));
+      
+      // Verify it was saved
+      const verification = await AsyncStorage.getItem('currentPlaying');
+      console.log('[DETAILS] Verification read:', verification);
     } catch (e) {
-      console.log('Error saving to AsyncStorage:', e);
+      console.log('[DETAILS] Error saving to AsyncStorage:', e);
     }
+    
+    // Small delay to ensure AsyncStorage write is complete
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     if (stream.infoHash) {
       // Torrent stream - use torrent player
