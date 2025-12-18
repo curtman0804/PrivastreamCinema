@@ -134,8 +134,9 @@ export default function DetailsScreen() {
     
     // Check if this is an xHamster stream - these have IP-restricted URLs that need browser playback
     const isXHamsterStream = stream.addon === 'xHamster' || (stream.name && stream.name.includes('xHamster'));
+    const contentId = id as string;
     
-    if (isXHamsterStream && decodedId.startsWith('http')) {
+    if (isXHamsterStream && contentId.startsWith('http')) {
       // xHamster streams need to be opened in browser due to IP restrictions
       Alert.alert(
         'Open in Browser',
@@ -144,7 +145,7 @@ export default function DetailsScreen() {
           { text: 'Cancel', style: 'cancel' },
           { 
             text: 'Open', 
-            onPress: () => Linking.openURL(decodedId).catch(err => console.log('Error opening URL:', err))
+            onPress: () => Linking.openURL(contentId).catch(err => console.log('Error opening URL:', err))
           },
         ]
       );
