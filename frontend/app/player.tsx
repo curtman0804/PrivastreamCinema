@@ -109,8 +109,65 @@ export default function PlayerScreen() {
   const [showSubtitlePicker, setShowSubtitlePicker] = useState(false);
   const [subtitleText, setSubtitleText] = useState<string>('');
   
+  // Custom player controls state
+  const [showControls, setShowControls] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const videoRef = useRef<Video>(null);
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
+  
+  // Format time helper
+  const formatTime = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+  
+  // Handle playback status updates
+  const handlePlaybackStatus = (status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      setIsPlaying(status.isPlaying);
+      setPosition(status.positionMillis);
+      setDuration(status.durationMillis || 0);
+    }
+  };
+  
+  // Toggle play/pause
+  const togglePlayPause = async () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        await videoRef.current.pauseAsync();
+      } else {
+        await videoRef.current.playAsync();
+      }
+    }
+  };
+  
+  // Auto-hide controls after 3 seconds
+  useEffect(() => {
+    if (showControls && streamUrl && !isLoading) {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+      controlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+      }, 4000);
+    }
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, [showControls, streamUrl, isLoading]);
 
   // Fetch subtitles for the content
   const fetchSubtitles = async (contentType: string, contentId: string) => {
