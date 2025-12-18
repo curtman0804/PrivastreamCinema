@@ -25,25 +25,20 @@ export default function SearchScreen() {
   const router = useRouter();
   const { searchResults, isLoadingSearch, search, clearSearch } = useContentStore();
   const [searchQuery, setSearchQuery] = useState(q || '');
-  const [hasSearched, setHasSearched] = useState(false);
+  const lastSearchedQuery = React.useRef<string | null>(null);
 
+  // Auto-search when query param exists and is different from last search
   useEffect(() => {
-    if (q && !hasSearched) {
+    if (q && q !== lastSearchedQuery.current) {
       setSearchQuery(q);
-      setHasSearched(true);
+      lastSearchedQuery.current = q;
       search(q);
     }
-  }, [q, search, hasSearched]);
-
-  // Reset search state when leaving
-  useEffect(() => {
-    return () => {
-      setHasSearched(false);
-    };
-  }, []);
+  }, [q, search]);
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
+      lastSearchedQuery.current = searchQuery.trim();
       search(searchQuery.trim());
     }
   };
