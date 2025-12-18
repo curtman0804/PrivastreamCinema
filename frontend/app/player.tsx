@@ -248,19 +248,19 @@ export default function PlayerScreen() {
     };
   }, []);
 
-  // Fetch subtitles when contentType and contentId are available
+  // Get current playing info from global store
+  const currentPlaying = useContentStore((state) => state.currentPlaying);
+
+  // Fetch subtitles when currentPlaying info is available
   useEffect(() => {
-    console.log('Subtitle fetch check - contentType:', contentType, 'contentId:', contentId);
-    // Always try to fetch subtitles if we have an ID
-    const cType = contentType as string || 'movie';
-    const cId = contentId as string;
-    if (cId) {
-      console.log('Fetching subtitles for:', cType, cId);
-      fetchSubtitles(cType, cId);
+    console.log('Current playing info:', currentPlaying);
+    if (currentPlaying?.contentId) {
+      console.log('Fetching subtitles for:', currentPlaying.contentType, currentPlaying.contentId);
+      fetchSubtitles(currentPlaying.contentType, currentPlaying.contentId);
     } else {
-      console.log('Missing contentId, cannot fetch subtitles');
+      console.log('No current playing info available for subtitles');
     }
-  }, [contentType, contentId]);
+  }, [currentPlaying]);
 
   useEffect(() => {
     continuePollingRef.current = true;
