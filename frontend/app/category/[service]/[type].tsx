@@ -91,10 +91,18 @@ export default function CategoryScreen() {
     fetchCategoryContent(0, false);
   }, [fetchCategoryContent]);
 
+  const loadMoreRef = React.useRef(false);
+  
   const handleLoadMore = useCallback(() => {
-    if (!isLoadingMore && hasMore) {
-      fetchCategoryContent(skip, true);
+    // Debounce and prevent duplicate calls
+    if (loadMoreRef.current || isLoadingMore || !hasMore) {
+      return;
     }
+    loadMoreRef.current = true;
+    console.log(`Loading more from skip=${skip}, hasMore=${hasMore}`);
+    fetchCategoryContent(skip, true).finally(() => {
+      loadMoreRef.current = false;
+    });
   }, [isLoadingMore, hasMore, skip, fetchCategoryContent]);
 
   const handleItemPress = (item: ContentItem) => {
