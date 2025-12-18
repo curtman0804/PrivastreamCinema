@@ -75,6 +75,50 @@ FALLBACK_MANIFESTS = {
         "types": ["movie", "series", "anime", "other"],
         "background": "https://torrentio.strem.fun/images/background_v1.jpg",
         "logo": "https://torrentio.strem.fun/images/logo_v1.png"
+    },
+    # Adult content addons
+    "stremio-porn-jrm3.onrender.com": {
+        "id": "org.stremio.porn",
+        "version": "0.0.4",
+        "name": "Porn",
+        "description": "Watch porn videos and webcam streams from TastyBlacks, EbonyGalore, PornHub, RedTube, YouPorn, SpankWire, Porn.com, Chaturbate",
+        "catalogs": [
+            {"type": "movie", "id": "porn_videos", "name": "Porn Videos"},
+            {"type": "tv", "id": "porn_live", "name": "Live Cams"}
+        ],
+        "resources": ["catalog", "meta", "stream"],
+        "types": ["movie", "tv"],
+        "idPrefixes": ["porn_"],
+        "logo": "https://stremio-porn-jrm3.onrender.com/logo.png",
+        "behaviorHints": {"adult": True}
+    },
+    "dirty-pink.ers.pw": {
+        "id": "pw.ers.porntube",
+        "version": "0.5.1",
+        "name": "Porn Tube",
+        "description": "Porn torrents, including VR. Supports Real-Debrid & Easynews",
+        "catalogs": [
+            {"type": "movie", "id": "tpdb_catalog", "name": "PornTube New"}
+        ],
+        "resources": ["catalog", "meta", "stream"],
+        "types": ["movie"],
+        "logo": "https://dirty-pink.ers.pw/logo-v0-3-0.png",
+        "behaviorHints": {"adult": True}
+    },
+    "1fe84bc728af-stremio-porn.baby-beamup.club": {
+        "id": "stremio_porn_plus",
+        "version": "0.0.9",
+        "name": "Porn+",
+        "description": "Watch porn videos and webcam streams from RedTube, Chaturbate",
+        "catalogs": [
+            {"type": "movie", "id": "porn_id:RedTube-movie-top", "name": "Porn: RedTube"},
+            {"type": "tv", "id": "porn_id:Chaturbate-tv-Featured", "name": "Chaturbate Live"}
+        ],
+        "resources": ["catalog", "meta", "stream"],
+        "types": ["movie", "tv"],
+        "idPrefixes": ["porn_id"],
+        "logo": "https://1fe84bc728af-stremio-porn.baby-beamup.club/logo.png",
+        "behaviorHints": {"adult": True}
     }
 }
 
