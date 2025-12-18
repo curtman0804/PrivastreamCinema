@@ -386,6 +386,30 @@ export default function DetailsScreen() {
               <View style={styles.noStreams}>
                 <Ionicons name="cloud-offline-outline" size={32} color="#666" />
                 <Text style={styles.noStreamsText}>No streams found</Text>
+                {/* Show Open in Browser if content ID is a URL or contains a source URL */}
+                {(id?.startsWith('http') || id?.includes('RedTube') || id?.includes('pornhub')) && (
+                  <TouchableOpacity
+                    style={styles.openBrowserButton}
+                    onPress={() => {
+                      // Extract URL from content ID
+                      let url = id;
+                      if (id?.includes('RedTube-movie-')) {
+                        // Extract RedTube video ID and create URL
+                        const videoId = id.split('RedTube-movie-')[1];
+                        url = `https://www.redtube.com/${videoId}`;
+                      } else if (id?.includes('pornhub-')) {
+                        const videoId = id.split('pornhub-')[1];
+                        url = `https://www.pornhub.com/view_video.php?viewkey=${videoId}`;
+                      }
+                      if (url) {
+                        Linking.openURL(url).catch(err => console.log('Error opening URL:', err));
+                      }
+                    }}
+                  >
+                    <Ionicons name="open-outline" size={18} color="#B8A05C" />
+                    <Text style={styles.openBrowserText}>Open in Browser</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               <View style={styles.streamList}>
