@@ -162,16 +162,21 @@ export default function CategoryScreen() {
         <FlatList
           data={items}
           renderItem={renderItem}
-          keyExtractor={(item, index) => `${item.id || item.imdb_id || ''}-${index}`}
+          keyExtractor={(item) => item.id || item.imdb_id || Math.random().toString()}
           numColumns={3}
           contentContainerStyle={styles.gridContent}
           showsVerticalScrollIndicator={true}
           onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.8}
+          onEndReachedThreshold={0.5}
           initialNumToRender={30}
-          maxToRenderPerBatch={30}
-          windowSize={10}
-          removeClippedSubviews={true}
+          maxToRenderPerBatch={20}
+          updateCellsBatchingPeriod={100}
+          windowSize={21}
+          getItemLayout={(data, index) => ({
+            length: ITEM_HEIGHT + 16 + 30, // poster height + margin + title
+            offset: (ITEM_HEIGHT + 16 + 30) * Math.floor(index / 3),
+            index,
+          })}
           ListFooterComponent={
             isLoadingMore ? (
               <View style={styles.loadMoreContainer}>
