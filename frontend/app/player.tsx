@@ -172,24 +172,29 @@ export default function PlayerScreen() {
 
   // Fetch subtitles for the content
   const fetchSubtitles = async (cType: string, cId: string) => {
-    console.log('fetchSubtitles called with:', cType, cId);
+    console.log('[SUBTITLES] fetchSubtitles called with:', cType, cId);
     if (!cId) {
-      console.log('No content ID provided');
+      console.log('[SUBTITLES] No content ID provided, skipping fetch');
       return;
     }
     try {
       const url = `/api/subtitles/${cType}/${cId}`;
-      console.log('Fetching subtitles from:', url);
+      console.log('[SUBTITLES] Making API call to:', url);
       const response = await api.get(url);
-      console.log('Subtitle response:', response.data);
+      console.log('[SUBTITLES] API response status:', response.status);
+      console.log('[SUBTITLES] API response data:', JSON.stringify(response.data));
+      
       if (response.data?.subtitles && response.data.subtitles.length > 0) {
+        console.log(`[SUBTITLES] Setting ${response.data.subtitles.length} subtitle options`);
         setSubtitles(response.data.subtitles);
-        console.log(`Loaded ${response.data.subtitles.length} subtitle languages`);
       } else {
-        console.log('No subtitles found in response');
+        console.log('[SUBTITLES] No subtitles found in response');
       }
-    } catch (err) {
-      console.log('Error fetching subtitles:', err);
+    } catch (err: any) {
+      console.log('[SUBTITLES] Error fetching subtitles:', err.message || err);
+      if (err.response) {
+        console.log('[SUBTITLES] Error response:', err.response.status, err.response.data);
+      }
     }
   };
 
