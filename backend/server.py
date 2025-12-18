@@ -1568,6 +1568,16 @@ async def get_category_content(
     addons = await db.addons.find({"userId": current_user.id}).to_list(100)
     
     # First try to match by catalog name (for separate sections)
+    # Handle naming patterns: "Netflix Movies" -> catalog "Netflix" with type "movie"
+    # Strip " Movies", " Series", " Channels" suffix if present
+    base_service_name = service_name
+    if service_name.endswith(' Movies'):
+        base_service_name = service_name[:-7]  # Remove " Movies"
+    elif service_name.endswith(' Series'):
+        base_service_name = service_name[:-7]  # Remove " Series"
+    elif service_name.endswith(' Channels'):
+        base_service_name = service_name[:-9]  # Remove " Channels"
+    
     for addon in addons:
         manifest = addon.get('manifest', {})
         base_url = addon.get('manifestUrl', '').replace('/manifest.json', '')
@@ -1578,8 +1588,8 @@ async def get_category_content(
             catalog_type = catalog.get('type', '')
             catalog_id = catalog.get('id', '')
             
-            # Check if this catalog matches the service name
-            if catalog_name != service_name:
+            # Check if this catalog matches the service name (exact or base name)
+            if catalog_name != service_name and catalog_name != base_service_name:
                 continue
             
             # Match content type
