@@ -881,7 +881,7 @@ async def extract_xhamster_video(video_url: str) -> list:
                     except json.JSONDecodeError as e:
                         logger.warning(f"Failed to parse xHamster sources JSON: {e}")
                 
-                # Also try to extract from mp4 URLs directly in page
+                # Also try to extract from mp4 URLs directly in page as fallback
                 if not streams:
                     mp4_urls = re.findall(r'https?://[^"\'<>\s]+\.mp4[^"\'<>\s]*', html)
                     seen = set()
@@ -898,6 +898,30 @@ async def extract_xhamster_video(video_url: str) -> list:
                                 "url": clean_url,
                                 "addon": "xHamster"
                             })
+                
+                # Sort streams by quality (highest first)
+                def quality_sort_key(s):
+                    name = s.get('name', '')
+                    # Extract resolution number
+                    match = re.search(r'(\d+)p', name)
+                    if match:
+                        return -int(match.group(1))  # Negative for descending order
+                    if 'HLS' in name or 'Auto' in name:
+                        return 0  # HLS auto goes after highest quality direct streams
+                    return 1  # Unknown goes last
+                
+                streams.sort(key=quality_sort_key)
+                
+                # Remove duplicates
+                seen_qualities = set()
+                unique_streams = []
+                for s in streams:
+                    quality_key = s.get('name', '')
+                    if quality_key not in seen_qualities:
+                        seen_qualities.add(quality_key)
+                        unique_streams.append(s)
+                
+                streams = unique_streams
                 
                 if streams:
                     logger.info(f"Extracted {len(streams)} streams from xHamster")
