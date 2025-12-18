@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useContentStore } from '../../../src/store/contentStore';
-import { ContentItem } from '../../../src/api/client';
+import { ContentItem, api } from '../../../src/api/client';
 
 const { width } = Dimensions.get('window');
 const ITEM_WIDTH = (width - 48) / 3; // 3 columns with padding
@@ -24,24 +24,65 @@ export default function CategoryScreen() {
   const router = useRouter();
   const { discoverData } = useContentStore();
   const [items, setItems] = useState<ContentItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [skip, setSkip] = useState(0);
+
+  const decodedService = service ? decodeURIComponent(service) : '';
+
+  const fetchCategoryContent = useCallback(async (skipValue: number = 0, append: boolean = false) => {
+    if (!decodedService || !type) return;
+    
+    try {
+      if (append) {
+        setIsLoadingMore(true);
+      } else {
+        setIsLoading(true);
+      }
+      
+      const response = await api.get(`/api/content/category/${encodeURIComponent(decodedService)}/${type}?skip=${skipValue}&limit=100`);
+      const data = response.data;
+      
+      if (append) {
+        setItems(prev => [...prev, ...data.items]);
+      } else {
+        setItems(data.items || []);
+      }
+      setHasMore(data.hasMore);
+      setSkip(skipValue + data.items.length);
+    } catch (error) {
+      console.log('Error fetching category:', error);
+      // Fallback to discover data
+      if (!append && discoverData) {
+        const serviceData = discoverData.services[decodedService];
+        if (serviceData) {
+          let categoryItems: ContentItem[] = [];
+          if (type === 'movies') {
+            categoryItems = serviceData.movies || [];
+          } else if (type === 'series') {
+            categoryItems = serviceData.series || [];
+          } else if (type === 'channels') {
+            categoryItems = serviceData.channels || [];
+          }
+          setItems(categoryItems.filter(Boolean));
+        }
+      }
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    }
+  }, [decodedService, type, discoverData]);
 
   useEffect(() => {
-    if (discoverData && service) {
-      const decodedService = decodeURIComponent(service);
-      const serviceData = discoverData.services[decodedService];
-      if (serviceData) {
-        let categoryItems: ContentItem[] = [];
-        if (type === 'movies') {
-          categoryItems = serviceData.movies || [];
-        } else if (type === 'series') {
-          categoryItems = serviceData.series || [];
-        } else if (type === 'channels') {
-          categoryItems = serviceData.channels || [];
-        }
-        setItems(categoryItems.filter(Boolean));
-      }
+    fetchCategoryContent(0, false);
+  }, [fetchCategoryContent]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!isLoadingMore && hasMore) {
+      fetchCategoryContent(skip, true);
     }
-  }, [discoverData, service, type]);
+  }, [isLoadingMore, hasMore, skip, fetchCategoryContent]);
 
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
