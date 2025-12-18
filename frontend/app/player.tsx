@@ -172,11 +172,6 @@ export default function PlayerScreen() {
     
     lockLandscape();
     
-    // Fetch subtitles when player loads
-    if (type && id) {
-      fetchSubtitles(type as string, id as string);
-    }
-    
     return () => {
       // Unlock orientation when leaving player
       if (Platform.OS !== 'web') {
@@ -184,6 +179,15 @@ export default function PlayerScreen() {
       }
     };
   }, []);
+
+  // Fetch subtitles when type and id are available
+  useEffect(() => {
+    const contentType = type as string;
+    const contentId = id as string;
+    if (contentType && contentId) {
+      fetchSubtitles(contentType, contentId);
+    }
+  }, [type, id]);
 
   useEffect(() => {
     continuePollingRef.current = true;
