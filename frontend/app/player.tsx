@@ -109,6 +109,20 @@ export default function PlayerScreen() {
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
 
+  // Fetch subtitles for the content
+  const fetchSubtitles = async () => {
+    if (!type || !id) return;
+    try {
+      const response = await api.get(`/api/subtitles/${type}/${id}`);
+      if (response.data?.subtitles) {
+        setSubtitles(response.data.subtitles);
+        console.log(`Loaded ${response.data.subtitles.length} subtitle languages`);
+      }
+    } catch (err) {
+      console.log('Error fetching subtitles:', err);
+    }
+  };
+
   // Open stream in external player (VLC, MX Player, etc.)
   const openInExternalPlayer = async () => {
     if (!streamUrl) return;
