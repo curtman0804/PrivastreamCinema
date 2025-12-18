@@ -170,13 +170,22 @@ export default function PlayerScreen() {
   }, [showControls, streamUrl, isLoading]);
 
   // Fetch subtitles for the content
-  const fetchSubtitles = async (contentType: string, contentId: string) => {
-    if (!contentType || !contentId) return;
+  const fetchSubtitles = async (cType: string, cId: string) => {
+    console.log('fetchSubtitles called with:', cType, cId);
+    if (!cId) {
+      console.log('No content ID provided');
+      return;
+    }
     try {
-      const response = await api.get(`/api/subtitles/${contentType}/${contentId}`);
-      if (response.data?.subtitles) {
+      const url = `/api/subtitles/${cType}/${cId}`;
+      console.log('Fetching subtitles from:', url);
+      const response = await api.get(url);
+      console.log('Subtitle response:', response.data);
+      if (response.data?.subtitles && response.data.subtitles.length > 0) {
         setSubtitles(response.data.subtitles);
         console.log(`Loaded ${response.data.subtitles.length} subtitle languages`);
+      } else {
+        console.log('No subtitles found in response');
       }
     } catch (err) {
       console.log('Error fetching subtitles:', err);
