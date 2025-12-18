@@ -677,6 +677,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginTop: 8,
   },
+  openBrowserButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#B8A05C',
+  },
+  openBrowserText: {
+    color: '#B8A05C',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
   streamList: {
     gap: 8,
   },
