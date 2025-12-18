@@ -1567,6 +1567,56 @@ async def get_category_content(
     # Get user's addons
     addons = await addons_collection.find({"userId": current_user.id}).to_list(100)
     
+    # First try to match by catalog name (for separate sections)
+    for addon in addons:
+        manifest = addon.get('manifest', {})
+        base_url = addon.get('manifestUrl', '').replace('/manifest.json', '')
+        catalogs = manifest.get('catalogs', [])
+        
+        for catalog in catalogs:
+            catalog_name = catalog.get('name', '')
+            catalog_type = catalog.get('type', '')
+            catalog_id = catalog.get('id', '')
+            
+            # Check if this catalog matches the service name
+            if catalog_name != service_name:
+                continue
+            
+            # Match content type
+            if content_type == 'movies' and catalog_type != 'movie':
+                continue
+            if content_type == 'series' and catalog_type != 'series':
+                continue
+            if content_type == 'channels' and catalog_type != 'tv':
+                continue
+            
+            try:
+                # Build URL with skip parameter for pagination
+                if skip > 0:
+                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}/skip={skip}.json"
+                else:
+                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                
+                logger.info(f"Fetching category: {url}")
+                
+                async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+                    response = await client.get(url)
+                    if response.status_code == 200:
+                        metas = response.json().get('metas', [])
+                        # Filter out items with empty names or IDs
+                        metas = [m for m in metas if m.get('name') and m.get('id')]
+                        
+                        return {
+                            "items": metas[:limit], 
+                            "total": len(metas), 
+                            "hasMore": len(metas) >= 50,  # Most Stremio catalogs return ~100 items per page
+                            "catalogId": catalog_id,
+                            "baseUrl": base_url
+                        }
+            except Exception as e:
+                logger.warning(f"Error fetching category {catalog_id}: {e}")
+    
+    # Fallback: match by addon name (old behavior)
     for addon in addons:
         manifest = addon.get('manifest', {})
         addon_name = manifest.get('name', 'Unknown')
@@ -1591,16 +1641,15 @@ async def get_category_content(
                 continue
                 
             try:
-                # Build URL with skip parameter for pagination
-                url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
                 if skip > 0:
                     url = f"{base_url}/catalog/{catalog_type}/{catalog_id}/skip={skip}.json"
+                else:
+                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
                 
                 async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
                     response = await client.get(url)
                     if response.status_code == 200:
                         metas = response.json().get('metas', [])
-                        # Filter out items with empty names or IDs
                         metas = [m for m in metas if m.get('name') and m.get('id')]
                         items.extend(metas)
             except Exception as e:
