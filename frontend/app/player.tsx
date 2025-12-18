@@ -454,7 +454,7 @@ export default function PlayerScreen() {
         </TouchableOpacity>
       )}
 
-      {/* CC Button - always show when stream is ready */}
+      {/* CC Button - positioned at bottom center near native controls */}
       {streamUrl && !isLoading && !error && (
         <TouchableOpacity
           style={[styles.ccButton, selectedSubtitle && styles.ccButtonActive]}
@@ -463,7 +463,7 @@ export default function PlayerScreen() {
             setShowSubtitlePicker(true);
           }}
         >
-          <Ionicons name="text" size={20} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
+          <Ionicons name="text" size={18} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
           <Text style={[styles.ccButtonText, selectedSubtitle && styles.ccButtonTextActive]}>
             {subtitles.length > 0 
               ? (selectedSubtitle ? subtitles.find(s => s.url === selectedSubtitle)?.langName || 'CC' : 'CC')
