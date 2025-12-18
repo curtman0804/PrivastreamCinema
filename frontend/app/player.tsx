@@ -452,6 +452,66 @@ export default function PlayerScreen() {
           <Text style={styles.externalPlayerText}>Open in VLC/External Player</Text>
         </TouchableOpacity>
       )}
+
+      {/* CC Button - show when subtitles are available */}
+      {streamUrl && !isLoading && !error && subtitles.length > 0 && (
+        <TouchableOpacity
+          style={[styles.ccButton, selectedSubtitle && styles.ccButtonActive]}
+          onPress={() => setShowSubtitlePicker(true)}
+        >
+          <Ionicons name="text" size={20} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
+          <Text style={[styles.ccButtonText, selectedSubtitle && styles.ccButtonTextActive]}>
+            {selectedSubtitle ? subtitles.find(s => s.url === selectedSubtitle)?.langName || 'CC' : 'CC'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Subtitle Picker Modal */}
+      <Modal
+        visible={showSubtitlePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSubtitlePicker(false)}
+      >
+        <View style={styles.subtitleModalOverlay}>
+          <View style={styles.subtitleModal}>
+            <View style={styles.subtitleModalHeader}>
+              <Text style={styles.subtitleModalTitle}>Select Subtitles</Text>
+              <TouchableOpacity onPress={() => setShowSubtitlePicker(false)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            
+            <FlatList
+              data={[{ id: 'off', url: '', lang: 'off', langName: 'Off' }, ...subtitles]}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.subtitleItem,
+                    (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemActive
+                  ]}
+                  onPress={() => {
+                    setSelectedSubtitle(item.lang === 'off' ? null : item.url);
+                    setShowSubtitlePicker(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.subtitleItemText,
+                    (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemTextActive
+                  ]}>
+                    {item.langName}
+                  </Text>
+                  {(item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && (
+                    <Ionicons name="checkmark" size={20} color="#B8A05C" />
+                  )}
+                </TouchableOpacity>
+              )}
+              style={styles.subtitleList}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
