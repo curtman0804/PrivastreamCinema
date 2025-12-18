@@ -127,25 +127,34 @@ export default function DiscoverScreen() {
               {content?.movies && content.movies.length > 0 && (
                 <ServiceRow
                   serviceName={serviceName}
-                  items={content.movies}
+                  items={content.movies.slice(0, 30)}
                   onItemPress={handleItemPress}
+                  onSeeAll={content.movies.length > 10 ? () => {
+                    router.push(`/category/${encodeURIComponent(serviceName)}/movies`);
+                  } : undefined}
                 />
               )}
               {content?.series && content.series.length > 0 && (
                 <ServiceRow
                   serviceName={serviceName}
-                  items={content.series}
+                  items={content.series.slice(0, 30)}
                   onItemPress={handleItemPress}
+                  onSeeAll={content.series.length > 10 ? () => {
+                    router.push(`/category/${encodeURIComponent(serviceName)}/series`);
+                  } : undefined}
                 />
               )}
               {content?.channels && content.channels.length > 0 && (
                 <ServiceRow
                   serviceName={serviceName}
-                  items={content.channels.map((ch: any) => ({
+                  items={content.channels.slice(0, 30).map((ch: any) => ({
                     ...ch,
                     type: 'tv' as const,
                   }))}
                   onItemPress={handleItemPress}
+                  onSeeAll={content.channels.length > 10 ? () => {
+                    router.push(`/category/${encodeURIComponent(serviceName)}/channels`);
+                  } : undefined}
                 />
               )}
             </View>
