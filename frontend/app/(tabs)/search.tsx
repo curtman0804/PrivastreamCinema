@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,10 @@ import {
   FlatList,
   ActivityIndicator,
   Dimensions,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { SearchBar } from '../../src/components/SearchBar';
@@ -20,21 +21,59 @@ const CARD_WIDTH = (width - 64) / 3;
 
 export default function SearchScreen() {
   const router = useRouter();
+  const { q: queryParam } = useLocalSearchParams<{ q?: string }>();
   const { searchResults, isLoadingSearch, search, clearSearch } = useContentStore();
   const [hasSearched, setHasSearched] = useState(false);
+  const [currentQuery, setCurrentQuery] = useState<string>('');
+  const hasTriggeredInitialSearch = useRef(false);
+
+  // Auto-trigger search when navigated to with a query parameter (from genre/cast/director tags)
+  useEffect(() => {
+    if (queryParam && !hasTriggeredInitialSearch.current) {
+      hasTriggeredInitialSearch.current = true;
+      const decodedQuery = decodeURIComponent(queryParam);
+      setCurrentQuery(decodedQuery);
+      setHasSearched(true);
+      search(decodedQuery);
+    }
+  }, [queryParam, search]);
+
+  // Reset when component unmounts or query changes
+  useEffect(() => {
+    return () => {
+      hasTriggeredInitialSearch.current = false;
+    };
+  }, [queryParam]);
 
   const handleSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
       clearSearch();
       setHasSearched(false);
+      setCurrentQuery('');
       return;
     }
+    setCurrentQuery(query);
     setHasSearched(true);
     await search(query);
   }, [search, clearSearch]);
 
   const handleItemPress = (item: SearchResult) => {
-    router.push(`/details/${item.type}/${item.id}`);
+    router.push({
+      pathname: `/details/${item.type}/${encodeURIComponent(item.id)}`,
+      params: {
+        name: item.name,
+        poster: item.poster,
+      },
+    });
+  };
+
+  const handleClearSearch = () => {
+    clearSearch();
+    setHasSearched(false);
+    setCurrentQuery('');
+    hasTriggeredInitialSearch.current = false;
+    // Navigate back to search without query param
+    router.replace('/search');
   };
 
   const renderItem = ({ item }: { item: SearchResult }) => (
@@ -53,7 +92,19 @@ export default function SearchScreen() {
         <Text style={styles.headerTitle}>Search</Text>
       </View>
 
-      <SearchBar onSearch={handleSearch} />
+      <SearchBar onSearch={handleSearch} initialValue={currentQuery} />
+
+      {/* Show current search query tag when searching from details page */}
+      {currentQuery && hasSearched && (
+        <View style={styles.searchTagContainer}>
+          <View style={styles.searchTag}>
+            <Text style={styles.searchTagText}>Results for "{currentQuery}"</Text>
+            <TouchableOpacity onPress={handleClearSearch} style={styles.clearButton}>
+              <Ionicons name="close-circle" size={18} color="#888" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {isLoadingSearch ? (
         <View style={styles.centerContainer}>
