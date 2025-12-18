@@ -165,7 +165,7 @@ export default function CategoryScreen() {
           keyExtractor={(item) => item.id || item.imdb_id || Math.random().toString()}
           numColumns={3}
           contentContainerStyle={styles.gridContent}
-          showsVerticalScrollIndicator={true}
+          showsVerticalScrollIndicator={false}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
           initialNumToRender={30}
