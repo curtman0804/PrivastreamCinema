@@ -172,6 +172,9 @@ export default function PlayerScreen() {
     
     lockLandscape();
     
+    // Fetch subtitles when player loads
+    fetchSubtitles();
+    
     return () => {
       // Unlock orientation when leaving player
       if (Platform.OS !== 'web') {
