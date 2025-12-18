@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/api/client';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { Modal, FlatList } from 'react-native';
 
 // Conditionally import WebView only on native (fallback for HLS)
 let WebView: any = null;
