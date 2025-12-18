@@ -132,23 +132,23 @@ export default function DetailsScreen() {
       console.log('[DETAILS] Error saving to AsyncStorage:', e);
     }
     
-    // Check if this is an xHamster stream - these have IP-restricted URLs that need browser playback
-    const isXHamsterStream = stream.addon === 'xHamster' || (stream.name && stream.name.includes('xHamster'));
-    const contentId = id as string;
-    
-    if (isXHamsterStream && contentId.startsWith('http')) {
-      // xHamster streams need to be opened in browser due to IP restrictions
-      Alert.alert(
-        'Open in Browser',
-        'xHamster videos play best in your browser. Open the video page?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Open', 
-            onPress: () => Linking.openURL(contentId).catch(err => console.log('Error opening URL:', err))
-          },
-        ]
-      );
+    // Check if this is a proxy stream (xHamster, etc.) - need to convert relative URL to absolute
+    if (stream.url && stream.url.startsWith('/api/proxy/')) {
+      // Convert relative proxy URL to absolute URL
+      const baseUrl = process.env.EXPO_PUBLIC_API_URL || '';
+      const absoluteUrl = baseUrl ? `${baseUrl}${stream.url}` : stream.url;
+      console.log('[DETAILS] Using proxy stream:', absoluteUrl);
+      
+      router.push({
+        pathname: '/player',
+        params: { 
+          directUrl: absoluteUrl,
+          title: contentTitle,
+          isLive: 'false',
+          contentType: cType,
+          contentId: imdbId,
+        },
+      });
       return;
     }
     
