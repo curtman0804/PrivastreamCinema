@@ -153,19 +153,32 @@ export default function CategoryScreen() {
         <FlatList
           data={items}
           renderItem={renderItem}
-          keyExtractor={(item, index) => item.id || item.imdb_id || index.toString()}
+          keyExtractor={(item, index) => `${item.id || item.imdb_id || ''}-${index}`}
           numColumns={3}
           contentContainerStyle={styles.gridContent}
-          showsVerticalScrollIndicator={false}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
+          showsVerticalScrollIndicator={true}
+          onEndReached={() => {
+            console.log('onEndReached triggered, hasMore:', hasMore, 'isLoadingMore:', isLoadingMore);
+            if (hasMore && !isLoadingMore) {
+              handleLoadMore();
+            }
+          }}
+          onEndReachedThreshold={0.3}
           ListFooterComponent={
-            isLoadingMore ? (
-              <View style={styles.loadMoreContainer}>
-                <ActivityIndicator size="small" color="#B8A05C" />
-                <Text style={styles.loadMoreText}>Loading more...</Text>
-              </View>
-            ) : null
+            <View style={styles.footerContainer}>
+              {isLoadingMore ? (
+                <View style={styles.loadMoreContainer}>
+                  <ActivityIndicator size="small" color="#B8A05C" />
+                  <Text style={styles.loadMoreText}>Loading more...</Text>
+                </View>
+              ) : hasMore ? (
+                <TouchableOpacity style={styles.loadMoreButton} onPress={handleLoadMore}>
+                  <Text style={styles.loadMoreButtonText}>Load More ({items.length} loaded)</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.endText}>End of catalog ({items.length} items)</Text>
+              )}
+            </View>
           }
         />
       )}
