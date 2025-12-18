@@ -933,6 +933,17 @@ async def get_all_streams(
     # These need to be fetched from the jaxxx addon which resolves the actual stream URL
     if content_id.startswith('http://') or content_id.startswith('https://'):
         logger.info(f"URL-based content ID detected: {content_id[:60]}...")
+        
+        # Check if it's an xHamster URL - use direct extraction since Jaxxx doesn't support it
+        if 'xhamster.com' in content_id:
+            logger.info(f"xHamster URL detected, using direct extraction")
+            xhamster_streams = await extract_xhamster_video(content_id)
+            if xhamster_streams:
+                return {"streams": xhamster_streams}
+            else:
+                logger.warning(f"xHamster extraction returned no streams")
+                return {"streams": []}
+        
         try:
             # Fetch from OnlyPorn/Jaxxx addon which can resolve these URLs to actual streams
             import urllib.parse
@@ -954,7 +965,8 @@ async def get_all_streams(
                             "addon": "OnlyPorn"
                         })
                     logger.info(f"OnlyPorn: Found {len(formatted)} streams")
-                    return {"streams": formatted}
+                    if formatted:
+                        return {"streams": formatted}
         except Exception as e:
             logger.warning(f"OnlyPorn stream fetch error: {e}")
         
