@@ -169,8 +169,9 @@ export const api = {
       return response.data;
     },
     getAllStreams: async (type: string, id: string): Promise<{ streams: Stream[] }> => {
-      // Fetch from backend first
-      const response = await apiClient.get(`/api/streams/${type}/${id}`);
+      // Fetch from backend first - encode ID to handle URLs and special characters
+      const encodedId = encodeURIComponent(id);
+      const response = await apiClient.get(`/api/streams/${type}/${encodedId}`);
       let allStreams = response.data.streams || [];
       
       // Also fetch directly from Torrentio on the client (bypasses Cloudflare)
