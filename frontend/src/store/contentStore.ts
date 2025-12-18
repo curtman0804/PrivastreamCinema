@@ -36,6 +36,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
   addons: [],
   library: null,
   searchResults: [],
+  currentPlaying: null,
   streams: [],
   isLoadingDiscover: false,
   isLoadingAddons: false,
