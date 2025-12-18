@@ -47,7 +47,9 @@ export default function DiscoverScreen() {
 
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
-    router.push(`/details/${item.type}/${id}`);
+    // Encode the ID to handle URLs and special characters in content IDs
+    const encodedId = encodeURIComponent(id);
+    router.push(`/details/${item.type}/${encodedId}`);
   };
 
   // Show loading only on initial load
