@@ -417,16 +417,7 @@ export default function PlayerScreen() {
     <View style={styles.container}>
       <StatusBar hidden />
       
-      {/* Header */}
-      <SafeAreaView style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.title} numberOfLines={1}>
-          {title || 'Video Player'}
-        </Text>
-        <View style={styles.placeholder} />
-      </SafeAreaView>
+      {/* Header removed - using custom controls overlay */}
 
       {/* Loading Overlay */}
       {isLoading && !error && (
