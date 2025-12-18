@@ -454,7 +454,7 @@ export default function PlayerScreen() {
       {/* Video Player with Custom Overlay Controls */}
       {streamUrl && !error && !isLoading && (
         Platform.OS === 'web' ? (
-          <View style={styles.webview}>
+          <View style={styles.videoContainer}>
             <video
               src={streamUrl}
               controls
@@ -467,6 +467,22 @@ export default function PlayerScreen() {
                 objectFit: 'contain'
               } as any}
             />
+            {/* Web Overlay Controls - Back and CC only */}
+            <View style={styles.webControlsOverlay}>
+              <TouchableOpacity 
+                style={styles.controlButton} 
+                onPress={() => router.back()}
+              >
+                <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
+                onPress={() => setShowSubtitlePicker(true)}
+              >
+                <Ionicons name="text" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
+              </TouchableOpacity>
+            </View>
           </View>
         ) : (
           <TouchableOpacity 
