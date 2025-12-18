@@ -1465,6 +1465,61 @@ async def get_discover(current_user: User = Depends(get_current_user)):
     
     return result
 
+@api_router.get("/content/category/{service_name}/{content_type}")
+async def get_category_content(
+    service_name: str,
+    content_type: str,  # movies, series, channels
+    skip: int = 0,
+    limit: int = 100,
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch full category content from an addon with pagination"""
+    # Get user's addons
+    addons = await addons_collection.find({"userId": current_user.id}).to_list(100)
+    
+    for addon in addons:
+        manifest = addon.get('manifest', {})
+        addon_name = manifest.get('name', 'Unknown')
+        
+        if addon_name != service_name:
+            continue
+            
+        base_url = addon.get('manifestUrl', '').replace('/manifest.json', '')
+        catalogs = manifest.get('catalogs', [])
+        
+        items = []
+        for catalog in catalogs:
+            catalog_type = catalog.get('type', '')
+            catalog_id = catalog.get('id', '')
+            
+            # Match content type
+            if content_type == 'movies' and catalog_type != 'movie':
+                continue
+            if content_type == 'series' and catalog_type != 'series':
+                continue
+            if content_type == 'channels' and catalog_type != 'tv':
+                continue
+                
+            try:
+                # Build URL with skip parameter for pagination
+                url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                if skip > 0:
+                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}/skip={skip}.json"
+                
+                async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+                    response = await client.get(url)
+                    if response.status_code == 200:
+                        metas = response.json().get('metas', [])
+                        # Filter out items with empty names or IDs
+                        metas = [m for m in metas if m.get('name') and m.get('id')]
+                        items.extend(metas)
+            except Exception as e:
+                logger.warning(f"Error fetching category {catalog_id}: {e}")
+                
+        return {"items": items[:limit], "total": len(items), "hasMore": len(items) >= limit}
+    
+    return {"items": [], "total": 0, "hasMore": False}
+
 @api_router.get("/content/search")
 async def search_content(q: str, current_user: User = Depends(get_current_user)):
     """Search content via Cinemeta with strict relevance filtering and stream availability check"""
