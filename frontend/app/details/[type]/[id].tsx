@@ -131,7 +131,19 @@ export default function DetailsScreen() {
       console.log('[DETAILS] Error saving to AsyncStorage:', e);
     }
     
-    // Check if this is a proxy stream (xHamster, etc.) - need to convert relative URL to absolute
+    // Check if this is an external URL stream (xHamster, etc.) that needs to open in browser
+    if (stream.externalUrl || stream.requiresWebView) {
+      const externalUrl = stream.externalUrl || stream.url;
+      console.log('[DETAILS] Opening external URL in browser:', externalUrl);
+      
+      // Open in external browser - this is the only way to play IP-restricted content
+      Linking.openURL(externalUrl).catch(err => {
+        console.error('Error opening URL:', err);
+      });
+      return;
+    }
+    
+    // Check if this is a proxy stream - need to convert relative URL to absolute
     if (stream.url && stream.url.startsWith('/api/proxy/')) {
       // Convert relative proxy URL to absolute URL and include auth token
       const baseUrl = process.env.EXPO_PUBLIC_API_URL || '';
