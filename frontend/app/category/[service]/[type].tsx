@@ -32,9 +32,16 @@ export default function CategoryScreen() {
 
   const decodedService = service ? decodeURIComponent(service) : '';
 
-  const fetchCategoryContent = useCallback(async (skipValue: number = 0, append: boolean = false) => {
+  const isLoadingRef = React.useRef(false);
+  const skipRef = React.useRef(0);
+  const hasMoreRef = React.useRef(true);
+  const initialLoadDone = React.useRef(false);
+
+  const fetchCategoryContent = async (skipValue: number, append: boolean) => {
     if (!decodedService || !type) return;
-    if (append && isLoadingMore) return; // Prevent duplicate calls
+    if (isLoadingRef.current) return; // Prevent duplicate calls
+    
+    isLoadingRef.current = true;
     
     try {
       if (append) {
@@ -48,63 +55,56 @@ export default function CategoryScreen() {
       const data = response.data;
       
       const newItems = data.items || [];
-      console.log(`Received ${newItems.length} items, hasMore=${data.hasMore}`);
+      console.log(`Received ${newItems.length} items`);
       
-      if (append) {
+      if (append && newItems.length > 0) {
         setItems(prev => {
-          // Deduplicate items based on ID
           const existingIds = new Set(prev.map(item => item.id || item.imdb_id));
           const uniqueNewItems = newItems.filter((item: ContentItem) => !existingIds.has(item.id || item.imdb_id));
           return [...prev, ...uniqueNewItems];
         });
-      } else {
+      } else if (!append) {
         setItems(newItems);
       }
       
-      // Keep loading if we got items (most Stremio addons have unlimited pagination)
-      setHasMore(newItems.length > 0);
-      setSkip(skipValue + newItems.length);
+      const moreAvailable = newItems.length >= 20;
+      hasMoreRef.current = moreAvailable;
+      setHasMore(moreAvailable);
+      skipRef.current = skipValue + newItems.length;
+      setSkip(skipRef.current);
     } catch (error) {
       console.log('Error fetching category:', error);
-      // Fallback to discover data
       if (!append && discoverData) {
         const serviceData = discoverData.services[decodedService];
         if (serviceData) {
           let categoryItems: ContentItem[] = [];
-          if (type === 'movies') {
-            categoryItems = serviceData.movies || [];
-          } else if (type === 'series') {
-            categoryItems = serviceData.series || [];
-          } else if (type === 'channels') {
-            categoryItems = serviceData.channels || [];
-          }
+          if (type === 'movies') categoryItems = serviceData.movies || [];
+          else if (type === 'series') categoryItems = serviceData.series || [];
+          else if (type === 'channels') categoryItems = serviceData.channels || [];
           setItems(categoryItems.filter(Boolean));
+          hasMoreRef.current = false;
           setHasMore(false);
         }
       }
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
+      isLoadingRef.current = false;
     }
-  }, [decodedService, type, discoverData, isLoadingMore]);
+  };
 
   useEffect(() => {
-    fetchCategoryContent(0, false);
-  }, [fetchCategoryContent]);
-
-  const loadMoreRef = React.useRef(false);
-  
-  const handleLoadMore = useCallback(() => {
-    // Debounce and prevent duplicate calls
-    if (loadMoreRef.current || isLoadingMore || !hasMore) {
-      return;
+    if (!initialLoadDone.current && decodedService && type) {
+      initialLoadDone.current = true;
+      fetchCategoryContent(0, false);
     }
-    loadMoreRef.current = true;
-    console.log(`Loading more from skip=${skip}, hasMore=${hasMore}`);
-    fetchCategoryContent(skip, true).finally(() => {
-      loadMoreRef.current = false;
-    });
-  }, [isLoadingMore, hasMore, skip, fetchCategoryContent]);
+  }, [decodedService, type]);
+
+  const handleLoadMore = useCallback(() => {
+    if (isLoadingRef.current || !hasMoreRef.current) return;
+    console.log(`Loading more from skip=${skipRef.current}`);
+    fetchCategoryContent(skipRef.current, true);
+  }, []);
 
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
