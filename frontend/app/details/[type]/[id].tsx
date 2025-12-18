@@ -104,13 +104,15 @@ export default function DetailsScreen() {
     // Get the IMDB ID for subtitles - use baseId for episodes
     const imdbId = baseId || (id as string);
     const contentTitle = content?.name || 'Video';
+    const cType = type as string;
     
     // Set current playing info in global store for subtitles
-    setCurrentPlaying({
-      contentType: type as string,
+    useContentStore.getState().setCurrentPlaying({
+      contentType: cType,
       contentId: imdbId,
       title: contentTitle,
     });
+    console.log('Set current playing:', cType, imdbId, contentTitle);
     
     if (stream.infoHash) {
       // Torrent stream - use torrent player
