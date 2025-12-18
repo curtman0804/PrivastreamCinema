@@ -154,7 +154,8 @@ export const api = {
       return response.data;
     },
     getMeta: async (type: string, id: string): Promise<ContentItem> => {
-      const response = await apiClient.get(`/api/content/meta/${type}/${id}`);
+      const encodedId = encodeURIComponent(id);
+      const response = await apiClient.get(`/api/content/meta/${type}/${encodedId}`);
       return response.data;
     },
   },
