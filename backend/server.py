@@ -959,9 +959,8 @@ async def get_all_streams(
     if content_id.startswith('http://') or content_id.startswith('https://'):
         logger.info(f"URL-based content ID detected: {content_id[:60]}...")
         
-        # Check if it's a URL from sites with IP-restricted streams
-        # These need to open in browser as the video URLs are bound to specific IPs
-        site_name = None
+        # Determine site name for labeling
+        site_name = "Video"
         if 'xhamster.com' in content_id:
             site_name = "xHamster"
         elif 'eporner.com' in content_id:
@@ -969,22 +968,8 @@ async def get_all_streams(
         elif 'porntrex.com' in content_id:
             site_name = "PornTrex"
         
-        if site_name:
-            logger.info(f"{site_name} URL detected - using browser streaming (IP restrictions)")
-            
-            # Return stream with externalUrl flag so frontend knows to open in browser
-            return {"streams": [
-                {
-                    "name": f"{site_name} Player",
-                    "title": f"{site_name} • Open in Browser",
-                    "externalUrl": content_id,
-                    "addon": site_name,
-                    "requiresWebView": True
-                }
-            ]}
-        
         try:
-            # Fetch from OnlyPorn/Jaxxx addon which can resolve these URLs to actual streams
+            # Fetch fresh streams from Jaxxx addon - try to play in-app first
             import urllib.parse
             encoded_id = urllib.parse.quote(content_id, safe='')
             stream_url = f"https://07b88951aaab-jaxxx-v2.baby-beamup.club/stream/{content_type}/{encoded_id}.json"
@@ -994,20 +979,45 @@ async def get_all_streams(
                 if response.status_code == 200:
                     data = response.json()
                     streams = data.get('streams', [])
-                    # Format streams for our app
+                    
+                    # Format streams for our app - include actual playable URLs
                     formatted = []
                     for s in streams:
-                        formatted.append({
-                            "name": s.get('name', 'Stream'),
-                            "title": f"OnlyPorn • {s.get('name', 'Stream')}",
-                            "url": s.get('url'),
-                            "addon": "OnlyPorn"
-                        })
-                    logger.info(f"OnlyPorn: Found {len(formatted)} streams")
-                    if formatted:
-                        return {"streams": formatted}
+                        stream_url_value = s.get('url', '')
+                        stream_name = s.get('name', 'Stream')
+                        if stream_url_value:
+                            formatted.append({
+                                "name": f"{site_name} {stream_name}",
+                                "title": f"{site_name} • {stream_name}",
+                                "url": stream_url_value,
+                                "addon": site_name
+                            })
+                    
+                    # Always add browser fallback option at the end
+                    formatted.append({
+                        "name": f"Open in Browser",
+                        "title": f"{site_name} • Open in Browser (if streams don't work)",
+                        "externalUrl": content_id,
+                        "addon": site_name,
+                        "requiresWebView": True
+                    })
+                    
+                    logger.info(f"{site_name}: Found {len(formatted)-1} streams + browser fallback")
+                    return {"streams": formatted}
         except Exception as e:
-            logger.warning(f"OnlyPorn stream fetch error: {e}")
+            logger.warning(f"{site_name} stream fetch error: {e}")
+        
+        # If Jaxxx fails, return browser-only option
+        logger.info(f"{site_name}: Jaxxx failed, returning browser-only option")
+        return {"streams": [
+            {
+                "name": f"Open in Browser",
+                "title": f"{site_name} • Open in Browser",
+                "externalUrl": content_id,
+                "addon": site_name,
+                "requiresWebView": True
+            }
+        ]}
         
         # Fallback - return empty if addon fails
         return {"streams": []}
