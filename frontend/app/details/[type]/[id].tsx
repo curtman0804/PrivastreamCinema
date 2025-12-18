@@ -288,9 +288,31 @@ export default function DetailsScreen() {
             <Text style={styles.sectionTitle}>Genres</Text>
             <View style={styles.pillContainer}>
               {content.genre.map((g, i) => (
-                <View key={i} style={styles.genrePill}>
+                <TouchableOpacity 
+                  key={i} 
+                  style={styles.genrePill}
+                  onPress={() => router.push(`/search?q=${encodeURIComponent(g)}`)}
+                >
                   <Text style={styles.genrePillText}>{g}</Text>
-                </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Director */}
+        {content?.director && Array.isArray(content.director) && content.director.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Director</Text>
+            <View style={styles.pillContainer}>
+              {content.director.map((d, i) => (
+                <TouchableOpacity 
+                  key={i} 
+                  style={styles.directorPill}
+                  onPress={() => router.push(`/search?q=${encodeURIComponent(d)}`)}
+                >
+                  <Text style={styles.directorPillText}>{d}</Text>
+                </TouchableOpacity>
               ))}
             </View>
           </View>
@@ -302,9 +324,13 @@ export default function DetailsScreen() {
             <Text style={styles.sectionTitle}>Cast</Text>
             <View style={styles.pillContainer}>
               {content.cast.slice(0, 6).map((actor, i) => (
-                <View key={i} style={styles.castPill}>
+                <TouchableOpacity 
+                  key={i} 
+                  style={styles.castPill}
+                  onPress={() => router.push(`/search?q=${encodeURIComponent(actor)}`)}
+                >
                   <Text style={styles.castPillText}>{actor}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           </View>
