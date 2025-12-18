@@ -25,14 +25,22 @@ export default function SearchScreen() {
   const router = useRouter();
   const { searchResults, isLoadingSearch, search, clearSearch } = useContentStore();
   const [searchQuery, setSearchQuery] = useState(q || '');
+  const [hasSearched, setHasSearched] = useState(false);
 
   useEffect(() => {
-    if (q) {
+    if (q && !hasSearched) {
       setSearchQuery(q);
+      setHasSearched(true);
       search(q);
     }
-    return () => clearSearch();
-  }, [q]);
+  }, [q, search, hasSearched]);
+
+  // Reset search state when leaving
+  useEffect(() => {
+    return () => {
+      setHasSearched(false);
+    };
+  }, []);
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
