@@ -1565,7 +1565,7 @@ async def get_category_content(
 ):
     """Fetch full category content from an addon with pagination"""
     # Get user's addons
-    addons = await addons_collection.find({"userId": current_user.id}).to_list(100)
+    addons = await db.addons.find({"userId": current_user.id}).to_list(100)
     
     # First try to match by catalog name (for separate sections)
     for addon in addons:
