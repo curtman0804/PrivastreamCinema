@@ -111,10 +111,10 @@ export default function PlayerScreen() {
   const continuePollingRef = useRef(true);
 
   // Fetch subtitles for the content
-  const fetchSubtitles = async () => {
-    if (!type || !id) return;
+  const fetchSubtitles = async (contentType: string, contentId: string) => {
+    if (!contentType || !contentId) return;
     try {
-      const response = await api.get(`/api/subtitles/${type}/${id}`);
+      const response = await api.get(`/api/subtitles/${contentType}/${contentId}`);
       if (response.data?.subtitles) {
         setSubtitles(response.data.subtitles);
         console.log(`Loaded ${response.data.subtitles.length} subtitle languages`);
