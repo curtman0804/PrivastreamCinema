@@ -249,19 +249,18 @@ export default function PlayerScreen() {
     };
   }, []);
 
-  // Get current playing info from global store
-  const currentPlaying = useContentStore((state) => state.currentPlaying);
-
-  // Fetch subtitles when currentPlaying info is available
+  // Fetch subtitles when player loads with contentType and contentId params
   useEffect(() => {
-    console.log('Current playing info:', currentPlaying);
-    if (currentPlaying?.contentId) {
-      console.log('Fetching subtitles for:', currentPlaying.contentType, currentPlaying.contentId);
-      fetchSubtitles(currentPlaying.contentType, currentPlaying.contentId);
+    const cType = contentType as string;
+    const cId = contentId as string;
+    console.log('Player params - contentType:', cType, 'contentId:', cId);
+    if (cId) {
+      console.log('Fetching subtitles for:', cType || 'movie', cId);
+      fetchSubtitles(cType || 'movie', cId);
     } else {
-      console.log('No current playing info available for subtitles');
+      console.log('No contentId param, cannot fetch subtitles');
     }
-  }, [currentPlaying]);
+  }, [contentType, contentId]);
 
   useEffect(() => {
     continuePollingRef.current = true;
