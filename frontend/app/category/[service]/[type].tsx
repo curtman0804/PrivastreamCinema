@@ -157,28 +157,23 @@ export default function CategoryScreen() {
           numColumns={3}
           contentContainerStyle={styles.gridContent}
           showsVerticalScrollIndicator={true}
-          onEndReached={() => {
-            console.log('onEndReached triggered, hasMore:', hasMore, 'isLoadingMore:', isLoadingMore);
-            if (hasMore && !isLoadingMore) {
-              handleLoadMore();
-            }
-          }}
-          onEndReachedThreshold={0.3}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.8}
+          initialNumToRender={30}
+          maxToRenderPerBatch={30}
+          windowSize={10}
+          removeClippedSubviews={true}
           ListFooterComponent={
-            <View style={styles.footerContainer}>
-              {isLoadingMore ? (
-                <View style={styles.loadMoreContainer}>
-                  <ActivityIndicator size="small" color="#B8A05C" />
-                  <Text style={styles.loadMoreText}>Loading more...</Text>
-                </View>
-              ) : hasMore ? (
-                <TouchableOpacity style={styles.loadMoreButton} onPress={handleLoadMore}>
-                  <Text style={styles.loadMoreButtonText}>Load More ({items.length} loaded)</Text>
-                </TouchableOpacity>
-              ) : (
+            isLoadingMore ? (
+              <View style={styles.loadMoreContainer}>
+                <ActivityIndicator size="small" color="#B8A05C" />
+                <Text style={styles.loadMoreText}>Loading more... ({items.length} loaded)</Text>
+              </View>
+            ) : !hasMore && items.length > 0 ? (
+              <View style={styles.footerContainer}>
                 <Text style={styles.endText}>End of catalog ({items.length} items)</Text>
-              )}
-            </View>
+              </View>
+            ) : null
           }
         />
       )}
