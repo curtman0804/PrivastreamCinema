@@ -766,7 +766,7 @@ async def extract_redtube_video(video_id: str) -> List[Dict]:
                 html = response.text
                 streams = []
                 
-                # Pattern 1: Look for mediaDefinitions JSON
+                # Look for mediaDefinitions JSON
                 media_match = re.search(r'"mediaDefinitions"\s*:\s*\[(.*?)\]', html, re.DOTALL)
                 if media_match:
                     try:
@@ -776,38 +776,47 @@ async def extract_redtube_video(video_id: str) -> List[Dict]:
                         for item in media_data:
                             if isinstance(item, dict) and item.get('videoUrl'):
                                 format_type = item.get('format', 'Unknown')
-                                video_url = item.get('videoUrl', '')
+                                media_url = item.get('videoUrl', '')
                                 
                                 # Convert relative URLs to absolute
-                                if video_url.startswith('/'):
-                                    video_url = f"https://www.redtube.com{video_url}"
+                                if media_url.startswith('/'):
+                                    media_url = f"https://www.redtube.com{media_url}"
+                                media_url = media_url.replace('\\/', '/')
                                 
-                                # Unescape the URL
-                                video_url = video_url.replace('\\/', '/')
-                                
-                                streams.append({
-                                    "name": f"RedTube {format_type.upper()}",
-                                    "title": f"RedTube • {format_type.upper()} Stream",
-                                    "url": video_url,
-                                    "addon": "RedTube"
-                                })
+                                # Fetch the actual video URLs from the media endpoint
+                                try:
+                                    media_resp = await client.get(media_url, headers=headers, timeout=10.0)
+                                    if media_resp.status_code == 200:
+                                        video_list = media_resp.json()
+                                        for video_item in video_list:
+                                            if isinstance(video_item, dict) and video_item.get('videoUrl'):
+                                                quality = video_item.get('quality', 'Unknown')
+                                                actual_url = video_item.get('videoUrl', '')
+                                                fmt = video_item.get('format', format_type)
+                                                
+                                                streams.append({
+                                                    "name": f"RedTube {quality}p",
+                                                    "title": f"RedTube • {quality}p {fmt.upper()}",
+                                                    "url": actual_url,
+                                                    "addon": "RedTube"
+                                                })
+                                except Exception as e:
+                                    logger.warning(f"Error fetching media endpoint: {e}")
+                                    
                     except Exception as e:
                         logger.warning(f"Error parsing mediaDefinitions: {e}")
                 
-                # Pattern 2: Look for direct video URLs with this video ID
-                video_urls = re.findall(rf'(https?://[^\s"\']*{video_id}[^\s"\']*\.mp4[^\s"\']*)', html)
-                for vid_url in video_urls[:2]:
-                    if vid_url not in [s.get('url') for s in streams]:
-                        streams.append({
-                            "name": "RedTube Direct",
-                            "title": "RedTube • Direct MP4",
-                            "url": vid_url.replace('\\/', '/'),
-                            "addon": "RedTube"
-                        })
+                # Remove duplicates based on URL
+                seen_urls = set()
+                unique_streams = []
+                for s in streams:
+                    if s['url'] not in seen_urls:
+                        seen_urls.add(s['url'])
+                        unique_streams.append(s)
                 
-                if streams:
-                    logger.info(f"Extracted {len(streams)} streams from RedTube for video {video_id}")
-                    return streams
+                if unique_streams:
+                    logger.info(f"Extracted {len(unique_streams)} streams from RedTube for video {video_id}")
+                    return unique_streams
                 else:
                     logger.warning(f"No streams found in RedTube page for {video_id}")
                     
