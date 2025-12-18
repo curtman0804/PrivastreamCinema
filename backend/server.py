@@ -750,6 +750,9 @@ async def get_addon_streams(
 
 async def extract_redtube_video(video_id: str) -> List[Dict]:
     """Extract actual video URLs from RedTube"""
+    import re
+    import json
+    
     try:
         url = f"https://www.redtube.com/{video_id}"
         headers = {
@@ -763,59 +766,53 @@ async def extract_redtube_video(video_id: str) -> List[Dict]:
                 html = response.text
                 streams = []
                 
-                # Look for video URLs in the page - RedTube embeds them in JavaScript
-                import re
-                
-                # Pattern 1: Look for mediaDefinitions in JavaScript
-                media_match = re.search(r'mediaDefinitions\s*[=:]\s*(\[.*?\])', html, re.DOTALL)
+                # Pattern 1: Look for mediaDefinitions JSON
+                media_match = re.search(r'"mediaDefinitions"\s*:\s*\[(.*?)\]', html, re.DOTALL)
                 if media_match:
                     try:
-                        import json
-                        # Clean up the JSON
-                        media_json = media_match.group(1)
-                        media_json = re.sub(r',\s*]', ']', media_json)  # Remove trailing commas
+                        media_json = '[' + media_match.group(1) + ']'
                         media_data = json.loads(media_json)
                         
                         for item in media_data:
                             if isinstance(item, dict) and item.get('videoUrl'):
-                                quality = item.get('quality', 'Unknown')
-                                video_url = item.get('videoUrl')
+                                format_type = item.get('format', 'Unknown')
+                                video_url = item.get('videoUrl', '')
+                                
+                                # Convert relative URLs to absolute
+                                if video_url.startswith('/'):
+                                    video_url = f"https://www.redtube.com{video_url}"
+                                
+                                # Unescape the URL
+                                video_url = video_url.replace('\\/', '/')
+                                
                                 streams.append({
-                                    "name": f"RedTube {quality}p",
-                                    "title": f"RedTube • {quality}p Direct",
+                                    "name": f"RedTube {format_type.upper()}",
+                                    "title": f"RedTube • {format_type.upper()} Stream",
                                     "url": video_url,
                                     "addon": "RedTube"
                                 })
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Error parsing mediaDefinitions: {e}")
                 
-                # Pattern 2: Look for direct MP4 URLs
-                mp4_matches = re.findall(r'(https?://[^\s"\']+\.mp4[^\s"\']*)', html)
-                for mp4_url in mp4_matches[:3]:  # Limit to 3
-                    if 'redtube' in mp4_url.lower() or 'phncdn' in mp4_url.lower():
+                # Pattern 2: Look for direct video URLs with this video ID
+                video_urls = re.findall(rf'(https?://[^\s"\']*{video_id}[^\s"\']*\.mp4[^\s"\']*)', html)
+                for vid_url in video_urls[:2]:
+                    if vid_url not in [s.get('url') for s in streams]:
                         streams.append({
                             "name": "RedTube Direct",
                             "title": "RedTube • Direct MP4",
-                            "url": mp4_url,
+                            "url": vid_url.replace('\\/', '/'),
                             "addon": "RedTube"
                         })
                 
-                # Pattern 3: Look for HLS/m3u8 URLs
-                hls_matches = re.findall(r'(https?://[^\s"\']+\.m3u8[^\s"\']*)', html)
-                for hls_url in hls_matches[:2]:
-                    streams.append({
-                        "name": "RedTube HLS",
-                        "title": "RedTube • HLS Stream",
-                        "url": hls_url,
-                        "addon": "RedTube"
-                    })
-                
                 if streams:
-                    logger.info(f"Extracted {len(streams)} streams from RedTube")
+                    logger.info(f"Extracted {len(streams)} streams from RedTube for video {video_id}")
                     return streams
+                else:
+                    logger.warning(f"No streams found in RedTube page for {video_id}")
                     
     except Exception as e:
-        logger.warning(f"Error extracting RedTube video: {e}")
+        logger.warning(f"Error extracting RedTube video {video_id}: {e}")
     
     return []
 
