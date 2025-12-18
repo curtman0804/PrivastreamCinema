@@ -844,14 +844,15 @@ async def extract_xhamster_video(video_url: str) -> list:
                 import re
                 import json
                 
-                # Pattern to find "sources" JSON object in the page
-                sources_match = re.search(r'"sources"\s*:\s*(\{[^}]+(?:\{[^}]*\}[^}]*)*\})', html)
-                if sources_match:
+                # Pattern to find "sources" JSON object in the page - use a more specific pattern
+                # Look for the h264 sources array directly
+                h264_match = re.search(r'"h264"\s*:\s*\[(.*?)\]', html, re.DOTALL)
+                if h264_match:
                     try:
-                        sources_json = sources_match.group(1)
+                        h264_json = "[" + h264_match.group(1) + "]"
                         # Clean up escaped slashes
-                        sources_json = sources_json.replace('\\/', '/')
-                        sources_data = json.loads(sources_json)
+                        h264_json = h264_json.replace('\\/', '/')
+                        sources_data = {"standard": {"h264": json.loads(h264_json)}}
                         
                         # Extract h264 streams from standard sources
                         if 'standard' in sources_data and 'h264' in sources_data['standard']:
