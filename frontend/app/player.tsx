@@ -751,31 +751,75 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
-  ccButton: {
-    position: 'absolute',
-    bottom: 60,
-    right: 16,
+  videoContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  controlsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'space-between',
+  },
+  topControls: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  topRightControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    zIndex: 100,
   },
-  ccButtonActive: {
-    backgroundColor: 'rgba(184, 160, 92, 0.3)',
-    borderWidth: 1,
-    borderColor: '#B8A05C',
+  controlButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
   },
-  ccButtonText: {
+  ccActive: {
+    backgroundColor: 'rgba(184, 160, 92, 0.5)',
+  },
+  centerControls: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playPauseButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  timeText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
+    fontWeight: '500',
+    minWidth: 50,
+    textAlign: 'center',
   },
-  ccButtonTextActive: {
-    color: '#B8A05C',
+  progressBarContainer: {
+    flex: 1,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 2,
+    marginHorizontal: 12,
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#B8A05C',
+    borderRadius: 2,
   },
   subtitleModalOverlay: {
     flex: 1,
