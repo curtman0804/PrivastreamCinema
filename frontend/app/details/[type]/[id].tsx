@@ -99,12 +99,13 @@ export default function DetailsScreen() {
       setContent(data);
     } catch (error) {
       console.log('Failed to fetch meta:', error);
+      // Use passed name/poster from discover page if available
       setContent({
         id: id!,
         imdb_id: id,
-        name: 'Unknown Title',
+        name: passedName || 'Unknown Title',
         type: type as 'movie' | 'series',
-        poster: '',
+        poster: passedPoster || '',
       });
     }
     setIsLoadingContent(false);
