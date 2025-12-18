@@ -44,7 +44,7 @@ export default function CategoryScreen() {
       }
       
       console.log(`Fetching category: ${decodedService}, skip=${skipValue}`);
-      const response = await api.get(`/api/content/category/${encodeURIComponent(decodedService)}/${type}?skip=${skipValue}&limit=100`);
+      const response = await apiClient.get(`/api/content/category/${encodeURIComponent(decodedService)}/${type}?skip=${skipValue}&limit=100`);
       const data = response.data;
       
       const newItems = data.items || [];
