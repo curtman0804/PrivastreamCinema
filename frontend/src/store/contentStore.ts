@@ -127,4 +127,8 @@ export const useContentStore = create<ContentState>((set, get) => ({
   clearSearch: () => {
     set({ searchResults: [] });
   },
+
+  setCurrentPlaying: (info) => {
+    set({ currentPlaying: info });
+  },
 }));
