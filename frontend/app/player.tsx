@@ -249,18 +249,26 @@ export default function PlayerScreen() {
     };
   }, []);
 
-  // Fetch subtitles when player loads with contentType and contentId params
+  // Fetch subtitles when player loads - with retry
   useEffect(() => {
-    const cType = contentType as string;
-    const cId = contentId as string;
-    console.log('Player params - contentType:', cType, 'contentId:', cId);
-    if (cId) {
-      console.log('Fetching subtitles for:', cType || 'movie', cId);
-      fetchSubtitles(cType || 'movie', cId);
-    } else {
-      console.log('No contentId param, cannot fetch subtitles');
-    }
-  }, [contentType, contentId]);
+    const fetchWithRetry = async () => {
+      // Wait a moment for params to be available
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const cType = contentType as string;
+      const cId = contentId as string;
+      console.log('Player params after delay - contentType:', cType, 'contentId:', cId);
+      
+      if (cId) {
+        console.log('Fetching subtitles for:', cType || 'movie', cId);
+        fetchSubtitles(cType || 'movie', cId);
+      } else {
+        console.log('No contentId param available');
+      }
+    };
+    
+    fetchWithRetry();
+  }, []);
 
   useEffect(() => {
     continuePollingRef.current = true;
