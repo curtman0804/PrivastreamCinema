@@ -210,9 +210,9 @@ export default function AddonsScreen() {
 
       {/* Disclaimer */}
       <View style={styles.disclaimer}>
-        <Ionicons name="shield-checkmark" size={18} color="#B8A05C" />
+        <Ionicons name="warning" size={18} color="#B8A05C" />
         <Text style={styles.disclaimerText}>
-          You are responsible for the addons you install. The app does not host or distribute any content.
+          This app supports third-party add-ons not affiliated with the developer. No content is hosted by the developer. Some add-ons may link to copyrighted or unauthorized material. Use is at your own risk and subject to applicable laws.
         </Text>
       </View>
 
