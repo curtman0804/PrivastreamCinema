@@ -182,14 +182,12 @@ export default function PlayerScreen() {
     };
   }, []);
 
-  // Fetch subtitles when type and id are available
+  // Fetch subtitles when contentType and contentId are available
   useEffect(() => {
-    const contentType = type as string;
-    const contentId = id as string;
     if (contentType && contentId) {
-      fetchSubtitles(contentType, contentId);
+      fetchSubtitles(contentType as string, contentId as string);
     }
-  }, [type, id]);
+  }, [contentType, contentId]);
 
   useEffect(() => {
     continuePollingRef.current = true;
