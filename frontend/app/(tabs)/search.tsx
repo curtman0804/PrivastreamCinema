@@ -154,6 +154,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFFFFF',
   },
+  searchTagContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  searchTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(184, 160, 92, 0.3)',
+  },
+  searchTagText: {
+    color: '#D4C78A',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  clearButton: {
+    marginLeft: 8,
+    padding: 2,
+  },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
