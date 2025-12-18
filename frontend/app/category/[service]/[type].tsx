@@ -13,7 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useContentStore } from '../../../src/store/contentStore';
-import { ContentItem, api } from '../../../src/api/client';
+import { ContentItem } from '../../../src/api/client';
+import apiClient from '../../../src/api/client';
 
 const { width } = Dimensions.get('window');
 const ITEM_WIDTH = (width - 48) / 3; // 3 columns with padding
