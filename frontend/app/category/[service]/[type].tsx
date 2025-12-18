@@ -211,4 +211,24 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: 'center',
   },
+  loadingText: {
+    color: '#999',
+    marginTop: 12,
+    fontSize: 14,
+  },
+  emptyText: {
+    color: '#666',
+    fontSize: 16,
+  },
+  loadMoreContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  loadMoreText: {
+    color: '#999',
+    marginLeft: 10,
+    fontSize: 14,
+  },
 });
