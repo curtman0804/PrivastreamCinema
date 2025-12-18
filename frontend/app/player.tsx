@@ -403,7 +403,7 @@ export default function PlayerScreen() {
         </View>
       )}
 
-      {/* Video Player - Web uses native video, native uses expo-av Video */}
+      {/* Video Player with Custom Overlay Controls */}
       {streamUrl && !error && !isLoading && (
         Platform.OS === 'web' ? (
           <View style={styles.webview}>
@@ -421,55 +421,82 @@ export default function PlayerScreen() {
             />
           </View>
         ) : (
-          <Video
-            source={{ uri: streamUrl }}
-            style={styles.videoPlayer}
-            useNativeControls
-            resizeMode={ResizeMode.CONTAIN}
-            shouldPlay
-            isLooping={false}
-            volume={1.0}
-            isMuted={false}
-            onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
-              if (status.isLoaded && status.isPlaying) {
-                // Video is playing
-              }
-            }}
-            onError={(error) => {
-              console.log('Video error:', error);
-              setError('Failed to play video. The audio codec may not be supported.');
-            }}
-          />
+          <TouchableOpacity 
+            activeOpacity={1} 
+            style={styles.videoContainer}
+            onPress={() => setShowControls(!showControls)}
+          >
+            <Video
+              ref={videoRef}
+              source={{ uri: streamUrl }}
+              style={styles.videoPlayer}
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+              isLooping={false}
+              volume={1.0}
+              isMuted={false}
+              onPlaybackStatusUpdate={handlePlaybackStatus}
+              onError={(error) => {
+                console.log('Video error:', error);
+                setError('Failed to play video. The audio codec may not be supported.');
+              }}
+            />
+            
+            {/* Custom Controls Overlay - fades in/out */}
+            {showControls && (
+              <View style={styles.controlsOverlay}>
+                {/* Top Bar - Back and CC */}
+                <View style={styles.topControls}>
+                  <TouchableOpacity 
+                    style={styles.controlButton} 
+                    onPress={() => router.back()}
+                  >
+                    <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+                  </TouchableOpacity>
+                  
+                  <View style={styles.topRightControls}>
+                    <TouchableOpacity 
+                      style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
+                      onPress={() => setShowSubtitlePicker(true)}
+                    >
+                      <Ionicons name="text" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
+                      style={styles.controlButton}
+                      onPress={openInExternalPlayer}
+                    >
+                      <Ionicons name="open-outline" size={24} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                
+                {/* Center Play/Pause */}
+                <View style={styles.centerControls}>
+                  <TouchableOpacity 
+                    style={styles.playPauseButton}
+                    onPress={togglePlayPause}
+                  >
+                    <Ionicons 
+                      name={isPlaying ? "pause" : "play"} 
+                      size={50} 
+                      color="#FFFFFF" 
+                    />
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Bottom Bar - Progress */}
+                <View style={styles.bottomControls}>
+                  <Text style={styles.timeText}>{formatTime(position)}</Text>
+                  <View style={styles.progressBarContainer}>
+                    <View style={[styles.progressBar, { width: `${(position / duration) * 100}%` }]} />
+                  </View>
+                  <Text style={styles.timeText}>{formatTime(duration)}</Text>
+                </View>
+              </View>
+            )}
+          </TouchableOpacity>
         )
-      )}
-
-      {/* External Player Button - always show on native when stream is ready */}
-      {streamUrl && !isLoading && !error && Platform.OS !== 'web' && (
-        <TouchableOpacity
-          style={styles.externalPlayerButton}
-          onPress={openInExternalPlayer}
-        >
-          <Ionicons name="open-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.externalPlayerText}>Open in VLC/External Player</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* CC Button - positioned at bottom center near native controls */}
-      {streamUrl && !isLoading && !error && (
-        <TouchableOpacity
-          style={[styles.ccButton, selectedSubtitle && styles.ccButtonActive]}
-          onPress={() => {
-            console.log('CC button pressed, subtitles available:', subtitles.length);
-            setShowSubtitlePicker(true);
-          }}
-        >
-          <Ionicons name="text" size={18} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
-          <Text style={[styles.ccButtonText, selectedSubtitle && styles.ccButtonTextActive]}>
-            {subtitles.length > 0 
-              ? (selectedSubtitle ? subtitles.find(s => s.url === selectedSubtitle)?.langName || 'CC' : 'CC')
-              : 'CC'}
-          </Text>
-        </TouchableOpacity>
       )}
 
       {/* Subtitle Picker Modal */}
