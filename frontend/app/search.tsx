@@ -23,20 +23,20 @@ const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
 export default function SearchScreen() {
   const { q } = useLocalSearchParams<{ q?: string }>();
   const router = useRouter();
-  const { searchResults, isSearching, searchContent, clearSearch } = useContentStore();
+  const { searchResults, isLoadingSearch, search, clearSearch } = useContentStore();
   const [searchQuery, setSearchQuery] = useState(q || '');
 
   useEffect(() => {
     if (q) {
       setSearchQuery(q);
-      searchContent(q);
+      search(q);
     }
     return () => clearSearch();
   }, [q]);
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
-      searchContent(searchQuery.trim());
+      search(searchQuery.trim());
     }
   };
 
