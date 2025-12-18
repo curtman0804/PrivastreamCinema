@@ -254,50 +254,48 @@ export default function PlayerScreen() {
     };
   }, []);
 
-  // Fetch subtitles from AsyncStorage when player loads
+  // Fetch subtitles when player loads - use URL params first, then fallback to AsyncStorage
   useEffect(() => {
     let isMounted = true;
-    let retryCount = 0;
-    const maxRetries = 5;
     
-    const loadAndFetchSubtitles = async () => {
+    const loadSubtitles = async () => {
+      // First try URL params (most reliable)
+      console.log('[SUBTITLES] URL params - contentType:', contentType, 'contentId:', contentId);
+      
+      if (contentId && isMounted) {
+        console.log('[SUBTITLES] Using URL params to fetch subtitles');
+        fetchSubtitles(contentType || 'movie', contentId);
+        return;
+      }
+      
+      // Fallback to AsyncStorage
+      console.log('[SUBTITLES] No URL params, trying AsyncStorage...');
       try {
-        console.log('[SUBTITLES] Attempting to read AsyncStorage (attempt', retryCount + 1, ')');
         const storedData = await AsyncStorage.getItem('currentPlaying');
-        console.log('[SUBTITLES] Raw AsyncStorage data:', storedData);
+        console.log('[SUBTITLES] AsyncStorage data:', storedData);
         
         if (storedData && isMounted) {
           const parsed = JSON.parse(storedData);
-          console.log('[SUBTITLES] Parsed data:', JSON.stringify(parsed));
           const { contentType: cType, contentId: cId } = parsed;
           
           if (cId) {
-            console.log('[SUBTITLES] Fetching subtitles for:', cType || 'movie', cId);
+            console.log('[SUBTITLES] Using AsyncStorage data to fetch subtitles');
             fetchSubtitles(cType || 'movie', cId);
-          } else {
-            console.log('[SUBTITLES] No contentId found in parsed data');
           }
-        } else if (!storedData && retryCount < maxRetries && isMounted) {
-          // Retry if no data found - may not have been written yet
-          retryCount++;
-          console.log('[SUBTITLES] No data found, retrying in 500ms...');
-          setTimeout(loadAndFetchSubtitles, 500);
-        } else {
-          console.log('[SUBTITLES] No currentPlaying data in AsyncStorage after retries');
         }
       } catch (e) {
         console.log('[SUBTITLES] Error reading from AsyncStorage:', e);
       }
     };
     
-    // Start trying to load subtitles after a small initial delay
-    const initialTimeout = setTimeout(loadAndFetchSubtitles, 200);
+    // Small delay to ensure component is fully mounted
+    const timeout = setTimeout(loadSubtitles, 300);
     
     return () => {
       isMounted = false;
-      clearTimeout(initialTimeout);
+      clearTimeout(timeout);
     };
-  }, []);
+  }, [contentType, contentId]);
 
   useEffect(() => {
     continuePollingRef.current = true;
