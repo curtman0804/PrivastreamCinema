@@ -2296,8 +2296,23 @@ async def proxy_stream(
 async def proxy_xhamster_stream(
     video_id: str,
     quality: str = "720p",
-    current_user: User = Depends(get_current_user)
+    token: Optional[str] = None,
+    current_user: Optional[User] = None
 ):
+    # Allow authentication via query param token for video player
+    if not current_user and token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_id = payload.get("sub")
+            if user_id:
+                user = await db.users.find_one({"_id": user_id})
+                if user:
+                    current_user = User(id=user["_id"], username=user["username"], isAdmin=user.get("isAdmin", False))
+        except:
+            pass
+    
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
     """Generate fresh xHamster stream URL and proxy it"""
     import urllib.parse
     
