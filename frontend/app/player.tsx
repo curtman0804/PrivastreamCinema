@@ -100,6 +100,12 @@ export default function PlayerScreen() {
   const [isLiveTV, setIsLiveTV] = useState(false);
   const [hasAudioError, setHasAudioError] = useState(false);
   
+  // Subtitles state
+  const [subtitles, setSubtitles] = useState<Array<{id: string; url: string; lang: string; langName: string}>>([]);
+  const [selectedSubtitle, setSelectedSubtitle] = useState<string | null>(null);
+  const [showSubtitlePicker, setShowSubtitlePicker] = useState(false);
+  const [subtitleText, setSubtitleText] = useState<string>('');
+  
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
 
