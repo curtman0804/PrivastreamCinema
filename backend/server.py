@@ -1671,25 +1671,43 @@ async def get_category_content(
 
 @api_router.get("/content/search")
 async def search_content(q: str, current_user: User = Depends(get_current_user)):
-    """Search content via Cinemeta with strict relevance filtering and stream availability check"""
+    """Search content via Cinemeta - supports title search and cast/director/genre searches"""
     if not q or len(q) < 2:
         return {"movies": [], "series": []}
     
     # Common words to ignore when matching
     STOP_WORDS = {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'is', 'it'}
     
-    def score_result(item, query):
-        """Score search results by relevance - strict matching"""
+    # Detect if this looks like a person name search (cast/director)
+    # Person names usually: 2-3 words, each capitalized, no common movie words
+    query_words = q.split()
+    MOVIE_WORDS = {'movie', 'film', 'show', 'series', 'season', 'episode', 'part', 'vol', 'volume', '2', '3', 'ii', 'iii'}
+    is_likely_person_name = (
+        len(query_words) >= 2 and 
+        len(query_words) <= 4 and
+        all(word[0].isupper() if word else False for word in query_words) and
+        not any(word.lower() in MOVIE_WORDS for word in query_words)
+    )
+    
+    # Also detect genre searches
+    GENRE_WORDS = {'action', 'comedy', 'drama', 'horror', 'thriller', 'romance', 'sci-fi', 'fantasy', 
+                   'adventure', 'animation', 'documentary', 'crime', 'mystery', 'western', 'musical'}
+    is_genre_search = q.lower() in GENRE_WORDS
+    
+    logger.info(f"Search query: '{q}' - is_person_name={is_likely_person_name}, is_genre={is_genre_search}")
+    
+    def score_result(item, query, trust_cinemeta=False):
+        """Score search results by relevance"""
         name = (item.get('name') or '').lower()
         query_lower = query.lower()
-        query_words = query_lower.split()
+        query_words_lower = query_lower.split()
         
         # Get significant words (non-stop words) from query
-        significant_words = [w for w in query_words if w not in STOP_WORDS and len(w) > 1]
+        significant_words = [w for w in query_words_lower if w not in STOP_WORDS and len(w) > 1]
         
         # If no significant words, use all words
         if not significant_words:
-            significant_words = query_words
+            significant_words = query_words_lower
         
         # Exact match gets highest score
         if name == query_lower:
@@ -1710,7 +1728,20 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
             length_bonus = max(0, 20 - len(name.split()))
             return 80 + length_bonus
         
-        # If not all significant words match, reject
+        # For person name or genre searches, trust Cinemeta's results
+        # Cinemeta searches across cast, director, and other metadata
+        if trust_cinemeta:
+            # Give a base score - Cinemeta returned this for a reason (cast match, etc)
+            # Use release year as tiebreaker - prefer newer content
+            year_str = item.get('releaseInfo') or item.get('year') or '0'
+            try:
+                year = int(str(year_str)[:4])
+                year_bonus = (year - 1950) / 10  # Higher score for newer movies
+            except:
+                year_bonus = 0
+            return 50 + min(year_bonus, 10)
+        
+        # If not matching and not trusting Cinemeta, reject
         return 0
     
     async def check_has_streams(content_type: str, content_id: str) -> bool:
