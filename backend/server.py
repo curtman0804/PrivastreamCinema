@@ -2303,14 +2303,16 @@ async def proxy_xhamster_stream(
     if not current_user and token:
         try:
             payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-            # Token uses "user_id" not "sub"
-            user_id = payload.get("user_id") or payload.get("sub")
-            logger.info(f"Proxy auth: token payload = {payload}")
+            user_id = payload.get("user_id")
+            logger.info(f"Proxy auth: Looking up user_id = {user_id}")
             if user_id:
-                user = await db.users.find_one({"_id": user_id})
+                # Use same lookup as get_current_user - by "id" field, not "_id"
+                user = await db.users.find_one({"id": user_id})
                 if user:
-                    current_user = User(id=user["_id"], username=user["username"], isAdmin=user.get("isAdmin", False))
-                    logger.info(f"Proxy auth successful for user: {user['username']}")
+                    current_user = User(**user)
+                    logger.info(f"Proxy auth successful for user: {user.get('username')}")
+                else:
+                    logger.warning(f"Proxy auth: user not found for id = {user_id}")
         except Exception as e:
             logger.warning(f"Proxy auth failed: {e}")
     
