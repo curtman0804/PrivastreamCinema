@@ -173,7 +173,9 @@ export default function PlayerScreen() {
     lockLandscape();
     
     // Fetch subtitles when player loads
-    fetchSubtitles();
+    if (type && id) {
+      fetchSubtitles(type as string, id as string);
+    }
     
     return () => {
       // Unlock orientation when leaving player
