@@ -1330,7 +1330,7 @@ async def get_discover(current_user: User = Depends(get_current_user)):
 
 @api_router.get("/content/search")
 async def search_content(q: str, current_user: User = Depends(get_current_user)):
-    """Search content via Cinemeta with strict relevance filtering"""
+    """Search content via Cinemeta with strict relevance filtering and stream availability check"""
     if not q or len(q) < 2:
         return {"movies": [], "series": []}
     
@@ -1372,6 +1372,20 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
         # If not all significant words match, reject
         return 0
     
+    async def check_has_streams(content_type: str, content_id: str) -> bool:
+        """Quick check if content has any streams available via Torrentio"""
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
+                url = f"https://torrentio.strem.fun/stream/{content_type}/{content_id}.json"
+                response = await client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    streams = data.get('streams', [])
+                    return len(streams) > 0
+        except:
+            pass
+        return False
+    
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
             # URL encode the query properly
@@ -1399,12 +1413,35 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
             series_scored = [(s, score_result(s, q)) for s in series]
             
             # Only include results where ALL significant words match (score > 0)
-            movies_filtered = [m for m, score in sorted(movies_scored, key=lambda x: -x[1]) if score > 0]
-            series_filtered = [s for s, score in sorted(series_scored, key=lambda x: -x[1]) if score > 0]
+            movies_filtered = [m for m, score in sorted(movies_scored, key=lambda x: -x[1]) if score > 0][:15]
+            series_filtered = [s for s, score in sorted(series_scored, key=lambda x: -x[1]) if score > 0][:15]
             
-            logger.info(f"Search '{q}': {len(movies_filtered)} movies, {len(series_filtered)} series (filtered from {len(movies)}/{len(series)})")
+            logger.info(f"Search '{q}': checking streams for {len(movies_filtered)} movies, {len(series_filtered)} series")
             
-            return {"movies": movies_filtered[:30], "series": series_filtered[:30]}
+            # Check stream availability in parallel (limit to top results for speed)
+            async def check_movie(m):
+                content_id = m.get('imdb_id') or m.get('id')
+                if content_id and await check_has_streams('movie', content_id):
+                    return m
+                return None
+            
+            async def check_series(s):
+                content_id = s.get('imdb_id') or s.get('id')
+                # For series, check first episode of first season
+                if content_id and await check_has_streams('series', f"{content_id}:1:1"):
+                    return s
+                return None
+            
+            # Run stream checks in parallel
+            movie_checks = await asyncio.gather(*[check_movie(m) for m in movies_filtered])
+            series_checks = await asyncio.gather(*[check_series(s) for s in series_filtered])
+            
+            movies_with_streams = [m for m in movie_checks if m is not None]
+            series_with_streams = [s for s in series_checks if s is not None]
+            
+            logger.info(f"Search '{q}': {len(movies_with_streams)} movies, {len(series_with_streams)} series with streams")
+            
+            return {"movies": movies_with_streams, "series": series_with_streams}
     except Exception as e:
         logger.error(f"Search error: {str(e)}")
         return {"movies": [], "series": []}
