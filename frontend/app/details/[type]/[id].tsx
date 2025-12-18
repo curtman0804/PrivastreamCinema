@@ -737,6 +737,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
+  websiteLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(184, 160, 92, 0.3)',
+  },
+  websiteLinkContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  websiteLinkTitle: {
+    color: '#B8A05C',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  websiteLinkSubtitle: {
+    color: '#888',
+    fontSize: 13,
+    marginTop: 2,
+  },
   streamList: {
     gap: 8,
   },
