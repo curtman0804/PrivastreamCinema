@@ -1609,7 +1609,7 @@ async def get_category_content(
                         return {
                             "items": metas[:limit], 
                             "total": len(metas), 
-                            "hasMore": len(metas) >= 50,  # Most Stremio catalogs return ~100 items per page
+                            "hasMore": len(metas) >= 20,  # If we got 20+ items, there's likely more
                             "catalogId": catalog_id,
                             "baseUrl": base_url
                         }
