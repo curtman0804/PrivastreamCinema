@@ -959,15 +959,37 @@ async def get_all_streams(
     if content_id.startswith('http://') or content_id.startswith('https://'):
         logger.info(f"URL-based content ID detected: {content_id[:60]}...")
         
-        # Check if it's an xHamster URL - use direct extraction since Jaxxx doesn't support it
+        # Check if it's an xHamster URL - use proxy-based streaming
         if 'xhamster.com' in content_id:
-            logger.info(f"xHamster URL detected, using direct extraction")
-            xhamster_streams = await extract_xhamster_video(content_id)
-            if xhamster_streams:
-                return {"streams": xhamster_streams}
-            else:
-                logger.warning(f"xHamster extraction returned no streams")
-                return {"streams": []}
+            logger.info(f"xHamster URL detected, returning proxy streams")
+            import urllib.parse
+            
+            # Return streams that use our proxy endpoint instead of direct URLs
+            encoded_video_url = urllib.parse.quote(content_id, safe='')
+            proxy_streams = [
+                {
+                    "name": "xHamster 720p",
+                    "title": "xHamster • 720p HD",
+                    "url": f"/api/proxy/xhamster/{encoded_video_url}?quality=720p",
+                    "addon": "xHamster",
+                    "isProxy": True
+                },
+                {
+                    "name": "xHamster 480p",
+                    "title": "xHamster • 480p SD",
+                    "url": f"/api/proxy/xhamster/{encoded_video_url}?quality=480p",
+                    "addon": "xHamster",
+                    "isProxy": True
+                },
+                {
+                    "name": "xHamster 240p",
+                    "title": "xHamster • 240p Low",
+                    "url": f"/api/proxy/xhamster/{encoded_video_url}?quality=240p",
+                    "addon": "xHamster",
+                    "isProxy": True
+                },
+            ]
+            return {"streams": proxy_streams}
         
         try:
             # Fetch from OnlyPorn/Jaxxx addon which can resolve these URLs to actual streams
