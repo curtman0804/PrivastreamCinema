@@ -1330,14 +1330,46 @@ async def get_discover(current_user: User = Depends(get_current_user)):
 
 @api_router.get("/content/search")
 async def search_content(q: str, current_user: User = Depends(get_current_user)):
-    """Search content via Cinemeta"""
+    """Search content via Cinemeta with improved relevance"""
     if not q or len(q) < 2:
         return {"movies": [], "series": []}
     
+    def score_result(item, query):
+        """Score search results by relevance to query"""
+        name = (item.get('name') or '').lower()
+        query_lower = query.lower()
+        query_words = query_lower.split()
+        
+        # Exact match gets highest score
+        if name == query_lower:
+            return 100
+        
+        # Title starts with query
+        if name.startswith(query_lower):
+            return 90
+        
+        # Full query appears in title
+        if query_lower in name:
+            return 80
+        
+        # All query words appear in title (in order)
+        all_words_present = all(word in name for word in query_words)
+        if all_words_present:
+            return 70
+        
+        # Partial match - count how many query words appear
+        matching_words = sum(1 for word in query_words if word in name)
+        if matching_words > 0:
+            return 50 + (matching_words * 5)
+        
+        return 0
+    
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-            movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/search={q}.json"
-            series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/search={q}.json"
+            # URL encode the query properly
+            encoded_q = q.replace(' ', '%20')
+            movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/search={encoded_q}.json"
+            series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/search={encoded_q}.json"
             
             movie_resp, series_resp = await asyncio.gather(
                 client.get(movie_url),
@@ -1354,7 +1386,17 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
             if not isinstance(series_resp, Exception) and series_resp.status_code == 200:
                 series = series_resp.json().get('metas', [])
             
-            return {"movies": movies[:30], "series": series[:30]}
+            # Score and sort results by relevance
+            movies_scored = [(m, score_result(m, q)) for m in movies]
+            series_scored = [(s, score_result(s, q)) for s in series]
+            
+            # Filter out very low relevance results (score < 50 means not all main words match)
+            movies_filtered = [m for m, score in sorted(movies_scored, key=lambda x: -x[1]) if score >= 50]
+            series_filtered = [s for s, score in sorted(series_scored, key=lambda x: -x[1]) if score >= 50]
+            
+            logger.info(f"Search '{q}': {len(movies_filtered)} movies, {len(series_filtered)} series (filtered from {len(movies)}/{len(series)})")
+            
+            return {"movies": movies_filtered[:30], "series": series_filtered[:30]}
     except Exception as e:
         logger.error(f"Search error: {str(e)}")
         return {"movies": [], "series": []}
