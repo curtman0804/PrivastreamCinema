@@ -2303,13 +2303,16 @@ async def proxy_xhamster_stream(
     if not current_user and token:
         try:
             payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-            user_id = payload.get("sub")
+            # Token uses "user_id" not "sub"
+            user_id = payload.get("user_id") or payload.get("sub")
+            logger.info(f"Proxy auth: token payload = {payload}")
             if user_id:
                 user = await db.users.find_one({"_id": user_id})
                 if user:
                     current_user = User(id=user["_id"], username=user["username"], isAdmin=user.get("isAdmin", False))
-        except:
-            pass
+                    logger.info(f"Proxy auth successful for user: {user['username']}")
+        except Exception as e:
+            logger.warning(f"Proxy auth failed: {e}")
     
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
