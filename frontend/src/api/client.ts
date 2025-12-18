@@ -15,7 +15,7 @@ const getBaseUrl = () => {
     return backendUrl;
   }
   // Fallback - try the packager hostname
-  return 'https://privastream-8.preview.emergentagent.com';
+  return 'https://streamflow-54.preview.emergentagent.com';
 };
 
 const BASE_URL = getBaseUrl();
