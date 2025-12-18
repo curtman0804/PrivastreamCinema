@@ -1,12 +1,19 @@
 import { create } from 'zustand';
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
 
+interface CurrentPlaying {
+  contentType: string;
+  contentId: string;
+  title: string;
+}
+
 interface ContentState {
   discoverData: DiscoverResponse | null;
   addons: Addon[];
   library: LibraryResponse | null;
   searchResults: SearchResult[];
   streams: Stream[];
+  currentPlaying: CurrentPlaying | null;
   isLoadingDiscover: boolean;
   isLoadingAddons: boolean;
   isLoadingLibrary: boolean;
@@ -21,6 +28,7 @@ interface ContentState {
   addToLibrary: (item: ContentItem) => Promise<void>;
   removeFromLibrary: (type: string, id: string) => Promise<void>;
   clearSearch: () => void;
+  setCurrentPlaying: (info: CurrentPlaying | null) => void;
 }
 
 export const useContentStore = create<ContentState>((set, get) => ({
