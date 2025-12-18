@@ -1520,13 +1520,13 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                         logger.warning(f"Error fetching USA TV: {e}")
                     break
         
-        # Generic addon handling
+        # Generic addon handling - show each catalog as a separate section
         else:
-            addon_content = {'movies': [], 'series': [], 'channels': []}
-            
             for catalog in catalogs:
                 catalog_type = catalog.get('type', '')
                 catalog_id = catalog.get('id', '')
+                catalog_name = catalog.get('name', addon_name)
+                
                 if not catalog_type or not catalog_id:
                     continue
                 try:
@@ -1538,17 +1538,20 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                             # Filter out items with empty names or IDs
                             metas = [m for m in metas if m.get('name') and m.get('id')]
                             
-                            if catalog_type == 'movie':
-                                addon_content['movies'].extend(metas)
-                            elif catalog_type == 'series':
-                                addon_content['series'].extend(metas)
-                            elif catalog_type == 'tv':
-                                addon_content['channels'].extend(metas)
-                except:
-                    pass
-            
-            if addon_content['movies'] or addon_content['series'] or addon_content['channels']:
-                result['services'][addon_name] = addon_content
+                            if metas:
+                                # Use catalog name as section name
+                                section_name = catalog_name
+                                if section_name not in result['services']:
+                                    result['services'][section_name] = {'movies': [], 'series': [], 'channels': [], '_catalog_id': catalog_id, '_base_url': base_url}
+                                
+                                if catalog_type == 'movie':
+                                    result['services'][section_name]['movies'].extend(metas)
+                                elif catalog_type == 'series':
+                                    result['services'][section_name]['series'].extend(metas)
+                                elif catalog_type == 'tv':
+                                    result['services'][section_name]['channels'].extend(metas)
+                except Exception as e:
+                    logger.warning(f"Error fetching catalog {catalog_id}: {e}")
     
     return result
 
