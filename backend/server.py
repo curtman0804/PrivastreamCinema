@@ -1436,6 +1436,8 @@ async def get_discover(current_user: User = Depends(get_current_user)):
         # Generic addon handling
         else:
             addon_content = {'movies': [], 'series': [], 'channels': []}
+            is_onlyporn = 'jaxxx' in base_url.lower() or addon_name.lower() == 'onlyporn'
+            
             for catalog in catalogs:
                 catalog_type = catalog.get('type', '')
                 catalog_id = catalog.get('id', '')
@@ -1446,9 +1448,36 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                     async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
                         response = await client.get(url)
                         if response.status_code == 200:
-                            metas = response.json().get('metas', [])[:30]
+                            metas = response.json().get('metas', [])
                             # Filter out items with empty names or IDs
                             metas = [m for m in metas if m.get('name') and m.get('id')]
+                            
+                            # For OnlyPorn, pre-check streams to filter out unavailable content
+                            if is_onlyporn and metas:
+                                validated_metas = []
+                                # Check up to 50 items to find 30 with streams
+                                for meta in metas[:50]:
+                                    if len(validated_metas) >= 30:
+                                        break
+                                    content_id = meta.get('id', '')
+                                    if content_id.startswith('http'):
+                                        try:
+                                            encoded_id = urllib.parse.quote(content_id, safe='')
+                                            stream_url = f"{base_url}/stream/{catalog_type}/{encoded_id}.json"
+                                            stream_resp = await client.get(stream_url, timeout=5.0)
+                                            if stream_resp.status_code == 200:
+                                                streams = stream_resp.json().get('streams', [])
+                                                if streams:
+                                                    validated_metas.append(meta)
+                                        except:
+                                            pass
+                                    else:
+                                        # Non-URL IDs (like porndb:) usually have streams
+                                        validated_metas.append(meta)
+                                metas = validated_metas
+                            else:
+                                metas = metas[:30]
+                            
                             if catalog_type == 'movie':
                                 addon_content['movies'].extend(metas)
                             elif catalog_type == 'series':
