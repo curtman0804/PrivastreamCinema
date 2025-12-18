@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   TextInput,
@@ -10,13 +10,22 @@ import { Ionicons } from '@expo/vector-icons';
 interface SearchBarProps {
   onSearch: (query: string) => void;
   placeholder?: string;
+  initialValue?: string;
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({
   onSearch,
   placeholder = 'Search movies & TV shows...',
+  initialValue = '',
 }) => {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialValue);
+
+  // Update query when initialValue changes (from tag navigation)
+  useEffect(() => {
+    if (initialValue) {
+      setQuery(initialValue);
+    }
+  }, [initialValue]);
 
   const handleSubmit = () => {
     if (query.trim()) {
