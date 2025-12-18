@@ -49,7 +49,14 @@ export default function DiscoverScreen() {
     const id = item.imdb_id || item.id;
     // Encode the ID to handle URLs and special characters in content IDs
     const encodedId = encodeURIComponent(id);
-    router.push(`/details/${item.type}/${encodedId}`);
+    // Pass content info for porn/external addons that don't have meta endpoints
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || '',
+        poster: item.poster || '',
+      }
+    });
   };
 
   // Show loading only on initial load
