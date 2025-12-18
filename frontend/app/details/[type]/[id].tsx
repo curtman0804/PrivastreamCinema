@@ -107,27 +107,18 @@ export default function DetailsScreen() {
     const contentTitle = content?.name || 'Video';
     const cType = type as string || 'movie';
     
-    console.log('[DETAILS] handleStreamSelect - preparing to save:', { cType, imdbId, contentTitle });
+    console.log('[DETAILS] handleStreamSelect - passing to player:', { cType, imdbId, contentTitle });
     
-    // Save content info to AsyncStorage for subtitles BEFORE navigating
+    // Also save to AsyncStorage as backup
     try {
-      const dataToSave = {
+      await AsyncStorage.setItem('currentPlaying', JSON.stringify({
         contentType: cType,
         contentId: imdbId,
         title: contentTitle,
-      };
-      await AsyncStorage.setItem('currentPlaying', JSON.stringify(dataToSave));
-      console.log('[DETAILS] Successfully saved to AsyncStorage:', JSON.stringify(dataToSave));
-      
-      // Verify it was saved
-      const verification = await AsyncStorage.getItem('currentPlaying');
-      console.log('[DETAILS] Verification read:', verification);
+      }));
     } catch (e) {
       console.log('[DETAILS] Error saving to AsyncStorage:', e);
     }
-    
-    // Small delay to ensure AsyncStorage write is complete
-    await new Promise(resolve => setTimeout(resolve, 100));
     
     if (stream.infoHash) {
       // Torrent stream - use torrent player
@@ -136,6 +127,8 @@ export default function DetailsScreen() {
         params: { 
           infoHash: stream.infoHash,
           title: contentTitle,
+          contentType: cType,
+          contentId: imdbId,
         },
       });
     } else if (stream.url) {
@@ -146,6 +139,8 @@ export default function DetailsScreen() {
           directUrl: stream.url,
           title: contentTitle,
           isLive: type === 'tv' ? 'true' : 'false',
+          contentType: cType,
+          contentId: imdbId,
         },
       });
     }
