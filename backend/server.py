@@ -1447,6 +1447,8 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                         response = await client.get(url)
                         if response.status_code == 200:
                             metas = response.json().get('metas', [])[:30]
+                            # Filter out items with empty names or IDs
+                            metas = [m for m in metas if m.get('name') and m.get('id')]
                             if catalog_type == 'movie':
                                 addon_content['movies'].extend(metas)
                             elif catalog_type == 'series':
