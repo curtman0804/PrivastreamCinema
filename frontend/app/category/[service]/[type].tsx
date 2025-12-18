@@ -113,7 +113,6 @@ export default function CategoryScreen() {
     </TouchableOpacity>
   );
 
-  const decodedService = service ? decodeURIComponent(service) : '';
   const typeLabel = type === 'movies' ? 'Movies' : type === 'series' ? 'Series' : 'Channels';
 
   return (
