@@ -2323,10 +2323,16 @@ async def proxy_xhamster_stream(
     
     # Decode the video URL
     video_url = urllib.parse.unquote(video_id)
-    if not video_url.startswith('http'):
+    
+    # Fix URL protocol - FastAPI path params can strip double slashes
+    if video_url.startswith('https:/') and not video_url.startswith('https://'):
+        video_url = 'https://' + video_url[7:]
+    elif video_url.startswith('http:/') and not video_url.startswith('http://'):
+        video_url = 'http://' + video_url[6:]
+    elif not video_url.startswith('http'):
         video_url = f"https://xhamster.com/videos/{video_id}"
     
-    logger.info(f"Proxying xHamster video: {video_url[:60]}... quality={quality}")
+    logger.info(f"Proxying xHamster video: {video_url[:80]}... quality={quality}")
     
     # Fetch fresh stream URLs from xHamster
     headers = {
