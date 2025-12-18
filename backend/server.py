@@ -959,17 +959,26 @@ async def get_all_streams(
     if content_id.startswith('http://') or content_id.startswith('https://'):
         logger.info(f"URL-based content ID detected: {content_id[:60]}...")
         
-        # Check if it's an xHamster URL - due to IP-based URL restrictions, we need to use WebView
+        # Check if it's a URL from sites with IP-restricted streams
+        # These need to open in browser as the video URLs are bound to specific IPs
+        site_name = None
         if 'xhamster.com' in content_id:
-            logger.info(f"xHamster URL detected - using WebView streaming")
+            site_name = "xHamster"
+        elif 'eporner.com' in content_id:
+            site_name = "Eporner"
+        elif 'porntrex.com' in content_id:
+            site_name = "PornTrex"
+        
+        if site_name:
+            logger.info(f"{site_name} URL detected - using browser streaming (IP restrictions)")
             
-            # Return stream with externalUrl flag so frontend knows to open in WebView
+            # Return stream with externalUrl flag so frontend knows to open in browser
             return {"streams": [
                 {
-                    "name": "xHamster Player",
-                    "title": "xHamster • Open Video",
+                    "name": f"{site_name} Player",
+                    "title": f"{site_name} • Open in Browser",
                     "externalUrl": content_id,
-                    "addon": "xHamster",
+                    "addon": site_name,
                     "requiresWebView": True
                 }
             ]}
