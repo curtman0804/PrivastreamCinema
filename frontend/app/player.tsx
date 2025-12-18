@@ -439,15 +439,6 @@ export default function PlayerScreen() {
         )
       )}
 
-      {/* Stats overlay when playing */}
-      {streamUrl && infoHash && !isLoading && !error && (
-        <View style={styles.statsOverlay}>
-          <Text style={styles.statsText}>
-            {downloadProgress.toFixed(1)}% • {peers} peers • {formatSpeed(downloadSpeed)}
-          </Text>
-        </View>
-      )}
-
       {/* External Player Button - always show on native when stream is ready */}
       {streamUrl && !isLoading && !error && Platform.OS !== 'web' && (
         <TouchableOpacity
