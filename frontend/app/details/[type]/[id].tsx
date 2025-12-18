@@ -372,6 +372,49 @@ export default function DetailsScreen() {
           </View>
         )}
 
+        {/* Direct Website Link for Porn+ / RedTube / PornHub content */}
+        {(id?.includes('RedTube') || id?.includes('pornhub') || id?.includes('porn_id')) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Watch on Website</Text>
+            <TouchableOpacity
+              style={styles.websiteLinkButton}
+              onPress={() => {
+                let url = '';
+                if (id?.includes('RedTube-movie-')) {
+                  const videoId = id.split('RedTube-movie-')[1];
+                  url = `https://www.redtube.com/${videoId}`;
+                } else if (id?.includes('pornhub-')) {
+                  const videoId = id.split('pornhub-')[1];
+                  url = `https://www.pornhub.com/view_video.php?viewkey=${videoId}`;
+                } else if (id?.includes('porn_id:')) {
+                  // Try to extract site and ID
+                  const parts = id.split(':');
+                  if (parts.length >= 2) {
+                    const site = parts[1].split('-')[0];
+                    const videoId = parts[parts.length - 1];
+                    if (site === 'RedTube') {
+                      url = `https://www.redtube.com/${videoId}`;
+                    }
+                  }
+                }
+                if (url) {
+                  Linking.openURL(url).catch(err => console.log('Error opening URL:', err));
+                }
+              }}
+            >
+              <Ionicons name="globe-outline" size={22} color="#B8A05C" />
+              <View style={styles.websiteLinkContent}>
+                <Text style={styles.websiteLinkTitle}>Open in Browser</Text>
+                <Text style={styles.websiteLinkSubtitle}>
+                  {id?.includes('RedTube') ? 'Watch on RedTube.com' : 
+                   id?.includes('pornhub') ? 'Watch on PornHub.com' : 'Watch on source website'}
+                </Text>
+              </View>
+              <Ionicons name="open-outline" size={20} color="#666" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Streams Section - For movies, episode pages, OR TV channels */}
         {(type === 'movie' || type === 'tv' || isEpisodePage) && (
           <View style={styles.section}>
