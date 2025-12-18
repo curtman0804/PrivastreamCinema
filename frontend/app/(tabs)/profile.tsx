@@ -90,29 +90,6 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
-          <View style={styles.menuCard}>
-            <MenuItem
-              icon="notifications-outline"
-              title="Notifications"
-              subtitle="Manage notifications"
-            />
-            <View style={styles.menuDivider} />
-            <MenuItem
-              icon="color-palette-outline"
-              title="Appearance"
-              subtitle="Dark mode"
-            />
-            <View style={styles.menuDivider} />
-            <MenuItem
-              icon="language-outline"
-              title="Language"
-              subtitle="English"
-            />
-          </View>
-        </View>
-
         {/* Admin Section - Only visible to admin users */}
         {user?.is_admin && (
           <View style={styles.section}>
