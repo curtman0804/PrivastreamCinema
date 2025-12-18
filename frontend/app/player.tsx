@@ -242,11 +242,14 @@ export default function PlayerScreen() {
   // Fetch subtitles when contentType and contentId are available
   useEffect(() => {
     console.log('Subtitle fetch check - contentType:', contentType, 'contentId:', contentId);
-    if (contentType && contentId) {
-      console.log('Fetching subtitles for:', contentType, contentId);
-      fetchSubtitles(contentType as string, contentId as string);
+    // Always try to fetch subtitles if we have an ID
+    const cType = contentType as string || 'movie';
+    const cId = contentId as string;
+    if (cId) {
+      console.log('Fetching subtitles for:', cType, cId);
+      fetchSubtitles(cType, cId);
     } else {
-      console.log('Missing contentType or contentId, cannot fetch subtitles');
+      console.log('Missing contentId, cannot fetch subtitles');
     }
   }, [contentType, contentId]);
 
