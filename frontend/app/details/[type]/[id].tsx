@@ -107,7 +107,17 @@ export default function DetailsScreen() {
     const contentTitle = content?.name || 'Video';
     const cType = type as string || 'movie';
     
-    console.log('handleStreamSelect - contentType:', cType, 'contentId:', imdbId);
+    // Save content info to AsyncStorage for subtitles
+    try {
+      await AsyncStorage.setItem('currentPlaying', JSON.stringify({
+        contentType: cType,
+        contentId: imdbId,
+        title: contentTitle,
+      }));
+      console.log('Saved to AsyncStorage:', cType, imdbId);
+    } catch (e) {
+      console.log('Error saving to AsyncStorage:', e);
+    }
     
     if (stream.infoHash) {
       // Torrent stream - use torrent player
@@ -116,8 +126,6 @@ export default function DetailsScreen() {
         params: { 
           infoHash: stream.infoHash,
           title: contentTitle,
-          contentType: cType,
-          contentId: imdbId,
         },
       });
     } else if (stream.url) {
@@ -128,8 +136,6 @@ export default function DetailsScreen() {
           directUrl: stream.url,
           title: contentTitle,
           isLive: type === 'tv' ? 'true' : 'false',
-          contentType: cType,
-          contentId: imdbId,
         },
       });
     }
