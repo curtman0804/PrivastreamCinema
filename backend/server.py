@@ -825,6 +825,92 @@ async def extract_redtube_video(video_id: str) -> List[Dict]:
     
     return []
 
+async def extract_xhamster_video(video_url: str) -> list:
+    """Extract direct video streams from xHamster video page"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+        }
+        
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            response = await client.get(video_url, headers=headers)
+            if response.status_code == 200:
+                html = response.text
+                streams = []
+                
+                # Look for video sources in JSON format embedded in the page
+                import re
+                import json
+                
+                # Pattern to find "sources" JSON object in the page
+                sources_match = re.search(r'"sources"\s*:\s*(\{[^}]+(?:\{[^}]*\}[^}]*)*\})', html)
+                if sources_match:
+                    try:
+                        sources_json = sources_match.group(1)
+                        # Clean up escaped slashes
+                        sources_json = sources_json.replace('\\/', '/')
+                        sources_data = json.loads(sources_json)
+                        
+                        # Extract h264 streams from standard sources
+                        if 'standard' in sources_data and 'h264' in sources_data['standard']:
+                            for stream in sources_data['standard']['h264']:
+                                url = stream.get('url', '')
+                                quality = stream.get('quality', 'Unknown')
+                                label = stream.get('label', quality)
+                                
+                                if url and quality != 'auto':  # Skip auto quality, prefer direct
+                                    # Clean URL
+                                    url = url.replace('\\/', '/')
+                                    streams.append({
+                                        "name": f"xHamster {label}",
+                                        "title": f"xHamster • {label}",
+                                        "url": url,
+                                        "addon": "xHamster"
+                                    })
+                                elif quality == 'auto' and url:
+                                    # Add HLS auto quality stream
+                                    url = url.replace('\\/', '/')
+                                    streams.append({
+                                        "name": "xHamster HLS Auto",
+                                        "title": "xHamster • HLS Auto Quality",
+                                        "url": url,
+                                        "addon": "xHamster"
+                                    })
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Failed to parse xHamster sources JSON: {e}")
+                
+                # Also try to extract from mp4 URLs directly in page
+                if not streams:
+                    mp4_urls = re.findall(r'https?://[^"\'<>\s]+\.mp4[^"\'<>\s]*', html)
+                    seen = set()
+                    for url in mp4_urls:
+                        clean_url = url.replace('\\/', '/')
+                        if clean_url not in seen and 'xhcdn.com' in clean_url:
+                            seen.add(clean_url)
+                            # Try to extract quality from URL
+                            quality_match = re.search(r'(\d{3,4}p)', clean_url)
+                            quality = quality_match.group(1) if quality_match else 'Unknown'
+                            streams.append({
+                                "name": f"xHamster {quality}",
+                                "title": f"xHamster • {quality}",
+                                "url": clean_url,
+                                "addon": "xHamster"
+                            })
+                
+                if streams:
+                    logger.info(f"Extracted {len(streams)} streams from xHamster")
+                    return streams
+                else:
+                    logger.warning(f"No streams found in xHamster page")
+                    
+    except Exception as e:
+        logger.warning(f"Error extracting xHamster video: {e}")
+    
+    return []
+
+
 @api_router.get("/streams/{content_type}/{content_id:path}")
 async def get_all_streams(
     content_type: str,
