@@ -748,6 +748,77 @@ async def get_addon_streams(
         logger.error(f"Error fetching streams: {str(e)}")
         return {"streams": []}
 
+async def extract_redtube_video(video_id: str) -> List[Dict]:
+    """Extract actual video URLs from RedTube"""
+    try:
+        url = f"https://www.redtube.com/{video_id}"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        }
+        
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                html = response.text
+                streams = []
+                
+                # Look for video URLs in the page - RedTube embeds them in JavaScript
+                import re
+                
+                # Pattern 1: Look for mediaDefinitions in JavaScript
+                media_match = re.search(r'mediaDefinitions\s*[=:]\s*(\[.*?\])', html, re.DOTALL)
+                if media_match:
+                    try:
+                        import json
+                        # Clean up the JSON
+                        media_json = media_match.group(1)
+                        media_json = re.sub(r',\s*]', ']', media_json)  # Remove trailing commas
+                        media_data = json.loads(media_json)
+                        
+                        for item in media_data:
+                            if isinstance(item, dict) and item.get('videoUrl'):
+                                quality = item.get('quality', 'Unknown')
+                                video_url = item.get('videoUrl')
+                                streams.append({
+                                    "name": f"RedTube {quality}p",
+                                    "title": f"RedTube • {quality}p Direct",
+                                    "url": video_url,
+                                    "addon": "RedTube"
+                                })
+                    except:
+                        pass
+                
+                # Pattern 2: Look for direct MP4 URLs
+                mp4_matches = re.findall(r'(https?://[^\s"\']+\.mp4[^\s"\']*)', html)
+                for mp4_url in mp4_matches[:3]:  # Limit to 3
+                    if 'redtube' in mp4_url.lower() or 'phncdn' in mp4_url.lower():
+                        streams.append({
+                            "name": "RedTube Direct",
+                            "title": "RedTube • Direct MP4",
+                            "url": mp4_url,
+                            "addon": "RedTube"
+                        })
+                
+                # Pattern 3: Look for HLS/m3u8 URLs
+                hls_matches = re.findall(r'(https?://[^\s"\']+\.m3u8[^\s"\']*)', html)
+                for hls_url in hls_matches[:2]:
+                    streams.append({
+                        "name": "RedTube HLS",
+                        "title": "RedTube • HLS Stream",
+                        "url": hls_url,
+                        "addon": "RedTube"
+                    })
+                
+                if streams:
+                    logger.info(f"Extracted {len(streams)} streams from RedTube")
+                    return streams
+                    
+    except Exception as e:
+        logger.warning(f"Error extracting RedTube video: {e}")
+    
+    return []
+
 @api_router.get("/streams/{content_type}/{content_id:path}")
 async def get_all_streams(
     content_type: str,
@@ -755,6 +826,16 @@ async def get_all_streams(
     current_user: User = Depends(get_current_user)
 ):
     """Fetch streams from ALL installed addons + built-in Torrentio-style aggregation"""
+    
+    # Handle Porn+ / RedTube content IDs - extract video directly
+    if 'RedTube-movie-' in content_id or 'porn_id:RedTube' in content_id:
+        # Extract video ID from content ID (e.g., porn_id:RedTube-movie-196897861)
+        video_id = content_id.split('-')[-1]
+        logger.info(f"Extracting RedTube video: {video_id}")
+        
+        redtube_streams = await extract_redtube_video(video_id)
+        if redtube_streams:
+            return {"streams": redtube_streams}
     
     # Handle URL-based content IDs (like from OnlyPorn addon)
     # These need to be fetched from the jaxxx addon which resolves the actual stream URL
