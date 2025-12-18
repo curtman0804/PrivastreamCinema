@@ -2198,6 +2198,180 @@ async def stream_video(
         logger.error(f"Error streaming video: {e}")
         raise HTTPException(status_code=503, detail=f"Stream unavailable: {str(e)}")
 
+# ==================== STREAM PROXY ====================
+
+@api_router.get("/proxy/stream")
+async def proxy_stream(
+    url: str,
+    referer: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Proxy a video stream through our server to bypass IP restrictions"""
+    import base64
+    
+    # Decode URL if it's base64 encoded
+    try:
+        if not url.startswith('http'):
+            url = base64.b64decode(url).decode('utf-8')
+    except:
+        pass
+    
+    logger.info(f"Proxying stream: {url[:80]}...")
+    
+    # Determine referer based on URL
+    if not referer:
+        if 'xhamster' in url:
+            referer = 'https://xhamster.com/'
+        elif 'xhcdn' in url:
+            referer = 'https://xhamster.com/'
+        elif 'eporner' in url:
+            referer = 'https://www.eporner.com/'
+        elif 'porntrex' in url:
+            referer = 'https://www.porntrex.com/'
+        elif 'redtube' in url:
+            referer = 'https://www.redtube.com/'
+        else:
+            referer = url.split('/')[0] + '//' + url.split('/')[2] + '/'
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Referer': referer,
+        'Origin': referer.rstrip('/'),
+    }
+    
+    async def stream_video():
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+                async with client.stream('GET', url, headers=headers) as response:
+                    if response.status_code != 200:
+                        logger.warning(f"Proxy stream error: {response.status_code}")
+                        return
+                    async for chunk in response.aiter_bytes(chunk_size=1024 * 256):  # 256KB chunks
+                        yield chunk
+        except Exception as e:
+            logger.error(f"Proxy stream error: {e}")
+    
+    # Determine content type
+    content_type = 'video/mp4'
+    if '.m3u8' in url:
+        content_type = 'application/vnd.apple.mpegurl'
+    elif '.ts' in url:
+        content_type = 'video/mp2t'
+    
+    return StreamingResponse(
+        stream_video(),
+        media_type=content_type,
+        headers={
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': 'no-cache',
+        }
+    )
+
+
+@api_router.get("/proxy/xhamster/{video_id:path}")
+async def proxy_xhamster_stream(
+    video_id: str,
+    quality: str = "720p",
+    current_user: User = Depends(get_current_user)
+):
+    """Generate fresh xHamster stream URL and proxy it"""
+    import urllib.parse
+    
+    # Decode the video URL
+    video_url = urllib.parse.unquote(video_id)
+    if not video_url.startswith('http'):
+        video_url = f"https://xhamster.com/videos/{video_id}"
+    
+    logger.info(f"Proxying xHamster video: {video_url[:60]}... quality={quality}")
+    
+    # Fetch fresh stream URLs from xHamster
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Referer': 'https://xhamster.com/',
+    }
+    
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            response = await client.get(video_url, headers=headers)
+            if response.status_code != 200:
+                raise HTTPException(status_code=404, detail="Video not found")
+            
+            html = response.text
+            import re
+            import json
+            
+            # Extract h264 sources
+            h264_match = re.search(r'"h264"\s*:\s*\[(.*?)\]', html, re.DOTALL)
+            if not h264_match:
+                raise HTTPException(status_code=404, detail="No streams found")
+            
+            h264_json = "[" + h264_match.group(1) + "]"
+            h264_json = h264_json.replace('\\/', '/')
+            sources = json.loads(h264_json)
+            
+            # Find the requested quality
+            stream_url = None
+            for s in sources:
+                if s.get('quality') == quality:
+                    stream_url = s.get('url', '').replace('\\/', '/')
+                    break
+            
+            # Fallback to any available quality
+            if not stream_url:
+                for s in sources:
+                    if s.get('url'):
+                        stream_url = s.get('url', '').replace('\\/', '/')
+                        break
+            
+            if not stream_url:
+                raise HTTPException(status_code=404, detail="No playable stream found")
+            
+            logger.info(f"Found stream URL: {stream_url[:80]}...")
+            
+            # Stream the video through our server
+            async def stream_video():
+                try:
+                    stream_headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': '*/*',
+                        'Referer': 'https://xhamster.com/',
+                        'Origin': 'https://xhamster.com',
+                    }
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as stream_client:
+                        async with stream_client.stream('GET', stream_url, headers=stream_headers) as stream_response:
+                            if stream_response.status_code != 200:
+                                logger.warning(f"xHamster stream error: {stream_response.status_code}")
+                                return
+                            async for chunk in stream_response.aiter_bytes(chunk_size=1024 * 512):  # 512KB chunks
+                                yield chunk
+                except Exception as e:
+                    logger.error(f"xHamster proxy error: {e}")
+            
+            # Determine content type
+            content_type = 'video/mp4'
+            if '.m3u8' in stream_url:
+                content_type = 'application/vnd.apple.mpegurl'
+            
+            return StreamingResponse(
+                stream_video(),
+                media_type=content_type,
+                headers={
+                    'Accept-Ranges': 'bytes',
+                    'Cache-Control': 'no-cache',
+                }
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"xHamster proxy error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== ROOT ====================
 
 @api_router.get("/")
