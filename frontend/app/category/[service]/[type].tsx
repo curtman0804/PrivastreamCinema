@@ -256,4 +256,23 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontSize: 14,
   },
+  footerContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  loadMoreButton: {
+    backgroundColor: '#B8A05C',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  loadMoreButtonText: {
+    color: '#000',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  endText: {
+    color: '#666',
+    fontSize: 14,
+  },
 });
