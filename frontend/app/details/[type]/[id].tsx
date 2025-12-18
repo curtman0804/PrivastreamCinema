@@ -15,9 +15,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useContentStore } from '../../../src/store/contentStore';
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 
-// Get setCurrentPlaying from the store
-const { setCurrentPlaying } = useContentStore.getState();
-
 const { width, height } = Dimensions.get('window');
 
 export default function DetailsScreen() {
