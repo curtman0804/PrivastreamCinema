@@ -670,4 +670,78 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
+  ccButton: {
+    position: 'absolute',
+    top: 70,
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 100,
+  },
+  ccButtonActive: {
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
+    borderWidth: 1,
+    borderColor: '#B8A05C',
+  },
+  ccButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  ccButtonTextActive: {
+    color: '#B8A05C',
+  },
+  subtitleModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'flex-end',
+  },
+  subtitleModal: {
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '60%',
+    paddingBottom: 30,
+  },
+  subtitleModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  subtitleModalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  subtitleList: {
+    maxHeight: 400,
+  },
+  subtitleItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  subtitleItemActive: {
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+  },
+  subtitleItemText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+  },
+  subtitleItemTextActive: {
+    color: '#B8A05C',
+    fontWeight: '600',
+  },
 });
