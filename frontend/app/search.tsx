@@ -94,7 +94,7 @@ export default function SearchScreen() {
       </View>
 
       {/* Results */}
-      {isSearching ? (
+      {isLoadingSearch ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#B8A05C" />
           <Text style={styles.searchingText}>Searching...</Text>
