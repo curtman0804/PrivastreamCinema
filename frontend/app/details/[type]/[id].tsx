@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const { width, height } = Dimensions.get('window');
 
 export default function DetailsScreen() {
-  const { type, id } = useLocalSearchParams<{ type: string; id: string }>();
+  const { type, id: rawId } = useLocalSearchParams<{ type: string; id: string }>();
   const router = useRouter();
   const { 
     streams, 
@@ -29,14 +29,18 @@ export default function DetailsScreen() {
     fetchLibrary,
   } = useContentStore();
   
+  // Decode the ID in case it contains URL-encoded characters
+  const id = rawId ? decodeURIComponent(rawId) : rawId;
+  
   const [content, setContent] = useState<ContentItem | null>(null);
   const [isLoadingContent, setIsLoadingContent] = useState(true);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
 
   // Check if this is an episode page (id contains season:episode)
-  const isEpisodePage = id?.includes(':');
-  const baseId = id?.split(':')[0];
+  // Also check for porn IDs which use colons
+  const isEpisodePage = id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
+  const baseId = isEpisodePage ? id?.split(':')[0] : id;
 
   // Get seasons from episodes
   const seasons = useMemo(() => {
