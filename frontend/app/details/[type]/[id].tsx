@@ -104,15 +104,9 @@ export default function DetailsScreen() {
     // Get the IMDB ID for subtitles - use baseId for episodes
     const imdbId = baseId || (id as string);
     const contentTitle = content?.name || 'Video';
-    const cType = type as string;
+    const cType = type as string || 'movie';
     
-    // Set current playing info in global store for subtitles
-    useContentStore.getState().setCurrentPlaying({
-      contentType: cType,
-      contentId: imdbId,
-      title: contentTitle,
-    });
-    console.log('Set current playing:', cType, imdbId, contentTitle);
+    console.log('handleStreamSelect - contentType:', cType, 'contentId:', imdbId);
     
     if (stream.infoHash) {
       // Torrent stream - use torrent player
@@ -121,6 +115,8 @@ export default function DetailsScreen() {
         params: { 
           infoHash: stream.infoHash,
           title: contentTitle,
+          contentType: cType,
+          contentId: imdbId,
         },
       });
     } else if (stream.url) {
@@ -131,6 +127,8 @@ export default function DetailsScreen() {
           directUrl: stream.url,
           title: contentTitle,
           isLive: type === 'tv' ? 'true' : 'false',
+          contentType: cType,
+          contentId: imdbId,
         },
       });
     }
