@@ -757,18 +757,36 @@ async def get_all_streams(
     """Fetch streams from ALL installed addons + built-in Torrentio-style aggregation"""
     
     # Handle URL-based content IDs (like from OnlyPorn addon)
-    # These IDs are direct video URLs that can be played
+    # These need to be fetched from the jaxxx addon which resolves the actual stream URL
     if content_id.startswith('http://') or content_id.startswith('https://'):
-        # The content ID IS the stream URL
-        logger.info(f"URL-based content ID detected: {content_id[:50]}...")
-        return {
-            "streams": [{
-                "name": "Direct Stream",
-                "title": "Play Video",
-                "url": content_id,
-                "addon": "OnlyPorn"
-            }]
-        }
+        logger.info(f"URL-based content ID detected: {content_id[:60]}...")
+        try:
+            # Fetch from OnlyPorn/Jaxxx addon which can resolve these URLs to actual streams
+            import urllib.parse
+            encoded_id = urllib.parse.quote(content_id, safe='')
+            stream_url = f"https://07b88951aaab-jaxxx-v2.baby-beamup.club/stream/{content_type}/{encoded_id}.json"
+            
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+                response = await client.get(stream_url)
+                if response.status_code == 200:
+                    data = response.json()
+                    streams = data.get('streams', [])
+                    # Format streams for our app
+                    formatted = []
+                    for s in streams:
+                        formatted.append({
+                            "name": s.get('name', 'Stream'),
+                            "title": f"OnlyPorn • {s.get('name', 'Stream')}",
+                            "url": s.get('url'),
+                            "addon": "OnlyPorn"
+                        })
+                    logger.info(f"OnlyPorn: Found {len(formatted)} streams")
+                    return {"streams": formatted}
+        except Exception as e:
+            logger.warning(f"OnlyPorn stream fetch error: {e}")
+        
+        # Fallback - return empty if addon fails
+        return {"streams": []}
     
     # For TV channels (USA TV), fetch directly from the addon
     if content_type == 'tv' and content_id.startswith('ustv'):
