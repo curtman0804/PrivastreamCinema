@@ -249,25 +249,31 @@ export default function PlayerScreen() {
     };
   }, []);
 
-  // Fetch subtitles when player loads - with retry
+  // Fetch subtitles from AsyncStorage when player loads
   useEffect(() => {
-    const fetchWithRetry = async () => {
-      // Wait a moment for params to be available
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const cType = contentType as string;
-      const cId = contentId as string;
-      console.log('Player params after delay - contentType:', cType, 'contentId:', cId);
-      
-      if (cId) {
-        console.log('Fetching subtitles for:', cType || 'movie', cId);
-        fetchSubtitles(cType || 'movie', cId);
-      } else {
-        console.log('No contentId param available');
+    const loadAndFetchSubtitles = async () => {
+      try {
+        const storedData = await AsyncStorage.getItem('currentPlaying');
+        console.log('AsyncStorage data:', storedData);
+        
+        if (storedData) {
+          const { contentType: cType, contentId: cId } = JSON.parse(storedData);
+          console.log('Parsed content info:', cType, cId);
+          
+          if (cId) {
+            console.log('Fetching subtitles for:', cType || 'movie', cId);
+            fetchSubtitles(cType || 'movie', cId);
+          }
+        } else {
+          console.log('No currentPlaying data in AsyncStorage');
+        }
+      } catch (e) {
+        console.log('Error reading from AsyncStorage:', e);
       }
     };
     
-    fetchWithRetry();
+    // Small delay to ensure AsyncStorage is written before reading
+    setTimeout(loadAndFetchSubtitles, 300);
   }, []);
 
   useEffect(() => {
