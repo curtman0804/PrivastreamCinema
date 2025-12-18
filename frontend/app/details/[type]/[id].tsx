@@ -667,6 +667,19 @@ const styles = StyleSheet.create({
     color: '#AAAAAA',
     fontSize: 13,
   },
+  directorPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(184, 160, 92, 0.3)',
+  },
+  directorPillText: {
+    color: '#B8A05C',
+    fontSize: 13,
+    fontWeight: '500',
+  },
   seasonScroll: {
     marginBottom: 16,
   },
