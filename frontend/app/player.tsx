@@ -82,12 +82,14 @@ const WebVideoPlayer = ({ streamUrl, onLoad, onError, isHLS = false }: { streamU
 };
 
 export default function PlayerScreen() {
-  const { url, title, infoHash, directUrl, isLive } = useLocalSearchParams<{
+  const { url, title, infoHash, directUrl, isLive, contentType, contentId } = useLocalSearchParams<{
     url?: string;
     title?: string;
     infoHash?: string;
     directUrl?: string;
     isLive?: string;
+    contentType?: string;
+    contentId?: string;
   }>();
   const router = useRouter();
   
