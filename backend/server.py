@@ -1330,15 +1330,25 @@ async def get_discover(current_user: User = Depends(get_current_user)):
 
 @api_router.get("/content/search")
 async def search_content(q: str, current_user: User = Depends(get_current_user)):
-    """Search content via Cinemeta with improved relevance"""
+    """Search content via Cinemeta with strict relevance filtering"""
     if not q or len(q) < 2:
         return {"movies": [], "series": []}
     
+    # Common words to ignore when matching
+    STOP_WORDS = {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'is', 'it'}
+    
     def score_result(item, query):
-        """Score search results by relevance to query"""
+        """Score search results by relevance - strict matching"""
         name = (item.get('name') or '').lower()
         query_lower = query.lower()
         query_words = query_lower.split()
+        
+        # Get significant words (non-stop words) from query
+        significant_words = [w for w in query_words if w not in STOP_WORDS and len(w) > 1]
+        
+        # If no significant words, use all words
+        if not significant_words:
+            significant_words = query_words
         
         # Exact match gets highest score
         if name == query_lower:
@@ -1346,22 +1356,20 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
         
         # Title starts with query
         if name.startswith(query_lower):
-            return 90
+            return 95
         
         # Full query appears in title
         if query_lower in name:
-            return 80
+            return 90
         
-        # All query words appear in title (in order)
-        all_words_present = all(word in name for word in query_words)
-        if all_words_present:
-            return 70
+        # All significant words must appear in title
+        all_significant_present = all(word in name for word in significant_words)
+        if all_significant_present:
+            # Bonus for shorter titles (more specific match)
+            length_bonus = max(0, 20 - len(name.split()))
+            return 80 + length_bonus
         
-        # Partial match - count how many query words appear
-        matching_words = sum(1 for word in query_words if word in name)
-        if matching_words > 0:
-            return 50 + (matching_words * 5)
-        
+        # If not all significant words match, reject
         return 0
     
     try:
@@ -1390,9 +1398,9 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
             movies_scored = [(m, score_result(m, q)) for m in movies]
             series_scored = [(s, score_result(s, q)) for s in series]
             
-            # Filter out very low relevance results (score < 50 means not all main words match)
-            movies_filtered = [m for m, score in sorted(movies_scored, key=lambda x: -x[1]) if score >= 50]
-            series_filtered = [s for s, score in sorted(series_scored, key=lambda x: -x[1]) if score >= 50]
+            # Only include results where ALL significant words match (score > 0)
+            movies_filtered = [m for m, score in sorted(movies_scored, key=lambda x: -x[1]) if score > 0]
+            series_filtered = [s for s, score in sorted(series_scored, key=lambda x: -x[1]) if score > 0]
             
             logger.info(f"Search '{q}': {len(movies_filtered)} movies, {len(series_filtered)} series (filtered from {len(movies)}/{len(series)})")
             
