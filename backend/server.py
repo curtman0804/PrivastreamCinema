@@ -748,13 +748,27 @@ async def get_addon_streams(
         logger.error(f"Error fetching streams: {str(e)}")
         return {"streams": []}
 
-@api_router.get("/streams/{content_type}/{content_id}")
+@api_router.get("/streams/{content_type}/{content_id:path}")
 async def get_all_streams(
     content_type: str,
     content_id: str,
     current_user: User = Depends(get_current_user)
 ):
     """Fetch streams from ALL installed addons + built-in Torrentio-style aggregation"""
+    
+    # Handle URL-based content IDs (like from OnlyPorn addon)
+    # These IDs are direct video URLs that can be played
+    if content_id.startswith('http://') or content_id.startswith('https://'):
+        # The content ID IS the stream URL
+        logger.info(f"URL-based content ID detected: {content_id[:50]}...")
+        return {
+            "streams": [{
+                "name": "Direct Stream",
+                "title": "Play Video",
+                "url": content_id,
+                "addon": "OnlyPorn"
+            }]
+        }
     
     # For TV channels (USA TV), fetch directly from the addon
     if content_type == 'tv' and content_id.startswith('ustv'):
