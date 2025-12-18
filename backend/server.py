@@ -1807,12 +1807,17 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
                 series = series_resp.json().get('metas', [])
             
             # Score and sort results by relevance
-            movies_scored = [(m, score_result(m, q)) for m in movies]
-            series_scored = [(s, score_result(s, q)) for s in series]
+            # For person name or genre searches, trust Cinemeta results more
+            trust_results = is_likely_person_name or is_genre_search
             
-            # Only include results where ALL significant words match (score > 0)
-            movies_filtered = [m for m, score in sorted(movies_scored, key=lambda x: -x[1]) if score > 0][:15]
-            series_filtered = [s for s, score in sorted(series_scored, key=lambda x: -x[1]) if score > 0][:15]
+            movies_scored = [(m, score_result(m, q, trust_cinemeta=trust_results)) for m in movies]
+            series_scored = [(s, score_result(s, q, trust_cinemeta=trust_results)) for s in series]
+            
+            # Only include results with score > 0
+            # Increase limit for person/genre searches since we want all results
+            result_limit = 50 if trust_results else 15
+            movies_filtered = [m for m, score in sorted(movies_scored, key=lambda x: -x[1]) if score > 0][:result_limit]
+            series_filtered = [s for s, score in sorted(series_scored, key=lambda x: -x[1]) if score > 0][:result_limit]
             
             logger.info(f"Search '{q}': checking streams for {len(movies_filtered)} movies, {len(series_filtered)} series")
             
