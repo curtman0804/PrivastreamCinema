@@ -1183,6 +1183,63 @@ async def get_all_streams(
     return {"streams": unique_streams}
 
 
+# ==================== SUBTITLES ====================
+
+@api_router.get("/subtitles/{content_type}/{content_id}")
+async def get_subtitles(content_type: str, content_id: str, current_user: User = Depends(get_current_user)):
+    """Get subtitles from OpenSubtitles addon"""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            url = f"https://opensubtitles-v3.strem.io/subtitles/{content_type}/{content_id}.json"
+            response = await client.get(url)
+            
+            if response.status_code == 200:
+                data = response.json()
+                subtitles = data.get('subtitles', [])
+                
+                # Language code to name mapping
+                lang_names = {
+                    'eng': 'English', 'spa': 'Spanish', 'fre': 'French', 'ger': 'German',
+                    'ita': 'Italian', 'por': 'Portuguese', 'rus': 'Russian', 'jpn': 'Japanese',
+                    'chi': 'Chinese', 'kor': 'Korean', 'ara': 'Arabic', 'hin': 'Hindi',
+                    'dut': 'Dutch', 'pol': 'Polish', 'tur': 'Turkish', 'vie': 'Vietnamese',
+                    'tha': 'Thai', 'swe': 'Swedish', 'nor': 'Norwegian', 'dan': 'Danish',
+                    'fin': 'Finnish', 'heb': 'Hebrew', 'cze': 'Czech', 'hun': 'Hungarian',
+                    'rum': 'Romanian', 'gre': 'Greek', 'bul': 'Bulgarian', 'ukr': 'Ukrainian',
+                    'ind': 'Indonesian', 'may': 'Malay', 'hrv': 'Croatian', 'srp': 'Serbian'
+                }
+                
+                # Process and organize by language
+                processed = []
+                seen_langs = set()
+                
+                for sub in subtitles:
+                    lang = sub.get('lang', 'unknown')
+                    lang_name = lang_names.get(lang, lang.upper())
+                    
+                    # Only include first subtitle per language (best rated)
+                    if lang not in seen_langs:
+                        processed.append({
+                            'id': sub.get('id'),
+                            'url': sub.get('url'),
+                            'lang': lang,
+                            'langName': lang_name
+                        })
+                        seen_langs.add(lang)
+                
+                # Sort with English first, then alphabetically
+                processed.sort(key=lambda x: (0 if x['lang'] == 'eng' else 1, x['langName']))
+                
+                logger.info(f"Found {len(processed)} subtitle languages for {content_type}/{content_id}")
+                return {"subtitles": processed}
+            else:
+                logger.warning(f"OpenSubtitles returned {response.status_code}")
+                return {"subtitles": []}
+    except Exception as e:
+        logger.error(f"Subtitles error: {str(e)}")
+        return {"subtitles": []}
+
+
 # ==================== CONTENT ROUTES ====================
 
 @api_router.get("/content/discover-organized")
