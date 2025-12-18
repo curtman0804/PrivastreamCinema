@@ -1447,7 +1447,7 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                     async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
                         response = await client.get(url)
                         if response.status_code == 200:
-                            metas = response.json().get('metas', [])[:30]
+                            metas = response.json().get('metas', [])[:100]  # Get up to 100 items
                             # Filter out items with empty names or IDs
                             metas = [m for m in metas if m.get('name') and m.get('id')]
                             
