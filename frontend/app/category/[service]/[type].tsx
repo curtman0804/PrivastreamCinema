@@ -128,9 +128,14 @@ export default function CategoryScreen() {
       </View>
 
       {/* Content Grid */}
-      {items.length === 0 ? (
+      {isLoading ? (
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color="#B8A05C" />
+          <Text style={styles.loadingText}>Loading {decodedService}...</Text>
+        </View>
+      ) : items.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No content found</Text>
         </View>
       ) : (
         <FlatList
@@ -140,6 +145,16 @@ export default function CategoryScreen() {
           numColumns={3}
           contentContainerStyle={styles.gridContent}
           showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={styles.loadMoreContainer}>
+                <ActivityIndicator size="small" color="#B8A05C" />
+                <Text style={styles.loadMoreText}>Loading more...</Text>
+              </View>
+            ) : null
+          }
         />
       )}
     </SafeAreaView>
