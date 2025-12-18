@@ -33,6 +33,7 @@ export default function CategoryScreen() {
 
   const fetchCategoryContent = useCallback(async (skipValue: number = 0, append: boolean = false) => {
     if (!decodedService || !type) return;
+    if (append && isLoadingMore) return; // Prevent duplicate calls
     
     try {
       if (append) {
@@ -41,16 +42,27 @@ export default function CategoryScreen() {
         setIsLoading(true);
       }
       
+      console.log(`Fetching category: ${decodedService}, skip=${skipValue}`);
       const response = await api.get(`/api/content/category/${encodeURIComponent(decodedService)}/${type}?skip=${skipValue}&limit=100`);
       const data = response.data;
       
+      const newItems = data.items || [];
+      console.log(`Received ${newItems.length} items, hasMore=${data.hasMore}`);
+      
       if (append) {
-        setItems(prev => [...prev, ...data.items]);
+        setItems(prev => {
+          // Deduplicate items based on ID
+          const existingIds = new Set(prev.map(item => item.id || item.imdb_id));
+          const uniqueNewItems = newItems.filter((item: ContentItem) => !existingIds.has(item.id || item.imdb_id));
+          return [...prev, ...uniqueNewItems];
+        });
       } else {
-        setItems(data.items || []);
+        setItems(newItems);
       }
-      setHasMore(data.hasMore);
-      setSkip(skipValue + data.items.length);
+      
+      // Keep loading if we got items (most Stremio addons have unlimited pagination)
+      setHasMore(newItems.length > 0);
+      setSkip(skipValue + newItems.length);
     } catch (error) {
       console.log('Error fetching category:', error);
       // Fallback to discover data
@@ -66,13 +78,14 @@ export default function CategoryScreen() {
             categoryItems = serviceData.channels || [];
           }
           setItems(categoryItems.filter(Boolean));
+          setHasMore(false);
         }
       }
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [decodedService, type, discoverData]);
+  }, [decodedService, type, discoverData, isLoadingMore]);
 
   useEffect(() => {
     fetchCategoryContent(0, false);
