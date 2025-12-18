@@ -131,6 +131,25 @@ export default function DetailsScreen() {
       console.log('[DETAILS] Error saving to AsyncStorage:', e);
     }
     
+    // Check if this is an xHamster stream - these have IP-restricted URLs that need browser playback
+    const isXHamsterStream = stream.addon === 'xHamster' || (stream.name && stream.name.includes('xHamster'));
+    
+    if (isXHamsterStream && decodedId.startsWith('http')) {
+      // xHamster streams need to be opened in browser due to IP restrictions
+      Alert.alert(
+        'Open in Browser',
+        'xHamster videos play best in your browser. Open the video page?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Open', 
+            onPress: () => Linking.openURL(decodedId).catch(err => console.log('Error opening URL:', err))
+          },
+        ]
+      );
+      return;
+    }
+    
     if (stream.infoHash) {
       // Torrent stream - use torrent player
       router.push({
