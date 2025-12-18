@@ -19,7 +19,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const { width, height } = Dimensions.get('window');
 
 export default function DetailsScreen() {
-  const { type, id: rawId } = useLocalSearchParams<{ type: string; id: string }>();
+  const { type, id: rawId, name: passedName, poster: passedPoster } = useLocalSearchParams<{ 
+    type: string; 
+    id: string;
+    name?: string;
+    poster?: string;
+  }>();
   const router = useRouter();
   const { 
     streams, 
