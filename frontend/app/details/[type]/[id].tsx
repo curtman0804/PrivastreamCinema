@@ -106,6 +106,14 @@ export default function DetailsScreen() {
   const handleStreamSelect = async (stream: Stream) => {
     // Get the IMDB ID for subtitles - use baseId for episodes
     const imdbId = baseId || (id as string);
+    const contentTitle = content?.name || 'Video';
+    
+    // Set current playing info in global store for subtitles
+    setCurrentPlaying({
+      contentType: type as string,
+      contentId: imdbId,
+      title: contentTitle,
+    });
     
     if (stream.infoHash) {
       // Torrent stream - use torrent player
@@ -113,9 +121,7 @@ export default function DetailsScreen() {
         pathname: '/player',
         params: { 
           infoHash: stream.infoHash,
-          title: content?.name || 'Video',
-          contentType: type as string,
-          contentId: imdbId,
+          title: contentTitle,
         },
       });
     } else if (stream.url) {
@@ -124,10 +130,8 @@ export default function DetailsScreen() {
         pathname: '/player',
         params: { 
           directUrl: stream.url,
-          title: content?.name || 'Live TV',
+          title: contentTitle,
           isLive: type === 'tv' ? 'true' : 'false',
-          contentType: type as string,
-          contentId: imdbId,
         },
       });
     }
