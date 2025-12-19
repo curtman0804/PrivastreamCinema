@@ -152,9 +152,10 @@ export default function DetailsScreen() {
       const separator = stream.url.includes('?') ? '&' : '?';
       const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
       
-      // For proxy URLs, we need the full backend URL
-      const absoluteUrl = `/api${stream.url.substring(4)}${tokenParam}`;
-      console.log('[DETAILS] Using proxy stream:', absoluteUrl.substring(0, 120));
+      // Construct full absolute URL with the current origin
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const absoluteUrl = `${origin}${stream.url}${tokenParam}`;
+      console.log('[DETAILS] Using proxy stream:', absoluteUrl.substring(0, 150));
       
       router.push({
         pathname: '/player',
