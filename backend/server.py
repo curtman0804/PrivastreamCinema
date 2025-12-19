@@ -2379,7 +2379,10 @@ async def proxy_video(
     try:
         is_head = request.method == "HEAD"
         
-        async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as client:
+        # Create client without context manager so it stays open for streaming
+        client = httpx.AsyncClient(follow_redirects=True, timeout=120.0)
+        
+        try:
             if is_head:
                 response = await client.head(url, headers=upstream_headers)
             else:
@@ -2392,6 +2395,7 @@ async def proxy_video(
             # Accept 200 (OK) and 206 (Partial Content) as success
             if response.status_code not in [200, 206]:
                 logger.warning(f"Video proxy error: {response.status_code}")
+                await client.aclose()
                 raise HTTPException(status_code=response.status_code, detail="Video unavailable")
             
             content_type = response.headers.get('content-type', 'video/mp4')
@@ -2414,10 +2418,12 @@ async def proxy_video(
             if content_range:
                 response_headers['Content-Range'] = content_range
             
-            # For HEAD requests, return just headers
+            # For HEAD requests, return just headers and close
             if is_head:
+                await client.aclose()
                 return Response(content=b"", status_code=response.status_code, headers=response_headers, media_type=content_type)
             
+            # For GET requests, stream the response
             async def stream_video():
                 try:
                     async for chunk in response.aiter_bytes(chunk_size=256 * 1024):  # 256KB chunks
@@ -2426,6 +2432,7 @@ async def proxy_video(
                     logger.error(f"Video proxy stream error: {e}")
                 finally:
                     await response.aclose()
+                    await client.aclose()
             
             return StreamingResponse(
                 stream_video(),
@@ -2433,6 +2440,12 @@ async def proxy_video(
                 media_type=content_type,
                 headers=response_headers
             )
+        except HTTPException:
+            await client.aclose()
+            raise
+        except Exception as e:
+            await client.aclose()
+            raise
         
     except HTTPException:
         raise
