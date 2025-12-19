@@ -2359,8 +2359,15 @@ async def proxy_video(
         headers['Origin'] = referer.rstrip('/')
     
     try:
+        # For HEAD requests, just get headers from upstream
+        is_head = request.method == "HEAD"
+        
         client = httpx.AsyncClient(follow_redirects=True, timeout=60.0)
-        response = await client.get(url, headers=headers)
+        
+        if is_head:
+            response = await client.head(url, headers=headers)
+        else:
+            response = await client.get(url, headers=headers)
         
         if response.status_code != 200:
             await client.aclose()
@@ -2370,7 +2377,23 @@ async def proxy_video(
         content_type = response.headers.get('content-type', 'video/mp4')
         content_length = response.headers.get('content-length')
         
-        logger.info(f"Video proxy: status={response.status_code}, type={content_type}, length={content_length}")
+        logger.info(f"Video proxy: method={request.method}, status={response.status_code}, type={content_type}, length={content_length}")
+        
+        response_headers = {
+            'Content-Type': content_type,
+            'Accept-Ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': '*',
+            'Cache-Control': 'no-cache',
+        }
+        if content_length:
+            response_headers['Content-Length'] = content_length
+        
+        # For HEAD requests, return just headers
+        if is_head:
+            await client.aclose()
+            return Response(content=b"", headers=response_headers, media_type=content_type)
         
         async def stream_video():
             try:
@@ -2381,15 +2404,6 @@ async def proxy_video(
             finally:
                 await response.aclose()
                 await client.aclose()
-        
-        response_headers = {
-            'Content-Type': content_type,
-            'Accept-Ranges': 'bytes',
-            'Access-Control-Allow-Origin': '*',
-            'Cache-Control': 'no-cache',
-        }
-        if content_length:
-            response_headers['Content-Length'] = content_length
         
         return StreamingResponse(
             stream_video(),
