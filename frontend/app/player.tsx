@@ -660,9 +660,9 @@ export default function PlayerScreen() {
               volume={1.0}
               isMuted={false}
               onPlaybackStatusUpdate={handlePlaybackStatus}
-              onError={(error) => {
-                console.log('Video error:', error);
-                setError('Failed to play video. The audio codec may not be supported.');
+              onError={(errorObj) => {
+                console.log('Video error:', errorObj);
+                handleVideoError(errorObj);
               }}
             />
             
