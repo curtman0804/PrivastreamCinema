@@ -311,6 +311,70 @@ export default function PlayerScreen() {
     };
   }, [contentType, contentId]);
 
+  // Load fallback streams from AsyncStorage
+  useEffect(() => {
+    const loadFallbackStreams = async () => {
+      try {
+        const storedData = await AsyncStorage.getItem('currentPlaying');
+        if (storedData) {
+          const parsed = JSON.parse(storedData);
+          if (parsed.fallbackStreams && Array.isArray(parsed.fallbackStreams)) {
+            console.log(`[PLAYER] Loaded ${parsed.fallbackStreams.length} fallback streams`);
+            setFallbackStreams(parsed.fallbackStreams);
+          }
+        }
+      } catch (e) {
+        console.log('[PLAYER] Error loading fallback streams:', e);
+      }
+    };
+    loadFallbackStreams();
+  }, []);
+
+  // Try next fallback stream
+  const tryNextStream = () => {
+    const nextIndex = currentFallbackIndex + 1;
+    if (nextIndex >= fallbackStreams.length) {
+      console.log('[PLAYER] No more fallback streams available');
+      setError('Failed to play video. No more streams available.');
+      setIsRetrying(false);
+      return;
+    }
+    
+    const nextStream = fallbackStreams[nextIndex];
+    console.log(`[PLAYER] Trying fallback stream ${nextIndex + 1}/${fallbackStreams.length}:`, nextStream.name || nextStream.url?.substring(0, 50));
+    
+    setCurrentFallbackIndex(nextIndex);
+    setError(null);
+    setIsRetrying(true);
+    setLoadingStatus(`Trying alternative stream ${nextIndex + 1}...`);
+    setIsLoading(true);
+    
+    if (nextStream.url) {
+      setStreamUrl(nextStream.url);
+      setIsLoading(false);
+      setIsRetrying(false);
+    } else if (nextStream.infoHash) {
+      // Start torrent for fallback
+      startTorrentStreamWithHash(nextStream.infoHash);
+    }
+  };
+
+  // Handle video error with auto-retry
+  const handleVideoError = (errorObj: any) => {
+    console.log('[PLAYER] Video error:', errorObj);
+    
+    // If we have fallback streams and haven't exhausted them, try next
+    if (fallbackStreams.length > 0 && currentFallbackIndex < fallbackStreams.length - 1) {
+      console.log('[PLAYER] Attempting fallback...');
+      // Small delay before retry
+      retryTimeoutRef.current = setTimeout(() => {
+        tryNextStream();
+      }, 1500);
+    } else {
+      setError('Failed to play video. Try another stream or check your connection.');
+    }
+  };
+
   useEffect(() => {
     continuePollingRef.current = true;
     
@@ -338,8 +402,43 @@ export default function PlayerScreen() {
         clearTimeout(pollIntervalRef.current);
         clearInterval(pollIntervalRef.current);
       }
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
     };
   }, [url, infoHash, directUrl, isLive]);
+  
+  // Generic torrent stream function for fallbacks
+  const startTorrentStreamWithHash = async (hash: string) => {
+    try {
+      setLoadingStatus('Starting torrent...');
+      await api.stream.start(hash);
+      
+      const pollStatus = async () => {
+        if (!continuePollingRef.current) return;
+        try {
+          const status = await api.stream.status(hash);
+          if (status.status === 'ready') {
+            const videoUrl = api.stream.getVideoUrl(hash);
+            setStreamUrl(videoUrl);
+            setIsLoading(false);
+            setIsRetrying(false);
+            return;
+          } else if (status.status === 'not_found' || status.status === 'invalid') {
+            // Try next fallback
+            handleVideoError({ message: 'Torrent failed' });
+            return;
+          }
+          setTimeout(pollStatus, 1000);
+        } catch {
+          handleVideoError({ message: 'Poll error' });
+        }
+      };
+      pollStatus();
+    } catch {
+      handleVideoError({ message: 'Start error' });
+    }
+  };
 
   const startTorrentStream = async () => {
     if (!infoHash) return;
