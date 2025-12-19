@@ -82,6 +82,14 @@ const WebVideoPlayer = ({ streamUrl, onLoad, onError, isHLS = false }: { streamU
   );
 };
 
+// Define Stream type for fallback
+interface FallbackStream {
+  url?: string;
+  infoHash?: string;
+  name?: string;
+  title?: string;
+}
+
 export default function PlayerScreen() {
   const { url, title, infoHash, directUrl, isLive, contentType, contentId } = useLocalSearchParams<{
     url?: string;
@@ -103,6 +111,12 @@ export default function PlayerScreen() {
   const [downloadSpeed, setDownloadSpeed] = useState(0);
   const [isLiveTV, setIsLiveTV] = useState(false);
   const [hasAudioError, setHasAudioError] = useState(false);
+  
+  // Fallback streams state
+  const [fallbackStreams, setFallbackStreams] = useState<FallbackStream[]>([]);
+  const [currentFallbackIndex, setCurrentFallbackIndex] = useState(-1);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Subtitles state
   const [subtitles, setSubtitles] = useState<Array<{id: string; url: string; lang: string; langName: string}>>([]);
