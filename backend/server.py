@@ -1519,7 +1519,7 @@ async def get_all_streams(
             # Streams without hash (direct URLs)
             unique_streams.append(stream)
     
-    # Sort by quality tier + seeders (best streams first)
+    # Sort by quality tier + reliability + seeders (best streams first)
     def get_sort_score(stream):
         # Extract seeders
         seeders = 0
@@ -1530,6 +1530,7 @@ async def get_all_streams(
                 seeders = 0
         title = stream.get('title', '')
         name = stream.get('name', '')
+        addon = stream.get('addon', '').lower()
         try:
             if '🌱' in title:
                 seeds_part = title.split('🌱')[1].split('|')[0].strip()
@@ -1557,9 +1558,33 @@ async def get_all_streams(
         else:
             quality_score = 2  # Default to 720p tier
         
-        # Combined score: quality tier * 10000 + seeders
-        # This ensures higher quality streams come first, with seeder count as tiebreaker
-        return (quality_score * 10000) + min(seeders, 9999)
+        # Source reliability bonus (higher = more reliable)
+        reliability_bonus = 0
+        
+        # Direct URL streams (yt-dlp extracted) are very reliable
+        if stream.get('url', '').startswith('/api/proxy/'):
+            reliability_bonus = 5000  # High priority for proxy streams
+        # Torrents with high seeders are reliable
+        elif seeders > 50:
+            reliability_bonus = 3000
+        elif seeders > 20:
+            reliability_bonus = 2000
+        elif seeders > 5:
+            reliability_bonus = 1000
+        
+        # Source-specific bonuses
+        if 'torrentio' in addon:
+            reliability_bonus += 500  # Torrentio is well-maintained
+        elif 'yts' in addon:
+            reliability_bonus += 400  # YTS has quality encodes
+        elif 'xhamster' in addon or 'eporner' in addon or 'porntrex' in addon:
+            reliability_bonus += 300  # Adult sites with yt-dlp work well
+        elif 'piratebay' in addon or 'tpb' in addon:
+            reliability_bonus += 200
+        
+        # Combined score: quality tier * 100000 + reliability * 100 + seeders
+        # This ensures: quality > reliability > seeders
+        return (quality_score * 100000) + (reliability_bonus * 10) + min(seeders, 9999)
     
     unique_streams.sort(key=get_sort_score, reverse=True)
     
