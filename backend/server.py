@@ -2298,15 +2298,28 @@ async def stream_video(
 
 # ==================== STREAM PROXY ====================
 
-@api_router.api_route("/proxy/video", methods=["GET", "HEAD"])
+@api_router.api_route("/proxy/video", methods=["GET", "HEAD", "OPTIONS"])
 async def proxy_video(
     request: Request,
     url: str,
     token: Optional[str] = None,
     current_user: Optional[User] = None
 ):
-    """Proxy a video stream through our server - handles base64 encoded URLs"""
+    """Proxy a video stream through our server - handles base64 encoded URLs and Range requests"""
     import base64
+    from urllib.parse import urlparse
+    
+    # Handle CORS preflight
+    if request.method == "OPTIONS":
+        return Response(
+            content="",
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+                'Access-Control-Allow-Headers': '*',
+                'Access-Control-Max-Age': '86400',
+            }
+        )
     
     # Allow authentication via query param token
     if not current_user and token:
@@ -2343,73 +2356,83 @@ async def proxy_video(
     else:
         # Extract domain for referer
         try:
-            from urllib.parse import urlparse
             parsed = urlparse(url)
             referer = f"{parsed.scheme}://{parsed.netloc}/"
         except:
             pass
     
-    headers = {
+    upstream_headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': '*/*',
         'Accept-Language': 'en-US,en;q=0.5',
     }
     if referer:
-        headers['Referer'] = referer
-        headers['Origin'] = referer.rstrip('/')
+        upstream_headers['Referer'] = referer
+        upstream_headers['Origin'] = referer.rstrip('/')
+    
+    # Get Range header from client request
+    range_header = request.headers.get('Range')
+    if range_header:
+        upstream_headers['Range'] = range_header
+        logger.info(f"Video proxy: Range request - {range_header}")
     
     try:
-        # For HEAD requests, just get headers from upstream
         is_head = request.method == "HEAD"
         
-        client = httpx.AsyncClient(follow_redirects=True, timeout=60.0)
-        
-        if is_head:
-            response = await client.head(url, headers=headers)
-        else:
-            response = await client.get(url, headers=headers)
-        
-        if response.status_code != 200:
-            await client.aclose()
-            logger.warning(f"Video proxy error: {response.status_code}")
-            raise HTTPException(status_code=response.status_code, detail="Video unavailable")
-        
-        content_type = response.headers.get('content-type', 'video/mp4')
-        content_length = response.headers.get('content-length')
-        
-        logger.info(f"Video proxy: method={request.method}, status={response.status_code}, type={content_type}, length={content_length}")
-        
-        response_headers = {
-            'Content-Type': content_type,
-            'Accept-Ranges': 'bytes',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-            'Access-Control-Allow-Headers': '*',
-            'Cache-Control': 'no-cache',
-        }
-        if content_length:
-            response_headers['Content-Length'] = content_length
-        
-        # For HEAD requests, return just headers
-        if is_head:
-            await client.aclose()
-            return Response(content=b"", headers=response_headers, media_type=content_type)
-        
-        async def stream_video():
-            try:
-                async for chunk in response.aiter_bytes(chunk_size=512 * 1024):  # 512KB chunks
-                    yield chunk
-            except Exception as e:
-                logger.error(f"Video proxy stream error: {e}")
-            finally:
-                await response.aclose()
-                await client.aclose()
-        
-        return StreamingResponse(
-            stream_video(),
-            media_type=content_type,
-            headers=response_headers
-        )
+        async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as client:
+            if is_head:
+                response = await client.head(url, headers=upstream_headers)
+            else:
+                # Use stream=True to not load entire file into memory
+                response = await client.send(
+                    client.build_request('GET', url, headers=upstream_headers),
+                    stream=True
+                )
+            
+            # Accept 200 (OK) and 206 (Partial Content) as success
+            if response.status_code not in [200, 206]:
+                logger.warning(f"Video proxy error: {response.status_code}")
+                raise HTTPException(status_code=response.status_code, detail="Video unavailable")
+            
+            content_type = response.headers.get('content-type', 'video/mp4')
+            content_length = response.headers.get('content-length')
+            content_range = response.headers.get('content-range')
+            
+            logger.info(f"Video proxy: method={request.method}, status={response.status_code}, type={content_type}, length={content_length}, range={content_range}")
+            
+            response_headers = {
+                'Content-Type': content_type,
+                'Accept-Ranges': 'bytes',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+                'Access-Control-Allow-Headers': '*',
+                'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
+                'Cache-Control': 'no-cache',
+            }
+            if content_length:
+                response_headers['Content-Length'] = content_length
+            if content_range:
+                response_headers['Content-Range'] = content_range
+            
+            # For HEAD requests, return just headers
+            if is_head:
+                return Response(content=b"", status_code=response.status_code, headers=response_headers, media_type=content_type)
+            
+            async def stream_video():
+                try:
+                    async for chunk in response.aiter_bytes(chunk_size=256 * 1024):  # 256KB chunks
+                        yield chunk
+                except Exception as e:
+                    logger.error(f"Video proxy stream error: {e}")
+                finally:
+                    await response.aclose()
+            
+            return StreamingResponse(
+                stream_video(),
+                status_code=response.status_code,  # Return 206 for range requests
+                media_type=content_type,
+                headers=response_headers
+            )
         
     except HTTPException:
         raise
