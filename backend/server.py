@@ -968,8 +968,8 @@ async def get_all_streams(
         elif 'porntrex.com' in content_id:
             site_name = "PornTrex"
         
-        # Try yt-dlp first for supported sites (xHamster, Eporner) - this gets REAL working URLs
-        if site_name in ["xHamster", "Eporner"]:
+        # Try yt-dlp first for supported sites - this gets REAL working URLs
+        if site_name in ["xHamster", "Eporner", "PornTrex"]:
             try:
                 import subprocess
                 logger.info(f"Using yt-dlp to extract {site_name} streams...")
