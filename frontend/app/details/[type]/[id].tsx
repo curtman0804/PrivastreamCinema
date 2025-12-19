@@ -145,17 +145,16 @@ export default function DetailsScreen() {
     
     // Check if this is a proxy stream - need to convert relative URL to absolute
     if (stream.url && stream.url.startsWith('/api/proxy/')) {
-      // Convert relative proxy URL to absolute URL and include auth token
-      const baseUrl = process.env.EXPO_PUBLIC_API_URL || '';
-      
       // Get the auth token to include in the URL for video player authentication
       const authToken = await AsyncStorage.getItem('auth_token');
-      const tokenParam = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
       
-      const absoluteUrl = baseUrl 
-        ? `${baseUrl}${stream.url}${tokenParam}` 
-        : `${stream.url}${tokenParam}`;
-      console.log('[DETAILS] Using proxy stream with auth:', absoluteUrl.substring(0, 100));
+      // Build the full URL - proxy URLs already have ?url= so we add &token=
+      const separator = stream.url.includes('?') ? '&' : '?';
+      const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
+      
+      // For proxy URLs, we need the full backend URL
+      const absoluteUrl = `/api${stream.url.substring(4)}${tokenParam}`;
+      console.log('[DETAILS] Using proxy stream:', absoluteUrl.substring(0, 120));
       
       router.push({
         pathname: '/player',
