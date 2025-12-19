@@ -2298,6 +2298,111 @@ async def stream_video(
 
 # ==================== STREAM PROXY ====================
 
+@api_router.get("/proxy/video")
+async def proxy_video(
+    url: str,
+    token: Optional[str] = None,
+    current_user: Optional[User] = None
+):
+    """Proxy a video stream through our server - handles base64 encoded URLs"""
+    import base64
+    
+    # Allow authentication via query param token
+    if not current_user and token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_id = payload.get("user_id")
+            if user_id:
+                user = await db.users.find_one({"id": user_id})
+                if user:
+                    current_user = User(**user)
+        except:
+            pass
+    
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Decode URL if it's base64 encoded
+    try:
+        if not url.startswith('http'):
+            url = base64.b64decode(url).decode('utf-8')
+    except Exception as e:
+        logger.warning(f"URL decode error: {e}")
+    
+    logger.info(f"Proxying video: {url[:80]}...")
+    
+    # Determine referer based on URL
+    referer = None
+    if 'xhamster' in url or 'xhcdn' in url:
+        referer = 'https://xhamster.com/'
+    elif 'eporner' in url:
+        referer = 'https://www.eporner.com/'
+    elif 'porntrex' in url:
+        referer = 'https://www.porntrex.com/'
+    else:
+        # Extract domain for referer
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            referer = f"{parsed.scheme}://{parsed.netloc}/"
+        except:
+            pass
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.5',
+    }
+    if referer:
+        headers['Referer'] = referer
+        headers['Origin'] = referer.rstrip('/')
+    
+    try:
+        client = httpx.AsyncClient(follow_redirects=True, timeout=60.0)
+        response = await client.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            await client.aclose()
+            logger.warning(f"Video proxy error: {response.status_code}")
+            raise HTTPException(status_code=response.status_code, detail="Video unavailable")
+        
+        content_type = response.headers.get('content-type', 'video/mp4')
+        content_length = response.headers.get('content-length')
+        
+        logger.info(f"Video proxy: status={response.status_code}, type={content_type}, length={content_length}")
+        
+        async def stream_video():
+            try:
+                async for chunk in response.aiter_bytes(chunk_size=512 * 1024):  # 512KB chunks
+                    yield chunk
+            except Exception as e:
+                logger.error(f"Video proxy stream error: {e}")
+            finally:
+                await response.aclose()
+                await client.aclose()
+        
+        response_headers = {
+            'Content-Type': content_type,
+            'Accept-Ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'no-cache',
+        }
+        if content_length:
+            response_headers['Content-Length'] = content_length
+        
+        return StreamingResponse(
+            stream_video(),
+            media_type=content_type,
+            headers=response_headers
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Video proxy error: {e}")
+        raise HTTPException(status_code=503, detail=str(e))
+
+
 @api_router.get("/proxy/stream")
 async def proxy_stream(
     url: str,
