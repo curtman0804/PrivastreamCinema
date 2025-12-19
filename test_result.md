@@ -313,4 +313,39 @@ agent_communication:
       
       All backend APIs are working correctly and meet the specified requirements.
       The discover page content organization has been fixed and no longer contains
-      the unwanted "Calendar-Videos" or "Last-Videos" sections.
+      the unwanted "Calendar-Videos" or "Last-Videos" sections.  - agent: "main"
+    message: |
+      SMART STREAM FALLBACK FEATURE IMPLEMENTED:
+      
+      This feature automatically tries the next available stream when the current one fails to play.
+      
+      Backend changes (server.py):
+      1. Fixed video proxy to properly support HTTP Range requests (206 Partial Content)
+      2. Added proper CORS headers and content-range handling for video streaming
+      3. Improved stream sorting algorithm to prioritize more reliable sources:
+         - Direct proxy streams (yt-dlp extracted) get highest reliability bonus
+         - Torrents with high seeders get priority
+         - Source-specific bonuses for Torrentio, YTS, adult sites
+         - Quality still comes first (4K > 1080p > 720p), then reliability, then seeders
+      
+      Frontend changes:
+      1. Details page ([type]/[id].tsx):
+         - Now saves up to 10 fallback streams to AsyncStorage when selecting a stream
+         - Passes the stream index when calling handleStreamSelect
+      
+      2. Player page (player.tsx):
+         - Added fallback stream state management
+         - New tryNextStream() function to automatically try the next stream on error
+         - handleVideoError() function that triggers fallback on playback failure
+         - "Try Another Stream" button shown in error UI if fallbacks available
+         - Both web and native video players now trigger auto-fallback on error
+      
+      How it works:
+      1. User clicks a stream on details page
+      2. Details page saves up to 10 alternative streams to AsyncStorage
+      3. If video fails to load, player automatically tries next stream after 1.5s
+      4. User sees "Trying alternative stream X..." message
+      5. If all streams fail, error message with "Go Back" button is shown
+      
+      This improves user experience by automatically finding a working stream instead of
+      showing an error immediately.
