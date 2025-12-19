@@ -112,20 +112,38 @@ export default function DetailsScreen() {
     setIsLoadingContent(false);
   };
 
-  const handleStreamSelect = async (stream: Stream) => {
+  const handleStreamSelect = async (stream: Stream, streamIndex: number = 0) => {
     // Get the IMDB ID for subtitles - use baseId for episodes
     const imdbId = baseId || (id as string);
     const contentTitle = content?.name || 'Video';
     const cType = type as string || 'movie';
     
-    console.log('[DETAILS] handleStreamSelect - passing to player:', { cType, imdbId, contentTitle });
+    console.log('[DETAILS] handleStreamSelect - passing to player:', { cType, imdbId, contentTitle, streamIndex });
     
-    // Also save to AsyncStorage as backup
+    // Get auth token for proxy URLs
+    const authToken = await AsyncStorage.getItem('auth_token');
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    
+    // Build list of fallback streams (excluding browser-only and current stream)
+    const fallbackStreams = streams
+      .filter((s, idx) => idx !== streamIndex && !s.externalUrl && !s.requiresWebView && (s.url || s.infoHash))
+      .map(s => {
+        // Convert proxy URLs to absolute URLs
+        if (s.url && s.url.startsWith('/api/proxy/')) {
+          const separator = s.url.includes('?') ? '&' : '?';
+          const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
+          return { ...s, url: `${origin}${s.url}${tokenParam}` };
+        }
+        return s;
+      });
+    
+    // Save to AsyncStorage for player fallback
     try {
       await AsyncStorage.setItem('currentPlaying', JSON.stringify({
         contentType: cType,
         contentId: imdbId,
         title: contentTitle,
+        fallbackStreams: fallbackStreams.slice(0, 10), // Max 10 fallbacks
       }));
     } catch (e) {
       console.log('[DETAILS] Error saving to AsyncStorage:', e);
