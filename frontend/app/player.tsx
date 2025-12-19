@@ -724,7 +724,7 @@ export default function PlayerScreen() {
                 <View style={styles.bottomControls}>
                   <Text style={styles.timeText}>{formatTime(position)}</Text>
                   <View style={styles.progressBarContainer}>
-                    <View style={[styles.progressBar, { width: `${(position / duration) * 100}%` }]} />
+                    <View style={[styles.playerProgressFill, { width: `${(position / duration) * 100}%` }]} />
                   </View>
                   <Text style={styles.timeText}>{formatTime(duration)}</Text>
                 </View>
