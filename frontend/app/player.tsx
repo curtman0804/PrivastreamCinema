@@ -893,6 +893,13 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 24,
   },
+  errorButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
   button: {
     backgroundColor: '#B8A05C',
     paddingHorizontal: 24,
