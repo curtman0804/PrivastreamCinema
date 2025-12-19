@@ -605,9 +605,16 @@ export default function PlayerScreen() {
         <View style={styles.errorContainer}>
           <Ionicons name="warning-outline" size={48} color="#ff6b6b" />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.button} onPress={() => router.back()}>
-            <Text style={styles.buttonText}>Go Back</Text>
-          </TouchableOpacity>
+          <View style={styles.errorButtons}>
+            {fallbackStreams.length > 0 && currentFallbackIndex < fallbackStreams.length - 1 && (
+              <TouchableOpacity style={[styles.button, { marginRight: 12 }]} onPress={tryNextStream}>
+                <Text style={styles.buttonText}>Try Another Stream</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[styles.button, { backgroundColor: '#333' }]} onPress={() => router.back()}>
+              <Text style={styles.buttonText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
