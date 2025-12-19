@@ -976,7 +976,7 @@ async def get_all_streams(
                 
                 # Get multiple formats
                 result = subprocess.run(
-                    ['yt-dlp', '-j', content_id],
+                    ['/root/.venv/bin/yt-dlp', '-j', content_id],
                     capture_output=True,
                     text=True,
                     timeout=30
