@@ -545,7 +545,7 @@ export default function DetailsScreen() {
                     <TouchableOpacity
                       key={index}
                       style={styles.streamItem}
-                      onPress={() => handleStreamSelect(stream)}
+                      onPress={() => handleStreamSelect(stream, index)}
                     >
                       <View style={styles.streamIcon}>
                         <Ionicons name="play" size={18} color="#B8A05C" />
