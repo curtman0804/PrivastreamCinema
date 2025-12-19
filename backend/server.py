@@ -968,8 +968,76 @@ async def get_all_streams(
         elif 'porntrex.com' in content_id:
             site_name = "PornTrex"
         
+        # Try yt-dlp first for supported sites (xHamster, Eporner) - this gets REAL working URLs
+        if site_name in ["xHamster", "Eporner"]:
+            try:
+                import subprocess
+                logger.info(f"Using yt-dlp to extract {site_name} streams...")
+                
+                # Get multiple formats
+                result = subprocess.run(
+                    ['yt-dlp', '-j', content_id],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                
+                if result.returncode == 0 and result.stdout:
+                    import json
+                    video_info = json.loads(result.stdout)
+                    formats = video_info.get('formats', [])
+                    
+                    # Filter and sort formats
+                    formatted = []
+                    seen_resolutions = set()
+                    
+                    # Sort by quality (height) descending
+                    formats_sorted = sorted(
+                        [f for f in formats if f.get('url') and f.get('height')],
+                        key=lambda x: x.get('height', 0),
+                        reverse=True
+                    )
+                    
+                    for fmt in formats_sorted:
+                        height = fmt.get('height', 0)
+                        url = fmt.get('url', '')
+                        
+                        # Skip duplicates and very low quality
+                        if height in seen_resolutions or height < 144:
+                            continue
+                        seen_resolutions.add(height)
+                        
+                        quality_label = f"{height}p"
+                        formatted.append({
+                            "name": f"{site_name} {quality_label}",
+                            "title": f"{site_name} • {quality_label} (Direct)",
+                            "url": url,
+                            "addon": site_name
+                        })
+                        
+                        # Limit to 4 quality options
+                        if len(formatted) >= 4:
+                            break
+                    
+                    if formatted:
+                        # Add browser fallback
+                        formatted.append({
+                            "name": "Open in Browser",
+                            "title": f"{site_name} • Open in Browser",
+                            "externalUrl": content_id,
+                            "addon": site_name,
+                            "requiresWebView": True
+                        })
+                        logger.info(f"{site_name}: yt-dlp found {len(formatted)-1} working streams!")
+                        return {"streams": formatted}
+                        
+            except subprocess.TimeoutExpired:
+                logger.warning(f"yt-dlp timeout for {site_name}")
+            except Exception as e:
+                logger.warning(f"yt-dlp error for {site_name}: {e}")
+        
+        # Fallback to Jaxxx addon for other sites
         try:
-            # Fetch fresh streams from Jaxxx addon - try to play in-app first
             import urllib.parse
             encoded_id = urllib.parse.quote(content_id, safe='')
             stream_url = f"https://07b88951aaab-jaxxx-v2.baby-beamup.club/stream/{content_type}/{encoded_id}.json"
@@ -980,7 +1048,6 @@ async def get_all_streams(
                     data = response.json()
                     streams = data.get('streams', [])
                     
-                    # Format streams for our app - include actual playable URLs
                     formatted = []
                     for s in streams:
                         stream_url_value = s.get('url', '')
@@ -993,25 +1060,25 @@ async def get_all_streams(
                                 "addon": site_name
                             })
                     
-                    # Always add browser fallback option at the end
+                    # Add browser fallback
                     formatted.append({
-                        "name": f"Open in Browser",
+                        "name": "Open in Browser",
                         "title": f"{site_name} • Open in Browser (if streams don't work)",
                         "externalUrl": content_id,
                         "addon": site_name,
                         "requiresWebView": True
                     })
                     
-                    logger.info(f"{site_name}: Found {len(formatted)-1} streams + browser fallback")
+                    logger.info(f"{site_name}: Jaxxx found {len(formatted)-1} streams + browser fallback")
                     return {"streams": formatted}
         except Exception as e:
-            logger.warning(f"{site_name} stream fetch error: {e}")
+            logger.warning(f"{site_name} Jaxxx error: {e}")
         
-        # If Jaxxx fails, return browser-only option
-        logger.info(f"{site_name}: Jaxxx failed, returning browser-only option")
+        # Final fallback - browser only
+        logger.info(f"{site_name}: All extraction failed, returning browser-only")
         return {"streams": [
             {
-                "name": f"Open in Browser",
+                "name": "Open in Browser",
                 "title": f"{site_name} • Open in Browser",
                 "externalUrl": content_id,
                 "addon": site_name,
