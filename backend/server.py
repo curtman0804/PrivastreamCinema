@@ -2298,8 +2298,9 @@ async def stream_video(
 
 # ==================== STREAM PROXY ====================
 
-@api_router.get("/proxy/video")
+@api_router.api_route("/proxy/video", methods=["GET", "HEAD"])
 async def proxy_video(
+    request: Request,
     url: str,
     token: Optional[str] = None,
     current_user: Optional[User] = None
