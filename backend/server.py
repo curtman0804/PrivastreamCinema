@@ -1008,11 +1008,18 @@ async def get_all_streams(
                         seen_resolutions.add(height)
                         
                         quality_label = f"{height}p"
+                        
+                        # Use proxy URL to bypass CORS/IP issues
+                        import base64
+                        encoded_url = base64.b64encode(url.encode()).decode()
+                        proxy_url = f"/api/proxy/video?url={encoded_url}"
+                        
                         formatted.append({
                             "name": f"{site_name} {quality_label}",
-                            "title": f"{site_name} • {quality_label} (Direct)",
-                            "url": url,
-                            "addon": site_name
+                            "title": f"{site_name} • {quality_label}",
+                            "url": proxy_url,
+                            "addon": site_name,
+                            "isProxy": True
                         })
                         
                         # Limit to 4 quality options
