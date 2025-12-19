@@ -627,6 +627,10 @@ export default function PlayerScreen() {
               controls
               autoPlay
               playsInline
+              onError={(e: any) => {
+                console.log('Web video error:', e);
+                handleVideoError(e);
+              }}
               style={{ 
                 width: '100%', 
                 height: '100%', 
