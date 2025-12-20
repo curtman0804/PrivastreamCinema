@@ -1762,7 +1762,10 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 response = await client.get(url)
                 if response.status_code == 200:
                     metas = response.json().get('metas', [])
-                    return (section_name, catalog_type, metas, order_idx)
+                    # Filter out items with empty/missing IDs or names (broken addon data)
+                    metas = [m for m in metas if m.get('id') and m.get('name')]
+                    if metas:  # Only return if we have valid items
+                        return (section_name, catalog_type, metas, order_idx)
         except Exception as e:
             logger.debug(f"Error fetching {section_name}: {e}")
         return None
