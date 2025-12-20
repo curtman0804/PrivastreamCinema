@@ -348,7 +348,7 @@ function handleTranscode(req, res, fileIndex) {
     console.error('Input stream error:', err);
     ffmpeg.kill('SIGTERM');
   });
-});
+}
 
 const PORT = 8002;
 app.listen(PORT, () => {
