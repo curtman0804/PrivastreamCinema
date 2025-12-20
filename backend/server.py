@@ -1935,13 +1935,32 @@ async def get_category_content(
                         # Filter out items with empty names or IDs
                         metas = [m for m in metas if m.get('name') and m.get('id')]
                         
-                        # If we got fewer items than the typical page size, we've reached the end
-                        # Most addons return 100 items per page, some return less
-                        has_more = len(metas) >= 50  # If less than 50, assume end of catalog
+                        # Detect if addon doesn't support pagination
+                        # If skip > 0 but we got a full page, the addon might not support skip
+                        # In this case, we should NOT return hasMore=true
+                        # Also check: if total items is less than skip, there's nothing new
+                        total_items = len(metas)
+                        
+                        # If we requested skip > 0 and got items, check if addon supports pagination
+                        # USA TV and some other addons return ALL items regardless of skip
+                        if skip > 0 and total_items > 0:
+                            # If total items is less than or equal to skip, addon doesn't support pagination
+                            # or we've already loaded everything
+                            if total_items <= skip:
+                                has_more = False
+                            else:
+                                # Addon might not support skip - return items after skip position
+                                # and indicate no more if we've covered all items
+                                metas = metas[skip:skip + limit]
+                                has_more = (skip + len(metas)) < total_items
+                        else:
+                            # First page - check if there might be more
+                            has_more = total_items >= 50 and total_items > limit
+                            metas = metas[:limit]
                         
                         return {
-                            "items": metas[:limit], 
-                            "total": len(metas), 
+                            "items": metas, 
+                            "total": total_items, 
                             "hasMore": has_more,
                             "catalogId": catalog_id,
                             "baseUrl": base_url
