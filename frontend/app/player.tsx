@@ -811,18 +811,16 @@ export default function PlayerScreen() {
               }}
             />
             
-            {/* Subtitle Text Overlay */}
-            {subtitleText ? (
-              <View style={styles.subtitleOverlay}>
+            {/* Subtitle Text Overlay - ALWAYS show something for debugging */}
+            <View style={styles.subtitleOverlay}>
+              {subtitleText ? (
                 <Text style={styles.subtitleTextDisplay}>{subtitleText}</Text>
-              </View>
-            ) : parsedSubtitles.length > 0 ? (
-              <View style={styles.subtitleOverlay}>
-                <Text style={[styles.subtitleTextDisplay, {fontSize: 12, backgroundColor: 'rgba(255,0,0,0.5)'}]}>
-                  DEBUG: {parsedSubtitles.length} subs loaded, pos: {Math.floor(position/1000)}s
+              ) : (
+                <Text style={[styles.subtitleTextDisplay, {fontSize: 11, backgroundColor: parsedSubtitles.length > 0 ? 'rgba(0,255,0,0.7)' : 'rgba(255,0,0,0.7)'}]}>
+                  CC: {parsedSubtitles.length} subs | pos: {Math.floor(position/1000)}s | sel: {selectedSubtitle ? 'YES' : 'NO'}
                 </Text>
-              </View>
-            ) : null}
+              )}
+            </View>
             
             {/* Custom Controls Overlay - fades in/out */}
             {showControls && (
