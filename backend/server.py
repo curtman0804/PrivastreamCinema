@@ -1336,20 +1336,42 @@ async def get_all_streams(
                 continue
         return []
     
-    async def search_eztv(imdb_id: str):
-        """Search EZTV for TV series"""
+    async def search_eztv(imdb_id: str, season: str = None, episode: str = None):
+        """Search EZTV for TV series - optionally filter by season/episode"""
         try:
             imdb_num = imdb_id.replace('tt', '') if imdb_id.startswith('tt') else imdb_id
             url = "https://eztv.re/api/get-torrents"
-            params = {"imdb_id": imdb_num, "limit": 50}
+            params = {"imdb_id": imdb_num, "limit": 100}
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
                 response = await client.get(url, params=params)
                 if response.status_code == 200:
                     data = response.json()
                     torrents = data.get('torrents', [])
                     streams = []
+                    
+                    # Build filter pattern if season/episode specified
+                    filter_pattern = None
+                    if season and episode:
+                        import re
+                        # Match patterns like S01E01, S1E1, 1x01, etc.
+                        s_num = int(season)
+                        e_num = int(episode)
+                        filter_pattern = re.compile(
+                            rf'S0?{s_num}E0?{e_num}\b|{s_num}x0?{e_num}\b',
+                            re.IGNORECASE
+                        )
+                    
                     for torrent in torrents:
                         title = torrent.get('title', '')
+                        
+                        # Filter by episode if pattern specified
+                        if filter_pattern:
+                            if not filter_pattern.search(title):
+                                # Skip torrents that don't match the episode
+                                # But allow season packs
+                                if 'COMPLETE' not in title.upper() and 'PACK' not in title.upper():
+                                    continue
+                        
                         quality = '4K' if '2160p' in title or '4K' in title else ('HD' if '1080p' in title or '720p' in title else 'SD')
                         size_bytes = int(torrent.get('size_bytes', 0))
                         size_str = f"{size_bytes / (1024*1024*1024):.2f} GB" if size_bytes > 1024*1024*1024 else f"{size_bytes / (1024*1024):.0f} MB"
