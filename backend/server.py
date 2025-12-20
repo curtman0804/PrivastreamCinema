@@ -1987,8 +1987,10 @@ async def get_category_content(
                         items.extend(metas)
             except Exception as e:
                 logger.warning(f"Error fetching category {catalog_id}: {e}")
-                
-        return {"items": items[:limit], "total": len(items), "hasMore": len(items) >= limit}
+        
+        # If we got fewer items than 50, we've likely reached the end
+        has_more = len(items) >= 50 if items else False
+        return {"items": items[:limit], "total": len(items), "hasMore": has_more}
     
     return {"items": [], "total": 0, "hasMore": False}
 
