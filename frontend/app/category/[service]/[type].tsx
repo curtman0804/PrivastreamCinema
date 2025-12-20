@@ -40,6 +40,7 @@ export default function CategoryScreen() {
   const fetchCategoryContent = async (skipValue: number, append: boolean) => {
     if (!decodedService || !type) return;
     if (isLoadingRef.current) return; // Prevent duplicate calls
+    if (append && !hasMoreRef.current) return; // Don't fetch if no more items
     
     isLoadingRef.current = true;
     
@@ -55,7 +56,7 @@ export default function CategoryScreen() {
       const data = response.data;
       
       const newItems = data.items || [];
-      console.log(`Received ${newItems.length} items`);
+      console.log(`Received ${newItems.length} items, hasMore=${data.hasMore}`);
       
       if (append && newItems.length > 0) {
         setItems(prev => {
@@ -67,13 +68,24 @@ export default function CategoryScreen() {
         setItems(newItems);
       }
       
-      const moreAvailable = newItems.length >= 20;
+      // Use the hasMore flag from backend response directly
+      const moreAvailable = data.hasMore === true && newItems.length > 0;
       hasMoreRef.current = moreAvailable;
       setHasMore(moreAvailable);
       skipRef.current = skipValue + newItems.length;
       setSkip(skipRef.current);
+      
+      // If we got 0 new items, definitely no more
+      if (newItems.length === 0) {
+        hasMoreRef.current = false;
+        setHasMore(false);
+      }
     } catch (error) {
       console.log('Error fetching category:', error);
+      // On error, stop trying to load more
+      hasMoreRef.current = false;
+      setHasMore(false);
+      
       if (!append && discoverData) {
         const serviceData = discoverData.services[decodedService];
         if (serviceData) {
@@ -82,8 +94,6 @@ export default function CategoryScreen() {
           else if (type === 'series') categoryItems = serviceData.series || [];
           else if (type === 'channels') categoryItems = serviceData.channels || [];
           setItems(categoryItems.filter(Boolean));
-          hasMoreRef.current = false;
-          setHasMore(false);
         }
       }
     } finally {
