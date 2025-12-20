@@ -20,6 +20,21 @@ const { width } = Dimensions.get('window');
 const ITEM_WIDTH = (width - 48) / 3; // 3 columns with padding
 const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
 
+// CDN domains that need proxying due to blocking direct browser requests
+const PROXY_DOMAINS = ['ptx.cdntrex.com', 'cdntrex.com'];
+
+const getProxiedPosterUrl = (posterUrl: string | undefined): string | undefined => {
+  if (!posterUrl) return undefined;
+  
+  // Check if this URL needs to be proxied
+  const needsProxy = PROXY_DOMAINS.some(domain => posterUrl.includes(domain));
+  if (needsProxy) {
+    // Use our image proxy endpoint
+    return `/api/proxy/image?url=${encodeURIComponent(posterUrl)}`;
+  }
+  return posterUrl;
+};
+
 export default function CategoryScreen() {
   const { service, type } = useLocalSearchParams<{ service: string; type: string }>();
   const router = useRouter();
