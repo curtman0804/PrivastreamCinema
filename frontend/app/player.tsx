@@ -87,12 +87,13 @@ const WebVideoPlayer = ({ streamUrl, onLoad, onError, isHLS = false }: { streamU
 interface FallbackStream {
   url?: string;
   infoHash?: string;
+  fileIdx?: number;
   name?: string;
   title?: string;
 }
 
 export default function PlayerScreen() {
-  const { url, title, infoHash, directUrl, isLive, contentType, contentId } = useLocalSearchParams<{
+  const { url, title, infoHash, directUrl, isLive, contentType, contentId, fileIdx } = useLocalSearchParams<{
     url?: string;
     title?: string;
     infoHash?: string;
@@ -100,6 +101,7 @@ export default function PlayerScreen() {
     isLive?: string;
     contentType?: string;
     contentId?: string;
+    fileIdx?: string;
   }>();
   const router = useRouter();
   
