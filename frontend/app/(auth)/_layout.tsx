@@ -1,17 +1,11 @@
 import React from 'react';
-import { Stack } from 'expo-router';
+import { Slot } from 'expo-router';
+import { View } from 'react-native';
 
 export default function AuthLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: '#0c0c0c' },
-        animation: 'slide_from_right',
-      }}
-    >
-      <Stack.Screen name="login" />
-      <Stack.Screen name="register" />
-    </Stack>
+    <View style={{ flex: 1, backgroundColor: '#0c0c0c' }}>
+      <Slot />
+    </View>
   );
 }
