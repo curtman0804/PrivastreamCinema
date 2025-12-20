@@ -2349,6 +2349,54 @@ async def remove_from_library(item_type: str, item_id: str, current_user: User =
 
 TORRENT_SERVER_URL = "http://localhost:8002"
 
+# ==================== IMAGE PROXY ====================
+@api_router.get("/proxy/image")
+async def proxy_image(url: str):
+    """Proxy images from CDNs that block direct browser access"""
+    import base64
+    
+    # Decode URL if base64 encoded
+    try:
+        if not url.startswith('http'):
+            url = base64.b64decode(url).decode('utf-8')
+    except:
+        pass
+    
+    # Security: only allow certain domains
+    allowed_domains = ['cdntrex.com', 'porntrex.com', 'xhamster.com', 'xhcdn.com', 
+                       'eporner.com', 'thumbs.eporner.com', 'static.eporner.com']
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if not any(domain in parsed.netloc for domain in allowed_domains):
+        raise HTTPException(status_code=403, detail="Domain not allowed")
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'image/*,*/*',
+        'Referer': f"{parsed.scheme}://{parsed.netloc}/",
+    }
+    
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                content_type = response.headers.get('content-type', 'image/jpeg')
+                return Response(
+                    content=response.content,
+                    media_type=content_type,
+                    headers={
+                        'Cache-Control': 'public, max-age=86400',
+                        'Access-Control-Allow-Origin': '*',
+                    }
+                )
+            else:
+                raise HTTPException(status_code=response.status_code, detail="Image not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Image proxy error: {e}")
+        raise HTTPException(status_code=502, detail="Failed to fetch image")
+
 @api_router.post("/stream/start/{info_hash}")
 async def start_stream(info_hash: str, current_user: User = Depends(get_current_user)):
     """Start downloading a torrent via WebTorrent server"""
