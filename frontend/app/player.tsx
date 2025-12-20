@@ -279,14 +279,17 @@ export default function PlayerScreen() {
       // First try URL params (most reliable)
       console.log('[SUBTITLES] URL params - contentType:', contentType, 'contentId:', contentId);
       
-      if (contentId && isMounted) {
-        console.log('[SUBTITLES] Using URL params to fetch subtitles');
+      // Validate contentId is a proper IMDB ID (tt followed by numbers)
+      const isValidImdbId = contentId && /^tt\d+$/.test(contentId);
+      
+      if (isValidImdbId && isMounted) {
+        console.log('[SUBTITLES] Using valid IMDB ID from URL params to fetch subtitles');
         fetchSubtitles(contentType || 'movie', contentId);
         return;
       }
       
       // Fallback to AsyncStorage
-      console.log('[SUBTITLES] No URL params, trying AsyncStorage...');
+      console.log('[SUBTITLES] No valid IMDB ID in URL params, trying AsyncStorage...');
       try {
         const storedData = await AsyncStorage.getItem('currentPlaying');
         console.log('[SUBTITLES] AsyncStorage data:', storedData);
@@ -295,9 +298,14 @@ export default function PlayerScreen() {
           const parsed = JSON.parse(storedData);
           const { contentType: cType, contentId: cId } = parsed;
           
-          if (cId) {
-            console.log('[SUBTITLES] Using AsyncStorage data to fetch subtitles');
+          // Validate contentId from AsyncStorage
+          const isStoredIdValid = cId && /^tt\d+$/.test(cId);
+          
+          if (isStoredIdValid) {
+            console.log('[SUBTITLES] Using valid IMDB ID from AsyncStorage to fetch subtitles');
             fetchSubtitles(cType || 'movie', cId);
+          } else {
+            console.log('[SUBTITLES] No valid IMDB ID found - subtitles not available for this content');
           }
         }
       } catch (e) {
