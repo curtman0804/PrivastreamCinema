@@ -1935,10 +1935,14 @@ async def get_category_content(
                         # Filter out items with empty names or IDs
                         metas = [m for m in metas if m.get('name') and m.get('id')]
                         
+                        # If we got fewer items than the typical page size, we've reached the end
+                        # Most addons return 100 items per page, some return less
+                        has_more = len(metas) >= 50  # If less than 50, assume end of catalog
+                        
                         return {
                             "items": metas[:limit], 
                             "total": len(metas), 
-                            "hasMore": len(metas) >= 20,  # If we got 20+ items, there's likely more
+                            "hasMore": has_more,
                             "catalogId": catalog_id,
                             "baseUrl": base_url
                         }
