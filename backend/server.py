@@ -1891,10 +1891,16 @@ async def get_category_content(
     return {"items": [], "total": 0, "hasMore": False}
 
 @api_router.get("/content/search")
-async def search_content(q: str, current_user: User = Depends(get_current_user)):
-    """Search content via Cinemeta - supports title search and cast/director/genre searches"""
+async def search_content(
+    q: str, 
+    skip: int = 0,
+    limit: int = 30,
+    content_type: str = None,  # 'movie' or 'series' to filter
+    current_user: User = Depends(get_current_user)
+):
+    """Search content via Cinemeta - supports title search and cast/director/genre searches with pagination"""
     if not q or len(q) < 2:
-        return {"movies": [], "series": []}
+        return {"movies": [], "series": [], "hasMore": False, "total": 0}
     
     # Common words to ignore when matching
     STOP_WORDS = {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'is', 'it'}
@@ -1943,31 +1949,55 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
     is_genre_search = query_lower in GENRE_MAP
     genre_name = GENRE_MAP.get(query_lower)
     
-    logger.info(f"Search query: '{q}' - is_person_name={is_likely_person_name}, is_genre={is_genre_search}, genre={genre_name}")
+    logger.info(f"Search query: '{q}' - skip={skip}, limit={limit}, type={content_type}, is_genre={is_genre_search}")
     
-    # If it's a genre search, fetch from genre catalog
+    # If it's a genre search, fetch from genre catalog with pagination
     if is_genre_search and genre_name:
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                # Fetch genre-specific catalogs from Cinemeta
-                # Format: /catalog/{type}/top/genre={genre}.json
-                movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/genre={genre_name}.json"
-                series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/genre={genre_name}.json"
+                # Fetch genre-specific catalogs from Cinemeta with skip parameter
+                # Format: /catalog/{type}/top/genre={genre}/skip={skip}.json
+                if skip > 0:
+                    movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/genre={genre_name}/skip={skip}.json"
+                    series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/genre={genre_name}/skip={skip}.json"
+                else:
+                    movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/genre={genre_name}.json"
+                    series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/genre={genre_name}.json"
                 
                 logger.info(f"Fetching genre catalog: {movie_url}")
                 
-                movie_resp, series_resp = await asyncio.gather(
-                    client.get(movie_url),
-                    client.get(series_url),
-                    return_exceptions=True
-                )
-                
+                # Fetch based on content_type filter
                 movies = []
                 series = []
                 
-                if not isinstance(movie_resp, Exception) and movie_resp.status_code == 200:
-                    movies = movie_resp.json().get('metas', [])
-                    logger.info(f"Genre '{genre_name}' movies: {len(movies)}")
+                if content_type != 'series':
+                    movie_resp = await client.get(movie_url)
+                    if movie_resp.status_code == 200:
+                        movies = movie_resp.json().get('metas', [])
+                        logger.info(f"Genre '{genre_name}' movies: {len(movies)}")
+                
+                if content_type != 'movie':
+                    series_resp = await client.get(series_url)
+                    if series_resp.status_code == 200:
+                        series = series_resp.json().get('metas', [])
+                        logger.info(f"Genre '{genre_name}' series: {len(series)}")
+                
+                # Apply limit
+                movies = movies[:limit]
+                series = series[:limit]
+                
+                # Determine if there's more content
+                has_more = len(movies) >= limit or len(series) >= limit
+                
+                return {
+                    "movies": movies,
+                    "series": series,
+                    "hasMore": has_more,
+                    "total": len(movies) + len(series)
+                }
+        except Exception as e:
+            logger.error(f"Genre search error: {str(e)}")
+            # Fall back to regular search
                 else:
                     logger.warning(f"Genre movie fetch failed: {movie_resp}")
                 
