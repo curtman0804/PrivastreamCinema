@@ -18,8 +18,8 @@ app.use(cors());
 const torrents = new Map();
 
 // Stremio-style: Very low buffer threshold - start playing ASAP
-const MIN_BUFFER_BYTES = 1 * 1024 * 1024; // Just 1MB before starting playback
-const CRITICAL_PIECES = 50; // Prioritize first 50 pieces
+const MIN_BUFFER_BYTES = 512 * 1024; // Just 512KB before starting playback
+const CRITICAL_PIECES = 100; // Prioritize first 100 pieces
 
 // Extended tracker list for faster peer discovery (like Stremio)
 const TRACKERS = [
