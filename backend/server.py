@@ -1958,13 +1958,8 @@ async def get_category_content(
                         metas = [m for m in metas if m.get('name') and m.get('id')]
                         
                         # Detect if addon doesn't support pagination
-                        # If skip > 0 but we got a full page, the addon might not support skip
-                        # In this case, we should NOT return hasMore=true
-                        # Also check: if total items is less than skip, there's nothing new
                         total_items = len(metas)
                         
-                        # If we requested skip > 0 and got items, check if addon supports pagination
-                        # USA TV and some other addons return ALL items regardless of skip
                         if skip > 0:
                             # If skip is beyond total items, return empty - no more items
                             if skip >= total_items:
@@ -1977,13 +1972,13 @@ async def get_category_content(
                                 }
                             else:
                                 # Addon might not support skip - return items after skip position
-                                # and indicate no more if we've covered all items
                                 metas = metas[skip:skip + limit]
-                                has_more = (skip + len(metas)) < total_items
+                                # If we got fewer items than limit, we've reached the end
+                                has_more = len(metas) >= limit
                         else:
-                            # First page - check if there might be more
-                            has_more = total_items >= 50 and total_items > limit
-                            metas = metas[:limit]
+                            # First page - if we got limit or more items, there might be more
+                            # Don't apply arbitrary limits - return what the addon gives
+                            has_more = total_items >= limit
                         
                         return {
                             "items": metas, 
