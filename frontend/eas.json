@@ -10,19 +10,22 @@
       "android": {
         "buildType": "apk",
         "withoutCredentials": true
-      }
+      },
+      "node": "22.12.0"
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk",
         "withoutCredentials": true
-      }
+      },
+      "node": "22.12.0"
     },
     "production": {
       "android": {
         "buildType": "apk"
-      }
+      },
+      "node": "22.12.0"
     }
   },
   "submit": {
