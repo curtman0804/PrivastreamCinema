@@ -20,6 +20,7 @@ import threading
 import time
 import tempfile
 import shutil
+from functools import lru_cache
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -32,6 +33,43 @@ JWT_ALGORITHM = "HS256"
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'privastream')]
+
+# ==================== IN-MEMORY CACHE ====================
+# Simple TTL cache for catalog and stream data to improve load times
+class TTLCache:
+    def __init__(self, default_ttl: int = 300):  # 5 min default TTL
+        self._cache: Dict[str, tuple] = {}  # key -> (value, expiry_time)
+        self._default_ttl = default_ttl
+        self._lock = threading.Lock()
+    
+    def get(self, key: str) -> Optional[Any]:
+        with self._lock:
+            if key in self._cache:
+                value, expiry = self._cache[key]
+                if time.time() < expiry:
+                    return value
+                else:
+                    del self._cache[key]
+        return None
+    
+    def set(self, key: str, value: Any, ttl: Optional[int] = None):
+        with self._lock:
+            expiry = time.time() + (ttl or self._default_ttl)
+            self._cache[key] = (value, expiry)
+    
+    def clear(self):
+        with self._lock:
+            self._cache.clear()
+    
+    def delete(self, key: str):
+        with self._lock:
+            if key in self._cache:
+                del self._cache[key]
+
+# Global caches
+catalog_cache = TTLCache(default_ttl=300)  # 5 min for catalogs
+stream_cache = TTLCache(default_ttl=120)   # 2 min for streams
+meta_cache = TTLCache(default_ttl=600)     # 10 min for metadata
 
 # Create the main app
 app = FastAPI(title="PrivastreamCinema API")
