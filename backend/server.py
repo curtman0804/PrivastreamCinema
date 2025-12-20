@@ -1976,7 +1976,9 @@ async def get_category_content(
                             has_more = (skip + len(metas)) < total_items
                         else:
                             # Normal pagination - addon handles skip parameter
-                            has_more = total_items >= limit
+                            # If we got ANY items, there might be more pages
+                            # Only set hasMore=false when we get 0 items
+                            has_more = total_items > 0
                         
                         return {
                             "items": metas, 
