@@ -67,6 +67,18 @@ export default function DetailsScreen() {
       .filter(ep => ep.season === selectedSeason)
       .sort((a, b) => a.episode - b.episode);
   }, [content?.videos, selectedSeason]);
+  
+  // Find current episode if on episode page
+  useEffect(() => {
+    if (isEpisodePage && content?.videos && episodeSeason !== null && episodeNumber !== null) {
+      const episode = content.videos.find(
+        ep => ep.season === episodeSeason && ep.episode === episodeNumber
+      );
+      if (episode) {
+        setCurrentEpisode(episode);
+      }
+    }
+  }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
 
   // Load content
   useEffect(() => {
