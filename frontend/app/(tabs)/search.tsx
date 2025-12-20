@@ -23,30 +23,28 @@ const CARD_WIDTH = (width - 64) / 3;
 export default function SearchScreen() {
   const router = useRouter();
   const { q: queryParam, type: searchType } = useLocalSearchParams<{ q?: string; type?: string }>();
-  const { searchResults, isLoadingSearch, search, clearSearch } = useContentStore();
+  const { 
+    searchResults, 
+    searchMovies,
+    searchSeries,
+    searchHasMore,
+    isLoadingSearch, 
+    isLoadingMoreSearch,
+    search, 
+    loadMoreSearch,
+    clearSearch 
+  } = useContentStore();
   const [hasSearched, setHasSearched] = useState(false);
   const [currentQuery, setCurrentQuery] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'movie' | 'series'>('all');
   const hasTriggeredInitialSearch = useRef(false);
 
-  // Separate results by type
-  const { movies, series, filteredResults } = useMemo(() => {
-    const movieResults = searchResults.filter(r => r.type === 'movie');
-    const seriesResults = searchResults.filter(r => r.type === 'series');
-    
-    let filtered = searchResults;
-    if (activeFilter === 'movie') {
-      filtered = movieResults;
-    } else if (activeFilter === 'series') {
-      filtered = seriesResults;
-    }
-    
-    return {
-      movies: movieResults,
-      series: seriesResults,
-      filteredResults: filtered,
-    };
-  }, [searchResults, activeFilter]);
+  // Get filtered results based on active filter
+  const filteredResults = useMemo(() => {
+    if (activeFilter === 'movie') return searchMovies;
+    if (activeFilter === 'series') return searchSeries;
+    return searchResults;
+  }, [searchResults, searchMovies, searchSeries, activeFilter]);
 
   // Auto-trigger search when navigated to with a query parameter (from genre/cast/director tags)
   useEffect(() => {
@@ -102,6 +100,12 @@ export default function SearchScreen() {
     router.replace('/search');
   };
 
+  const handleLoadMore = useCallback(() => {
+    if (!isLoadingMoreSearch && searchHasMore) {
+      loadMoreSearch();
+    }
+  }, [isLoadingMoreSearch, searchHasMore, loadMoreSearch]);
+
   const renderItem = ({ item }: { item: SearchResult }) => (
     <View style={styles.cardWrapper}>
       <ContentCard
@@ -124,23 +128,33 @@ export default function SearchScreen() {
     </View>
   );
 
-  // Prepare section data
+  const renderFooter = () => {
+    if (!isLoadingMoreSearch) return null;
+    return (
+      <View style={styles.loadMoreContainer}>
+        <ActivityIndicator size="small" color="#B8A05C" />
+        <Text style={styles.loadMoreText}>Loading more...</Text>
+      </View>
+    );
+  };
+
+  // Prepare section data for SectionList
   const sections = useMemo(() => {
     const result = [];
     if (activeFilter === 'all') {
-      if (movies.length > 0) {
-        result.push({ title: 'Movies', data: movies });
+      if (searchMovies.length > 0) {
+        result.push({ title: 'Movies', data: searchMovies });
       }
-      if (series.length > 0) {
-        result.push({ title: 'Series', data: series });
+      if (searchSeries.length > 0) {
+        result.push({ title: 'Series', data: searchSeries });
       }
-    } else if (activeFilter === 'movie' && movies.length > 0) {
-      result.push({ title: 'Movies', data: movies });
-    } else if (activeFilter === 'series' && series.length > 0) {
-      result.push({ title: 'Series', data: series });
+    } else if (activeFilter === 'movie' && searchMovies.length > 0) {
+      result.push({ title: 'Movies', data: searchMovies });
+    } else if (activeFilter === 'series' && searchSeries.length > 0) {
+      result.push({ title: 'Series', data: searchSeries });
     }
     return result;
-  }, [movies, series, activeFilter]);
+  }, [searchMovies, searchSeries, activeFilter]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -183,7 +197,7 @@ export default function SearchScreen() {
               color={activeFilter === 'movie' ? '#B8A05C' : '#888'} 
             />
             <Text style={[styles.filterText, activeFilter === 'movie' && styles.filterTextActive]}>
-              Movies ({movies.length})
+              Movies ({searchMovies.length})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity 
@@ -196,7 +210,7 @@ export default function SearchScreen() {
               color={activeFilter === 'series' ? '#B8A05C' : '#888'} 
             />
             <Text style={[styles.filterText, activeFilter === 'series' && styles.filterTextActive]}>
-              Series ({series.length})
+              Series ({searchSeries.length})
             </Text>
           </TouchableOpacity>
         </View>
@@ -246,9 +260,12 @@ export default function SearchScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={renderFooter}
         />
       ) : (
-        /* Flat List for filtered view */
+        /* Flat List for filtered view with infinite scroll */
         <FlatList
           data={filteredResults}
           renderItem={renderItem}
@@ -257,6 +274,9 @@ export default function SearchScreen() {
           contentContainerStyle={styles.listContent}
           columnWrapperStyle={styles.row}
           showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={renderFooter}
           ListHeaderComponent={
             <View style={styles.sectionHeader}>
               <Ionicons 
@@ -398,5 +418,16 @@ const styles = StyleSheet.create({
   },
   cardWrapper: {
     width: CARD_WIDTH,
+  },
+  loadMoreContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 8,
+  },
+  loadMoreText: {
+    color: '#888',
+    fontSize: 14,
   },
 });
