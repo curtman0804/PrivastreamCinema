@@ -1353,24 +1353,25 @@ async def get_all_streams(
                     filter_pattern = None
                     if season and episode:
                         import re
-                        # Match patterns like S01E01, S1E1, 1x01, etc.
+                        # Extract numeric values
                         s_num = int(season)
                         e_num = int(episode)
+                        # Match patterns like S01E01, S1E1, 1x01, etc. - must be exact episode
                         filter_pattern = re.compile(
-                            rf'S0?{s_num}E0?{e_num}\b|{s_num}x0?{e_num}\b',
+                            rf'\bS0?{s_num}E0?{e_num}\b|\b{s_num}x0?{e_num}\b',
                             re.IGNORECASE
                         )
+                        logger.info(f"EZTV filtering for S{s_num:02d}E{e_num:02d}")
                     
                     for torrent in torrents:
                         title = torrent.get('title', '')
                         
                         # Filter by episode if pattern specified
                         if filter_pattern:
+                            # Check if this is the right episode
                             if not filter_pattern.search(title):
-                                # Skip torrents that don't match the episode
-                                # But allow season packs
-                                if 'COMPLETE' not in title.upper() and 'PACK' not in title.upper():
-                                    continue
+                                # Skip - not our episode
+                                continue
                         
                         quality = '4K' if '2160p' in title or '4K' in title else ('HD' if '1080p' in title or '720p' in title else 'SD')
                         size_bytes = int(torrent.get('size_bytes', 0))
@@ -1386,6 +1387,7 @@ async def get_all_streams(
                                 "addon": "EZTV",
                                 "seeders": seeds
                             })
+                    logger.info(f"EZTV returned {len(streams)} streams for {imdb_id}")
                     return streams
         except Exception as e:
             logger.warning(f"EZTV search error: {e}")
