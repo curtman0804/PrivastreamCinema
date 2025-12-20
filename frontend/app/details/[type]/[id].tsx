@@ -302,12 +302,22 @@ export default function DetailsScreen() {
     ? parseFloat(content.imdbRating) 
     : content?.imdbRating;
 
+  // Determine what image to show in hero - episode thumbnail for episode pages
+  const heroImage = isEpisodePage && currentEpisode?.thumbnail 
+    ? currentEpisode.thumbnail 
+    : (content?.background || content?.poster);
+
+  // Title to display - episode title for episode pages
+  const displayTitle = isEpisodePage && currentEpisode 
+    ? `S${episodeSeason}:E${episodeNumber} - ${currentEpisode.name || currentEpisode.title || 'Episode'}`
+    : content?.name;
+
   return (
     <View style={styles.container}>
       {/* Hero Section */}
       <View style={styles.heroContainer}>
         <Image
-          source={{ uri: content?.background || content?.poster }}
+          source={{ uri: heroImage }}
           style={styles.heroImage}
           contentFit="cover"
         />
@@ -326,7 +336,7 @@ export default function DetailsScreen() {
 
         {/* Logo or Title */}
         <View style={styles.heroContent}>
-          {content?.logo ? (
+          {!isEpisodePage && content?.logo ? (
             <Image
               source={{ uri: content.logo }}
               style={styles.logoImage}
