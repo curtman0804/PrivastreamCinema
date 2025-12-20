@@ -605,33 +605,29 @@ export default function PlayerScreen() {
     const parsedFileIdx = fileIdx ? parseInt(fileIdx, 10) : 0;
 
     try {
-      setLoadingStatus('Starting torrent engine...');
+      setLoadingStatus('Starting stream...');
       
       await api.stream.start(infoHash, parsedFileIdx);
       
-      // Start with fast polling (500ms) for quicker response during initial buffering
+      // Aggressive polling for fast response
       let pollInterval = 500;
-      let pollCount = 0;
-      const maxPollCount = 60; // Timeout after ~30 seconds (60 * 500ms)
       const startTime = Date.now();
-      const TIMEOUT_MS = 45000; // 45 second timeout
+      const TOTAL_TIMEOUT_MS = 30000; // 30 second HARD timeout
+      const NO_PEERS_TIMEOUT_MS = 10000; // 10 seconds with no peers = try next
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
         
         try {
           const status = await api.stream.status(infoHash);
-          pollCount++;
-          
-          // Check for timeout - try next stream if taking too long
           const elapsed = Date.now() - startTime;
-          if (elapsed > TIMEOUT_MS && status.status !== 'ready') {
-            console.log(`[PLAYER] Timeout after ${elapsed}ms, trying next stream`);
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current);
-            }
-            setLoadingStatus('Stream too slow, trying alternative...');
-            setTimeout(() => tryNextStream(), 500);
+          
+          // HARD 30 second timeout - try next stream
+          if (elapsed > TOTAL_TIMEOUT_MS && status.status !== 'ready') {
+            console.log(`[PLAYER] TIMEOUT after ${elapsed}ms, trying next stream`);
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            setLoadingStatus('Timeout - trying next stream...');
+            setTimeout(() => tryNextStream(), 300);
             return;
           }
           
@@ -641,51 +637,42 @@ export default function PlayerScreen() {
           
           if (status.status === 'downloading_metadata') {
             const peerCount = status.peers || 0;
+            const timeLeft = Math.ceil((TOTAL_TIMEOUT_MS - elapsed) / 1000);
+            
             if (peerCount === 0) {
-              setLoadingStatus(`Searching for peers... (${Math.floor(elapsed/1000)}s)`);
+              setLoadingStatus(`Finding peers... (${timeLeft}s)`);
               
-              // If no peers found after 20 seconds, try next stream
-              if (elapsed > 20000 && peerCount === 0) {
-                console.log('[PLAYER] No peers found after 20s, trying next stream');
-                if (pollIntervalRef.current) {
-                  clearInterval(pollIntervalRef.current);
-                }
-                setLoadingStatus('No peers found, trying alternative...');
-                setTimeout(() => tryNextStream(), 500);
+              // No peers after 10 seconds = try next stream immediately
+              if (elapsed > NO_PEERS_TIMEOUT_MS) {
+                console.log('[PLAYER] No peers found in 10s, trying next stream');
+                if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                setLoadingStatus('No peers - trying next stream...');
+                setTimeout(() => tryNextStream(), 300);
                 return;
               }
             } else {
-              setLoadingStatus(`Found ${peerCount} peers, getting file info...`);
+              setLoadingStatus(`${peerCount} peers, loading... (${timeLeft}s)`);
             }
           } else if (status.status === 'buffering') {
             const speedMB = ((status.download_rate || 0) / 1024 / 1024).toFixed(1);
             const downloaded = status.downloaded ? (status.downloaded / (1024 * 1024)).toFixed(1) : '0';
-            const threshold = status.ready_threshold_mb ? status.ready_threshold_mb.toFixed(1) : '3';
-            setLoadingStatus(`Buffering ${downloaded}MB / ${threshold}MB (${speedMB} MB/s)`);
-            
-            // Slow down polling once we're buffering (save resources)
-            if (pollInterval < 1000) {
-              pollInterval = 1000;
-            }
+            setLoadingStatus(`Buffering ${downloaded}MB (${speedMB} MB/s)`);
+            pollInterval = 300; // Faster polling during buffering
           } else if (status.status === 'ready') {
-            // Video ready - start playback immediately!
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current);
-            }
+            // Video ready - start playback!
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             
+            console.log(`[PLAYER] Ready in ${elapsed}ms!`);
             setLoadingStatus('Starting playback...');
-            // Use direct stream (no transcoding) for faster start - like Stremio
             const videoUrl = api.stream.getVideoUrl(infoHash, parsedFileIdx, false);
             setStreamUrl(videoUrl);
             setIsLoading(false);
-            return; // Stop polling
+            return;
           } else if (status.status === 'not_found' || status.status === 'invalid') {
-            console.log('[PLAYER] Stream not found/invalid, trying next');
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current);
-            }
-            setLoadingStatus('Stream unavailable, trying alternative...');
-            setTimeout(() => tryNextStream(), 500);
+            console.log('[PLAYER] Stream invalid, trying next');
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            setLoadingStatus('Stream unavailable - trying next...');
+            setTimeout(() => tryNextStream(), 300);
             return;
           }
           
@@ -693,8 +680,7 @@ export default function PlayerScreen() {
           pollIntervalRef.current = setTimeout(pollStatus, pollInterval) as any;
         } catch (err) {
           console.error('Status poll error:', err);
-          // Retry on error
-          pollIntervalRef.current = setTimeout(pollStatus, 2000) as any;
+          pollIntervalRef.current = setTimeout(pollStatus, 1000) as any;
         }
       };
       
