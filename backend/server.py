@@ -1910,12 +1910,81 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
         not any(word.lower() in MOVIE_WORDS for word in query_words)
     )
     
-    # Also detect genre searches
-    GENRE_WORDS = {'action', 'comedy', 'drama', 'horror', 'thriller', 'romance', 'sci-fi', 'fantasy', 
-                   'adventure', 'animation', 'documentary', 'crime', 'mystery', 'western', 'musical'}
-    is_genre_search = q.lower() in GENRE_WORDS
+    # Detect genre searches - map to Cinemeta genre IDs
+    GENRE_MAP = {
+        'action': 'Action',
+        'comedy': 'Comedy', 
+        'drama': 'Drama',
+        'horror': 'Horror',
+        'thriller': 'Thriller',
+        'romance': 'Romance',
+        'sci-fi': 'Sci-Fi',
+        'science fiction': 'Sci-Fi',
+        'fantasy': 'Fantasy',
+        'adventure': 'Adventure',
+        'animation': 'Animation',
+        'animated': 'Animation',
+        'documentary': 'Documentary',
+        'crime': 'Crime',
+        'mystery': 'Mystery',
+        'western': 'Western',
+        'musical': 'Musical',
+        'war': 'War',
+        'history': 'History',
+        'historical': 'History',
+        'biography': 'Biography',
+        'family': 'Family',
+        'sport': 'Sport',
+        'sports': 'Sport',
+        'music': 'Music',
+    }
     
-    logger.info(f"Search query: '{q}' - is_person_name={is_likely_person_name}, is_genre={is_genre_search}")
+    query_lower = q.lower().strip()
+    is_genre_search = query_lower in GENRE_MAP
+    genre_name = GENRE_MAP.get(query_lower)
+    
+    logger.info(f"Search query: '{q}' - is_person_name={is_likely_person_name}, is_genre={is_genre_search}, genre={genre_name}")
+    
+    # If it's a genre search, fetch from genre catalog
+    if is_genre_search and genre_name:
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+                # Fetch genre-specific catalogs from Cinemeta
+                # Format: /catalog/{type}/top/genre={genre}.json
+                movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/genre={genre_name}.json"
+                series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/genre={genre_name}.json"
+                
+                logger.info(f"Fetching genre catalog: {movie_url}")
+                
+                movie_resp, series_resp = await asyncio.gather(
+                    client.get(movie_url),
+                    client.get(series_url),
+                    return_exceptions=True
+                )
+                
+                movies = []
+                series = []
+                
+                if not isinstance(movie_resp, Exception) and movie_resp.status_code == 200:
+                    movies = movie_resp.json().get('metas', [])
+                    logger.info(f"Genre '{genre_name}' movies: {len(movies)}")
+                else:
+                    logger.warning(f"Genre movie fetch failed: {movie_resp}")
+                
+                if not isinstance(series_resp, Exception) and series_resp.status_code == 200:
+                    series = series_resp.json().get('metas', [])
+                    logger.info(f"Genre '{genre_name}' series: {len(series)}")
+                else:
+                    logger.warning(f"Genre series fetch failed: {series_resp}")
+                
+                # Return top results (Cinemeta returns sorted by popularity)
+                return {
+                    "movies": movies[:100],
+                    "series": series[:100]
+                }
+        except Exception as e:
+            logger.error(f"Genre search error: {str(e)}")
+            # Fall back to regular search
     
     def score_result(item, query, trust_cinemeta=False):
         """Score search results by relevance"""
