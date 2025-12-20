@@ -88,19 +88,33 @@ app.get('/stream/:infoHash', (req, res) => {
   const { infoHash } = req.params;
   const infoHashLower = infoHash.toLowerCase();
   
-  // Build magnet with trackers for faster peer discovery
+  // Extensive tracker list for VPN users - more trackers = faster peer discovery
   const trackers = [
+    // Tier 1 - High reliability
     'udp://tracker.opentrackr.org:1337/announce',
     'udp://open.stealth.si:80/announce',
     'udp://tracker.torrent.eu.org:451/announce',
     'udp://exodus.desync.com:6969/announce',
     'udp://tracker.openbittorrent.com:6969/announce',
+    // Tier 2 - Good reliability
     'udp://open.demonii.com:1337/announce',
     'udp://tracker.moeking.me:6969/announce',
     'udp://explodie.org:6969/announce',
     'udp://tracker.coppersurfer.tk:6969/announce',
     'udp://tracker.leechers-paradise.org:6969/announce',
     'udp://p4p.arenabg.com:1337/announce',
+    // Tier 3 - Additional trackers for VPN scenarios
+    'udp://tracker.internetwarriors.net:1337/announce',
+    'udp://tracker.cyberia.is:6969/announce',
+    'udp://tracker.tiny-vps.com:6969/announce',
+    'udp://tracker.sbsub.com:2710/announce',
+    'udp://tracker.pirateparty.gr:6969/announce',
+    'udp://retracker.lanta-net.ru:2710/announce',
+    // HTTP trackers (sometimes work better through VPNs)
+    'http://tracker.openbittorrent.com:80/announce',
+    'http://tracker3.itzmx.com:6961/announce',
+    'http://tracker2.itzmx.com:6961/announce',
+    'http://tracker.bt4g.com:2095/announce',
   ];
   
   let magnetURI = `magnet:?xt=urn:btih:${infoHash}`;
