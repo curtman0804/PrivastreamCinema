@@ -763,21 +763,41 @@ export default function PlayerScreen() {
           <View style={styles.videoContainer}>
             <video
               ref={(el) => {
-                // Ensure audio is enabled
+                // Store ref for later use
                 if (el) {
-                  el.muted = false;
-                  el.volume = 1.0;
+                  (window as any).__videoEl = el;
+                  // Try to unmute after a small delay (after user interaction)
+                  setTimeout(() => {
+                    if (el) {
+                      el.muted = false;
+                      el.volume = 1.0;
+                    }
+                  }, 100);
                 }
               }}
               src={streamUrl}
               controls
               autoPlay
               playsInline
+              muted={false}
+              onCanPlay={(e: any) => {
+                // Try to unmute when video is ready
+                const videoEl = e.target;
+                if (videoEl) {
+                  videoEl.muted = false;
+                  videoEl.volume = 1.0;
+                }
+              }}
               onTimeUpdate={(e: any) => {
                 const videoEl = e.target;
                 if (videoEl) {
                   setPosition(videoEl.currentTime * 1000);
                   setDuration(videoEl.duration * 1000);
+                  // Ensure unmuted during playback
+                  if (videoEl.muted) {
+                    videoEl.muted = false;
+                    videoEl.volume = 1.0;
+                  }
                 }
               }}
               onError={(e: any) => {
