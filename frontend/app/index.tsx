@@ -6,7 +6,12 @@ import { Image } from 'expo-image';
 
 export default function Index() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading, loadStoredAuth } = useAuthStore();
+
+  useEffect(() => {
+    // Load stored auth on mount
+    loadStoredAuth();
+  }, []);
 
   useEffect(() => {
     if (!isLoading) {
