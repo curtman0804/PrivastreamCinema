@@ -760,6 +760,13 @@ export default function PlayerScreen() {
               controls
               autoPlay
               playsInline
+              onTimeUpdate={(e: any) => {
+                const videoEl = e.target;
+                if (videoEl) {
+                  setPosition(videoEl.currentTime * 1000);
+                  setDuration(videoEl.duration * 1000);
+                }
+              }}
               onError={(e: any) => {
                 console.log('Web video error:', e);
                 handleVideoError(e);
@@ -771,6 +778,18 @@ export default function PlayerScreen() {
                 objectFit: 'contain'
               } as any}
             />
+            
+            {/* Subtitle Text Overlay for Web */}
+            <View style={styles.subtitleOverlay}>
+              {subtitleText ? (
+                <Text style={styles.subtitleTextDisplay}>{subtitleText}</Text>
+              ) : (
+                <Text style={[styles.subtitleTextDisplay, {fontSize: 11, backgroundColor: parsedSubtitles.length > 0 ? 'rgba(0,255,0,0.7)' : 'rgba(255,0,0,0.7)'}]}>
+                  CC: {parsedSubtitles.length} subs | pos: {Math.floor(position/1000)}s | sel: {selectedSubtitle ? 'YES' : 'NO'}
+                </Text>
+              )}
+            </View>
+            
             {/* Web Overlay Controls - Back and CC only */}
             <View style={styles.webControlsOverlay}>
               <TouchableOpacity 
