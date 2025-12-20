@@ -187,10 +187,13 @@ export default function PlayerScreen() {
   // Fetch subtitles for the content
   const fetchSubtitles = async (cType: string, cId: string) => {
     console.log('[SUBTITLES] fetchSubtitles called with:', cType, cId);
-    if (!cId) {
-      console.log('[SUBTITLES] No content ID provided, skipping fetch');
+    
+    // Validate that we have a proper IMDB ID (must start with 'tt' followed by numbers)
+    if (!cId || !/^tt\d+$/.test(cId)) {
+      console.log('[SUBTITLES] Invalid or missing IMDB ID, skipping subtitle fetch. Content ID:', cId);
       return;
     }
+    
     try {
       const url = `/api/subtitles/${cType}/${cId}`;
       console.log('[SUBTITLES] Making API call to:', url);
