@@ -255,6 +255,94 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Transcoded stream endpoint - converts to H.264/AAC for browser compatibility
+app.get('/transcode/:infoHash/:fileIdx?', (req, res) => {
+  const { infoHash, fileIdx } = req.params;
+  const infoHashLower = infoHash.toLowerCase();
+  const fileIndex = parseInt(fileIdx || '0', 10);
+  
+  console.log(`📺 Transcode request for ${infoHash}, fileIdx: ${fileIndex}`);
+  
+  let torrent = torrents.get(infoHashLower);
+  if (!torrent) {
+    torrent = client.get(infoHashLower);
+  }
+  
+  if (!torrent || !torrent.ready) {
+    return res.status(404).send('Torrent not ready. Start with /stream first.');
+  }
+  
+  // Find the video file
+  let file = torrent.files[fileIndex];
+  if (!file) {
+    // Find largest video file
+    const videoFiles = torrent.files
+      .filter(f => /\.(mp4|mkv|avi|webm|mov|wmv|flv|ts)$/i.test(f.name))
+      .sort((a, b) => b.length - a.length);
+    file = videoFiles[0];
+  }
+  
+  if (!file) {
+    return res.status(404).send('No video file found');
+  }
+  
+  console.log(`Transcoding: ${file.name} (${(file.length / 1024 / 1024 / 1024).toFixed(2)} GB)`);
+  
+  // Set headers for streaming
+  res.setHeader('Content-Type', 'video/mp4');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Transfer-Encoding', 'chunked');
+  
+  // Create read stream from torrent
+  const inputStream = file.createReadStream();
+  
+  // Spawn FFmpeg to transcode
+  const ffmpeg = spawn('ffmpeg', [
+    '-i', 'pipe:0',           // Read from stdin
+    '-c:v', 'libx264',        // H.264 video codec
+    '-preset', 'ultrafast',   // Fastest encoding for real-time
+    '-tune', 'zerolatency',   // Low latency
+    '-crf', '23',             // Quality (lower = better, 23 is default)
+    '-c:a', 'aac',            // AAC audio codec
+    '-b:a', '128k',           // Audio bitrate
+    '-ac', '2',               // Stereo audio
+    '-movflags', 'frag_keyframe+empty_moov+faststart', // For streaming
+    '-f', 'mp4',              // Output format
+    'pipe:1'                  // Write to stdout
+  ], {
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  
+  // Handle errors
+  ffmpeg.on('error', (err) => {
+    console.error('FFmpeg error:', err);
+    if (!res.headersSent) {
+      res.status(500).send('Transcoding error');
+    }
+  });
+  
+  ffmpeg.stderr.on('data', (data) => {
+    // Log FFmpeg progress (optional, can be noisy)
+    // console.log('FFmpeg:', data.toString());
+  });
+  
+  // Pipe torrent stream to FFmpeg, FFmpeg output to response
+  inputStream.pipe(ffmpeg.stdin);
+  ffmpeg.stdout.pipe(res);
+  
+  // Handle client disconnect
+  res.on('close', () => {
+    console.log('Client disconnected, killing FFmpeg');
+    ffmpeg.kill('SIGTERM');
+    inputStream.destroy();
+  });
+  
+  inputStream.on('error', (err) => {
+    console.error('Input stream error:', err);
+    ffmpeg.kill('SIGTERM');
+  });
+});
+
 const PORT = 8002;
 app.listen(PORT, () => {
   console.log(`🚀 WebTorrent streaming server running on port ${PORT}`);
