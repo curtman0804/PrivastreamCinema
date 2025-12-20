@@ -1791,7 +1791,7 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 else:
                     url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
                 
-                fetch_tasks.append(fetch_catalog(url, section_name, catalog_type))
+                fetch_tasks.append(fetch_catalog(url, section_name, catalog_type, section_order[section_name]))
         
         # Handle Streaming Catalogs addon
         elif 'netflix-catalog' in addon['manifestUrl'].lower() or 'streaming-catalogs' in addon_id:
@@ -1807,7 +1807,12 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 type_label = 'Movies' if catalog_type == 'movie' else 'Series'
                 section_name = f"{service_name} {type_label}"
                 
-                fetch_tasks.append(fetch_catalog(url, section_name, catalog_type))
+                # Track order for FIFO
+                if section_name not in section_order:
+                    section_order[section_name] = order_counter
+                    order_counter += 1
+                
+                fetch_tasks.append(fetch_catalog(url, section_name, catalog_type, section_order[section_name]))
         
         # Handle USA TV addon - fetch only first page (100 items) for discover
         elif 'usatv' in addon_id or 'usa-tv' in addon['manifestUrl'].lower():
@@ -1822,7 +1827,12 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
                 section_name = 'USA TV Channels'
                 
-                fetch_tasks.append(fetch_catalog(url, section_name, 'channels', timeout=8.0))
+                # Track order for FIFO
+                if section_name not in section_order:
+                    section_order[section_name] = order_counter
+                    order_counter += 1
+                
+                fetch_tasks.append(fetch_catalog(url, section_name, 'channels', section_order[section_name], timeout=8.0))
         
         # Handle adult addons
         elif any(x in addon_id.lower() for x in ['jaxxx', 'porn', 'onlyporn']):
