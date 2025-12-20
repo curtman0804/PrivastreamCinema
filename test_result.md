@@ -315,37 +315,38 @@ agent_communication:
       The discover page content organization has been fixed and no longer contains
       the unwanted "Calendar-Videos" or "Last-Videos" sections.  - agent: "main"
     message: |
-      SMART STREAM FALLBACK FEATURE IMPLEMENTED:
+      CLOSED CAPTIONS (CC) FIX IMPLEMENTED:
       
-      This feature automatically tries the next available stream when the current one fails to play.
+      Problem: The subtitle modal only showed "Off" option because:
+      1. The frontend was passing invalid content IDs (URLs, porn_tube:// prefixes) to the subtitle API
+      2. OpenSubtitles requires valid IMDB IDs (tt followed by numbers) to work
       
-      Backend changes (server.py):
-      1. Fixed video proxy to properly support HTTP Range requests (206 Partial Content)
-      2. Added proper CORS headers and content-range handling for video streaming
-      3. Improved stream sorting algorithm to prioritize more reliable sources:
-         - Direct proxy streams (yt-dlp extracted) get highest reliability bonus
-         - Torrents with high seeders get priority
-         - Source-specific bonuses for Torrentio, YTS, adult sites
-         - Quality still comes first (4K > 1080p > 720p), then reliability, then seeders
+      Root Cause Analysis:
+      - In details/[type]/[id].tsx, the `handleStreamSelect` function was using `baseId || id` directly
+      - This passed raw URL IDs for adult content instead of actual IMDB IDs
+      - The player then tried to fetch subtitles with invalid IDs, causing the API to fail
       
-      Frontend changes:
-      1. Details page ([type]/[id].tsx):
-         - Now saves up to 10 fallback streams to AsyncStorage when selecting a stream
-         - Passes the stream index when calling handleStreamSelect
+      Fix Applied:
+      1. details/[type]/[id].tsx - Updated handleStreamSelect to:
+         - Use `content?.imdb_id` (from metadata) instead of raw ID
+         - Validate IMDB ID format with regex `/^tt\d+$/`
+         - Only pass valid IMDB IDs to player for subtitle fetching
+         - Pass empty string for content without valid IMDB IDs
       
-      2. Player page (player.tsx):
-         - Added fallback stream state management
-         - New tryNextStream() function to automatically try the next stream on error
-         - handleVideoError() function that triggers fallback on playback failure
-         - "Try Another Stream" button shown in error UI if fallbacks available
-         - Both web and native video players now trigger auto-fallback on error
+      2. player.tsx - Updated fetchSubtitles to:
+         - Validate contentId is a proper IMDB ID before making API call
+         - Added regex validation `/^tt\d+$/` 
+         - Skip subtitle fetch gracefully for invalid IDs
+         - Better logging for debugging
       
-      How it works:
-      1. User clicks a stream on details page
-      2. Details page saves up to 10 alternative streams to AsyncStorage
-      3. If video fails to load, player automatically tries next stream after 1.5s
-      4. User sees "Trying alternative stream X..." message
-      5. If all streams fail, error message with "Go Back" button is shown
+      3. Added missing cachetools dependency to requirements.txt
       
-      This improves user experience by automatically finding a working stream instead of
-      showing an error immediately.
+      Expected Behavior:
+      - Movies/Series from Cinemeta: Will show subtitle options (English, etc.)
+      - Adult content: CC button will be present but no subtitles available (graceful)
+      - TV channels: No subtitles (as expected for live content)
+      
+      Testing:
+      - Backend endpoint verified with curl: /api/subtitles/movie/tt1375666 returns 15+ subtitle options
+      - Frontend changes need manual testing by user
+
