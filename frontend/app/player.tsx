@@ -1224,7 +1224,7 @@ const styles = StyleSheet.create({
     right: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    pointerEvents: 'none',
+    zIndex: 100,
   },
   subtitleTextDisplay: {
     color: '#FFFFFF',
@@ -1236,8 +1236,5 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 4,
     overflow: 'hidden',
-    textShadowColor: 'rgba(0, 0, 0, 0.9)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
   },
 });
