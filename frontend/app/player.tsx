@@ -924,7 +924,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     marginHorizontal: 12,
   },
-  progressBar: {
+  playerProgressBar: {
     height: '100%',
     backgroundColor: '#B8A05C',
     borderRadius: 2,
