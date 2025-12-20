@@ -2363,6 +2363,10 @@ async def proxy_image(url: str):
     except:
         pass
     
+    # Rewrite CDN URLs to main domain (CDN blocks requests, main domain allows)
+    if 'ptx.cdntrex.com' in url:
+        url = url.replace('ptx.cdntrex.com', 'www.porntrex.com')
+    
     # Security: only allow certain domains
     allowed_domains = ['cdntrex.com', 'porntrex.com', 'xhamster.com', 'xhcdn.com', 
                        'eporner.com', 'thumbs.eporner.com', 'static.eporner.com']
