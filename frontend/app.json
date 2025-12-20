@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "privastreamcinema",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.privastream.cinema"
