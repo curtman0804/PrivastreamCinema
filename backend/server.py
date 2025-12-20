@@ -1943,11 +1943,16 @@ async def get_category_content(
                         
                         # If we requested skip > 0 and got items, check if addon supports pagination
                         # USA TV and some other addons return ALL items regardless of skip
-                        if skip > 0 and total_items > 0:
-                            # If total items is less than or equal to skip, addon doesn't support pagination
-                            # or we've already loaded everything
-                            if total_items <= skip:
-                                has_more = False
+                        if skip > 0:
+                            # If skip is beyond total items, return empty - no more items
+                            if skip >= total_items:
+                                return {
+                                    "items": [], 
+                                    "total": total_items, 
+                                    "hasMore": False,
+                                    "catalogId": catalog_id,
+                                    "baseUrl": base_url
+                                }
                             else:
                                 # Addon might not support skip - return items after skip position
                                 # and indicate no more if we've covered all items
