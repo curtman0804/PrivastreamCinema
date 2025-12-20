@@ -2403,6 +2403,43 @@ async def proxy_image(url: str):
         logger.warning(f"Image proxy error: {e}")
         raise HTTPException(status_code=502, detail="Failed to fetch image")
 
+@api_router.get("/proxy/subtitle")
+async def proxy_subtitle(url: str):
+    """Proxy subtitle files from external sources to bypass CORS"""
+    from urllib.parse import urlparse
+    
+    # Security: only allow subtitle domains
+    allowed_domains = ['strem.io', 'subs5.strem.io', 'opensubtitles.org', 'opensubtitles.com']
+    parsed = urlparse(url)
+    if not any(domain in parsed.netloc for domain in allowed_domains):
+        raise HTTPException(status_code=403, detail="Domain not allowed for subtitles")
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/plain, text/srt, application/x-subrip, */*',
+    }
+    
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                # Return as plain text with proper headers
+                return Response(
+                    content=response.content,
+                    media_type='text/plain; charset=utf-8',
+                    headers={
+                        'Cache-Control': 'public, max-age=86400',
+                        'Access-Control-Allow-Origin': '*',
+                    }
+                )
+            else:
+                raise HTTPException(status_code=response.status_code, detail="Subtitle not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Subtitle proxy error: {e}")
+        raise HTTPException(status_code=502, detail="Failed to fetch subtitle")
+
 @api_router.post("/stream/start/{info_hash}")
 async def start_stream(info_hash: str, current_user: User = Depends(get_current_user)):
     """Start downloading a torrent via WebTorrent server"""
