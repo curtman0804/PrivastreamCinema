@@ -205,6 +205,9 @@ export default function DetailsScreen() {
     
     if (stream.infoHash) {
       // Torrent stream - use torrent player
+      // Get fileIdx from stream if available (for multi-file torrents like season packs)
+      const streamFileIdx = stream.fileIdx ?? stream.behaviorHints?.fileIdx ?? 0;
+      
       router.push({
         pathname: '/player',
         params: { 
@@ -212,6 +215,7 @@ export default function DetailsScreen() {
           title: contentTitle,
           contentType: cType,
           contentId: isValidImdbId ? imdbIdForSubtitles : '', // Only pass valid IMDB IDs
+          fileIdx: String(streamFileIdx),
         },
       });
     } else if (stream.url) {
