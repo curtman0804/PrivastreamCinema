@@ -1848,7 +1848,8 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                     continue
                 
                 url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
-                section_name = f"OnlyPorn: {catalog_name}"
+                # Use catalog name directly - don't add prefix if it already has one
+                section_name = catalog_name
                 
                 # Track order for FIFO
                 if section_name not in section_order:
