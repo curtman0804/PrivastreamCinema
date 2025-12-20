@@ -197,7 +197,7 @@ export default function DetailsScreen() {
           title: contentTitle,
           isLive: 'false',
           contentType: cType,
-          contentId: imdbId,
+          contentId: isValidImdbId ? imdbIdForSubtitles : '', // Only pass valid IMDB IDs
         },
       });
       return;
@@ -211,7 +211,7 @@ export default function DetailsScreen() {
           infoHash: stream.infoHash,
           title: contentTitle,
           contentType: cType,
-          contentId: imdbId,
+          contentId: isValidImdbId ? imdbIdForSubtitles : '', // Only pass valid IMDB IDs
         },
       });
     } else if (stream.url) {
@@ -223,7 +223,7 @@ export default function DetailsScreen() {
           title: contentTitle,
           isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
-          contentId: imdbId,
+          contentId: isValidImdbId ? imdbIdForSubtitles : '', // Only pass valid IMDB IDs
         },
       });
     }
