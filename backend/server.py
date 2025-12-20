@@ -2467,10 +2467,14 @@ async def proxy_subtitle(url: str):
         raise HTTPException(status_code=502, detail="Failed to fetch subtitle")
 
 @api_router.post("/stream/start/{info_hash}")
-async def start_stream(info_hash: str, current_user: User = Depends(get_current_user)):
+async def start_stream(
+    info_hash: str,
+    file_idx: int = 0,
+    current_user: User = Depends(get_current_user)
+):
     """Start downloading a torrent via WebTorrent server"""
     try:
-        logger.info(f"Starting torrent download for {info_hash}")
+        logger.info(f"Starting torrent download for {info_hash}, fileIdx={file_idx}")
         
         # Trigger the WebTorrent server to start downloading
         # We make a GET request to /stream which adds the torrent
@@ -2480,8 +2484,10 @@ async def start_stream(info_hash: str, current_user: User = Depends(get_current_
                 async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
                     # Make a request to trigger torrent addition
                     # The stream endpoint will add the torrent and start downloading
+                    # Include fileIdx in the URL for multi-file torrents
+                    stream_url = f"{TORRENT_SERVER_URL}/stream/{info_hash}/{file_idx}" if file_idx > 0 else f"{TORRENT_SERVER_URL}/stream/{info_hash}"
                     response = await client.get(
-                        f"{TORRENT_SERVER_URL}/stream/{info_hash}",
+                        stream_url,
                         headers={"Range": "bytes=0-1024"}  # Request just first 1KB to trigger start
                     )
                     logger.info(f"Torrent trigger response: {response.status_code}")
@@ -2491,7 +2497,7 @@ async def start_stream(info_hash: str, current_user: User = Depends(get_current_
         # Start in background
         asyncio.create_task(trigger_torrent())
         
-        return {"status": "started", "info_hash": info_hash}
+        return {"status": "started", "info_hash": info_hash, "file_idx": file_idx}
     except Exception as e:
         logger.error(f"Error starting stream: {e}")
         raise HTTPException(status_code=500, detail=str(e))
