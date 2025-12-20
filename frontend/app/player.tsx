@@ -756,6 +756,13 @@ export default function PlayerScreen() {
         Platform.OS === 'web' ? (
           <View style={styles.videoContainer}>
             <video
+              ref={(el) => {
+                // Ensure audio is enabled
+                if (el) {
+                  el.muted = false;
+                  el.volume = 1.0;
+                }
+              }}
               src={streamUrl}
               controls
               autoPlay
