@@ -1998,23 +1998,6 @@ async def search_content(
         except Exception as e:
             logger.error(f"Genre search error: {str(e)}")
             # Fall back to regular search
-                else:
-                    logger.warning(f"Genre movie fetch failed: {movie_resp}")
-                
-                if not isinstance(series_resp, Exception) and series_resp.status_code == 200:
-                    series = series_resp.json().get('metas', [])
-                    logger.info(f"Genre '{genre_name}' series: {len(series)}")
-                else:
-                    logger.warning(f"Genre series fetch failed: {series_resp}")
-                
-                # Return top results (Cinemeta returns sorted by popularity)
-                return {
-                    "movies": movies[:100],
-                    "series": series[:100]
-                }
-        except Exception as e:
-            logger.error(f"Genre search error: {str(e)}")
-            # Fall back to regular search
     
     def score_result(item, query, trust_cinemeta=False):
         """Score search results by relevance"""
