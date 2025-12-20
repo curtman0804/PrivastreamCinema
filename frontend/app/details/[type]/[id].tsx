@@ -42,11 +42,16 @@ export default function DetailsScreen() {
   const [isLoadingContent, setIsLoadingContent] = useState(true);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
+  const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(null);
 
   // Check if this is an episode page (id contains season:episode)
   // Also check for porn IDs which use colons
   const isEpisodePage = id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
+  
+  // Parse season and episode from ID if on episode page
+  const episodeSeason = isEpisodePage ? parseInt(id?.split(':')[1] || '1', 10) : null;
+  const episodeNumber = isEpisodePage ? parseInt(id?.split(':')[2] || '1', 10) : null;
 
   // Get seasons from episodes
   const seasons = useMemo(() => {
