@@ -2198,10 +2198,52 @@ async def search_content(q: str, current_user: User = Depends(get_current_user))
         logger.error(f"Search error: {str(e)}")
         return {"movies": [], "series": []}
 
-@api_router.get("/content/meta/{content_type}/{content_id}")
+@api_router.get("/content/meta/{content_type}/{content_id:path}")
 async def get_meta(content_type: str, content_id: str, current_user: User = Depends(get_current_user)):
     """Get metadata for content including episodes for series"""
     try:
+        # For URL-based content (porn sites like xHamster, Eporner, etc.)
+        # Return basic metadata structure - the real info is on the details page from discover
+        if content_id.startswith('http://') or content_id.startswith('https://'):
+            logger.info(f"URL-based content meta request: {content_id[:50]}...")
+            # Extract basic info from URL
+            name = "Unknown Title"
+            if 'xhamster' in content_id:
+                # Try to extract title from URL slug
+                parts = content_id.split('/')
+                if len(parts) > 4:
+                    slug = parts[-1].split('-x')[0]  # Remove xhXXXX suffix
+                    name = slug.replace('-', ' ').title()
+            elif 'eporner' in content_id:
+                parts = content_id.split('/')
+                if len(parts) > 3:
+                    name = parts[-2].replace('-', ' ').title() if parts[-2] else "Eporner Video"
+            elif 'porntrex' in content_id:
+                parts = content_id.split('/')
+                if len(parts) > 4:
+                    name = parts[-2].replace('-', ' ').title() if parts[-2] else "PornTrex Video"
+            
+            return {
+                "id": content_id,
+                "type": content_type,
+                "name": name,
+                "poster": "",  # Will use fallback from discover page
+                "description": "",
+                "isAdult": True,
+            }
+        
+        # For porn addon IDs (porn_id:XXX format)
+        if content_id.startswith('porn_id:') or content_id.startswith('pt:'):
+            logger.info(f"Porn addon content meta request: {content_id[:50]}...")
+            return {
+                "id": content_id,
+                "type": content_type,
+                "name": "Adult Content",
+                "poster": "",
+                "description": "",
+                "isAdult": True,
+            }
+        
         # For TV channels, try USA TV addon first
         if content_type == 'tv' and content_id.startswith('ustv'):
             try:
