@@ -1696,7 +1696,7 @@ async def get_all_streams(
         
         # Combined score: language * 1000000 + quality * 100000 + reliability * 10 + seeders
         # This ensures: language > quality > reliability > seeders
-        return (quality_score * 100000) + (reliability_bonus * 10) + min(seeders, 9999)
+        return (language_bonus * 1000) + (quality_score * 100000) + (reliability_bonus * 10) + min(seeders, 9999)
     
     unique_streams.sort(key=get_sort_score, reverse=True)
     
