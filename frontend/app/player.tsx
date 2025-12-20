@@ -765,41 +765,18 @@ export default function PlayerScreen() {
           <View style={styles.videoContainer}>
             <video
               ref={(el) => {
-                // Store ref for later use
-                if (el) {
-                  (window as any).__videoEl = el;
-                  // Try to unmute after a small delay (after user interaction)
-                  setTimeout(() => {
-                    if (el) {
-                      el.muted = false;
-                      el.volume = 1.0;
-                    }
-                  }, 100);
-                }
+                webVideoRef.current = el;
               }}
               src={streamUrl}
               controls
               autoPlay
               playsInline
-              muted={false}
-              onCanPlay={(e: any) => {
-                // Try to unmute when video is ready
-                const videoEl = e.target;
-                if (videoEl) {
-                  videoEl.muted = false;
-                  videoEl.volume = 1.0;
-                }
-              }}
+              muted={isMuted}
               onTimeUpdate={(e: any) => {
                 const videoEl = e.target;
                 if (videoEl) {
                   setPosition(videoEl.currentTime * 1000);
                   setDuration(videoEl.duration * 1000);
-                  // Ensure unmuted during playback
-                  if (videoEl.muted) {
-                    videoEl.muted = false;
-                    videoEl.volume = 1.0;
-                  }
                 }
               }}
               onError={(e: any) => {
@@ -813,6 +790,23 @@ export default function PlayerScreen() {
                 objectFit: 'contain'
               } as any}
             />
+            
+            {/* UNMUTE BUTTON - Shows when video is muted */}
+            {isMuted && (
+              <TouchableOpacity
+                style={styles.unmuteButton}
+                onPress={() => {
+                  if (webVideoRef.current) {
+                    webVideoRef.current.muted = false;
+                    webVideoRef.current.volume = 1.0;
+                  }
+                  setIsMuted(false);
+                }}
+              >
+                <Ionicons name="volume-mute" size={32} color="#FFFFFF" />
+                <Text style={styles.unmuteText}>TAP TO UNMUTE</Text>
+              </TouchableOpacity>
+            )}
             
             {/* Subtitle Text Overlay for Web */}
             {subtitleText && (
