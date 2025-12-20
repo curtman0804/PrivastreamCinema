@@ -289,8 +289,8 @@ export const api = {
     },
   },
   stream: {
-    start: async (infoHash: string): Promise<{ status: string; info_hash: string }> => {
-      const response = await apiClient.post(`/api/stream/start/${infoHash}`);
+    start: async (infoHash: string, fileIdx: number = 0): Promise<{ status: string; info_hash: string; file_idx?: number }> => {
+      const response = await apiClient.post(`/api/stream/start/${infoHash}?file_idx=${fileIdx}`);
       return response.data;
     },
     status: async (infoHash: string): Promise<{
@@ -306,10 +306,10 @@ export const api = {
       const response = await apiClient.get(`/api/stream/status/${infoHash}`);
       return response.data;
     },
-    getVideoUrl: (infoHash: string): string => {
+    getVideoUrl: (infoHash: string, fileIdx: number = 0): string => {
       // Return the full URL for the video stream
       const baseUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-      return `${baseUrl}/api/stream/video/${infoHash}`;
+      return `${baseUrl}/api/stream/video/${infoHash}?file_idx=${fileIdx}`;
     },
   },
 };
