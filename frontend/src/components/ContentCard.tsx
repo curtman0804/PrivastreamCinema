@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,7 +15,7 @@ interface ContentCardProps {
   showRating?: boolean;
 }
 
-export const ContentCard: React.FC<ContentCardProps> = ({
+const ContentCardComponent: React.FC<ContentCardProps> = ({
   item,
   onPress,
   size = 'medium',
@@ -44,12 +44,16 @@ export const ContentCard: React.FC<ContentCardProps> = ({
           source={{ uri: item.poster }}
           style={styles.image}
           contentFit="cover"
-          transition={200}
+          transition={100}
+          recyclingKey={item.id || item.imdb_id}
+          cachePolicy="memory-disk"
         />
       </View>
     </TouchableOpacity>
   );
 };
+
+export const ContentCard = memo(ContentCardComponent);
 
 const styles = StyleSheet.create({
   container: {
