@@ -674,8 +674,8 @@ export default function PlayerScreen() {
             }
             
             setLoadingStatus('Starting playback...');
-            // Use transcoding for better codec compatibility
-            const videoUrl = api.stream.getVideoUrl(infoHash, parsedFileIdx, true);
+            // Use direct stream (no transcoding) for faster start - like Stremio
+            const videoUrl = api.stream.getVideoUrl(infoHash, parsedFileIdx, false);
             setStreamUrl(videoUrl);
             setIsLoading(false);
             return; // Stop polling
