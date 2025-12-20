@@ -803,6 +803,7 @@ export default function PlayerScreen() {
               isLooping={false}
               volume={1.0}
               isMuted={false}
+              progressUpdateIntervalMillis={250}
               onPlaybackStatusUpdate={handlePlaybackStatus}
               onError={(errorObj) => {
                 console.log('Video error:', errorObj);
