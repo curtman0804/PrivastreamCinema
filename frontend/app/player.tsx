@@ -220,13 +220,27 @@ export default function PlayerScreen() {
     const fetchSubtitleFile = async () => {
       try {
         console.log('[SUBTITLES] Fetching subtitle file:', selectedSubtitle);
-        const response = await fetch(selectedSubtitle);
-        const text = await response.text();
-        console.log('[SUBTITLES] Subtitle content length:', text.length);
         
-        const parsed = parseSRT(text);
-        console.log('[SUBTITLES] Parsed', parsed.length, 'subtitle entries');
-        setParsedSubtitles(parsed);
+        // Use backend proxy to bypass CORS
+        const proxyUrl = `/api/proxy/subtitle?url=${encodeURIComponent(selectedSubtitle)}`;
+        console.log('[SUBTITLES] Using proxy URL:', proxyUrl);
+        
+        const response = await apiClient.get(proxyUrl);
+        const text = response.data;
+        console.log('[SUBTITLES] Subtitle content length:', text?.length || 0);
+        console.log('[SUBTITLES] First 200 chars:', text?.substring(0, 200));
+        
+        if (text && text.length > 0) {
+          const parsed = parseSRT(text);
+          console.log('[SUBTITLES] Parsed', parsed.length, 'subtitle entries');
+          if (parsed.length > 0) {
+            console.log('[SUBTITLES] First entry:', parsed[0]);
+          }
+          setParsedSubtitles(parsed);
+        } else {
+          console.log('[SUBTITLES] Empty subtitle content received');
+          setParsedSubtitles([]);
+        }
       } catch (err) {
         console.error('[SUBTITLES] Error fetching subtitle file:', err);
         setParsedSubtitles([]);
