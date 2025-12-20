@@ -545,17 +545,17 @@ export default function PlayerScreen() {
   }, [url, infoHash, directUrl, isLive]);
   
   // Generic torrent stream function for fallbacks
-  const startTorrentStreamWithHash = async (hash: string) => {
+  const startTorrentStreamWithHash = async (hash: string, streamFileIdx: number = 0) => {
     try {
       setLoadingStatus('Starting torrent...');
-      await api.stream.start(hash);
+      await api.stream.start(hash, streamFileIdx);
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
         try {
           const status = await api.stream.status(hash);
           if (status.status === 'ready') {
-            const videoUrl = api.stream.getVideoUrl(hash);
+            const videoUrl = api.stream.getVideoUrl(hash, streamFileIdx);
             setStreamUrl(videoUrl);
             setIsLoading(false);
             setIsRetrying(false);
