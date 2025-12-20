@@ -296,7 +296,7 @@ export default function PlayerScreen() {
       try {
         const url = `/api/subtitles/${cType}/${cId}`;
         console.log('[SUBTITLES] Making API call to:', url);
-        const response = await api.get(url);
+        const response = await apiClient.get(url);
         console.log('[SUBTITLES] API response status:', response.status);
         
         if (response.data?.subtitles && response.data.subtitles.length > 0) {
