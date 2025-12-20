@@ -380,9 +380,21 @@ export default function DetailsScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Description */}
-        {content?.description && (
+        {/* Description - show episode overview if on episode page, otherwise content description */}
+        {isEpisodePage && currentEpisode?.overview ? (
+          <Text style={styles.description}>{currentEpisode.overview}</Text>
+        ) : content?.description ? (
           <Text style={styles.description}>{content.description}</Text>
+        ) : null}
+
+        {/* Show series title when on episode page */}
+        {isEpisodePage && content?.name && (
+          <TouchableOpacity 
+            style={styles.seriesLink}
+            onPress={() => router.push(`/details/${type}/${baseId}`)}
+          >
+            <Text style={styles.seriesLinkText}>← Back to {content.name}</Text>
+          </TouchableOpacity>
         )}
 
         {/* Genres */}
