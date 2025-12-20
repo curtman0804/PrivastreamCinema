@@ -1847,6 +1847,11 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 except Exception as e:
                     logger.warning(f"Error fetching catalog {catalog_id}: {e}")
     
+    # Cache the result for future requests
+    elapsed = time.time() - start_time
+    logger.info(f"Discover fetch took {elapsed:.2f}s - caching result")
+    catalog_cache.set(cache_key, result)
+    
     return result
 
 @api_router.get("/content/category/{service_name}/{content_type}")
