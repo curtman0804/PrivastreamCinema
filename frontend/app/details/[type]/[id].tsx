@@ -380,12 +380,10 @@ export default function DetailsScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Description - show episode overview if on episode page, otherwise content description */}
-        {isEpisodePage && currentEpisode?.overview ? (
-          <Text style={styles.description}>{currentEpisode.overview}</Text>
-        ) : content?.description ? (
+        {/* Description - only show for non-episode pages */}
+        {!isEpisodePage && content?.description && (
           <Text style={styles.description}>{content.description}</Text>
-        ) : null}
+        )}
 
         {/* Genres */}
         {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
