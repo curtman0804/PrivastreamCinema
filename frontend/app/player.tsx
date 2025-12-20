@@ -509,6 +509,15 @@ export default function PlayerScreen() {
       {streamUrl && !error && !isLoading && (
         Platform.OS === 'web' ? (
           <View style={styles.videoContainer}>
+            {/* HEVC Warning Banner for Web */}
+            {isHEVCContent(title) && (
+              <View style={styles.hevcWarningBanner}>
+                <Ionicons name="warning" size={16} color="#FFA500" />
+                <Text style={styles.hevcWarningText}>
+                  HEVC/x265 codec detected - may show black screen on web. Use mobile app for best experience.
+                </Text>
+              </View>
+            )}
             <video
               src={streamUrl}
               controls
