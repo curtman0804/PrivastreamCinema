@@ -796,6 +796,13 @@ export default function PlayerScreen() {
               }}
             />
             
+            {/* Subtitle Text Overlay */}
+            {subtitleText && (
+              <View style={styles.subtitleOverlay}>
+                <Text style={styles.subtitleTextDisplay}>{subtitleText}</Text>
+              </View>
+            )}
+            
             {/* Custom Controls Overlay - fades in/out */}
             {showControls && (
               <View style={styles.controlsOverlay}>
