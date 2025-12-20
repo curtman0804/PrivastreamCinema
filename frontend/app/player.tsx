@@ -32,6 +32,13 @@ if (Platform.OS !== 'web') {
 
 const { width, height } = Dimensions.get('window');
 
+// Check if title suggests HEVC/x265 codec (not supported on most web browsers)
+const isHEVCContent = (titleStr: string | undefined): boolean => {
+  if (!titleStr) return false;
+  const lowerTitle = titleStr.toLowerCase();
+  return lowerTitle.includes('hevc') || lowerTitle.includes('x265') || lowerTitle.includes('h.265');
+};
+
 // Web Video Component using dangerouslySetInnerHTML
 const WebVideoPlayer = ({ streamUrl, onLoad, onError, isHLS = false }: { streamUrl: string; onLoad: () => void; onError: () => void; isHLS?: boolean }) => {
   useEffect(() => {
