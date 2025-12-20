@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "privastreamcinema",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.privastream.cinema"
@@ -17,7 +17,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "edgeToEdgeEnabled": true,
+      "edgeToEdgeEnabled": false,
       "package": "com.privastream.cinema"
     },
     "web": {
@@ -44,7 +44,8 @@
       "router": {},
       "eas": {
         "projectId": "734879b5-3cae-4195-b064-cc0c7617b7ae"
-      }
+      },
+      "backendUrl": "https://privastream-app-1.preview.emergentagent.com"
     },
     "owner": "choyt"
   }
