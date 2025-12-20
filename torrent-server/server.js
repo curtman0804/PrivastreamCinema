@@ -208,7 +208,7 @@ function handleStream(req, res, fileIndex) {
   if (torrent && torrent.ready) {
     console.log('✅ Torrent ready, streaming immediately');
     streamFile(torrent);
-  } else if (torrent) {
+  } else if (torrent && typeof torrent.once === 'function') {
     console.log('⏳ Torrent loading, waiting for ready...');
     torrent.once('ready', () => {
       console.log('✅ Torrent now ready');
@@ -217,9 +217,13 @@ function handleStream(req, res, fileIndex) {
   } else {
     console.log('🆕 Adding new torrent...');
     
+    // Remove any stale entry
+    if (torrent) {
+      torrents.delete(infoHashLower);
+    }
+    
     torrent = client.add(magnetURI, {
       announce: TRACKERS,
-      // Stremio-style: Don't store files, stream directly
       path: '/tmp/webtorrent-' + infoHashLower,
     });
 
