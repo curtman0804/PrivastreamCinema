@@ -184,36 +184,7 @@ export default function PlayerScreen() {
     };
   }, [showControls, streamUrl, isLoading]);
 
-  // Fetch subtitles for the content
-  const fetchSubtitles = async (cType: string, cId: string) => {
-    console.log('[SUBTITLES] fetchSubtitles called with:', cType, cId);
-    
-    // Validate that we have a proper IMDB ID (must start with 'tt' followed by numbers)
-    if (!cId || !/^tt\d+$/.test(cId)) {
-      console.log('[SUBTITLES] Invalid or missing IMDB ID, skipping subtitle fetch. Content ID:', cId);
-      return;
-    }
-    
-    try {
-      const url = `/api/subtitles/${cType}/${cId}`;
-      console.log('[SUBTITLES] Making API call to:', url);
-      const response = await api.get(url);
-      console.log('[SUBTITLES] API response status:', response.status);
-      console.log('[SUBTITLES] API response data:', JSON.stringify(response.data));
-      
-      if (response.data?.subtitles && response.data.subtitles.length > 0) {
-        console.log(`[SUBTITLES] Setting ${response.data.subtitles.length} subtitle options`);
-        setSubtitles(response.data.subtitles);
-      } else {
-        console.log('[SUBTITLES] No subtitles found in response');
-      }
-    } catch (err: any) {
-      console.log('[SUBTITLES] Error fetching subtitles:', err.message || err);
-      if (err.response) {
-        console.log('[SUBTITLES] Error response:', err.response.status, err.response.data);
-      }
-    }
-  };
+  // NOTE: fetchSubtitlesFromAPI is defined inside the useEffect above to avoid stale closures
 
   // Open stream in external player (VLC, MX Player, etc.)
   const openInExternalPlayer = async () => {
