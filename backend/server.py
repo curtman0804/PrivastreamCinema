@@ -1957,28 +1957,11 @@ async def get_category_content(
                         # Filter out items with empty names or IDs
                         metas = [m for m in metas if m.get('name') and m.get('id')]
                         
-                        # Detect if addon doesn't support pagination
                         total_items = len(metas)
                         
-                        if skip > 0:
-                            # If skip is beyond total items, return empty - no more items
-                            if skip >= total_items:
-                                return {
-                                    "items": [], 
-                                    "total": total_items, 
-                                    "hasMore": False,
-                                    "catalogId": catalog_id,
-                                    "baseUrl": base_url
-                                }
-                            else:
-                                # Addon might not support skip - return items after skip position
-                                metas = metas[skip:skip + limit]
-                                # If we got fewer items than limit, we've reached the end
-                                has_more = len(metas) >= limit
-                        else:
-                            # First page - if we got limit or more items, there might be more
-                            # Don't apply arbitrary limits - return what the addon gives
-                            has_more = total_items >= limit
+                        # The addon handles pagination via skip parameter in URL
+                        # We just return what we get - if we got a full page, there's likely more
+                        has_more = total_items >= limit
                         
                         return {
                             "items": metas, 
