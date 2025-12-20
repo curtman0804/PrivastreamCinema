@@ -982,6 +982,18 @@ async def get_all_streams(
 ):
     """Fetch streams from ALL installed addons + built-in Torrentio-style aggregation"""
     
+    # Check cache for non-URL content IDs (URL-based streams have expiring links)
+    is_url_content = content_id.startswith('http://') or content_id.startswith('https://')
+    cache_key = f"streams_{content_type}_{content_id}"
+    
+    if not is_url_content:
+        cached = stream_cache.get(cache_key)
+        if cached:
+            logger.info(f"Returning cached streams for {content_type}/{content_id[:40]}")
+            return cached
+    
+    start_time = time.time()
+    
     # Handle Porn+ / RedTube content IDs - extract video directly
     if 'RedTube-movie-' in content_id or 'porn_id:RedTube' in content_id:
         # Extract video ID from content ID (e.g., porn_id:RedTube-movie-196897861)
