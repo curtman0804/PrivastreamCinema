@@ -814,11 +814,7 @@ export default function PlayerScreen() {
             </View>
           </View>
         ) : (
-          <TouchableOpacity 
-            activeOpacity={1} 
-            style={styles.videoContainer}
-            onPress={() => setShowControls(!showControls)}
-          >
+          <View style={styles.videoContainer}>
             <Video
               ref={videoRef}
               source={{ uri: streamUrl }}
@@ -844,60 +840,23 @@ export default function PlayerScreen() {
               </View>
             )}
             
-            {/* Custom Controls Overlay - fades in/out */}
-            {showControls && (
-              <View style={styles.controlsOverlay}>
-                {/* Top Bar - Back and CC */}
-                <View style={styles.topControls}>
-                  <TouchableOpacity 
-                    style={styles.controlButton} 
-                    onPress={() => router.back()}
-                  >
-                    <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
-                  </TouchableOpacity>
-                  
-                  <View style={styles.topRightControls}>
-                    <TouchableOpacity 
-                      style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
-                      onPress={() => setShowSubtitlePicker(true)}
-                    >
-                      <Ionicons name="text" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={styles.controlButton}
-                      onPress={openInExternalPlayer}
-                    >
-                      <Ionicons name="open-outline" size={24} color="#FFFFFF" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                
-                {/* Center Play/Pause */}
-                <View style={styles.centerControls}>
-                  <TouchableOpacity 
-                    style={styles.playPauseButton}
-                    onPress={togglePlayPause}
-                  >
-                    <Ionicons 
-                      name={isPlaying ? "pause" : "play"} 
-                      size={50} 
-                      color="#FFFFFF" 
-                    />
-                  </TouchableOpacity>
-                </View>
-                
-                {/* Bottom Bar - Progress */}
-                <View style={styles.bottomControls}>
-                  <Text style={styles.timeText}>{formatTime(position)}</Text>
-                  <View style={styles.progressBarContainer}>
-                    <View style={[styles.playerProgressFill, { width: `${(position / duration) * 100}%` }]} />
-                  </View>
-                  <Text style={styles.timeText}>{formatTime(duration)}</Text>
-                </View>
-              </View>
-            )}
-          </TouchableOpacity>
+            {/* Back button and CC button overlay */}
+            <View style={styles.nativeControlsOverlay}>
+              <TouchableOpacity 
+                style={styles.controlButton} 
+                onPress={() => router.back()}
+              >
+                <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
+                onPress={() => setShowSubtitlePicker(true)}
+              >
+                <Ionicons name="text" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
+              </TouchableOpacity>
+            </View>
+          </View>
         )
       )}
 
