@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { memo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,7 +17,10 @@ interface ServiceRowProps {
   onSeeAll?: () => void;
 }
 
-export const ServiceRow: React.FC<ServiceRowProps> = ({
+// Memoized content card to prevent re-renders
+const MemoizedContentCard = memo(ContentCard);
+
+export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   serviceName,
   items,
   onItemPress,
@@ -26,6 +29,16 @@ export const ServiceRow: React.FC<ServiceRowProps> = ({
   // Filter out undefined/null items
   const validItems = (items || []).filter(Boolean);
   if (validItems.length === 0) return null;
+
+  const renderItem = ({ item }: { item: ContentItem }) => (
+    <MemoizedContentCard
+      item={item}
+      onPress={() => onItemPress(item)}
+    />
+  );
+
+  const keyExtractor = (item: ContentItem, index: number) => 
+    item.id || item.imdb_id || `item-${index}`;
 
   return (
     <View style={styles.container}>
@@ -40,22 +53,26 @@ export const ServiceRow: React.FC<ServiceRowProps> = ({
           </TouchableOpacity>
         )}
       </View>
-      <ScrollView
+      <FlatList
         horizontal
+        data={validItems}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-      >
-        {validItems.map((item, index) => (
-          <ContentCard
-            key={item.id || item.imdb_id || index}
-            item={item}
-            onPress={() => onItemPress(item)}
-          />
-        ))}
-      </ScrollView>
+        initialNumToRender={5}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        removeClippedSubviews={true}
+        getItemLayout={(data, index) => ({
+          length: 120,
+          offset: 120 * index,
+          index,
+        })}
+      />
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
