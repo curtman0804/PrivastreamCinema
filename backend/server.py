@@ -1637,16 +1637,30 @@ async def get_all_streams(
         # Source reliability bonus (higher = more reliable)
         reliability_bonus = 0
         
+        # CRITICAL for series: Streams with fileIdx are properly indexed and will play the right episode
+        has_file_idx = stream.get('fileIdx') is not None or (stream.get('behaviorHints') or {}).get('fileIdx') is not None
+        if has_file_idx and content_type == 'series':
+            reliability_bonus += 8000  # Highest priority - guaranteed correct episode
+        
         # Direct URL streams (yt-dlp extracted) are very reliable
         if stream.get('url', '').startswith('/api/proxy/'):
-            reliability_bonus = 5000  # High priority for proxy streams
+            reliability_bonus += 5000  # High priority for proxy streams
+        
+        # MediaFusion and Comet streams are very reliable and have proper metadata
+        if 'mediafusion' in addon:
+            reliability_bonus += 4000  # MediaFusion has best metadata
+        elif 'comet' in addon:
+            reliability_bonus += 3500  # Comet is also very reliable
+        
         # Torrents with high seeders are reliable
+        if seeders > 100:
+            reliability_bonus += 3000
         elif seeders > 50:
-            reliability_bonus = 3000
+            reliability_bonus += 2500
         elif seeders > 20:
-            reliability_bonus = 2000
+            reliability_bonus += 2000
         elif seeders > 5:
-            reliability_bonus = 1000
+            reliability_bonus += 1000
         
         # Source-specific bonuses
         if 'torrentio' in addon:
@@ -1657,6 +1671,10 @@ async def get_all_streams(
             reliability_bonus += 300  # Adult sites with yt-dlp work well
         elif 'piratebay' in addon or 'tpb' in addon:
             reliability_bonus += 200
+        
+        # Penalize streams without fileIdx for series (they're likely season packs that won't work right)
+        if content_type == 'series' and not has_file_idx and stream.get('infoHash'):
+            reliability_bonus -= 2000  # Lower priority
         
         # Combined score: quality tier * 100000 + reliability * 100 + seeders
         # This ensures: quality > reliability > seeders
