@@ -771,7 +771,6 @@ export default function PlayerScreen() {
               controls
               autoPlay
               playsInline
-              muted={isMuted}
               onTimeUpdate={(e: any) => {
                 const videoEl = e.target;
                 if (videoEl) {
@@ -790,23 +789,6 @@ export default function PlayerScreen() {
                 objectFit: 'contain'
               } as any}
             />
-            
-            {/* UNMUTE BUTTON - Shows when video is muted */}
-            {isMuted && (
-              <TouchableOpacity
-                style={styles.unmuteButton}
-                onPress={() => {
-                  if (webVideoRef.current) {
-                    webVideoRef.current.muted = false;
-                    webVideoRef.current.volume = 1.0;
-                  }
-                  setIsMuted(false);
-                }}
-              >
-                <Ionicons name="volume-mute" size={32} color="#FFFFFF" />
-                <Text style={styles.unmuteText}>TAP TO UNMUTE</Text>
-              </TouchableOpacity>
-            )}
             
             {/* Subtitle Text Overlay for Web */}
             {subtitleText && (
