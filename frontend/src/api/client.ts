@@ -306,10 +306,10 @@ export const api = {
       const response = await apiClient.get(`/api/stream/status/${infoHash}`);
       return response.data;
     },
-    getVideoUrl: (infoHash: string, fileIdx: number = 0): string => {
+    getVideoUrl: (infoHash: string, fileIdx: number = 0, transcode: boolean = false): string => {
       // Return the full URL for the video stream
       const baseUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-      return `${baseUrl}/api/stream/video/${infoHash}?file_idx=${fileIdx}`;
+      return `${baseUrl}/api/stream/video/${infoHash}?file_idx=${fileIdx}&transcode=${transcode}`;
     },
   },
 };
