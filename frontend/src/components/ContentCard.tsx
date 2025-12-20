@@ -16,6 +16,21 @@ interface ContentCardProps {
   showRating?: boolean;
 }
 
+// CDN domains that need proxying due to blocking direct browser requests
+const PROXY_DOMAINS = ['ptx.cdntrex.com', 'cdntrex.com'];
+
+const getProxiedPosterUrl = (posterUrl: string | undefined): string | undefined => {
+  if (!posterUrl) return undefined;
+  
+  // Check if this URL needs to be proxied
+  const needsProxy = PROXY_DOMAINS.some(domain => posterUrl.includes(domain));
+  if (needsProxy) {
+    // Use our image proxy endpoint
+    return `/api/proxy/image?url=${encodeURIComponent(posterUrl)}`;
+  }
+  return posterUrl;
+};
+
 export const ContentCard: React.FC<ContentCardProps> = ({
   item,
   onPress,
@@ -35,7 +50,8 @@ export const ContentCard: React.FC<ContentCardProps> = ({
     return null;
   }
 
-  const hasValidPoster = item.poster && !imageError;
+  const posterUrl = getProxiedPosterUrl(item.poster);
+  const hasValidPoster = posterUrl && !imageError;
 
   return (
     <TouchableOpacity
@@ -46,7 +62,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
       <View style={[styles.imageContainer, { height: cardHeight }]}>
         {hasValidPoster ? (
           <Image
-            source={{ uri: item.poster }}
+            source={{ uri: posterUrl }}
             style={styles.image}
             contentFit="cover"
             transition={200}
