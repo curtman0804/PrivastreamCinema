@@ -124,6 +124,7 @@ export default function PlayerScreen() {
   const [selectedSubtitle, setSelectedSubtitle] = useState<string | null>(null);
   const [showSubtitlePicker, setShowSubtitlePicker] = useState(false);
   const [subtitleText, setSubtitleText] = useState<string>('');
+  const [parsedSubtitles, setParsedSubtitles] = useState<Array<{start: number; end: number; text: string}>>([]);
   
   // Custom player controls state
   const [showControls, setShowControls] = useState(true);
