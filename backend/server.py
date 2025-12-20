@@ -1733,7 +1733,7 @@ async def get_discover(current_user: User = Depends(get_current_user)):
         logger.info("No addons installed for user - returning empty discover")
         return result
     
-    logger.info(f"Processing {len(addons)} installed addons for discover")
+    logger.info(f"Processing {len(addons)} installed addons for discover (parallel)")
     
     # Service ID to display name mapping for Streaming Catalogs addon
     service_names = {
@@ -1742,22 +1742,35 @@ async def get_discover(current_user: User = Depends(get_current_user)):
     }
     
     # Cinemeta catalogs to fetch - only the ones that work without required params
-    # 'top' = Popular, 'year' requires genre=year param, 'imdbRating' = Featured/Top Rated
     cinemeta_fetch = [
         ('movie', 'top', 'Popular Movies'),
         ('series', 'top', 'Popular Series'),
-        ('movie', 'year', 'New Movies', 'genre=2025'),  # Fetch 2025 movies
-        ('series', 'year', 'New Series', 'genre=2025'),  # Fetch 2025 series
+        ('movie', 'year', 'New Movies', 'genre=2025'),
+        ('series', 'year', 'New Series', 'genre=2025'),
     ]
+    
+    # Build all fetch tasks for parallel execution
+    fetch_tasks = []
+    
+    # Helper function to fetch a single catalog
+    async def fetch_catalog(url: str, section_name: str, catalog_type: str, timeout: float = 10.0):
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
+                response = await client.get(url)
+                if response.status_code == 200:
+                    metas = response.json().get('metas', [])
+                    return (section_name, catalog_type, metas)
+        except Exception as e:
+            logger.debug(f"Error fetching {section_name}: {e}")
+        return None
     
     for addon in addons:
         manifest = addon.get('manifest', {})
         addon_id = manifest.get('id', '').lower()
-        addon_name = manifest.get('name', 'Unknown')
         base_url = get_base_url(addon['manifestUrl'])
         catalogs = manifest.get('catalogs', [])
         
-        # Handle Cinemeta addon specially - fetch specific catalogs
+        # Handle Cinemeta addon
         if 'cinemeta' in addon_id:
             for fetch_config in cinemeta_fetch:
                 catalog_type = fetch_config[0]
@@ -1765,29 +1778,14 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 section_name = fetch_config[2]
                 extra_param = fetch_config[3] if len(fetch_config) > 3 else None
                 
-                try:
-                    if extra_param:
-                        url = f"{base_url}/catalog/{catalog_type}/{catalog_id}/{extra_param}.json"
-                    else:
-                        url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
-                    
-                    async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                        response = await client.get(url)
-                        if response.status_code == 200:
-                            metas = response.json().get('metas', [])  # Get all items
-                            
-                            if section_name not in result['services']:
-                                result['services'][section_name] = {'movies': [], 'series': [], 'channels': []}
-                            
-                            if catalog_type == 'movie':
-                                result['services'][section_name]['movies'].extend(metas)
-                            else:
-                                result['services'][section_name]['series'].extend(metas)
-                            logger.info(f"Cinemeta: {len(metas)} items for {section_name}")
-                except Exception as e:
-                    logger.warning(f"Error fetching Cinemeta {section_name}: {e}")
+                if extra_param:
+                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}/{extra_param}.json"
+                else:
+                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                
+                fetch_tasks.append(fetch_catalog(url, section_name, catalog_type))
         
-        # Handle Streaming Catalogs addon - organize by streaming service
+        # Handle Streaming Catalogs addon
         elif 'netflix-catalog' in addon['manifestUrl'].lower() or 'streaming-catalogs' in addon_id:
             for catalog in catalogs:
                 catalog_type = catalog.get('type', '')
@@ -1797,25 +1795,77 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 if not service_name or catalog_type not in ['movie', 'series']:
                     continue
                 
-                try:
-                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
-                    async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                        response = await client.get(url)
-                        if response.status_code == 200:
-                            metas = response.json().get('metas', [])  # Get all items
-                            type_label = 'Movies' if catalog_type == 'movie' else 'Series'
-                            section_name = f"{service_name} {type_label}"
-                            
-                            if section_name not in result['services']:
-                                result['services'][section_name] = {'movies': [], 'series': [], 'channels': []}
-                            
-                            if catalog_type == 'movie':
-                                result['services'][section_name]['movies'].extend(metas)
-                            else:
-                                result['services'][section_name]['series'].extend(metas)
-                            logger.info(f"Streaming: {len(metas)} items for {section_name}")
-                except Exception as e:
-                    logger.warning(f"Error fetching {service_name}: {e}")
+                url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                type_label = 'Movies' if catalog_type == 'movie' else 'Series'
+                section_name = f"{service_name} {type_label}"
+                
+                fetch_tasks.append(fetch_catalog(url, section_name, catalog_type))
+        
+        # Handle USA TV addon - fetch only first page (100 items) for discover
+        elif 'usatv' in addon_id or 'usa-tv' in addon['manifestUrl'].lower():
+            for catalog in catalogs:
+                catalog_type = catalog.get('type', '')
+                catalog_id = catalog.get('id', '')
+                catalog_name = catalog.get('name', '')
+                
+                if catalog_type not in ['movie', 'series', 'tv'] or 'calendar' in catalog_id.lower() or 'last' in catalog_id.lower():
+                    continue
+                
+                url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                section_name = 'USA TV Channels'
+                
+                fetch_tasks.append(fetch_catalog(url, section_name, 'channels', timeout=8.0))
+        
+        # Handle adult addons
+        elif any(x in addon_id.lower() for x in ['jaxxx', 'porn', 'onlyporn']):
+            for catalog in catalogs:
+                catalog_type = catalog.get('type', '')
+                catalog_id = catalog.get('id', '')
+                catalog_name = catalog.get('name', '')
+                
+                if 'calendar' in catalog_id.lower() or 'last' in catalog_id.lower():
+                    continue
+                
+                url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                section_name = f"OnlyPorn: {catalog_name}"
+                
+                fetch_tasks.append(fetch_catalog(url, section_name, catalog_type, timeout=8.0))
+    
+    # Execute all fetch tasks in parallel
+    logger.info(f"Executing {len(fetch_tasks)} catalog fetches in parallel...")
+    results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+    
+    # Process results
+    for res in results:
+        if res is None or isinstance(res, Exception):
+            continue
+        section_name, catalog_type, metas = res
+        
+        if section_name not in result['services']:
+            result['services'][section_name] = {'movies': [], 'series': [], 'channels': []}
+        
+        if catalog_type == 'movie':
+            result['services'][section_name]['movies'].extend(metas)
+        elif catalog_type == 'series':
+            result['services'][section_name]['series'].extend(metas)
+        elif catalog_type in ['tv', 'channels']:
+            result['services'][section_name]['channels'].extend(metas)
+    
+    # Sort services to put popular content first
+    sorted_services = {}
+    priority_order = ['Popular Movies', 'Popular Series', 'New Movies', 'New Series', 'Netflix', 'Disney+', 'HBO Max', 'Prime Video']
+    
+    for priority in priority_order:
+        for key in result['services']:
+            if priority in key and key not in sorted_services:
+                sorted_services[key] = result['services'][key]
+    
+    # Add remaining services
+    for key in result['services']:
+        if key not in sorted_services:
+            sorted_services[key] = result['services'][key]
+    
+    result['services'] = sorted_services
         
         # Handle USA TV addon
         elif 'usatv' in addon['manifestUrl'].lower() or 'usatv' in addon_id:
