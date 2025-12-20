@@ -1866,56 +1866,6 @@ async def get_discover(current_user: User = Depends(get_current_user)):
             sorted_services[key] = result['services'][key]
     
     result['services'] = sorted_services
-        
-        # Handle USA TV addon
-        elif 'usatv' in addon['manifestUrl'].lower() or 'usatv' in addon_id:
-            for catalog in catalogs:
-                if catalog.get('type') == 'tv':
-                    catalog_id = catalog.get('id', 'usatv')
-                    try:
-                        url = f"{base_url}/catalog/tv/{catalog_id}.json"
-                        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                            response = await client.get(url)
-                            if response.status_code == 200:
-                                metas = response.json().get('metas', [])  # Get all channels
-                                result['services']['USA TV Channels'] = {'movies': [], 'series': [], 'channels': metas}
-                                logger.info(f"USA TV: {len(metas)} channels")
-                    except Exception as e:
-                        logger.warning(f"Error fetching USA TV: {e}")
-                    break
-        
-        # Generic addon handling - show each catalog as a separate section
-        else:
-            for catalog in catalogs:
-                catalog_type = catalog.get('type', '')
-                catalog_id = catalog.get('id', '')
-                catalog_name = catalog.get('name', addon_name)
-                
-                if not catalog_type or not catalog_id:
-                    continue
-                try:
-                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
-                    async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                        response = await client.get(url)
-                        if response.status_code == 200:
-                            metas = response.json().get('metas', [])[:30]  # Get 30 items for discover
-                            # Filter out items with empty names or IDs
-                            metas = [m for m in metas if m.get('name') and m.get('id')]
-                            
-                            if metas:
-                                # Use catalog name as section name
-                                section_name = catalog_name
-                                if section_name not in result['services']:
-                                    result['services'][section_name] = {'movies': [], 'series': [], 'channels': [], '_catalog_id': catalog_id, '_base_url': base_url}
-                                
-                                if catalog_type == 'movie':
-                                    result['services'][section_name]['movies'].extend(metas)
-                                elif catalog_type == 'series':
-                                    result['services'][section_name]['series'].extend(metas)
-                                elif catalog_type == 'tv':
-                                    result['services'][section_name]['channels'].extend(metas)
-                except Exception as e:
-                    logger.warning(f"Error fetching catalog {catalog_id}: {e}")
     
     # Cache the result for future requests
     elapsed = time.time() - start_time
