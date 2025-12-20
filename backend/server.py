@@ -1692,6 +1692,16 @@ async def get_subtitles(content_type: str, content_id: str, current_user: User =
 @api_router.get("/content/discover-organized")
 async def get_discover(current_user: User = Depends(get_current_user)):
     """Get discover page content from installed addons - organized by service"""
+    
+    # Check cache first - cache key is per-user
+    cache_key = f"discover_{current_user.id}"
+    cached_result = catalog_cache.get(cache_key)
+    if cached_result:
+        logger.info(f"Returning cached discover for user {current_user.id}")
+        return cached_result
+    
+    start_time = time.time()
+    
     addons = await db.addons.find({"userId": current_user.id}).sort("installedAt", 1).to_list(100)
     
     result = {
