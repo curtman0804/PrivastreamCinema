@@ -951,4 +951,15 @@ const styles = StyleSheet.create({
   bottomPadding: {
     height: 100,
   },
+  seriesLink: {
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  seriesLinkText: {
+    color: '#B8A05C',
+    fontSize: 14,
+    fontWeight: '500',
+  },
 });
