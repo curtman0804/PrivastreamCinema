@@ -547,25 +547,46 @@ export default function PlayerScreen() {
   
   // Generic torrent stream function for fallbacks
   const startTorrentStreamWithHash = async (hash: string, streamFileIdx: number = 0) => {
+    const startTime = Date.now();
+    const TIMEOUT_MS = 30000; // 30 second timeout for fallback streams
+    
     try {
-      setLoadingStatus('Starting torrent...');
+      setLoadingStatus('Starting alternative stream...');
       await api.stream.start(hash, streamFileIdx);
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
+        
+        const elapsed = Date.now() - startTime;
+        
+        // Timeout check
+        if (elapsed > TIMEOUT_MS) {
+          console.log('[PLAYER] Fallback stream timeout, trying next');
+          handleVideoError({ message: 'Timeout' });
+          return;
+        }
+        
         try {
           const status = await api.stream.status(hash);
+          
           if (status.status === 'ready') {
-            const videoUrl = api.stream.getVideoUrl(hash, streamFileIdx);
+            // Use transcoding for better compatibility
+            const videoUrl = api.stream.getVideoUrl(hash, streamFileIdx, true);
             setStreamUrl(videoUrl);
             setIsLoading(false);
             setIsRetrying(false);
             return;
           } else if (status.status === 'not_found' || status.status === 'invalid') {
             // Try next fallback
-            handleVideoError({ message: 'Torrent failed' });
+            handleVideoError({ message: 'Stream failed' });
+            return;
+          } else if (status.status === 'downloading_metadata' && status.peers === 0 && elapsed > 15000) {
+            // No peers after 15 seconds, try next
+            handleVideoError({ message: 'No peers' });
             return;
           }
+          
+          setLoadingStatus(`Buffering alternative... (${Math.floor(elapsed/1000)}s)`);
           setTimeout(pollStatus, 1000);
         } catch {
           handleVideoError({ message: 'Poll error' });
