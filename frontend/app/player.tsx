@@ -828,6 +828,7 @@ export default function PlayerScreen() {
               isLooping={false}
               volume={1.0}
               isMuted={false}
+              useNativeControls={true}
               progressUpdateIntervalMillis={250}
               onPlaybackStatusUpdate={handlePlaybackStatus}
               onError={(errorObj) => {
