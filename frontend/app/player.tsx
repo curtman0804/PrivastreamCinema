@@ -577,11 +577,14 @@ export default function PlayerScreen() {
 
   const startTorrentStream = async () => {
     if (!infoHash) return;
+    
+    // Parse fileIdx from URL params (default to 0)
+    const parsedFileIdx = fileIdx ? parseInt(fileIdx, 10) : 0;
 
     try {
       setLoadingStatus('Starting torrent engine...');
       
-      await api.stream.start(infoHash);
+      await api.stream.start(infoHash, parsedFileIdx);
       
       // Start with fast polling (500ms) for quicker response during initial buffering
       let pollInterval = 500;
@@ -622,7 +625,7 @@ export default function PlayerScreen() {
             }
             
             setLoadingStatus('Starting playback...');
-            const videoUrl = api.stream.getVideoUrl(infoHash);
+            const videoUrl = api.stream.getVideoUrl(infoHash, parsedFileIdx);
             setStreamUrl(videoUrl);
             setIsLoading(false);
             return; // Stop polling
