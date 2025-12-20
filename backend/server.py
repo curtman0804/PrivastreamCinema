@@ -1847,20 +1847,27 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
                 section_name = f"OnlyPorn: {catalog_name}"
                 
-                fetch_tasks.append(fetch_catalog(url, section_name, catalog_type, timeout=8.0))
+                # Track order for FIFO
+                if section_name not in section_order:
+                    section_order[section_name] = order_counter
+                    order_counter += 1
+                
+                fetch_tasks.append(fetch_catalog(url, section_name, catalog_type, section_order[section_name], timeout=8.0))
     
     # Execute all fetch tasks in parallel
     logger.info(f"Executing {len(fetch_tasks)} catalog fetches in parallel...")
     results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
     
-    # Process results
+    # Process results - track order from each result
+    service_order_map = {}  # section_name -> order_idx
     for res in results:
         if res is None or isinstance(res, Exception):
             continue
-        section_name, catalog_type, metas = res
+        section_name, catalog_type, metas, order_idx = res
         
         if section_name not in result['services']:
             result['services'][section_name] = {'movies': [], 'series': [], 'channels': []}
+            service_order_map[section_name] = order_idx
         
         if catalog_type == 'movie':
             result['services'][section_name]['movies'].extend(metas)
@@ -1869,21 +1876,14 @@ async def get_discover(current_user: User = Depends(get_current_user)):
         elif catalog_type in ['tv', 'channels']:
             result['services'][section_name]['channels'].extend(metas)
     
-    # Sort services to put popular content first
+    # Sort services by FIFO order (addon installation order)
     sorted_services = {}
-    priority_order = ['Popular Movies', 'Popular Series', 'New Movies', 'New Series', 'Netflix', 'Disney+', 'HBO Max', 'Prime Video']
-    
-    for priority in priority_order:
-        for key in result['services']:
-            if priority in key and key not in sorted_services:
-                sorted_services[key] = result['services'][key]
-    
-    # Add remaining services
-    for key in result['services']:
-        if key not in sorted_services:
-            sorted_services[key] = result['services'][key]
+    sorted_keys = sorted(result['services'].keys(), key=lambda k: service_order_map.get(k, 9999))
+    for key in sorted_keys:
+        sorted_services[key] = result['services'][key]
     
     result['services'] = sorted_services
+    logger.info(f"Services ordered by FIFO: {list(sorted_services.keys())[:5]}...")
     
     # Cache the result for future requests
     elapsed = time.time() - start_time
