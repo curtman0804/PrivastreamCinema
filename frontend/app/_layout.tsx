@@ -14,12 +14,3 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#0c0c0c',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
