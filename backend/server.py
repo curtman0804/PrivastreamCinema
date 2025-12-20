@@ -1620,9 +1620,27 @@ async def get_all_streams(
         except:
             pass
         
+        combined_text = (name + ' ' + title).upper()
+        
+        # LANGUAGE PRIORITY - English first, penalize foreign languages
+        language_bonus = 0
+        foreign_languages = ['RUSSIAN', 'РУССКИЙ', 'RUS', 'FRENCH', 'GERMAN', 'SPANISH', 'ITALIAN', 
+                            'PORTUGUESE', 'CHINESE', 'JAPANESE', 'KOREAN', 'HINDI', 'ARABIC',
+                            'MULTI', 'DUAL', 'DUBLADO', 'FRENCH', 'LATINO', 'CASTELLANO']
+        is_foreign = any(lang in combined_text for lang in foreign_languages)
+        
+        # Check for English indicators
+        is_english = 'ENGLISH' in combined_text or 'ENG' in combined_text or 'EN ' in combined_text
+        
+        if is_english and not is_foreign:
+            language_bonus = 20000  # Strong bonus for English
+        elif is_foreign:
+            language_bonus = -15000  # Strong penalty for foreign languages
+        else:
+            language_bonus = 10000  # Neutral/unknown language (likely English)
+        
         # Quality tier (higher is better)
         quality_score = 0
-        combined_text = (name + ' ' + title).upper()
         if '2160P' in combined_text or '4K' in combined_text or 'UHD' in combined_text:
             quality_score = 4
         elif '1080P' in combined_text:
@@ -1676,8 +1694,8 @@ async def get_all_streams(
         if content_type == 'series' and not has_file_idx and stream.get('infoHash'):
             reliability_bonus -= 2000  # Lower priority
         
-        # Combined score: quality tier * 100000 + reliability * 100 + seeders
-        # This ensures: quality > reliability > seeders
+        # Combined score: language * 1000000 + quality * 100000 + reliability * 10 + seeders
+        # This ensures: language > quality > reliability > seeders
         return (quality_score * 100000) + (reliability_bonus * 10) + min(seeders, 9999)
     
     unique_streams.sort(key=get_sort_score, reverse=True)
