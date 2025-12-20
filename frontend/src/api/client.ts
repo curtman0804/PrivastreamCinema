@@ -149,8 +149,8 @@ export const api = {
       const response = await apiClient.get('/api/content/discover-organized');
       return response.data;
     },
-    search: async (query: string): Promise<{ movies: SearchResult[]; series?: SearchResult[] }> => {
-      const response = await apiClient.get(`/api/content/search?q=${encodeURIComponent(query)}`);
+    search: async (query: string, skip: number = 0, limit: number = 30): Promise<{ movies: SearchResult[]; series: SearchResult[]; hasMore: boolean; total: number }> => {
+      const response = await apiClient.get(`/api/content/search?q=${encodeURIComponent(query)}&skip=${skip}&limit=${limit}`);
       return response.data;
     },
     getMeta: async (type: string, id: string): Promise<ContentItem> => {
