@@ -148,6 +148,111 @@ export default function PlayerScreen() {
     }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
+
+  // Parse SRT/VTT time format to milliseconds
+  const parseSubtitleTime = (timeStr: string): number => {
+    // Handle both SRT (00:00:00,000) and VTT (00:00:00.000) formats
+    const cleaned = timeStr.replace(',', '.').trim();
+    const parts = cleaned.split(':');
+    if (parts.length === 3) {
+      const [hours, minutes, secondsMs] = parts;
+      const [seconds, ms] = secondsMs.split('.');
+      return (
+        parseInt(hours) * 3600000 +
+        parseInt(minutes) * 60000 +
+        parseInt(seconds) * 1000 +
+        parseInt(ms || '0')
+      );
+    }
+    return 0;
+  };
+
+  // Parse SRT subtitle content
+  const parseSRT = (content: string): Array<{start: number; end: number; text: string}> => {
+    const result: Array<{start: number; end: number; text: string}> = [];
+    
+    // Remove BOM and normalize line endings
+    const cleaned = content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    // Split by double newline to get subtitle blocks
+    const blocks = cleaned.split(/\n\n+/);
+    
+    for (const block of blocks) {
+      const lines = block.trim().split('\n');
+      if (lines.length < 2) continue;
+      
+      // Find the timing line (contains -->)
+      let timingLineIndex = lines.findIndex(line => line.includes('-->'));
+      if (timingLineIndex === -1) continue;
+      
+      const timingLine = lines[timingLineIndex];
+      const timingMatch = timingLine.match(/(\d{1,2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,\.]\d{3})/);
+      
+      if (timingMatch) {
+        const start = parseSubtitleTime(timingMatch[1]);
+        const end = parseSubtitleTime(timingMatch[2]);
+        
+        // Get text lines (everything after timing)
+        const textLines = lines.slice(timingLineIndex + 1);
+        const text = textLines
+          .join('\n')
+          .replace(/<[^>]+>/g, '') // Remove HTML tags
+          .replace(/\{[^}]+\}/g, '') // Remove style tags like {\\an8}
+          .trim();
+        
+        if (text) {
+          result.push({ start, end, text });
+        }
+      }
+    }
+    
+    return result;
+  };
+
+  // Fetch and parse subtitle file when selected
+  useEffect(() => {
+    if (!selectedSubtitle) {
+      setParsedSubtitles([]);
+      setSubtitleText('');
+      return;
+    }
+
+    const fetchSubtitleFile = async () => {
+      try {
+        console.log('[SUBTITLES] Fetching subtitle file:', selectedSubtitle);
+        const response = await fetch(selectedSubtitle);
+        const text = await response.text();
+        console.log('[SUBTITLES] Subtitle content length:', text.length);
+        
+        const parsed = parseSRT(text);
+        console.log('[SUBTITLES] Parsed', parsed.length, 'subtitle entries');
+        setParsedSubtitles(parsed);
+      } catch (err) {
+        console.error('[SUBTITLES] Error fetching subtitle file:', err);
+        setParsedSubtitles([]);
+      }
+    };
+
+    fetchSubtitleFile();
+  }, [selectedSubtitle]);
+
+  // Update subtitle text based on current position
+  useEffect(() => {
+    if (!parsedSubtitles.length || !position) {
+      if (subtitleText) setSubtitleText('');
+      return;
+    }
+
+    // Find the subtitle for current position
+    const currentSub = parsedSubtitles.find(
+      sub => position >= sub.start && position <= sub.end
+    );
+
+    const newText = currentSub?.text || '';
+    if (newText !== subtitleText) {
+      setSubtitleText(newText);
+    }
+  }, [position, parsedSubtitles]);
   
   // Handle playback status updates
   const handlePlaybackStatus = (status: AVPlaybackStatus) => {
