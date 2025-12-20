@@ -100,11 +100,25 @@ app.get('/stream/:infoHash', (req, res) => {
 
       console.log(`Serving range: ${start}-${end}/${fileSize}`);
 
+      // Detect MIME type based on file extension
+      const fileName = file.name.toLowerCase();
+      let contentType = 'video/mp4'; // default
+      if (fileName.endsWith('.mkv')) {
+        contentType = 'video/x-matroska';
+      } else if (fileName.endsWith('.avi')) {
+        contentType = 'video/x-msvideo';
+      } else if (fileName.endsWith('.webm')) {
+        contentType = 'video/webm';
+      } else if (fileName.endsWith('.ts')) {
+        contentType = 'video/mp2t';
+      }
+      console.log(`File: ${file.name}, Content-Type: ${contentType}`);
+
       res.writeHead(206, {
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunksize,
-        'Content-Type': 'video/mp4',
+        'Content-Type': contentType,
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Range',
       });
