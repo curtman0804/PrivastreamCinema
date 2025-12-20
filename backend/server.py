@@ -2354,6 +2354,7 @@ TORRENT_SERVER_URL = "http://localhost:8002"
 async def proxy_image(url: str):
     """Proxy images from CDNs that block direct browser access"""
     import base64
+    import ssl
     
     # Decode URL if base64 encoded
     try:
@@ -2377,7 +2378,8 @@ async def proxy_image(url: str):
     }
     
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+        # Skip SSL verification for CDNs with certificate issues
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0, verify=False) as client:
             response = await client.get(url, headers=headers)
             if response.status_code == 200:
                 content_type = response.headers.get('content-type', 'image/jpeg')
