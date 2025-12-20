@@ -343,7 +343,7 @@ export default function DetailsScreen() {
               contentFit="contain"
             />
           ) : (
-            <Text style={styles.heroTitle}>{content?.name}</Text>
+            <Text style={styles.heroTitle}>{displayTitle}</Text>
           )}
         </View>
       </View>
