@@ -1750,16 +1750,19 @@ async def get_discover(current_user: User = Depends(get_current_user)):
     ]
     
     # Build all fetch tasks for parallel execution
+    # Track order for FIFO - (order_index, task)
     fetch_tasks = []
+    section_order = {}  # section_name -> order_index (lower = earlier addon)
+    order_counter = 0
     
     # Helper function to fetch a single catalog
-    async def fetch_catalog(url: str, section_name: str, catalog_type: str, timeout: float = 10.0):
+    async def fetch_catalog(url: str, section_name: str, catalog_type: str, order_idx: int, timeout: float = 10.0):
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
                 response = await client.get(url)
                 if response.status_code == 200:
                     metas = response.json().get('metas', [])
-                    return (section_name, catalog_type, metas)
+                    return (section_name, catalog_type, metas, order_idx)
         except Exception as e:
             logger.debug(f"Error fetching {section_name}: {e}")
         return None
@@ -1777,6 +1780,11 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 catalog_id = fetch_config[1]
                 section_name = fetch_config[2]
                 extra_param = fetch_config[3] if len(fetch_config) > 3 else None
+                
+                # Track order for FIFO
+                if section_name not in section_order:
+                    section_order[section_name] = order_counter
+                    order_counter += 1
                 
                 if extra_param:
                     url = f"{base_url}/catalog/{catalog_type}/{catalog_id}/{extra_param}.json"
