@@ -3,12 +3,55 @@ import express from 'express';
 import cors from 'cors';
 
 const app = express();
-const client = new WebTorrent();
+
+// Create WebTorrent client with VPN-optimized settings
+const client = new WebTorrent({
+  maxConns: 100,        // More connections per torrent
+  dht: true,            // Enable DHT for peer discovery
+  lsd: true,            // Local Service Discovery  
+  webSeeds: true,       // Enable web seeds
+  utp: true,            // Enable uTP (better for NAT traversal)
+  tracker: {
+    announce: [
+      // Tier 1 - High reliability trackers
+      'udp://tracker.opentrackr.org:1337/announce',
+      'udp://open.stealth.si:80/announce',
+      'udp://tracker.torrent.eu.org:451/announce',
+      'udp://exodus.desync.com:6969/announce',
+      'udp://tracker.openbittorrent.com:6969/announce',
+      // Tier 2 - Good reliability
+      'udp://open.demonii.com:1337/announce',
+      'udp://tracker.moeking.me:6969/announce',
+      'udp://explodie.org:6969/announce',
+      'udp://tracker.coppersurfer.tk:6969/announce',
+      'udp://tracker.leechers-paradise.org:6969/announce',
+      'udp://p4p.arenabg.com:1337/announce',
+      // Tier 3 - Backup trackers
+      'udp://tracker.internetwarriors.net:1337/announce',
+      'udp://tracker.cyberia.is:6969/announce',
+      'udp://tracker.tiny-vps.com:6969/announce',
+      'udp://tracker.sbsub.com:2710/announce',
+      // HTTP trackers (better for some VPNs)
+      'http://tracker.openbittorrent.com:80/announce',
+      'http://tracker3.itzmx.com:6961/announce',
+      'http://tracker.bt4g.com:2095/announce',
+    ]
+  }
+});
 
 app.use(cors());
 
 // Store active torrents
 const torrents = new Map();
+
+// Periodically log status for debugging
+setInterval(() => {
+  const activeTorrents = client.torrents.length;
+  const totalPeers = client.torrents.reduce((sum, t) => sum + t.numPeers, 0);
+  if (activeTorrents > 0) {
+    console.log(`📊 Active torrents: ${activeTorrents}, Total peers: ${totalPeers}`);
+  }
+}, 30000);
 
 // Get torrent status
 app.get('/status/:infoHash', (req, res) => {
