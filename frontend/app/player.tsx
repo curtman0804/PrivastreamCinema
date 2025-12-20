@@ -591,6 +591,9 @@ export default function PlayerScreen() {
       // Start with fast polling (500ms) for quicker response during initial buffering
       let pollInterval = 500;
       let pollCount = 0;
+      const maxPollCount = 60; // Timeout after ~30 seconds (60 * 500ms)
+      const startTime = Date.now();
+      const TIMEOUT_MS = 45000; // 45 second timeout
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
@@ -599,6 +602,18 @@ export default function PlayerScreen() {
           const status = await api.stream.status(infoHash);
           pollCount++;
           
+          // Check for timeout - try next stream if taking too long
+          const elapsed = Date.now() - startTime;
+          if (elapsed > TIMEOUT_MS && status.status !== 'ready') {
+            console.log(`[PLAYER] Timeout after ${elapsed}ms, trying next stream`);
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+            }
+            setLoadingStatus('Stream too slow, trying alternative...');
+            setTimeout(() => tryNextStream(), 500);
+            return;
+          }
+          
           setDownloadProgress(status.progress || 0);
           setPeers(status.peers || 0);
           setDownloadSpeed(status.download_rate || 0);
@@ -606,7 +621,18 @@ export default function PlayerScreen() {
           if (status.status === 'downloading_metadata') {
             const peerCount = status.peers || 0;
             if (peerCount === 0) {
-              setLoadingStatus('Searching for peers...');
+              setLoadingStatus(`Searching for peers... (${Math.floor(elapsed/1000)}s)`);
+              
+              // If no peers found after 20 seconds, try next stream
+              if (elapsed > 20000 && peerCount === 0) {
+                console.log('[PLAYER] No peers found after 20s, trying next stream');
+                if (pollIntervalRef.current) {
+                  clearInterval(pollIntervalRef.current);
+                }
+                setLoadingStatus('No peers found, trying alternative...');
+                setTimeout(() => tryNextStream(), 500);
+                return;
+              }
             } else {
               setLoadingStatus(`Found ${peerCount} peers, getting file info...`);
             }
@@ -627,16 +653,18 @@ export default function PlayerScreen() {
             }
             
             setLoadingStatus('Starting playback...');
-            const videoUrl = api.stream.getVideoUrl(infoHash, parsedFileIdx);
+            // Use transcoding for better codec compatibility
+            const videoUrl = api.stream.getVideoUrl(infoHash, parsedFileIdx, true);
             setStreamUrl(videoUrl);
             setIsLoading(false);
             return; // Stop polling
           } else if (status.status === 'not_found' || status.status === 'invalid') {
-            setError('Failed to start. Try selecting a different stream with more seeders.');
-            setIsLoading(false);
+            console.log('[PLAYER] Stream not found/invalid, trying next');
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
             }
+            setLoadingStatus('Stream unavailable, trying alternative...');
+            setTimeout(() => tryNextStream(), 500);
             return;
           }
           
