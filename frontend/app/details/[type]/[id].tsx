@@ -113,12 +113,26 @@ export default function DetailsScreen() {
   };
 
   const handleStreamSelect = async (stream: Stream, streamIndex: number = 0) => {
-    // Get the IMDB ID for subtitles - use baseId for episodes
-    const imdbId = baseId || (id as string);
+    // Get the IMDB ID for subtitles - prefer content.imdb_id which is the actual IMDB ID (tt12345678)
+    // For episodes, we need the base series IMDB ID, not the episode-specific ID
+    // Only use valid IMDB IDs (start with 'tt') for subtitle fetching
+    let imdbIdForSubtitles = content?.imdb_id || baseId || (id as string);
+    
+    // Validate that we have a real IMDB ID - must start with 'tt' followed by numbers
+    const isValidImdbId = typeof imdbIdForSubtitles === 'string' && /^tt\d+$/.test(imdbIdForSubtitles);
+    
     const contentTitle = content?.name || 'Video';
     const cType = type as string || 'movie';
     
-    console.log('[DETAILS] handleStreamSelect - passing to player:', { cType, imdbId, contentTitle, streamIndex });
+    console.log('[DETAILS] handleStreamSelect - passing to player:', { 
+      cType, 
+      imdbIdForSubtitles, 
+      isValidImdbId,
+      contentTitle, 
+      streamIndex,
+      rawId: id,
+      contentImdbId: content?.imdb_id
+    });
     
     // Get auth token for proxy URLs
     const authToken = await AsyncStorage.getItem('auth_token');
