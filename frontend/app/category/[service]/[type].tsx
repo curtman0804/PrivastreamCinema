@@ -143,22 +143,26 @@ export default function CategoryScreen() {
     });
   };
 
-  const renderItem = ({ item }: { item: ContentItem }) => (
-    <TouchableOpacity 
-      style={styles.itemContainer}
-      onPress={() => handleItemPress(item)}
-      activeOpacity={0.7}
-    >
-      <Image
-        source={{ uri: item.poster }}
-        style={styles.poster}
-        contentFit="cover"
-        placeholder={require('../../../assets/images/icon.png')}
-        placeholderContentFit="contain"
-      />
-      <Text style={styles.itemTitle} numberOfLines={2}>{item.name}</Text>
-    </TouchableOpacity>
-  );
+  const renderItem = ({ item }: { item: ContentItem }) => {
+    const posterUrl = getProxiedPosterUrl(item.poster);
+    
+    return (
+      <TouchableOpacity 
+        style={styles.itemContainer}
+        onPress={() => handleItemPress(item)}
+        activeOpacity={0.7}
+      >
+        <Image
+          source={{ uri: posterUrl }}
+          style={styles.poster}
+          contentFit="cover"
+          placeholder={require('../../../assets/images/icon.png')}
+          placeholderContentFit="contain"
+        />
+        <Text style={styles.itemTitle} numberOfLines={2}>{item.name}</Text>
+      </TouchableOpacity>
+    );
+  };
 
   const typeLabel = type === 'movies' ? 'Movies' : type === 'series' ? 'Series' : 'Channels';
 
