@@ -152,10 +152,11 @@ export default function DetailsScreen() {
       });
     
     // Save to AsyncStorage for player fallback
+    // Only include contentId for subtitle fetching if we have a valid IMDB ID
     try {
       await AsyncStorage.setItem('currentPlaying', JSON.stringify({
         contentType: cType,
-        contentId: imdbId,
+        contentId: isValidImdbId ? imdbIdForSubtitles : null, // Only save valid IMDB IDs for subtitle fetching
         title: contentTitle,
         fallbackStreams: fallbackStreams.slice(0, 10), // Max 10 fallbacks
       }));
