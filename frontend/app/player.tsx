@@ -277,14 +277,16 @@ export default function PlayerScreen() {
     
     const loadSubtitles = async () => {
       // First try URL params (most reliable)
-      console.log('[SUBTITLES] URL params - contentType:', contentType, 'contentId:', contentId);
+      console.log('[SUBTITLES] URL params - contentType:', contentType, 'contentId:', contentId, 'typeof contentId:', typeof contentId);
       
       // Validate contentId is a proper IMDB ID (tt followed by numbers)
-      const isValidImdbId = contentId && /^tt\d+$/.test(contentId);
+      // Make sure contentId is not empty string, null, or undefined
+      const isValidImdbId = contentId && contentId.length > 0 && /^tt\d+$/.test(contentId);
+      console.log('[SUBTITLES] isValidImdbId:', isValidImdbId);
       
       if (isValidImdbId && isMounted) {
-        console.log('[SUBTITLES] Using valid IMDB ID from URL params to fetch subtitles');
-        fetchSubtitles(contentType || 'movie', contentId);
+        console.log('[SUBTITLES] Using valid IMDB ID from URL params to fetch subtitles:', contentId);
+        await fetchSubtitlesFromAPI(contentType || 'movie', contentId);
         return;
       }
       
@@ -297,13 +299,15 @@ export default function PlayerScreen() {
         if (storedData && isMounted) {
           const parsed = JSON.parse(storedData);
           const { contentType: cType, contentId: cId } = parsed;
+          console.log('[SUBTITLES] Parsed from AsyncStorage - contentType:', cType, 'contentId:', cId);
           
           // Validate contentId from AsyncStorage
-          const isStoredIdValid = cId && /^tt\d+$/.test(cId);
+          const isStoredIdValid = cId && cId.length > 0 && /^tt\d+$/.test(cId);
+          console.log('[SUBTITLES] isStoredIdValid:', isStoredIdValid);
           
           if (isStoredIdValid) {
-            console.log('[SUBTITLES] Using valid IMDB ID from AsyncStorage to fetch subtitles');
-            fetchSubtitles(cType || 'movie', cId);
+            console.log('[SUBTITLES] Using valid IMDB ID from AsyncStorage to fetch subtitles:', cId);
+            await fetchSubtitlesFromAPI(cType || 'movie', cId);
           } else {
             console.log('[SUBTITLES] No valid IMDB ID found - subtitles not available for this content');
           }
@@ -313,8 +317,34 @@ export default function PlayerScreen() {
       }
     };
     
+    // Fetch subtitles from API
+    const fetchSubtitlesFromAPI = async (cType: string, cId: string) => {
+      console.log('[SUBTITLES] fetchSubtitlesFromAPI called with:', cType, cId);
+      
+      try {
+        const url = `/api/subtitles/${cType}/${cId}`;
+        console.log('[SUBTITLES] Making API call to:', url);
+        const response = await api.get(url);
+        console.log('[SUBTITLES] API response status:', response.status);
+        
+        if (response.data?.subtitles && response.data.subtitles.length > 0) {
+          console.log(`[SUBTITLES] SUCCESS! Setting ${response.data.subtitles.length} subtitle options`);
+          if (isMounted) {
+            setSubtitles(response.data.subtitles);
+          }
+        } else {
+          console.log('[SUBTITLES] No subtitles found in response');
+        }
+      } catch (err: any) {
+        console.log('[SUBTITLES] Error fetching subtitles:', err.message || err);
+        if (err.response) {
+          console.log('[SUBTITLES] Error response:', err.response.status, err.response.data);
+        }
+      }
+    };
+    
     // Small delay to ensure component is fully mounted
-    const timeout = setTimeout(loadSubtitles, 300);
+    const timeout = setTimeout(loadSubtitles, 500);
     
     return () => {
       isMounted = false;
