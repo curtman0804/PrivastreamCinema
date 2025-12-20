@@ -2527,7 +2527,8 @@ async def stream_status(info_hash: str, current_user: User = Depends(get_current
 @api_router.get("/stream/video/{info_hash}")
 async def stream_video(
     info_hash: str,
-    request: Request
+    request: Request,
+    file_idx: int = 0
 ):
     """Proxy video stream from WebTorrent server"""
     try:
@@ -2536,7 +2537,7 @@ async def stream_video(
         if "range" in request.headers:
             headers["range"] = request.headers["range"]
         
-        logger.info(f"Streaming request for {info_hash}, range: {headers.get('range', 'none')}")
+        logger.info(f"Streaming request for {info_hash}, fileIdx={file_idx}, range: {headers.get('range', 'none')}")
         
         # Create persistent client for streaming
         client = httpx.AsyncClient(
@@ -2545,8 +2546,8 @@ async def stream_video(
         )
         
         try:
-            # Request stream from WebTorrent server
-            torrent_url = f"{TORRENT_SERVER_URL}/stream/{info_hash}"
+            # Request stream from WebTorrent server - include fileIdx for multi-file torrents
+            torrent_url = f"{TORRENT_SERVER_URL}/stream/{info_hash}/{file_idx}" if file_idx > 0 else f"{TORRENT_SERVER_URL}/stream/{info_hash}"
             req = client.build_request("GET", torrent_url, headers=headers)
             response = await client.send(req, stream=True)
             
