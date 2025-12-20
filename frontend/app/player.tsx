@@ -489,8 +489,9 @@ export default function PlayerScreen() {
       setIsLoading(false);
       setIsRetrying(false);
     } else if (nextStream.infoHash) {
-      // Start torrent for fallback
-      startTorrentStreamWithHash(nextStream.infoHash);
+      // Start torrent for fallback - include fileIdx if available
+      const streamFileIdx = nextStream.fileIdx ?? 0;
+      startTorrentStreamWithHash(nextStream.infoHash, streamFileIdx);
     }
   };
 
