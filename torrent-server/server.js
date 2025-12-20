@@ -256,10 +256,17 @@ app.get('/health', (req, res) => {
 });
 
 // Transcoded stream endpoint - converts to H.264/AAC for browser compatibility
-app.get('/transcode/:infoHash/:fileIdx?', (req, res) => {
-  const { infoHash, fileIdx } = req.params;
+app.get('/transcode/:infoHash', (req, res) => {
+  handleTranscode(req, res, 0);
+});
+
+app.get('/transcode/:infoHash/:fileIdx', (req, res) => {
+  handleTranscode(req, res, parseInt(req.params.fileIdx || '0', 10));
+});
+
+function handleTranscode(req, res, fileIndex) {
+  const { infoHash } = req.params;
   const infoHashLower = infoHash.toLowerCase();
-  const fileIndex = parseInt(fileIdx || '0', 10);
   
   console.log(`📺 Transcode request for ${infoHash}, fileIdx: ${fileIndex}`);
   
