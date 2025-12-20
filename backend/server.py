@@ -1638,8 +1638,16 @@ async def get_all_streams(
     
     unique_streams.sort(key=get_sort_score, reverse=True)
     
+    result = {"streams": unique_streams}
+    
+    # Cache the result for non-URL content
+    if not is_url_content:
+        elapsed = time.time() - start_time
+        logger.info(f"Streams fetch took {elapsed:.2f}s - caching result")
+        stream_cache.set(cache_key, result)
+    
     logger.info(f"Found {len(unique_streams)} total streams for {content_type}/{content_id}")
-    return {"streams": unique_streams}
+    return result
 
 
 # ==================== SUBTITLES ====================
