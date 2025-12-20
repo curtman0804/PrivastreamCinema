@@ -1959,9 +1959,32 @@ async def get_category_content(
                         
                         total_items = len(metas)
                         
-                        # The addon handles pagination via skip parameter in URL
-                        # We just return what we get - if we got a full page, there's likely more
-                        has_more = total_items >= limit
+                        # Detect addons that don't support pagination:
+                        # If skip > 0 but we got more items than (total - skip), 
+                        # the addon is returning all items regardless of skip
+                        if skip > 0 and total_items > 0:
+                            # If we're asking for skip=100 and got 205 items,
+                            # that means addon returned everything (doesn't support skip)
+                            # In this case, slice the response and check if there's more
+                            if total_items > (limit * 2):  # Got way more than expected
+                                # Addon doesn't support pagination - slice manually
+                                if skip >= total_items:
+                                    # Already past the end
+                                    return {
+                                        "items": [],
+                                        "total": total_items,
+                                        "hasMore": False,
+                                        "catalogId": catalog_id,
+                                        "baseUrl": base_url
+                                    }
+                                metas = metas[skip:skip + limit]
+                                has_more = (skip + len(metas)) < total_items
+                            else:
+                                # Normal pagination - addon returned a page
+                                has_more = total_items >= limit
+                        else:
+                            # First page - if we got >= limit items, there might be more
+                            has_more = total_items >= limit
                         
                         return {
                             "items": metas, 
