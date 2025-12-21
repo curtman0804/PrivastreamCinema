@@ -1487,6 +1487,46 @@ async def get_all_streams(
             logger.warning(f"Torrentio search error: {e}")
         return []
     
+    async def search_mediafusion(content_type: str, content_id: str):
+        """Search MediaFusion for streams - works when Torrentio is blocked"""
+        try:
+            # MediaFusion public config for P2P torrents
+            config = "D-4C4xWmNTkZh5t3IFgCpKntBlt_LgQMQ2VCAsNiaiTXduH23xKZmif4pvOIpYtRe9AadLhw5GfD6T6NaBWkZndxjLMS4LYpupSq8A_V-Isgk"
+            url = f"https://mediafusion.elfhosted.com/{config}/stream/{content_type}/{content_id}.json"
+            
+            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+                response = await client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    streams = data.get('streams', [])
+                    for stream in streams:
+                        stream['addon'] = 'MediaFusion'
+                    logger.info(f"MediaFusion found {len(streams)} streams")
+                    return streams
+        except Exception as e:
+            logger.warning(f"MediaFusion error: {e}")
+        return []
+    
+    async def search_comet(content_type: str, content_id: str):
+        """Search Comet for streams - excellent Torrentio alternative"""
+        try:
+            # Comet public P2P config
+            config = "eyJtYXhSZXN1bHRzUGVyUmVzb2x1dGlvbiI6MCwibWF4U2l6ZSI6MCwiY2FjaGVkT25seSI6ZmFsc2UsInJlbW92ZVRyYXNoIjp0cnVlLCJyZXN1bHRGb3JtYXQiOlsiYWxsIl0sImRlYnJpZFNlcnZpY2UiOiJ0b3JyZW50IiwiZGVicmlkQXBpS2V5IjoiIiwiZGVicmlkU3RyZWFtUHJveHlQYXNzd29yZCI6IiIsImxhbmd1YWdlcyI6eyJyZXF1aXJlZCI6WyJlbiJdLCJleGNsdWRlIjpbXSwicHJlZmVycmVkIjpbImVuIl19LCJyZXNvbHV0aW9ucyI6e30sIm9wdGlvbnMiOnsicmVtb3ZlX3JhbmtzX3VuZGVyIjotMTAwMDAwMDAwMDAsImFsbG93X2VuZ2xpc2hfaW5fbGFuZ3VhZ2VzIjpmYWxzZSwicmVtb3ZlX3Vua25vd25fbGFuZ3VhZ2VzIjpmYWxzZX19"
+            url = f"https://comet.elfhosted.com/{config}/stream/{content_type}/{content_id}.json"
+            
+            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+                response = await client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    streams = data.get('streams', [])
+                    for stream in streams:
+                        stream['addon'] = 'Comet'
+                    logger.info(f"Comet found {len(streams)} streams")
+                    return streams
+        except Exception as e:
+            logger.warning(f"Comet error: {e}")
+        return []
+    
     # Build tasks
     tasks = []
     
@@ -1494,7 +1534,11 @@ async def get_all_streams(
     for addon in addons:
         tasks.append(fetch_addon_streams(addon))
     
-    # ALWAYS search Torrentio first - it's the best aggregator
+    # Add built-in stream aggregators - these work reliably
+    tasks.append(search_mediafusion(content_type, content_id))
+    tasks.append(search_comet(content_type, content_id))
+    
+    # Try Torrentio but it may be blocked by Cloudflare
     tasks.append(search_torrentio(content_type, content_id))
     
     # Add built-in torrent searches if we have content info
