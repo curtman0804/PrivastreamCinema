@@ -80,6 +80,7 @@ export default function DetailsScreen() {
     
     // Fetch streams for movies, episode pages, or TV channels
     if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
+      console.log('[DETAILS] Fetching streams:', { type, id, isEpisodePage, baseId, episodeSeason, episodeNumber });
       fetchStreams(type, id);
     }
   }, [id, type]);
