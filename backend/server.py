@@ -1508,9 +1508,13 @@ async def get_all_streams(
             tasks.append(search_apibay(search_query, content_type))
         elif content_type == 'series':
             # For series, check if we have season/episode
+            ep_season = None
+            ep_episode = None
             if ':' in content_id:
                 parts = content_id.split(':')
                 if len(parts) >= 3:
+                    ep_season = parts[1]
+                    ep_episode = parts[2]
                     season = parts[1].zfill(2)
                     episode = parts[2].zfill(2)
                     search_query = f"{content_title} S{season}E{episode}"
@@ -1519,7 +1523,7 @@ async def get_all_streams(
             else:
                 search_query = content_title
             
-            tasks.append(search_eztv(base_id))
+            tasks.append(search_eztv(base_id, ep_season, ep_episode))
             tasks.append(search_apibay(search_query, content_type))
     
     # Execute all tasks concurrently
