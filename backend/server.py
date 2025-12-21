@@ -1533,6 +1533,63 @@ async def get_all_streams(
         if isinstance(result, list):
             all_streams.extend(result)
     
+    # For series with episode ID, filter streams to only include matching episode
+    if content_type == 'series' and ':' in content_id:
+        parts = content_id.split(':')
+        if len(parts) >= 3:
+            target_season = parts[1].zfill(2)
+            target_episode = parts[2].zfill(2)
+            s_int = str(int(parts[1]))
+            e_int = str(int(parts[2]))
+            
+            # Create patterns that match this specific episode
+            episode_patterns = [
+                f"S{target_season}E{target_episode}",  # S01E05
+                f"S{s_int}E{e_int}",                    # S1E5
+                f"S{s_int}E{target_episode}",           # S1E05
+                f"S{target_season}E{e_int}",            # S01E5
+                f"{s_int}x{target_episode}",            # 1x05
+                f"SEASON {s_int} EPISODE {e_int}",      # Season 1 Episode 5
+            ]
+            
+            # Also create patterns for wrong episodes to explicitly reject
+            # This catches streams that are clearly for a different episode
+            def is_wrong_episode(title_upper):
+                import re
+                # Look for SxxEyy patterns
+                matches = re.findall(r'S(\d{1,2})E(\d{1,2})', title_upper)
+                for m in matches:
+                    found_s, found_e = m
+                    if found_s.zfill(2) != target_season or found_e.zfill(2) != target_episode:
+                        return True
+                # Look for 1x05 patterns
+                matches = re.findall(r'(\d{1,2})X(\d{1,2})', title_upper)
+                for m in matches:
+                    found_s, found_e = m
+                    if found_s.zfill(2) != target_season or found_e.zfill(2) != target_episode:
+                        return True
+                return False
+            
+            filtered_streams = []
+            for stream in all_streams:
+                title = stream.get('title', '').upper()
+                name = stream.get('name', '').upper()
+                combined = title + ' ' + name
+                
+                # First check if it's explicitly wrong episode
+                if is_wrong_episode(combined):
+                    continue
+                
+                # Then check if it matches the target (or has no episode info)
+                has_episode_info = any(pat.upper() in combined for pat in ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', '1X', '2X', '3X', '4X', '5X'])
+                matches_target = any(pat.upper() in combined for pat in episode_patterns)
+                
+                if matches_target or not has_episode_info:
+                    filtered_streams.append(stream)
+            
+            logger.info(f"Episode filter: {len(all_streams)} -> {len(filtered_streams)} streams for S{target_season}E{target_episode}")
+            all_streams = filtered_streams
+    
     # Remove duplicates based on infoHash
     seen_hashes = set()
     unique_streams = []
