@@ -47,6 +47,16 @@ export default function DetailsScreen() {
   // Also check for porn IDs which use colons
   const isEpisodePage = id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
+  const episodeSeason = isEpisodePage ? parseInt(id?.split(':')[1] || '1') : null;
+  const episodeNumber = isEpisodePage ? parseInt(id?.split(':')[2] || '1') : null;
+
+  // Get the specific episode data when on an episode page
+  const currentEpisode = useMemo(() => {
+    if (!isEpisodePage || !content?.videos || !episodeSeason || !episodeNumber) return null;
+    return content.videos.find(
+      ep => ep.season === episodeSeason && ep.episode === episodeNumber
+    );
+  }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
 
   // Get seasons from episodes
   const seasons = useMemo(() => {
