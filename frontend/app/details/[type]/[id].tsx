@@ -163,9 +163,9 @@ export default function DetailsScreen() {
       const separator = stream.url.includes('?') ? '&' : '?';
       const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
       
-      // Construct full absolute URL with the current origin
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const absoluteUrl = `${origin}${stream.url}${tokenParam}`;
+      // Get the backend URL from env or use default - works on both web and mobile
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://mobilestremio.preview.emergentagent.com';
+      const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
       console.log('[DETAILS] Using proxy stream:', absoluteUrl.substring(0, 150));
       
       router.push({
