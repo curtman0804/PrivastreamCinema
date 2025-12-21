@@ -2087,6 +2087,105 @@ async def search_content(
             pass
         return False
     
+    async def verify_actor_in_cast(client: httpx.AsyncClient, content_type: str, content_id: str, actor_name: str):
+        """Verify that an actor appears in the cast of a specific content item"""
+        try:
+            url = f"https://v3-cinemeta.strem.io/meta/{content_type}/{content_id}.json"
+            response = await client.get(url, timeout=8.0)
+            if response.status_code == 200:
+                data = response.json()
+                meta = data.get('meta', {})
+                cast = meta.get('cast', [])
+                
+                # Normalize actor name for comparison
+                actor_lower = actor_name.lower()
+                actor_parts = actor_lower.split()
+                
+                # Check each cast member
+                for cast_member in cast:
+                    if isinstance(cast_member, str):
+                        cast_lower = cast_member.lower()
+                    elif isinstance(cast_member, dict):
+                        cast_lower = cast_member.get('name', '').lower()
+                    else:
+                        continue
+                    
+                    # Exact match or all parts of name are in cast member name
+                    if actor_lower == cast_lower:
+                        return True
+                    if all(part in cast_lower for part in actor_parts):
+                        return True
+                        
+                return False
+        except Exception as e:
+            logger.debug(f"Error verifying actor for {content_id}: {e}")
+            return False
+    
+    # Handle actor/person searches with verification
+    if is_likely_person_name:
+        logger.info(f"Actor search detected for: '{q}'")
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+                encoded_q = q.replace(' ', '%20')
+                movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/search={encoded_q}.json"
+                series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/search={encoded_q}.json"
+                
+                movie_resp, series_resp = await asyncio.gather(
+                    client.get(movie_url),
+                    client.get(series_url),
+                    return_exceptions=True
+                )
+                
+                movies_raw = []
+                series_raw = []
+                
+                if not isinstance(movie_resp, Exception) and movie_resp.status_code == 200:
+                    movies_raw = movie_resp.json().get('metas', [])[:30]  # Limit for verification
+                
+                if not isinstance(series_resp, Exception) and series_resp.status_code == 200:
+                    series_raw = series_resp.json().get('metas', [])[:30]
+                
+                logger.info(f"Actor search '{q}': Found {len(movies_raw)} movies, {len(series_raw)} series to verify")
+                
+                # Verify actor is in cast for each result
+                async def verify_and_return_movie(m):
+                    content_id = m.get('imdb_id') or m.get('id')
+                    if content_id and await verify_actor_in_cast(client, 'movie', content_id, q):
+                        # Also check for streams
+                        if await check_has_streams('movie', content_id):
+                            return m
+                    return None
+                
+                async def verify_and_return_series(s):
+                    content_id = s.get('imdb_id') or s.get('id')
+                    if content_id and await verify_actor_in_cast(client, 'series', content_id, q):
+                        # Series usually have streams
+                        return s
+                    return None
+                
+                # Run verifications in parallel
+                movie_checks = await asyncio.gather(*[verify_and_return_movie(m) for m in movies_raw])
+                series_checks = await asyncio.gather(*[verify_and_return_series(s) for s in series_raw])
+                
+                verified_movies = [m for m in movie_checks if m is not None]
+                verified_series = [s for s in series_checks if s is not None]
+                
+                logger.info(f"Actor search '{q}': Verified {len(verified_movies)} movies, {len(verified_series)} series")
+                
+                # Apply pagination
+                total_count = len(verified_movies) + len(verified_series)
+                has_more = False  # Actor search doesn't support pagination currently
+                
+                return {
+                    "movies": verified_movies[:limit],
+                    "series": verified_series[:limit],
+                    "hasMore": has_more,
+                    "total": total_count
+                }
+        except Exception as e:
+            logger.error(f"Actor search error: {str(e)}")
+            # Fall through to regular search
+    
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
             # URL encode the query properly
@@ -2110,15 +2209,11 @@ async def search_content(
                 series = series_resp.json().get('metas', [])
             
             # Score and sort results by relevance
-            # For person name or genre searches, trust Cinemeta results more
-            trust_results = is_likely_person_name or is_genre_search
-            
-            movies_scored = [(m, score_result(m, q, trust_cinemeta=trust_results)) for m in movies]
-            series_scored = [(s, score_result(s, q, trust_cinemeta=trust_results)) for s in series]
+            movies_scored = [(m, score_result(m, q, trust_cinemeta=False)) for m in movies]
+            series_scored = [(s, score_result(s, q, trust_cinemeta=False)) for s in series]
             
             # Only include results with score > 0
-            # Increase limit for person/genre searches since we want all results
-            result_limit = 50 if trust_results else 15
+            result_limit = 15
             movies_filtered = [m for m, score in sorted(movies_scored, key=lambda x: -x[1]) if score > 0][:result_limit]
             series_filtered = [s for s, score in sorted(series_scored, key=lambda x: -x[1]) if score > 0][:result_limit]
             
