@@ -194,10 +194,89 @@ export const api = {
         console.log('[STREAMS] Client-side Torrentio fetch failed:', e);
       }
       
+      // Filter for correct episode if this is a series episode (id format: tt1234567:1:5)
+      if (type === 'series' && id.includes(':')) {
+        const parts = id.split(':');
+        if (parts.length >= 3) {
+          const targetSeason = parts[1].padStart(2, '0');
+          const targetEpisode = parts[2].padStart(2, '0');
+          const sInt = String(parseInt(parts[1], 10));
+          const eInt = String(parseInt(parts[2], 10));
+          
+          // Patterns that match the target episode
+          const targetPatterns = [
+            `S${targetSeason}E${targetEpisode}`,  // S01E05
+            `S${sInt}E${eInt}`,                    // S1E5
+            `S${sInt}E${targetEpisode}`,           // S1E05
+            `S${targetSeason}E${eInt}`,            // S01E5
+            `${sInt}X${targetEpisode}`,            // 1x05
+          ].map(p => p.toUpperCase());
+          
+          // Function to check if a stream is for a WRONG episode
+          const isWrongEpisode = (title: string): boolean => {
+            const upper = title.toUpperCase();
+            
+            // Look for SxxEyy patterns
+            const sxePatterns = upper.match(/S(\d{1,2})E(\d{1,2})/g) || [];
+            for (const match of sxePatterns) {
+              const m = match.match(/S(\d{1,2})E(\d{1,2})/);
+              if (m) {
+                const foundS = m[1].padStart(2, '0');
+                const foundE = m[2].padStart(2, '0');
+                if (foundS !== targetSeason || foundE !== targetEpisode) {
+                  return true; // Wrong episode
+                }
+              }
+            }
+            
+            // Look for 1x05 patterns
+            const xPatterns = upper.match(/(\d{1,2})X(\d{1,2})/g) || [];
+            for (const match of xPatterns) {
+              const m = match.match(/(\d{1,2})X(\d{1,2})/);
+              if (m) {
+                const foundS = m[1].padStart(2, '0');
+                const foundE = m[2].padStart(2, '0');
+                if (foundS !== targetSeason || foundE !== targetEpisode) {
+                  return true; // Wrong episode
+                }
+              }
+            }
+            
+            // Check for season packs (e.g., "S01-S04" or "S01 S02 S03")
+            if (/S\d{1,2}[-\s]S\d{1,2}/i.test(title) || /S\d{1,2}\s+S\d{1,2}/i.test(title)) {
+              return true; // Season pack
+            }
+            
+            // Check for "Complete Series" or "All Seasons"
+            if (/COMPLETE|ALL\s*SEASONS|FULL\s*SERIES/i.test(title)) {
+              return true;
+            }
+            
+            // Check for Russian "Сезон: X" that doesn't match
+            const russianSeason = title.match(/СЕЗОН[:\s]*(\d+)/i);
+            if (russianSeason) {
+              const foundS = russianSeason[1].padStart(2, '0');
+              if (foundS !== targetSeason) {
+                return true;
+              }
+            }
+            
+            return false;
+          };
+          
+          const beforeFilter = allStreams.length;
+          allStreams = allStreams.filter((s: Stream) => {
+            const combined = `${s.title || ''} ${s.name || ''}`;
+            return !isWrongEpisode(combined);
+          });
+          console.log(`[STREAMS] Episode filter: ${beforeFilter} -> ${allStreams.length} streams for S${targetSeason}E${targetEpisode}`);
+        }
+      }
+      
       // Sort by seeders (highest first)
       allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
       
-      console.log(`[STREAMS] Total streams after merge: ${allStreams.length}`);
+      console.log(`[STREAMS] Total streams after filter: ${allStreams.length}`);
       return { streams: allStreams };
     },
     
