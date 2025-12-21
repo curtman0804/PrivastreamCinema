@@ -175,24 +175,29 @@ export const api = {
       const response = await apiClient.get(`/api/streams/${type}/${encodedId}`);
       let allStreams = response.data.streams || [];
       
-      // Also fetch directly from Torrentio on the client (bypasses Cloudflare)
+      console.log(`[STREAMS] Backend returned ${allStreams.length} streams for ${type}/${id}`);
+      
+      // Also fetch directly from Torrentio and ThePirateBay+ on the client (bypasses Cloudflare)
       try {
         const torrentioStreams = await api.addons.fetchTorrentioStreams(type, id);
+        console.log(`[STREAMS] Client-side Torrentio returned ${torrentioStreams.length} streams`);
         if (torrentioStreams.length > 0) {
           // Merge and dedupe by infoHash
           const existingHashes = new Set(allStreams.map((s: Stream) => s.infoHash?.toLowerCase()).filter(Boolean));
           const newStreams = torrentioStreams.filter((s: Stream) => 
             s.infoHash && !existingHashes.has(s.infoHash.toLowerCase())
           );
+          console.log(`[STREAMS] Adding ${newStreams.length} new streams from Torrentio`);
           allStreams = [...allStreams, ...newStreams];
         }
       } catch (e) {
-        console.log('Client-side Torrentio fetch failed, using backend streams:', e);
+        console.log('[STREAMS] Client-side Torrentio fetch failed:', e);
       }
       
       // Sort by seeders (highest first)
       allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
       
+      console.log(`[STREAMS] Total streams after merge: ${allStreams.length}`);
       return { streams: allStreams };
     },
     
