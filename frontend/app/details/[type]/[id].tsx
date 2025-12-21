@@ -260,10 +260,10 @@ export default function DetailsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Hero Section */}
+      {/* Hero Section - Show episode thumbnail if on episode page */}
       <View style={styles.heroContainer}>
         <Image
-          source={{ uri: content?.background || content?.poster }}
+          source={{ uri: (isEpisodePage && currentEpisode?.thumbnail) || content?.background || content?.poster }}
           style={styles.heroImage}
           contentFit="cover"
         />
@@ -282,7 +282,18 @@ export default function DetailsScreen() {
 
         {/* Logo or Title */}
         <View style={styles.heroContent}>
-          {content?.logo ? (
+          {isEpisodePage && currentEpisode ? (
+            // Episode title with season/episode number
+            <View>
+              <Text style={styles.episodeLabel}>
+                S{episodeSeason} E{episodeNumber}
+              </Text>
+              <Text style={styles.heroTitle}>
+                {currentEpisode.name || currentEpisode.title || `Episode ${episodeNumber}`}
+              </Text>
+              <Text style={styles.seriesTitle}>{content?.name}</Text>
+            </View>
+          ) : content?.logo ? (
             <Image
               source={{ uri: content.logo }}
               style={styles.logoImage}
@@ -295,21 +306,46 @@ export default function DetailsScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Metadata Row */}
-        <View style={styles.metaRow}>
-          {rating && rating > 0 && (
-            <View style={styles.imdbBadge}>
-              <Text style={styles.imdbLabel}>IMDb</Text>
-              <Text style={styles.imdbRating}>{rating.toFixed(1)}/10</Text>
-            </View>
-          )}
-          {content?.year && (
-            <Text style={styles.metaText}>{content.year}</Text>
-          )}
-          {content?.runtime && (
-            <Text style={styles.metaText}>{content.runtime}</Text>
-          )}
-        </View>
+        {/* Episode-specific info */}
+        {isEpisodePage && currentEpisode && (
+          <>
+            {/* Episode Release Date */}
+            {currentEpisode.released && (
+              <View style={styles.metaRow}>
+                <Text style={styles.metaText}>
+                  {new Date(currentEpisode.released).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
+                </Text>
+              </View>
+            )}
+            
+            {/* Episode Description */}
+            {currentEpisode.overview && (
+              <Text style={styles.description}>{currentEpisode.overview}</Text>
+            )}
+          </>
+        )}
+
+        {/* Metadata Row - only show for non-episode pages or if episode has no specific info */}
+        {(!isEpisodePage || !currentEpisode) && (
+          <View style={styles.metaRow}>
+            {rating && rating > 0 && (
+              <View style={styles.imdbBadge}>
+                <Text style={styles.imdbLabel}>IMDb</Text>
+                <Text style={styles.imdbRating}>{rating.toFixed(1)}/10</Text>
+              </View>
+            )}
+            {content?.year && (
+              <Text style={styles.metaText}>{content.year}</Text>
+            )}
+            {content?.runtime && (
+              <Text style={styles.metaText}>{content.runtime}</Text>
+            )}
+          </View>
+        )}
 
         {/* Add to Library Button */}
         <TouchableOpacity 
