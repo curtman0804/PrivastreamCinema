@@ -2098,23 +2098,42 @@ async def search_content(
                 cast = meta.get('cast', [])
                 
                 # Normalize actor name for comparison
-                actor_lower = actor_name.lower()
+                actor_lower = actor_name.lower().strip()
                 actor_parts = actor_lower.split()
+                
+                # For person searches, require at least first and last name
+                if len(actor_parts) < 2:
+                    return False
                 
                 # Check each cast member
                 for cast_member in cast:
                     if isinstance(cast_member, str):
-                        cast_lower = cast_member.lower()
+                        cast_lower = cast_member.lower().strip()
                     elif isinstance(cast_member, dict):
-                        cast_lower = cast_member.get('name', '').lower()
+                        cast_lower = cast_member.get('name', '').lower().strip()
                     else:
                         continue
                     
-                    # Exact match or all parts of name are in cast member name
+                    cast_parts = cast_lower.split()
+                    
+                    # Require exact match on full name
                     if actor_lower == cast_lower:
                         return True
-                    if all(part in cast_lower for part in actor_parts):
-                        return True
+                    
+                    # Or match if first name AND last name both appear in cast member name
+                    # This handles "David Harbour" matching "David K. Harbour" or similar
+                    first_name = actor_parts[0]
+                    last_name = actor_parts[-1]
+                    
+                    # Both first and last name must be in the cast member's name
+                    # And the cast member name must be similar length (to avoid "David" matching "David Holmes")
+                    first_match = first_name in cast_parts or any(p.startswith(first_name) for p in cast_parts)
+                    last_match = last_name in cast_parts or any(p.startswith(last_name) for p in cast_parts)
+                    
+                    if first_match and last_match:
+                        # Additional check: cast name shouldn't be much longer than search name
+                        if len(cast_parts) <= len(actor_parts) + 1:
+                            return True
                         
                 return False
         except Exception as e:
