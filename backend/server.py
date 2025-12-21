@@ -2254,15 +2254,13 @@ async def search_content(
                 async def verify_and_return_movie(m):
                     content_id = m.get('imdb_id') or m.get('id')
                     if content_id and await verify_actor_in_cast(client, 'movie', content_id, q):
-                        # Also check for streams
-                        if await check_has_streams('movie', content_id):
-                            return m
+                        # Skip stream check for actor search - too slow and unreliable
+                        return m
                     return None
                 
                 async def verify_and_return_series(s):
                     content_id = s.get('imdb_id') or s.get('id')
                     if content_id and await verify_actor_in_cast(client, 'series', content_id, q):
-                        # Series usually have streams
                         return s
                     return None
                 
