@@ -15,7 +15,7 @@ const getBaseUrl = () => {
     return backendUrl;
   }
   // Fallback - try the packager hostname
-  return 'https://privastream-app-1.preview.emergentagent.com';
+  return 'https://mobilestremio.preview.emergentagent.com';
 };
 
 const BASE_URL = getBaseUrl();
