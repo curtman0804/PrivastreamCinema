@@ -55,6 +55,7 @@ export interface Episode {
   season: number;
   episode: number;
   name: string;
+  title?: string;  // Alternative field name for episode title
   thumbnail?: string;
   overview?: string;
   released?: string;
