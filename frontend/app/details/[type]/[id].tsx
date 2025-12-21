@@ -654,6 +654,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 20,
   },
+  episodeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#B8A05C',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  seriesTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#888888',
+    textAlign: 'center',
+    marginTop: 4,
+  },
   scrollView: {
     flex: 1,
   },
