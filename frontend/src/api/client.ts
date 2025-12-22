@@ -15,7 +15,7 @@ const getBaseUrl = () => {
     return backendUrl;
   }
   // Fallback - try the packager hostname
-  return 'https://mobilestremio.preview.emergentagent.com';
+  return 'https://streamingnest.preview.emergentagent.com';
 };
 
 const BASE_URL = getBaseUrl();
