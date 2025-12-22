@@ -282,57 +282,76 @@ export const api = {
     
     fetchTorrentioStreams: async (type: string, id: string): Promise<Stream[]> => {
       // Direct client-side fetch from Torrentio (mobile apps bypass Cloudflare)
+      // Torrentio base URL from addon manifest
+      const TORRENTIO_BASE = 'https://torrentio.strem.fun';
+      const CONFIG = 'sort=seeders|qualityfilter=480p,scr,cam';
+      
       try {
-        const torrentioUrl = `https://torrentio.strem.fun/sort=seeders|qualityfilter=480p,scr,cam/stream/${type}/${id}.json`;
+        // Build URL - ensure ID is NOT double-encoded
+        // For series episodes: id format is "tt1234567:1:5" (imdb:season:episode)
+        const torrentioUrl = `${TORRENTIO_BASE}/${CONFIG}/stream/${type}/${id}.json`;
+        console.log(`[TORRENTIO] Fetching: ${torrentioUrl}`);
+        
         const response = await fetch(torrentioUrl, {
+          method: 'GET',
           headers: {
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36',
+            'Content-Type': 'application/json',
           },
         });
         
-        if (response.ok) {
-          const data = await response.json();
-          const rawStreams = data.streams || [];
-          
-          // Parse Torrentio streams
-          return rawStreams.map((stream: any) => {
-            const name = stream.name || '';
-            const title = stream.title || '';
-            
-            // Extract infoHash
-            let infoHash = stream.infoHash;
-            if (!infoHash && stream.behaviorHints?.bingeGroup?.length === 40) {
-              infoHash = stream.behaviorHints.bingeGroup;
-            }
-            if (!infoHash && stream.url?.includes('magnet:')) {
-              const match = stream.url.match(/btih:([a-fA-F0-9]{40})/);
-              if (match) infoHash = match[1];
-            }
-            
-            // Parse seeders from title (format: "👤 123")
-            let seeders = 0;
-            const seederMatch = title.match(/👤\s*(\d+)/);
-            if (seederMatch) seeders = parseInt(seederMatch[1], 10);
-            
-            // Determine quality
-            const quality = name.toUpperCase().includes('4K') || name.includes('2160') ? '4K' :
-                           name.includes('1080') ? '1080p' :
-                           name.includes('720') ? '720p' : 'SD';
-            
-            return {
-              name: `⚡ ${name}`,
-              title: title,
-              infoHash: infoHash?.toLowerCase(),
-              sources: ['tracker:udp://tracker.opentrackr.org:1337/announce'],
-              addon: 'Torrentio',
-              seeders: seeders,
-              quality: quality,
-            };
-          }).filter((s: Stream) => s.infoHash);
+        console.log(`[TORRENTIO] Response status: ${response.status}`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log(`[TORRENTIO] Error response: ${errorText.substring(0, 200)}`);
+          return [];
         }
-      } catch (e) {
-        console.log('Torrentio direct fetch error:', e);
+        
+        const data = await response.json();
+        const rawStreams = data.streams || [];
+        console.log(`[TORRENTIO] Raw streams count: ${rawStreams.length}`);
+        
+        // Parse Torrentio streams
+        const parsedStreams = rawStreams.map((stream: any) => {
+          const name = stream.name || '';
+          const title = stream.title || '';
+          
+          // Extract infoHash from multiple possible sources
+          let infoHash = stream.infoHash;
+          if (!infoHash && stream.behaviorHints?.bingeGroup?.length === 40) {
+            infoHash = stream.behaviorHints.bingeGroup;
+          }
+          if (!infoHash && stream.url?.includes('magnet:')) {
+            const match = stream.url.match(/btih:([a-fA-F0-9]{40})/i);
+            if (match) infoHash = match[1];
+          }
+          
+          // Parse seeders from title (format: "👤 123")
+          let seeders = 0;
+          const seederMatch = title.match(/👤\s*(\d+)/);
+          if (seederMatch) seeders = parseInt(seederMatch[1], 10);
+          
+          // Determine quality
+          const quality = name.toUpperCase().includes('4K') || name.includes('2160') ? '4K' :
+                         name.includes('1080') ? '1080p' :
+                         name.includes('720') ? '720p' : 'SD';
+          
+          return {
+            name: `⚡ ${name}`,
+            title: title,
+            infoHash: infoHash?.toLowerCase(),
+            sources: ['tracker:udp://tracker.opentrackr.org:1337/announce'],
+            addon: 'Torrentio',
+            seeders: seeders,
+            quality: quality,
+          };
+        }).filter((s: any) => s.infoHash);
+        
+        console.log(`[TORRENTIO] Parsed streams with infoHash: ${parsedStreams.length}`);
+        return parsedStreams;
+      } catch (e: any) {
+        console.log(`[TORRENTIO] Fetch error: ${e.message || e}`);
       }
       return [];
     },
