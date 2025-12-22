@@ -306,34 +306,40 @@ export const api = {
     },
     
     fetchTorrentioStreams: async (type: string, id: string): Promise<Stream[]> => {
-      // Direct client-side fetch from Torrentio (mobile apps bypass Cloudflare)
-      // Torrentio base URL from addon manifest
-      const TORRENTIO_BASE = 'https://torrentio.strem.fun';
-      const CONFIG = 'sort=seeders|qualityfilter=480p,scr,cam';
+      // For web: use backend proxy to bypass CORS
+      // For mobile: direct fetch (no CORS restrictions)
+      const isWeb = Platform.OS === 'web';
       
       try {
-        // Build URL - ensure ID is NOT double-encoded
-        // For series episodes: id format is "tt1234567:1:5" (imdb:season:episode)
-        const torrentioUrl = `${TORRENTIO_BASE}/${CONFIG}/stream/${type}/${id}.json`;
-        console.log(`[TORRENTIO] Fetching: ${torrentioUrl}`);
+        let data: any;
         
-        const response = await fetch(torrentioUrl, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
-        });
-        
-        console.log(`[TORRENTIO] Response status: ${response.status}`);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.log(`[TORRENTIO] Error response: ${errorText.substring(0, 200)}`);
-          return [];
+        if (isWeb) {
+          // Use backend proxy to bypass CORS on web
+          console.log(`[TORRENTIO] Using backend proxy for web`);
+          const response = await apiClient.get(`/api/addon-proxy/torrentio/${type}/${id}`);
+          data = response.data;
+        } else {
+          // Direct fetch on mobile (no CORS)
+          const TORRENTIO_BASE = 'https://torrentio.strem.fun';
+          const CONFIG = 'sort=seeders|qualityfilter=480p,scr,cam';
+          const torrentioUrl = `${TORRENTIO_BASE}/${CONFIG}/stream/${type}/${id}.json`;
+          console.log(`[TORRENTIO] Direct fetch: ${torrentioUrl}`);
+          
+          const response = await fetch(torrentioUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+          });
+          
+          if (!response.ok) {
+            console.log(`[TORRENTIO] Response status: ${response.status}`);
+            return [];
+          }
+          
+          data = await response.json();
         }
         
-        const data = await response.json();
         const rawStreams = data.streams || [];
         console.log(`[TORRENTIO] Raw streams count: ${rawStreams.length}`);
         
