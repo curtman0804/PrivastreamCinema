@@ -1535,8 +1535,8 @@ async def get_all_streams(
         tasks.append(fetch_addon_streams(addon))
     
     # Add built-in stream aggregators - these work reliably
-    tasks.append(search_mediafusion(content_type, content_id))
-    tasks.append(search_comet(content_type, content_id))
+    # tasks.append(search_mediafusion(content_type, content_id))  # Disabled - user wants only installed addons
+    # tasks.append(search_comet(content_type, content_id))  # Disabled - user wants only installed addons
     
     # Try Torrentio but it may be blocked by Cloudflare
     tasks.append(search_torrentio(content_type, content_id))
