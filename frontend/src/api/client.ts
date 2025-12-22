@@ -380,6 +380,81 @@ export const api = {
       }
       return [];
     },
+    
+    fetchTPBStreams: async (type: string, id: string): Promise<Stream[]> => {
+      // Direct client-side fetch from ThePirateBay+ (mobile apps bypass Cloudflare)
+      // TPB+ base URL from addon manifest - supports movie, series with tt prefix
+      const TPB_BASE = 'https://thepiratebay-plus.strem.fun';
+      
+      try {
+        // Build URL - TPB+ uses simple format
+        const tpbUrl = `${TPB_BASE}/stream/${type}/${id}.json`;
+        console.log(`[TPB+] Fetching: ${tpbUrl}`);
+        
+        const response = await fetch(tpbUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        console.log(`[TPB+] Response status: ${response.status}`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log(`[TPB+] Error response: ${errorText.substring(0, 200)}`);
+          return [];
+        }
+        
+        const data = await response.json();
+        const rawStreams = data.streams || [];
+        console.log(`[TPB+] Raw streams count: ${rawStreams.length}`);
+        
+        // Parse TPB+ streams
+        const parsedStreams = rawStreams.map((stream: any) => {
+          const name = stream.name || '';
+          const title = stream.title || '';
+          
+          // Extract infoHash from multiple possible sources
+          let infoHash = stream.infoHash;
+          if (!infoHash && stream.behaviorHints?.bingeGroup?.length === 40) {
+            infoHash = stream.behaviorHints.bingeGroup;
+          }
+          if (!infoHash && stream.url?.includes('magnet:')) {
+            const match = stream.url.match(/btih:([a-fA-F0-9]{40})/i);
+            if (match) infoHash = match[1];
+          }
+          
+          // Parse seeders from title (various formats)
+          let seeders = 0;
+          const seederMatch = title.match(/👤\s*(\d+)/) || title.match(/Seeds?:\s*(\d+)/i) || title.match(/(\d+)\s*seeds?/i);
+          if (seederMatch) seeders = parseInt(seederMatch[1], 10);
+          
+          // Determine quality
+          const quality = name.toUpperCase().includes('4K') || name.includes('2160') ? '4K' :
+                         name.includes('1080') ? '1080p' :
+                         name.includes('720') ? '720p' : 'SD';
+          
+          return {
+            name: `🏴‍☠️ ${name}`,
+            title: title,
+            infoHash: infoHash?.toLowerCase(),
+            sources: ['tracker:udp://tracker.opentrackr.org:1337/announce'],
+            addon: 'ThePirateBay+',
+            seeders: seeders,
+            quality: quality,
+          };
+        }).filter((s: any) => s.infoHash);
+        
+        console.log(`[TPB+] Parsed streams with infoHash: ${parsedStreams.length}`);
+        return parsedStreams;
+      } catch (e: any) {
+        console.log(`[TPB+] Fetch error: ${e.message || e}`);
+      }
+      return [];
+    },
+    
     install: async (manifestUrl: string): Promise<Addon> => {
       const response = await apiClient.post('/api/addons/install', { manifestUrl });
       return response.data;
