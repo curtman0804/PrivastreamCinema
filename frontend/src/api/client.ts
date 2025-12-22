@@ -170,28 +170,53 @@ export const api = {
       return response.data;
     },
     getAllStreams: async (type: string, id: string): Promise<{ streams: Stream[] }> => {
+      console.log(`[STREAMS] ========== Fetching streams for ${type}/${id} ==========`);
+      
       // Fetch from backend first - encode ID to handle URLs and special characters
       const encodedId = encodeURIComponent(id);
-      const response = await apiClient.get(`/api/streams/${type}/${encodedId}`);
-      let allStreams = response.data.streams || [];
+      let allStreams: Stream[] = [];
       
-      console.log(`[STREAMS] Backend returned ${allStreams.length} streams for ${type}/${id}`);
+      try {
+        const response = await apiClient.get(`/api/streams/${type}/${encodedId}`);
+        allStreams = response.data.streams || [];
+        console.log(`[STREAMS] Backend returned ${allStreams.length} streams`);
+      } catch (e) {
+        console.log(`[STREAMS] Backend fetch failed:`, e);
+      }
       
-      // Also fetch directly from Torrentio and ThePirateBay+ on the client (bypasses Cloudflare)
+      // CLIENT-SIDE FETCHING: Bypass Cloudflare by fetching directly from the app
+      // This works because mobile apps and browsers appear as regular users, not servers
+      
+      // Fetch from Torrentio (supports movie, series, anime with tt/kitsu prefixes)
       try {
         const torrentioStreams = await api.addons.fetchTorrentioStreams(type, id);
-        console.log(`[STREAMS] Client-side Torrentio returned ${torrentioStreams.length} streams`);
+        console.log(`[STREAMS] Torrentio client-side: ${torrentioStreams.length} streams`);
         if (torrentioStreams.length > 0) {
-          // Merge and dedupe by infoHash
           const existingHashes = new Set(allStreams.map((s: Stream) => s.infoHash?.toLowerCase()).filter(Boolean));
           const newStreams = torrentioStreams.filter((s: Stream) => 
             s.infoHash && !existingHashes.has(s.infoHash.toLowerCase())
           );
-          console.log(`[STREAMS] Adding ${newStreams.length} new streams from Torrentio`);
+          console.log(`[STREAMS] Adding ${newStreams.length} new Torrentio streams`);
           allStreams = [...allStreams, ...newStreams];
         }
-      } catch (e) {
-        console.log('[STREAMS] Client-side Torrentio fetch failed:', e);
+      } catch (e: any) {
+        console.log(`[STREAMS] Torrentio client-side error: ${e.message || e}`);
+      }
+      
+      // Fetch from ThePirateBay+ (supports movie, series with tt prefix)
+      try {
+        const tpbStreams = await api.addons.fetchTPBStreams(type, id);
+        console.log(`[STREAMS] TPB+ client-side: ${tpbStreams.length} streams`);
+        if (tpbStreams.length > 0) {
+          const existingHashes = new Set(allStreams.map((s: Stream) => s.infoHash?.toLowerCase()).filter(Boolean));
+          const newStreams = tpbStreams.filter((s: Stream) => 
+            s.infoHash && !existingHashes.has(s.infoHash.toLowerCase())
+          );
+          console.log(`[STREAMS] Adding ${newStreams.length} new TPB+ streams`);
+          allStreams = [...allStreams, ...newStreams];
+        }
+      } catch (e: any) {
+        console.log(`[STREAMS] TPB+ client-side error: ${e.message || e}`);
       }
       
       // Filter for correct episode if this is a series episode (id format: tt1234567:1:5)
