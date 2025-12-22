@@ -944,7 +944,7 @@ async def proxy_addon_streams(
     content_id: str,
     current_user: User = Depends(get_current_user)
 ):
-    """Proxy requests to Stremio addons to bypass CORS on web"""
+    """Proxy requests to Stremio addons to bypass CORS on web - uses cloudscraper for Cloudflare"""
     logger.info(f"Addon proxy: {addon}/{content_type}/{content_id}")
     
     addon_urls = {
@@ -957,11 +957,29 @@ async def proxy_addon_streams(
     
     url = addon_urls[addon]
     
+    # Try cloudscraper first (can bypass Cloudflare)
+    try:
+        import cloudscraper
+        scraper = cloudscraper.create_scraper(
+            browser={'browser': 'chrome', 'platform': 'android', 'mobile': True}
+        )
+        response = scraper.get(url, timeout=15)
+        
+        if response.status_code == 200:
+            data = response.json()
+            logger.info(f"Addon proxy {addon} success via cloudscraper: {len(data.get('streams', []))} streams")
+            return data
+        else:
+            logger.warning(f"Addon proxy {addon} cloudscraper status {response.status_code}")
+    except Exception as e:
+        logger.warning(f"Addon proxy {addon} cloudscraper error: {e}")
+    
+    # Fallback to regular httpx
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
             response = await client.get(url, headers={
                 'Accept': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36'
             })
             
             if response.status_code == 200:
