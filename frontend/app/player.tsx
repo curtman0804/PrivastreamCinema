@@ -181,6 +181,36 @@ export default function PlayerScreen() {
     if (show) setShowControls(true);
   };
   
+  // Try next fallback stream
+  const tryNextStream = () => {
+    if (fallbackUrls.length > currentStreamIndex + 1) {
+      const nextIndex = currentStreamIndex + 1;
+      console.log(`[PLAYER] Trying fallback stream ${nextIndex + 1}/${fallbackUrls.length}`);
+      setCurrentStreamIndex(nextIndex);
+      setStreamUrl(fallbackUrls[nextIndex]);
+      setPlaybackStarted(false);
+      setError(null);
+      setIsLoading(true);
+      setLoadingStatus(`Trying stream ${nextIndex + 1}/${fallbackUrls.length}...`);
+      
+      // Start new timeout for this stream
+      if (playbackTimeoutRef.current) {
+        clearTimeout(playbackTimeoutRef.current);
+      }
+      playbackTimeoutRef.current = setTimeout(() => {
+        if (!playbackStarted) {
+          console.log('[PLAYER] Stream timeout, trying next...');
+          tryNextStream();
+        }
+      }, 30000); // 30 second timeout
+    } else {
+      // No more fallback streams
+      console.log('[PLAYER] No more fallback streams available');
+      setError('Unable to play video. All streams failed to load.');
+      setIsLoading(false);
+    }
+  };
+  
   // Handle tap to show/hide controls
   const handleVideoTap = () => {
     if (showControls) {
@@ -213,6 +243,28 @@ export default function PlayerScreen() {
       }
     };
   }, [showControls, streamUrl, isLoading]);
+  
+  // Set up playback timeout when stream URL changes
+  useEffect(() => {
+    if (streamUrl && !playbackStarted) {
+      // Clear any existing timeout
+      if (playbackTimeoutRef.current) {
+        clearTimeout(playbackTimeoutRef.current);
+      }
+      // Set 30 second timeout for playback to start
+      playbackTimeoutRef.current = setTimeout(() => {
+        if (!playbackStarted && fallbackUrls.length > currentStreamIndex + 1) {
+          console.log('[PLAYER] Playback timeout - trying next stream');
+          tryNextStream();
+        }
+      }, 30000);
+    }
+    return () => {
+      if (playbackTimeoutRef.current) {
+        clearTimeout(playbackTimeoutRef.current);
+      }
+    };
+  }, [streamUrl, playbackStarted]);
 
   // Fetch subtitles for the content
   const fetchSubtitles = async (cType: string, cId: string) => {
