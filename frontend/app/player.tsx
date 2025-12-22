@@ -125,6 +125,7 @@ export default function PlayerScreen() {
   const [duration, setDuration] = useState(0);
   const videoRef = useRef<Video>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const controlsOpacity = useRef(new Animated.Value(1)).current;
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
@@ -158,6 +159,34 @@ export default function PlayerScreen() {
       } else {
         await videoRef.current.playAsync();
       }
+    }
+  };
+  
+  // Fade controls in/out
+  const fadeControls = (show: boolean) => {
+    Animated.timing(controlsOpacity, {
+      toValue: show ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      if (!show) setShowControls(false);
+    });
+    if (show) setShowControls(true);
+  };
+  
+  // Handle tap to show/hide controls
+  const handleVideoTap = () => {
+    if (showControls) {
+      fadeControls(false);
+    } else {
+      fadeControls(true);
+      // Reset auto-hide timer
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+      controlsTimeoutRef.current = setTimeout(() => {
+        if (isPlaying) fadeControls(false);
+      }, 3000);
     }
   };
   
