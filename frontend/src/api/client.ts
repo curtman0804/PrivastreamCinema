@@ -388,32 +388,39 @@ export const api = {
     },
     
     fetchTPBStreams: async (type: string, id: string): Promise<Stream[]> => {
-      // Direct client-side fetch from ThePirateBay+ (mobile apps bypass Cloudflare)
-      // TPB+ base URL from addon manifest - supports movie, series with tt prefix
-      const TPB_BASE = 'https://thepiratebay-plus.strem.fun';
+      // For web: use backend proxy to bypass CORS
+      // For mobile: direct fetch (no CORS restrictions)
+      const isWeb = Platform.OS === 'web';
       
       try {
-        // Build URL - TPB+ uses simple format
-        const tpbUrl = `${TPB_BASE}/stream/${type}/${id}.json`;
-        console.log(`[TPB+] Fetching: ${tpbUrl}`);
+        let data: any;
         
-        const response = await fetch(tpbUrl, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
-        });
-        
-        console.log(`[TPB+] Response status: ${response.status}`);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.log(`[TPB+] Error response: ${errorText.substring(0, 200)}`);
-          return [];
+        if (isWeb) {
+          // Use backend proxy to bypass CORS on web
+          console.log(`[TPB+] Using backend proxy for web`);
+          const response = await apiClient.get(`/api/addon-proxy/tpb/${type}/${id}`);
+          data = response.data;
+        } else {
+          // Direct fetch on mobile (no CORS)
+          const TPB_BASE = 'https://thepiratebay-plus.strem.fun';
+          const tpbUrl = `${TPB_BASE}/stream/${type}/${id}.json`;
+          console.log(`[TPB+] Direct fetch: ${tpbUrl}`);
+          
+          const response = await fetch(tpbUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+          });
+          
+          if (!response.ok) {
+            console.log(`[TPB+] Response status: ${response.status}`);
+            return [];
+          }
+          
+          data = await response.json();
         }
         
-        const data = await response.json();
         const rawStreams = data.streams || [];
         console.log(`[TPB+] Raw streams count: ${rawStreams.length}`);
         
