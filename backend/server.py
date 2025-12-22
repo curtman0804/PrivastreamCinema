@@ -936,6 +936,45 @@ async def extract_xhamster_video(video_url: str) -> list:
     return []
 
 
+# Proxy endpoint for client-side addon fetching (bypasses CORS for web)
+@api_router.get("/addon-proxy/{addon}/{content_type}/{content_id:path}")
+async def proxy_addon_streams(
+    addon: str,
+    content_type: str,
+    content_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Proxy requests to Stremio addons to bypass CORS on web"""
+    logger.info(f"Addon proxy: {addon}/{content_type}/{content_id}")
+    
+    addon_urls = {
+        "torrentio": f"https://torrentio.strem.fun/sort=seeders|qualityfilter=480p,scr,cam/stream/{content_type}/{content_id}.json",
+        "tpb": f"https://thepiratebay-plus.strem.fun/stream/{content_type}/{content_id}.json",
+    }
+    
+    if addon not in addon_urls:
+        return {"streams": []}
+    
+    url = addon_urls[addon]
+    
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            response = await client.get(url, headers={
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            })
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data
+            else:
+                logger.warning(f"Addon proxy {addon} returned status {response.status_code}")
+                return {"streams": []}
+    except Exception as e:
+        logger.warning(f"Addon proxy {addon} error: {e}")
+        return {"streams": []}
+
+
 @api_router.get("/streams/{content_type}/{content_id:path}")
 async def get_all_streams(
     content_type: str,
