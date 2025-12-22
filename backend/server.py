@@ -2036,12 +2036,15 @@ async def search_content(
     # Detect if this looks like a person name search (cast/director)
     # Person names usually: 2-3 words, each capitalized, no common movie words
     query_words = q.split()
-    MOVIE_WORDS = {'movie', 'film', 'show', 'series', 'season', 'episode', 'part', 'vol', 'volume', '2', '3', 'ii', 'iii'}
+    MOVIE_WORDS = {'movie', 'film', 'show', 'series', 'season', 'episode', 'part', 'vol', 'volume', '2', '3', 'ii', 'iii', 'things', 'the', 'of', 'and', 'a', 'in', 'on', 'at', 'to'}
+    # Also exclude common show/movie title patterns
+    TITLE_PATTERNS = ['stranger things', 'breaking bad', 'game of thrones', 'the walking dead', 'stranger', 'squid']
     is_likely_person_name = (
         len(query_words) >= 2 and 
         len(query_words) <= 4 and
         all(word[0].isupper() if word else False for word in query_words) and
-        not any(word.lower() in MOVIE_WORDS for word in query_words)
+        not any(word.lower() in MOVIE_WORDS for word in query_words) and
+        not any(pattern in q.lower() for pattern in TITLE_PATTERNS)
     )
     
     # Detect genre searches - map to Cinemeta genre IDs
