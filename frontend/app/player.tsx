@@ -99,6 +99,7 @@ export default function PlayerScreen() {
     isLive?: string;
     contentType?: string;
     contentId?: string;
+    fallbackStreams?: string; // JSON stringified array of fallback stream URLs
   }>();
   const router = useRouter();
   
@@ -111,6 +112,12 @@ export default function PlayerScreen() {
   const [downloadSpeed, setDownloadSpeed] = useState(0);
   const [isLiveTV, setIsLiveTV] = useState(false);
   const [hasAudioError, setHasAudioError] = useState(false);
+  
+  // Fallback streams for auto-retry
+  const [fallbackUrls, setFallbackUrls] = useState<string[]>([]);
+  const [currentStreamIndex, setCurrentStreamIndex] = useState(0);
+  const [playbackStarted, setPlaybackStarted] = useState(false);
+  const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Subtitles state
   const [subtitles, setSubtitles] = useState<Array<{id: string; url: string; lang: string; langName: string}>>([]);
