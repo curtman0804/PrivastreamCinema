@@ -565,7 +565,8 @@ export default function PlayerScreen() {
               onPlaybackStatusUpdate={handlePlaybackStatus}
               onError={(error) => {
                 console.log('Video error:', error);
-                setError('Failed to play video. The audio codec may not be supported.');
+                setError('Failed to play video. The codec may not be supported.\n\nTry opening in an external player.');
+                setHasAudioError(true);
               }}
             />
             
