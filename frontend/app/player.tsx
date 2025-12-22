@@ -499,6 +499,16 @@ export default function PlayerScreen() {
         <View style={styles.errorContainer}>
           <Ionicons name="warning-outline" size={48} color="#ff6b6b" />
           <Text style={styles.errorText}>{error}</Text>
+          
+          {/* Show Open External Player button when there's an error */}
+          <TouchableOpacity 
+            style={[styles.button, { backgroundColor: '#B8A05C', marginBottom: 12 }]} 
+            onPress={openInExternalPlayer}
+          >
+            <Ionicons name="open-outline" size={20} color="#000" style={{ marginRight: 8 }} />
+            <Text style={[styles.buttonText, { color: '#000' }]}>Open in External Player</Text>
+          </TouchableOpacity>
+          
           <TouchableOpacity style={styles.button} onPress={() => router.back()}>
             <Text style={styles.buttonText}>Go Back</Text>
           </TouchableOpacity>
