@@ -675,9 +675,15 @@ export default function PlayerScreen() {
               isMuted={false}
               onPlaybackStatusUpdate={handlePlaybackStatus}
               onError={(error) => {
-                console.log('Video error:', error);
-                setError('Failed to play video. The codec may not be supported.\n\nTry opening in an external player.');
-                setHasAudioError(true);
+                console.log('[PLAYER] Video error:', error);
+                // Try next stream instead of showing error immediately
+                if (fallbackUrls.length > currentStreamIndex + 1) {
+                  console.log('[PLAYER] Video error - trying next stream');
+                  tryNextStream();
+                } else {
+                  setError('Failed to play video. All streams failed.');
+                  setHasAudioError(true);
+                }
               }}
             />
             
