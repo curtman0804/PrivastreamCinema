@@ -591,7 +591,7 @@ export default function PlayerScreen() {
           <TouchableOpacity 
             activeOpacity={1} 
             style={styles.videoContainer}
-            onPress={() => setShowControls(!showControls)}
+            onPress={handleVideoTap}
           >
             <Video
               ref={videoRef}
@@ -612,7 +612,7 @@ export default function PlayerScreen() {
             
             {/* Custom Controls Overlay - fades in/out */}
             {showControls && (
-              <View style={styles.controlsOverlay}>
+              <Animated.View style={[styles.controlsOverlay, { opacity: controlsOpacity }]}>
                 {/* Top Bar - Back and CC */}
                 <View style={styles.topControls}>
                   <TouchableOpacity 
