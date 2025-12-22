@@ -661,7 +661,7 @@ export default function PlayerScreen() {
                   </View>
                   <Text style={styles.timeText}>{formatTime(duration)}</Text>
                 </View>
-              </View>
+              </Animated.View>
             )}
           </TouchableOpacity>
         )
