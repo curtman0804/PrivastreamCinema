@@ -155,6 +155,18 @@ export default function PlayerScreen() {
       setIsPlaying(status.isPlaying);
       setPosition(status.positionMillis);
       setDuration(status.durationMillis || 0);
+      
+      // Mark playback as started when video is actually playing
+      if (status.isPlaying && !playbackStarted) {
+        console.log('[PLAYER] Playback started successfully!');
+        setPlaybackStarted(true);
+        setIsLoading(false);
+        // Clear timeout since playback started
+        if (playbackTimeoutRef.current) {
+          clearTimeout(playbackTimeoutRef.current);
+          playbackTimeoutRef.current = null;
+        }
+      }
     }
   };
   
