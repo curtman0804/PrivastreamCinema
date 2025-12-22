@@ -131,6 +131,22 @@ export default function DetailsScreen() {
     
     console.log('[DETAILS] handleStreamSelect - passing to player:', { cType, imdbId, contentTitle });
     
+    // Build fallback streams list (other streams of the same content)
+    const buildFallbackUrls = async (): Promise<string[]> => {
+      const authToken = await AsyncStorage.getItem('auth_token');
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://mobilestremio.preview.emergentagent.com';
+      
+      return streams
+        .filter(s => s !== stream) // Exclude current stream
+        .filter(s => s.url && s.url.startsWith('/api/proxy/')) // Only proxy streams for now
+        .slice(0, 5) // Limit to 5 fallbacks
+        .map(s => {
+          const separator = s.url!.includes('?') ? '&' : '?';
+          const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
+          return `${backendUrl}${s.url}${tokenParam}`;
+        });
+    };
+    
     // Also save to AsyncStorage as backup
     try {
       await AsyncStorage.setItem('currentPlaying', JSON.stringify({
@@ -168,6 +184,10 @@ export default function DetailsScreen() {
       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
       console.log('[DETAILS] Using proxy stream:', absoluteUrl.substring(0, 150));
       
+      // Get fallback URLs
+      const fallbacks = await buildFallbackUrls();
+      console.log('[DETAILS] Fallback streams available:', fallbacks.length);
+      
       router.push({
         pathname: '/player',
         params: { 
@@ -176,6 +196,7 @@ export default function DetailsScreen() {
           isLive: 'false',
           contentType: cType,
           contentId: imdbId,
+          fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks]),
         },
       });
       return;
