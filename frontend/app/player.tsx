@@ -962,15 +962,62 @@ export default function PlayerScreen() {
         <View style={styles.subtitleModalOverlay}>
           <View style={styles.subtitleModal}>
             <View style={styles.subtitleModalHeader}>
-              <Text style={styles.subtitleModalTitle}>Select Subtitles</Text>
+              <Text style={styles.subtitleModalTitle}>Subtitles</Text>
               <TouchableOpacity onPress={() => setShowSubtitlePicker(false)}>
                 <Ionicons name="close" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
             
+            {/* Subtitle Sync Controls */}
+            {selectedSubtitle && (
+              <View style={styles.syncControlsContainer}>
+                <Text style={styles.syncLabel}>Sync Adjustment</Text>
+                <View style={styles.syncControls}>
+                  <TouchableOpacity 
+                    style={styles.syncButton}
+                    onPress={() => setSubtitleOffset(prev => prev - 500)}
+                  >
+                    <Text style={styles.syncButtonText}>-0.5s</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.syncButton}
+                    onPress={() => setSubtitleOffset(prev => prev - 100)}
+                  >
+                    <Text style={styles.syncButtonText}>-0.1s</Text>
+                  </TouchableOpacity>
+                  <View style={styles.syncValueContainer}>
+                    <Text style={styles.syncValue}>
+                      {subtitleOffset >= 0 ? '+' : ''}{(subtitleOffset / 1000).toFixed(1)}s
+                    </Text>
+                  </View>
+                  <TouchableOpacity 
+                    style={styles.syncButton}
+                    onPress={() => setSubtitleOffset(prev => prev + 100)}
+                  >
+                    <Text style={styles.syncButtonText}>+0.1s</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.syncButton}
+                    onPress={() => setSubtitleOffset(prev => prev + 500)}
+                  >
+                    <Text style={styles.syncButtonText}>+0.5s</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity 
+                  style={styles.resetSyncButton}
+                  onPress={() => setSubtitleOffset(0)}
+                >
+                  <Text style={styles.resetSyncText}>Reset to 0</Text>
+                </TouchableOpacity>
+                <Text style={styles.syncHint}>
+                  Subtitles too early? Use + | Too late? Use -
+                </Text>
+              </View>
+            )}
+            
             {subtitles.length === 0 ? (
               <View style={styles.noSubtitlesContainer}>
-                <Ionicons name="text-outline" size={48} color="#666" />
+                <Ionicons name="chatbubble-ellipses-outline" size={48} color="#666" />
                 <Text style={styles.noSubtitlesText}>No subtitles available</Text>
                 <Text style={styles.noSubtitlesHint}>Subtitles will appear here when available</Text>
               </View>
