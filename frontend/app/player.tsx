@@ -243,10 +243,10 @@ export default function PlayerScreen() {
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const creditsShownRef = useRef(false); // Track if we've shown the credits popup
   
-  // Credits detection settings
-  const CREDITS_TIME_REMAINING_MS = 90000; // Show popup when 90 seconds remaining
-  const CREDITS_PERCENTAGE = 0.95; // Or when 95% complete
-  const MIN_DURATION_FOR_CREDITS = 300000; // Only detect credits for videos > 5 minutes
+  // Credits detection settings - show popup near the end
+  const CREDITS_TIME_REMAINING_MS = 30000; // Show popup when 30 seconds remaining
+  const CREDITS_PERCENTAGE = 0.98; // Or when 98% complete
+  const MIN_DURATION_FOR_CREDITS = 180000; // Only detect credits for videos > 3 minutes
   
   // Handle playback status updates
   const handlePlaybackStatus = (status: AVPlaybackStatus) => {
