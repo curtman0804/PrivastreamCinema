@@ -225,76 +225,96 @@ export const api = {
         if (parts.length >= 3) {
           const targetSeason = parts[1].padStart(2, '0');
           const targetEpisode = parts[2].padStart(2, '0');
-          const sInt = String(parseInt(parts[1], 10));
-          const eInt = String(parseInt(parts[2], 10));
+          const sInt = parseInt(parts[1], 10);
+          const eInt = parseInt(parts[2], 10);
           
-          // Patterns that match the target episode
-          const targetPatterns = [
-            `S${targetSeason}E${targetEpisode}`,  // S01E05
-            `S${sInt}E${eInt}`,                    // S1E5
-            `S${sInt}E${targetEpisode}`,           // S1E05
-            `S${targetSeason}E${eInt}`,            // S01E5
-            `${sInt}X${targetEpisode}`,            // 1x05
-          ].map(p => p.toUpperCase());
-          
-          // Function to check if a stream is for a WRONG episode
-          const isWrongEpisode = (title: string): boolean => {
+          // Function to check if a stream matches the EXACT target episode
+          const isCorrectEpisode = (title: string): boolean => {
             const upper = title.toUpperCase();
             
-            // Look for SxxEyy patterns
-            const sxePatterns = upper.match(/S(\d{1,2})E(\d{1,2})/g) || [];
-            for (const match of sxePatterns) {
-              const m = match.match(/S(\d{1,2})E(\d{1,2})/);
-              if (m) {
-                const foundS = m[1].padStart(2, '0');
-                const foundE = m[2].padStart(2, '0');
-                if (foundS !== targetSeason || foundE !== targetEpisode) {
-                  return true; // Wrong episode
+            // Reject season packs and complete series immediately
+            if (/COMPLETE|ALL\s*SEASONS|FULL\s*SERIES|SEASONS?\s*\d+\s*[-–]\s*\d+/i.test(upper)) {
+              return false;
+            }
+            
+            // Reject multi-season packs (e.g., "S01-S04" or "S01 S02 S03")
+            if (/S\d{1,2}\s*[-–]\s*S\d{1,2}/i.test(upper) || /S\d{1,2}\s+S\d{1,2}/i.test(upper)) {
+              return false;
+            }
+            
+            // Look for episode ranges like S01E01-E03 or S01E01-03
+            const rangePattern = /S(\d{1,2})E(\d{1,2})\s*[-–]\s*E?(\d{1,2})/gi;
+            let rangeMatch;
+            while ((rangeMatch = rangePattern.exec(upper)) !== null) {
+              const s = parseInt(rangeMatch[1], 10);
+              const startE = parseInt(rangeMatch[2], 10);
+              const endE = parseInt(rangeMatch[3], 10);
+              // If this is a range that includes our episode but also others, reject
+              if (s === sInt && startE <= eInt && endE >= eInt && (startE !== eInt || endE !== eInt)) {
+                return false; // This is a multi-episode file
+              }
+            }
+            
+            // Find ALL SxxEyy patterns in the title
+            const allEpisodes: Array<{s: number, e: number}> = [];
+            const sxePattern = /S(\d{1,2})E(\d{1,2})/gi;
+            let match;
+            while ((match = sxePattern.exec(upper)) !== null) {
+              allEpisodes.push({ s: parseInt(match[1], 10), e: parseInt(match[2], 10) });
+            }
+            
+            // Also check 1x05 format
+            const xPattern = /(\d{1,2})X(\d{1,2})/gi;
+            while ((match = xPattern.exec(upper)) !== null) {
+              allEpisodes.push({ s: parseInt(match[1], 10), e: parseInt(match[2], 10) });
+            }
+            
+            // If we found episode markers, check if ANY match our target
+            if (allEpisodes.length > 0) {
+              // Check if target episode is in the list
+              const hasTarget = allEpisodes.some(ep => ep.s === sInt && ep.e === eInt);
+              if (!hasTarget) {
+                return false; // Target episode not found
+              }
+              
+              // If there are multiple different episodes, reject (it's a pack)
+              const uniqueEpisodes = allEpisodes.filter((ep, idx, arr) => 
+                arr.findIndex(e => e.s === ep.s && e.e === ep.e) === idx
+              );
+              if (uniqueEpisodes.length > 1) {
+                // Multiple episodes in title - could be a pack
+                // Only allow if ALL episodes are the same as target
+                const allSame = uniqueEpisodes.every(ep => ep.s === sInt && ep.e === eInt);
+                if (!allSame) {
+                  return false;
                 }
               }
+              
+              return true; // Found exact target episode
             }
             
-            // Look for 1x05 patterns
-            const xPatterns = upper.match(/(\d{1,2})X(\d{1,2})/g) || [];
-            for (const match of xPatterns) {
-              const m = match.match(/(\d{1,2})X(\d{1,2})/);
-              if (m) {
-                const foundS = m[1].padStart(2, '0');
-                const foundE = m[2].padStart(2, '0');
-                if (foundS !== targetSeason || foundE !== targetEpisode) {
-                  return true; // Wrong episode
-                }
-              }
+            // No episode marker found - could be a season pack or single episode
+            // Check if it mentions just the season
+            if (/\bS(\d{1,2})\b(?!E)/i.test(upper)) {
+              // Has season but no episode - likely a season pack
+              return false;
             }
             
-            // Check for season packs (e.g., "S01-S04" or "S01 S02 S03")
-            if (/S\d{1,2}[-\s]S\d{1,2}/i.test(title) || /S\d{1,2}\s+S\d{1,2}/i.test(title)) {
-              return true; // Season pack
-            }
-            
-            // Check for "Complete Series" or "All Seasons"
-            if (/COMPLETE|ALL\s*SEASONS|FULL\s*SERIES/i.test(title)) {
-              return true;
-            }
-            
-            // Check for Russian "Сезон: X" that doesn't match
-            const russianSeason = title.match(/СЕЗОН[:\s]*(\d+)/i);
-            if (russianSeason) {
-              const foundS = russianSeason[1].padStart(2, '0');
-              if (foundS !== targetSeason) {
-                return true;
-              }
-            }
-            
-            return false;
+            // No clear episode marker - let it through but with low confidence
+            // (these are usually less accurate streams anyway)
+            return true;
           };
           
           const beforeFilter = allStreams.length;
           allStreams = allStreams.filter((s: Stream) => {
             const combined = `${s.title || ''} ${s.name || ''}`;
-            return !isWrongEpisode(combined);
+            const result = isCorrectEpisode(combined);
+            if (!result) {
+              console.log(`[FILTER] Rejected: ${combined.substring(0, 80)}`);
+            }
+            return result;
           });
-          console.log(`[STREAMS] Episode filter: ${beforeFilter} -> ${allStreams.length} streams for S${targetSeason}E${targetEpisode}`);
+          console.log(`[STREAMS] Episode filter: ${beforeFilter} -> ${allStreams.length} streams for S${String(sInt).padStart(2,'0')}E${String(eInt).padStart(2,'0')}`);
         }
       }
       
