@@ -851,7 +851,7 @@ export default function PlayerScreen() {
                   style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
                   onPress={() => setShowSubtitlePicker(true)}
                 >
-                  <Ionicons name="text" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
+                  <Ionicons name="chatbubble-ellipses-outline" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
                 </TouchableOpacity>
                 
                 {nextEpisodeId && (
