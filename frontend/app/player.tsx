@@ -199,11 +199,6 @@ export default function PlayerScreen() {
         metadata: {
           type: 'movie',
           title: title || 'Video',
-          images: [
-            {
-              url: poster || '',
-            }
-          ]
         }
       };
       
@@ -221,7 +216,7 @@ export default function PlayerScreen() {
       console.error('[CAST] Error casting:', error);
       Alert.alert('Cast Error', 'Failed to cast to device. Please make sure your device is connected to the same network as your Chromecast.');
     }
-  }, [streamUrl, title, poster, position]);
+  }, [streamUrl, title, position]);
   
   // Check cast availability on mount
   useEffect(() => {
