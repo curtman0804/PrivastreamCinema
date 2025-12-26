@@ -115,6 +115,7 @@ export default function PlayerScreen() {
   const [showSubtitlePicker, setShowSubtitlePicker] = useState(false);
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [currentSubtitleText, setCurrentSubtitleText] = useState<string>('');
+  const [subtitleOffset, setSubtitleOffset] = useState<number>(0); // Offset in ms (positive = subtitles appear later)
   
   // Custom player controls state
   const [showControls, setShowControls] = useState(true);
