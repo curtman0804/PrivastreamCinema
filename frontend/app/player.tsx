@@ -1006,11 +1006,23 @@ export default function PlayerScreen() {
                   <Text style={styles.titleText} numberOfLines={1}>{title || 'Playing'}</Text>
                   
                   <View style={styles.topRightControls}>
+                    {/* Cast Button */}
+                    <TouchableOpacity 
+                      style={[styles.controlButton, isCasting && styles.castActive]}
+                      onPress={handleCastToDevice}
+                    >
+                      <Ionicons 
+                        name={isCasting ? "tv" : "tv-outline"} 
+                        size={24} 
+                        color={isCasting ? '#B8A05C' : '#FFFFFF'} 
+                      />
+                    </TouchableOpacity>
+                    
                     <TouchableOpacity 
                       style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
                       onPress={() => setShowSubtitlePicker(true)}
                     >
-                      <Ionicons name="text" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
+                      <Ionicons name="chatbubble-ellipses-outline" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
                     </TouchableOpacity>
                     
                     {nextEpisodeId && (
