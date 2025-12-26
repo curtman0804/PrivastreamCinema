@@ -540,19 +540,6 @@ export const api = {
         
         const rawStreams = data?.streams || [];
         console.log(`[TPB+] Raw streams count: ${rawStreams.length}`);
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
-          });
-          
-          if (response.ok) {
-            data = await response.json();
-          } else {
-            console.log(`[TPB+] Response status: ${response.status}`);
-          }
-        }
-        
-        const rawStreams = data?.streams || [];
-        console.log(`[TPB+] Raw streams count: ${rawStreams.length}`);
         
         // Parse TPB+ streams
         const parsedStreams = rawStreams.map((stream: any) => {
