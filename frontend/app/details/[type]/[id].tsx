@@ -141,14 +141,18 @@ export default function DetailsScreen() {
   };
 
   const handleStreamSelect = async (stream: Stream) => {
-    // Get the IMDB ID for subtitles - use baseId for episodes
-    const imdbId = baseId || (id as string);
+    // Get the content ID for subtitles
+    // For series episodes: use full episode ID (tt1234567:1:1)
+    // For movies: use the movie ID
+    const subtitleContentId = isEpisodePage 
+      ? `${baseId}:${episodeSeason}:${episodeNumber}`  // Full episode ID for subtitles
+      : (id as string);
     const contentTitle = currentEpisode 
       ? `S${episodeSeason}E${episodeNumber} - ${currentEpisode.name || content?.name || 'Video'}`
       : content?.name || 'Video';
     const cType = type as string || 'movie';
     
-    console.log('[DETAILS] handleStreamSelect - passing to player:', { cType, imdbId, contentTitle });
+    console.log('[DETAILS] handleStreamSelect - passing to player:', { cType, subtitleContentId, contentTitle });
     
     // Build next episode ID if available
     const nextEpisodeData = nextEpisode ? {
