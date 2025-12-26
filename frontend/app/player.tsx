@@ -505,14 +505,13 @@ export default function PlayerScreen() {
       return;
     }
     try {
-      const url = `/api/subtitles/${cType}/${cId}`;
-      console.log('[SUBTITLES] Making API call to:', url);
-      const response = await api.get(url);
-      console.log('[SUBTITLES] API response status:', response.status);
+      console.log('[SUBTITLES] Making API call for:', cType, cId);
+      const response = await api.subtitles.get(cType, cId);
+      console.log('[SUBTITLES] API response:', response);
       
-      if (response.data?.subtitles && response.data.subtitles.length > 0) {
-        console.log(`[SUBTITLES] Setting ${response.data.subtitles.length} subtitle options`);
-        setSubtitles(response.data.subtitles);
+      if (response?.subtitles && response.subtitles.length > 0) {
+        console.log(`[SUBTITLES] Setting ${response.subtitles.length} subtitle options`);
+        setSubtitles(response.subtitles);
       } else {
         console.log('[SUBTITLES] No subtitles found in response');
       }
