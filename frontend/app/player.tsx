@@ -803,6 +803,31 @@ export default function PlayerScreen() {
               autoPlay
               playsInline
               onEnded={() => handlePlaybackEnd()}
+              onTimeUpdate={(e: any) => {
+                const video = e.target;
+                const currentTime = video.currentTime * 1000; // Convert to ms
+                const totalDuration = video.duration * 1000; // Convert to ms
+                const timeRemaining = totalDuration - currentTime;
+                const percentComplete = totalDuration > 0 ? currentTime / totalDuration : 0;
+                
+                // Update position for subtitles
+                setPosition(currentTime);
+                setDuration(totalDuration);
+                
+                // Credits detection for web
+                if (
+                  nextEpisodeId && 
+                  contentType === 'series' && 
+                  !creditsShownRef.current && 
+                  !showNextEpisodeModal &&
+                  totalDuration > MIN_DURATION_FOR_CREDITS &&
+                  (timeRemaining <= CREDITS_TIME_REMAINING_MS || percentComplete >= CREDITS_PERCENTAGE)
+                ) {
+                  console.log(`[PLAYER-WEB] Credits detected! Time remaining: ${(timeRemaining/1000).toFixed(0)}s, ${(percentComplete*100).toFixed(1)}% complete`);
+                  creditsShownRef.current = true;
+                  showCreditsPopup();
+                }
+              }}
               style={{ 
                 width: '100%', 
                 height: '100%', 
