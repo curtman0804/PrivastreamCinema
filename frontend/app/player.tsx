@@ -608,7 +608,11 @@ export default function PlayerScreen() {
     try {
       setLoadingStatus('Starting torrent engine...');
       
-      await api.stream.start(infoHash);
+      // Parse fileIdx if provided (for selecting specific episode in season packs)
+      const parsedFileIdx = fileIdx ? parseInt(fileIdx, 10) : undefined;
+      console.log(`[PLAYER] Starting torrent with fileIdx=${parsedFileIdx}, filename=${filename || 'auto'}`);
+      
+      await api.stream.start(infoHash, parsedFileIdx, filename || undefined);
       
       let pollInterval = 500;
       
@@ -642,7 +646,8 @@ export default function PlayerScreen() {
             }
             
             setLoadingStatus('Starting playback...');
-            const videoUrl = api.stream.getVideoUrl(infoHash);
+            // Pass fileIdx to getVideoUrl for file selection
+            const videoUrl = api.stream.getVideoUrl(infoHash, parsedFileIdx);
             setStreamUrl(videoUrl);
             setIsLoading(false);
             return;
