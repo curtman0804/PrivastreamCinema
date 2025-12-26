@@ -232,6 +232,11 @@ export default function PlayerScreen() {
     }
   }, [selectedSubtitle]);
   
+  // Next episode modal state
+  const [showNextEpisodeModal, setShowNextEpisodeModal] = useState(false);
+  const [countdown, setCountdown] = useState(10);
+  const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  
   // Handle playback status updates
   const handlePlaybackStatus = (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
@@ -260,24 +265,31 @@ export default function PlayerScreen() {
     }
   };
   
-  // Handle playback end - go back or play next episode
+  // Handle playback end - show modal or go back
   const handlePlaybackEnd = useCallback(() => {
     if (nextEpisodeId && contentType === 'series') {
-      // Show next episode prompt
-      Alert.alert(
-        'Next Episode',
-        `Play ${nextEpisodeTitle || 'next episode'}?`,
-        [
-          {
-            text: 'Go Back',
-            style: 'cancel',
-            onPress: () => router.back(),
-          },
-          {
-            text: 'Play Next',
-            onPress: () => playNextEpisode(),
-          },
-        ],
+      // Show next episode modal with countdown
+      setShowNextEpisodeModal(true);
+      setCountdown(10);
+      
+      // Start countdown
+      countdownRef.current = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            // Time's up - go back to previous screen
+            if (countdownRef.current) clearInterval(countdownRef.current);
+            setShowNextEpisodeModal(false);
+            router.back();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      // No next episode - go back immediately
+      router.back();
+    }
+  }, [nextEpisodeId, contentType, router]);
         { cancelable: false }
       );
     } else {
