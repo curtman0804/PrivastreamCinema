@@ -697,8 +697,18 @@ export const api = {
     },
   },
   stream: {
-    start: async (infoHash: string): Promise<{ status: string; info_hash: string }> => {
-      const response = await apiClient.post(`/api/stream/start/${infoHash}`);
+    start: async (infoHash: string, fileIdx?: number, filename?: string): Promise<{ status: string; info_hash: string }> => {
+      // Pass fileIdx and filename to tell the torrent server which file to play
+      const params = new URLSearchParams();
+      if (fileIdx !== undefined && fileIdx !== null) {
+        params.append('fileIdx', String(fileIdx));
+      }
+      if (filename) {
+        params.append('filename', filename);
+      }
+      const queryString = params.toString();
+      const url = `/api/stream/start/${infoHash}${queryString ? '?' + queryString : ''}`;
+      const response = await apiClient.post(url);
       return response.data;
     },
     status: async (infoHash: string): Promise<{
@@ -714,10 +724,11 @@ export const api = {
       const response = await apiClient.get(`/api/stream/status/${infoHash}`);
       return response.data;
     },
-    getVideoUrl: (infoHash: string): string => {
-      // Return the full URL for the video stream
+    getVideoUrl: (infoHash: string, fileIdx?: number): string => {
+      // Return the full URL for the video stream with optional fileIdx
       const baseUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-      return `${baseUrl}/api/stream/video/${infoHash}`;
+      const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
+      return `${baseUrl}/api/stream/video/${infoHash}${params}`;
     },
   },
 };
