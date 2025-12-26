@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -40,58 +40,38 @@ const isHEVCContent = (titleStr: string | undefined): boolean => {
   return lowerTitle.includes('hevc') || lowerTitle.includes('x265') || lowerTitle.includes('h.265');
 };
 
-// Web Video Component using dangerouslySetInnerHTML
-const WebVideoPlayer = ({ streamUrl, onLoad, onError, isHLS = false }: { streamUrl: string; onLoad: () => void; onError: () => void; isHLS?: boolean }) => {
-  useEffect(() => {
-    // Notify that we've loaded
-    const timer = setTimeout(onLoad, 2000);
-    return () => clearTimeout(timer);
-  }, []);
+// Subtitle interface
+interface Subtitle {
+  id: string;
+  url: string;
+  lang: string;
+  langName: string;
+}
 
-  // Check if this is an HLS stream
-  const isHLSStream = isHLS || streamUrl.includes('.m3u8');
-  
-  // For HLS streams, we need HLS.js on web
-  const html = isHLSStream ? `
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <video 
-      id="video"
-      controls 
-      autoplay 
-      playsinline 
-      style="width:100%;height:100%;background:#000;object-fit:contain;"
-    ></video>
-    <script>
-      var video = document.getElementById('video');
-      if (Hls.isSupported()) {
-        var hls = new Hls();
-        hls.loadSource('${streamUrl}');
-        hls.attachMedia(video);
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = '${streamUrl}';
-      }
-    </script>
-  ` : `
-    <video 
-      controls 
-      autoplay 
-      playsinline 
-      style="width:100%;height:100%;background:#000;object-fit:contain;"
-    >
-      <source src="${streamUrl}" type="video/mp4">
-    </video>
-  `;
-
-  return (
-    <div 
-      style={{ width: '100%', height: '100%', background: '#000' }}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
-};
+// Parsed subtitle cue
+interface SubtitleCue {
+  start: number;
+  end: number;
+  text: string;
+}
 
 export default function PlayerScreen() {
-  const { url, title, infoHash, directUrl, isLive, contentType, contentId } = useLocalSearchParams<{
+  const { 
+    url, 
+    title, 
+    infoHash, 
+    directUrl, 
+    isLive, 
+    contentType, 
+    contentId,
+    fallbackStreams,
+    // Next episode data
+    nextEpisodeId,
+    nextEpisodeTitle,
+    seriesId,
+    season,
+    episode,
+  } = useLocalSearchParams<{
     url?: string;
     title?: string;
     infoHash?: string;
@@ -99,7 +79,12 @@ export default function PlayerScreen() {
     isLive?: string;
     contentType?: string;
     contentId?: string;
-    fallbackStreams?: string; // JSON stringified array of fallback stream URLs
+    fallbackStreams?: string;
+    nextEpisodeId?: string;
+    nextEpisodeTitle?: string;
+    seriesId?: string;
+    season?: string;
+    episode?: string;
   }>();
   const router = useRouter();
   
@@ -120,16 +105,18 @@ export default function PlayerScreen() {
   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Subtitles state
-  const [subtitles, setSubtitles] = useState<Array<{id: string; url: string; lang: string; langName: string}>>([]);
+  const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
   const [selectedSubtitle, setSelectedSubtitle] = useState<string | null>(null);
   const [showSubtitlePicker, setShowSubtitlePicker] = useState(false);
-  const [subtitleText, setSubtitleText] = useState<string>('');
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
+  const [currentSubtitleText, setCurrentSubtitleText] = useState<string>('');
   
   // Custom player controls state
   const [showControls, setShowControls] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isEnded, setIsEnded] = useState(false);
   const videoRef = useRef<Video>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
@@ -149,6 +136,102 @@ export default function PlayerScreen() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
   
+  // Parse VTT/SRT subtitle file
+  const parseSubtitleFile = async (subtitleUrl: string) => {
+    try {
+      console.log('[SUBTITLES] Fetching subtitle file:', subtitleUrl);
+      const response = await fetch(subtitleUrl);
+      const text = await response.text();
+      
+      const cues: SubtitleCue[] = [];
+      
+      // Parse VTT or SRT format
+      const lines = text.split('\n');
+      let i = 0;
+      
+      // Skip VTT header
+      if (lines[0]?.includes('WEBVTT')) {
+        i = 1;
+        while (i < lines.length && lines[i].trim() !== '') i++;
+        i++;
+      }
+      
+      while (i < lines.length) {
+        // Skip empty lines and cue numbers
+        while (i < lines.length && (lines[i].trim() === '' || /^\d+$/.test(lines[i].trim()))) {
+          i++;
+        }
+        
+        if (i >= lines.length) break;
+        
+        // Parse timestamp line (00:00:00,000 --> 00:00:00,000 or 00:00:00.000 --> 00:00:00.000)
+        const timestampLine = lines[i];
+        const timestampMatch = timestampLine.match(/(\d{1,2}:)?(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{1,2}:)?(\d{2}):(\d{2})[,.](\d{3})/);
+        
+        if (timestampMatch) {
+          const startHours = timestampMatch[1] ? parseInt(timestampMatch[1]) : 0;
+          const startMins = parseInt(timestampMatch[2]);
+          const startSecs = parseInt(timestampMatch[3]);
+          const startMs = parseInt(timestampMatch[4]);
+          
+          const endHours = timestampMatch[5] ? parseInt(timestampMatch[5]) : 0;
+          const endMins = parseInt(timestampMatch[6]);
+          const endSecs = parseInt(timestampMatch[7]);
+          const endMs = parseInt(timestampMatch[8]);
+          
+          const start = (startHours * 3600 + startMins * 60 + startSecs) * 1000 + startMs;
+          const end = (endHours * 3600 + endMins * 60 + endSecs) * 1000 + endMs;
+          
+          i++;
+          
+          // Collect text lines until empty line
+          let textLines: string[] = [];
+          while (i < lines.length && lines[i].trim() !== '') {
+            textLines.push(lines[i].trim());
+            i++;
+          }
+          
+          if (textLines.length > 0) {
+            cues.push({
+              start,
+              end,
+              text: textLines.join('\n').replace(/<[^>]*>/g, ''), // Remove HTML tags
+            });
+          }
+        } else {
+          i++;
+        }
+      }
+      
+      console.log(`[SUBTITLES] Parsed ${cues.length} subtitle cues`);
+      setSubtitleCues(cues);
+    } catch (err) {
+      console.log('[SUBTITLES] Error parsing subtitle file:', err);
+    }
+  };
+  
+  // Update current subtitle based on position
+  useEffect(() => {
+    if (subtitleCues.length > 0) {
+      const currentCue = subtitleCues.find(
+        cue => position >= cue.start && position <= cue.end
+      );
+      setCurrentSubtitleText(currentCue?.text || '');
+    } else {
+      setCurrentSubtitleText('');
+    }
+  }, [position, subtitleCues]);
+  
+  // Load subtitle when selected
+  useEffect(() => {
+    if (selectedSubtitle) {
+      parseSubtitleFile(selectedSubtitle);
+    } else {
+      setSubtitleCues([]);
+      setCurrentSubtitleText('');
+    }
+  }, [selectedSubtitle]);
+  
   // Handle playback status updates
   const handlePlaybackStatus = (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
@@ -167,7 +250,55 @@ export default function PlayerScreen() {
           playbackTimeoutRef.current = null;
         }
       }
+      
+      // Check if playback ended
+      if (status.didJustFinish) {
+        console.log('[PLAYER] Playback ended');
+        setIsEnded(true);
+        handlePlaybackEnd();
+      }
     }
+  };
+  
+  // Handle playback end - go back or play next episode
+  const handlePlaybackEnd = useCallback(() => {
+    if (nextEpisodeId && contentType === 'series') {
+      // Show next episode prompt
+      Alert.alert(
+        'Next Episode',
+        `Play ${nextEpisodeTitle || 'next episode'}?`,
+        [
+          {
+            text: 'Go Back',
+            style: 'cancel',
+            onPress: () => router.back(),
+          },
+          {
+            text: 'Play Next',
+            onPress: () => playNextEpisode(),
+          },
+        ],
+        { cancelable: false }
+      );
+    } else {
+      // No next episode, go back to previous screen
+      router.back();
+    }
+  }, [nextEpisodeId, nextEpisodeTitle, contentType]);
+  
+  // Play next episode
+  const playNextEpisode = async () => {
+    if (!nextEpisodeId || !seriesId) {
+      router.back();
+      return;
+    }
+    
+    console.log('[PLAYER] Playing next episode:', nextEpisodeId);
+    
+    // Navigate to the next episode details page
+    router.replace({
+      pathname: `/details/series/${nextEpisodeId}`,
+    });
   };
   
   // Toggle play/pause
@@ -246,7 +377,7 @@ export default function PlayerScreen() {
         clearTimeout(controlsTimeoutRef.current);
       }
       controlsTimeoutRef.current = setTimeout(() => {
-        setShowControls(false);
+        if (isPlaying) fadeControls(false);
       }, 4000);
     }
     return () => {
@@ -254,7 +385,7 @@ export default function PlayerScreen() {
         clearTimeout(controlsTimeoutRef.current);
       }
     };
-  }, [showControls, streamUrl, isLoading]);
+  }, [showControls, streamUrl, isLoading, isPlaying]);
   
   // Set up playback timeout when stream URL changes
   useEffect(() => {
@@ -290,7 +421,6 @@ export default function PlayerScreen() {
       console.log('[SUBTITLES] Making API call to:', url);
       const response = await api.get(url);
       console.log('[SUBTITLES] API response status:', response.status);
-      console.log('[SUBTITLES] API response data:', JSON.stringify(response.data));
       
       if (response.data?.subtitles && response.data.subtitles.length > 0) {
         console.log(`[SUBTITLES] Setting ${response.data.subtitles.length} subtitle options`);
@@ -300,9 +430,6 @@ export default function PlayerScreen() {
       }
     } catch (err: any) {
       console.log('[SUBTITLES] Error fetching subtitles:', err.message || err);
-      if (err.response) {
-        console.log('[SUBTITLES] Error response:', err.response.status, err.response.data);
-      }
     }
   };
 
@@ -319,9 +446,6 @@ export default function PlayerScreen() {
         await Linking.openURL(vlcUrl);
         return;
       }
-      
-      // Try MX Player
-      const mxUrl = `intent:${streamUrl}#Intent;package=com.mxtech.videoplayer.ad;end`;
       
       // Fallback to generic video intent
       const supported = await Linking.canOpenURL(streamUrl);
@@ -362,12 +486,11 @@ export default function PlayerScreen() {
     };
   }, []);
 
-  // Fetch subtitles when player loads - use URL params first, then fallback to AsyncStorage
+  // Fetch subtitles when player loads
   useEffect(() => {
     let isMounted = true;
     
     const loadSubtitles = async () => {
-      // First try URL params (most reliable)
       console.log('[SUBTITLES] URL params - contentType:', contentType, 'contentId:', contentId);
       
       if (contentId && isMounted) {
@@ -377,17 +500,12 @@ export default function PlayerScreen() {
       }
       
       // Fallback to AsyncStorage
-      console.log('[SUBTITLES] No URL params, trying AsyncStorage...');
       try {
         const storedData = await AsyncStorage.getItem('currentPlaying');
-        console.log('[SUBTITLES] AsyncStorage data:', storedData);
-        
         if (storedData && isMounted) {
           const parsed = JSON.parse(storedData);
           const { contentType: cType, contentId: cId } = parsed;
-          
           if (cId) {
-            console.log('[SUBTITLES] Using AsyncStorage data to fetch subtitles');
             fetchSubtitles(cType || 'movie', cId);
           }
         }
@@ -396,7 +514,6 @@ export default function PlayerScreen() {
       }
     };
     
-    // Small delay to ensure component is fully mounted
     const timeout = setTimeout(loadSubtitles, 300);
     
     return () => {
@@ -405,14 +522,27 @@ export default function PlayerScreen() {
     };
   }, [contentType, contentId]);
 
+  // Initialize player
   useEffect(() => {
     continuePollingRef.current = true;
+    
+    // Parse fallback streams
+    if (fallbackStreams) {
+      try {
+        const parsed = JSON.parse(fallbackStreams);
+        if (Array.isArray(parsed)) {
+          setFallbackUrls(parsed);
+          console.log('[PLAYER] Loaded', parsed.length, 'fallback streams');
+        }
+      } catch (e) {
+        console.log('[PLAYER] Error parsing fallback streams:', e);
+      }
+    }
     
     // Check if this is live TV
     setIsLiveTV(isLive === 'true');
     
     if (directUrl) {
-      // Direct URL stream (USA TV, etc.) - play immediately
       setStreamUrl(directUrl);
       setIsLoading(false);
       setLoadingStatus('');
@@ -433,7 +563,7 @@ export default function PlayerScreen() {
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [url, infoHash, directUrl, isLive]);
+  }, [url, infoHash, directUrl, isLive, fallbackStreams]);
 
   const startTorrentStream = async () => {
     if (!infoHash) return;
@@ -443,16 +573,13 @@ export default function PlayerScreen() {
       
       await api.stream.start(infoHash);
       
-      // Start with fast polling (500ms) for quicker response during initial buffering
       let pollInterval = 500;
-      let pollCount = 0;
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
         
         try {
           const status = await api.stream.status(infoHash);
-          pollCount++;
           
           setDownloadProgress(status.progress || 0);
           setPeers(status.peers || 0);
@@ -471,12 +598,8 @@ export default function PlayerScreen() {
             const threshold = status.ready_threshold_mb ? status.ready_threshold_mb.toFixed(1) : '3';
             setLoadingStatus(`Buffering ${downloaded}MB / ${threshold}MB (${speedMB} MB/s)`);
             
-            // Slow down polling once we're buffering (save resources)
-            if (pollInterval < 1000) {
-              pollInterval = 1000;
-            }
+            if (pollInterval < 1000) pollInterval = 1000;
           } else if (status.status === 'ready') {
-            // Video ready - start playback immediately!
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
             }
@@ -485,7 +608,7 @@ export default function PlayerScreen() {
             const videoUrl = api.stream.getVideoUrl(infoHash);
             setStreamUrl(videoUrl);
             setIsLoading(false);
-            return; // Stop polling
+            return;
           } else if (status.status === 'not_found' || status.status === 'invalid') {
             setError('Failed to start. Try selecting a different stream with more seeders.');
             setIsLoading(false);
@@ -495,16 +618,13 @@ export default function PlayerScreen() {
             return;
           }
           
-          // Continue polling
           pollIntervalRef.current = setTimeout(pollStatus, pollInterval) as any;
         } catch (err) {
           console.error('Status poll error:', err);
-          // Retry on error
           pollIntervalRef.current = setTimeout(pollStatus, 2000) as any;
         }
       };
       
-      // Start polling immediately
       pollStatus();
       
     } catch (err: any) {
@@ -521,58 +641,14 @@ export default function PlayerScreen() {
     return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
   };
 
-  // HTML for native WebView video player
-  const getVideoPlayerHTML = () => {
-    if (!streamUrl) return '';
-    
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
-          video { width: 100%; height: 100%; object-fit: contain; background: #000; }
-          .status { color: #fff; text-align: center; padding: 20px; font-family: sans-serif; 
-                   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
-          .spinner { width: 30px; height: 30px; border: 3px solid rgba(184, 160, 92, 0.3);
-                    border-top-color: #B8A05C; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; }
-          @keyframes spin { to { transform: rotate(360deg); } }
-        </style>
-      </head>
-      <body>
-        <div id="status" class="status"><div class="spinner"></div><div>Loading...</div></div>
-        <video id="player" controls playsinline style="display: none;">
-          <source src="${streamUrl}" type="video/mp4">
-        </video>
-        <script>
-          const video = document.getElementById('player');
-          const status = document.getElementById('status');
-          video.addEventListener('loadeddata', function() {
-            status.style.display = 'none';
-            video.style.display = 'block';
-            video.play().catch(e => console.log('Autoplay blocked:', e));
-          });
-          video.addEventListener('canplay', function() {
-            status.style.display = 'none';
-            video.style.display = 'block';
-          });
-          video.addEventListener('error', function() {
-            status.innerHTML = '<div style="color:#ff6b6b;">Error loading video</div>';
-          });
-          video.load();
-        </script>
-      </body>
-      </html>
-    `;
+  // Handle back button
+  const handleBack = () => {
+    router.back();
   };
 
   return (
     <View style={styles.container}>
       <StatusBar hidden />
-      
-      {/* Header removed - using custom controls overlay */}
 
       {/* Loading Overlay */}
       {isLoading && !error && (
@@ -582,7 +658,7 @@ export default function PlayerScreen() {
           
           {infoHash && (
             <View style={styles.progressInfo}>
-              <View style={styles.progressBar}>
+              <View style={styles.progressBarBg}>
                 <View style={[styles.progressFill, { width: `${Math.min(downloadProgress, 100)}%` }]} />
               </View>
               <View style={styles.statsRow}>
@@ -601,7 +677,6 @@ export default function PlayerScreen() {
           <Ionicons name="warning-outline" size={48} color="#ff6b6b" />
           <Text style={styles.errorText}>{error}</Text>
           
-          {/* Show Open External Player button when there's an error */}
           <TouchableOpacity 
             style={[styles.button, { backgroundColor: '#B8A05C', marginBottom: 12 }]} 
             onPress={openInExternalPlayer}
@@ -610,13 +685,13 @@ export default function PlayerScreen() {
             <Text style={[styles.buttonText, { color: '#000' }]}>Open in External Player</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.button} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.button} onPress={handleBack}>
             <Text style={styles.buttonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Video Player with Custom Overlay Controls */}
+      {/* Video Player */}
       {streamUrl && !error && !isLoading && (
         Platform.OS === 'web' ? (
           <View style={styles.videoContainer}>
@@ -625,7 +700,7 @@ export default function PlayerScreen() {
               <View style={styles.hevcWarningBanner}>
                 <Ionicons name="warning" size={16} color="#FFA500" />
                 <Text style={styles.hevcWarningText}>
-                  HEVC/x265 codec detected - may show black screen on web. Use mobile app for best experience.
+                  HEVC/x265 codec detected - may show black screen on web.
                 </Text>
               </View>
             )}
@@ -634,6 +709,7 @@ export default function PlayerScreen() {
               controls
               autoPlay
               playsInline
+              onEnded={() => handlePlaybackEnd()}
               style={{ 
                 width: '100%', 
                 height: '100%', 
@@ -641,21 +717,32 @@ export default function PlayerScreen() {
                 objectFit: 'contain'
               } as any}
             />
-            {/* Web Overlay Controls - Back and CC only */}
+            {/* Subtitle Overlay for Web */}
+            {currentSubtitleText && (
+              <View style={styles.subtitleContainer}>
+                <Text style={styles.subtitleText}>{currentSubtitleText}</Text>
+              </View>
+            )}
+            {/* Web Controls Overlay - always visible */}
             <View style={styles.webControlsOverlay}>
-              <TouchableOpacity 
-                style={styles.controlButton} 
-                onPress={() => router.back()}
-              >
+              <TouchableOpacity style={styles.controlButton} onPress={handleBack}>
                 <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
               </TouchableOpacity>
               
-              <TouchableOpacity 
-                style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
-                onPress={() => setShowSubtitlePicker(true)}
-              >
-                <Ionicons name="text" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
-              </TouchableOpacity>
+              <View style={styles.topRightControls}>
+                <TouchableOpacity 
+                  style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
+                  onPress={() => setShowSubtitlePicker(true)}
+                >
+                  <Ionicons name="text" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
+                </TouchableOpacity>
+                
+                {nextEpisodeId && (
+                  <TouchableOpacity style={styles.controlButton} onPress={playNextEpisode}>
+                    <Ionicons name="play-skip-forward" size={24} color="#FFFFFF" />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
         ) : (
@@ -676,9 +763,7 @@ export default function PlayerScreen() {
               onPlaybackStatusUpdate={handlePlaybackStatus}
               onError={(error) => {
                 console.log('[PLAYER] Video error:', error);
-                // Try next stream instead of showing error immediately
                 if (fallbackUrls.length > currentStreamIndex + 1) {
-                  console.log('[PLAYER] Video error - trying next stream');
                   tryNextStream();
                 } else {
                   setError('Failed to play video. All streams failed.');
@@ -687,17 +772,23 @@ export default function PlayerScreen() {
               }}
             />
             
+            {/* Subtitle Overlay */}
+            {currentSubtitleText && (
+              <View style={styles.subtitleContainer}>
+                <Text style={styles.subtitleText}>{currentSubtitleText}</Text>
+              </View>
+            )}
+            
             {/* Custom Controls Overlay - fades in/out */}
             {showControls && (
               <Animated.View style={[styles.controlsOverlay, { opacity: controlsOpacity }]}>
-                {/* Top Bar - Back and CC */}
+                {/* Top Bar - Back, Title, CC, Next */}
                 <View style={styles.topControls}>
-                  <TouchableOpacity 
-                    style={styles.controlButton} 
-                    onPress={() => router.back()}
-                  >
+                  <TouchableOpacity style={styles.controlButton} onPress={handleBack}>
                     <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
                   </TouchableOpacity>
+                  
+                  <Text style={styles.titleText} numberOfLines={1}>{title || 'Playing'}</Text>
                   
                   <View style={styles.topRightControls}>
                     <TouchableOpacity 
@@ -707,10 +798,13 @@ export default function PlayerScreen() {
                       <Ionicons name="text" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
                     </TouchableOpacity>
                     
-                    <TouchableOpacity 
-                      style={styles.controlButton}
-                      onPress={openInExternalPlayer}
-                    >
+                    {nextEpisodeId && (
+                      <TouchableOpacity style={styles.controlButton} onPress={playNextEpisode}>
+                        <Ionicons name="play-skip-forward" size={24} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    )}
+                    
+                    <TouchableOpacity style={styles.controlButton} onPress={openInExternalPlayer}>
                       <Ionicons name="open-outline" size={24} color="#FFFFFF" />
                     </TouchableOpacity>
                   </View>
@@ -718,15 +812,8 @@ export default function PlayerScreen() {
                 
                 {/* Center Play/Pause */}
                 <View style={styles.centerControls}>
-                  <TouchableOpacity 
-                    style={styles.playPauseButton}
-                    onPress={togglePlayPause}
-                  >
-                    <Ionicons 
-                      name={isPlaying ? "pause" : "play"} 
-                      size={50} 
-                      color="#FFFFFF" 
-                    />
+                  <TouchableOpacity style={styles.playPauseButton} onPress={togglePlayPause}>
+                    <Ionicons name={isPlaying ? "pause" : "play"} size={50} color="#FFFFFF" />
                   </TouchableOpacity>
                 </View>
                 
@@ -734,7 +821,7 @@ export default function PlayerScreen() {
                 <View style={styles.bottomControls}>
                   <Text style={styles.timeText}>{formatTime(position)}</Text>
                   <View style={styles.progressBarContainer}>
-                    <View style={[styles.progressBar, { width: `${(position / duration) * 100}%` }]} />
+                    <View style={[styles.progressBarFill, { width: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
                   </View>
                   <Text style={styles.timeText}>{formatTime(duration)}</Text>
                 </View>
@@ -760,33 +847,41 @@ export default function PlayerScreen() {
               </TouchableOpacity>
             </View>
             
-            <FlatList
-              data={[{ id: 'off', url: '', lang: 'off', langName: 'Off' }, ...subtitles]}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.subtitleItem,
-                    (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemActive
-                  ]}
-                  onPress={() => {
-                    setSelectedSubtitle(item.lang === 'off' ? null : item.url);
-                    setShowSubtitlePicker(false);
-                  }}
-                >
-                  <Text style={[
-                    styles.subtitleItemText,
-                    (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemTextActive
-                  ]}>
-                    {item.langName}
-                  </Text>
-                  {(item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && (
-                    <Ionicons name="checkmark" size={20} color="#B8A05C" />
-                  )}
-                </TouchableOpacity>
-              )}
-              style={styles.subtitleList}
-            />
+            {subtitles.length === 0 ? (
+              <View style={styles.noSubtitlesContainer}>
+                <Ionicons name="text-outline" size={48} color="#666" />
+                <Text style={styles.noSubtitlesText}>No subtitles available</Text>
+                <Text style={styles.noSubtitlesHint}>Subtitles will appear here when available</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={[{ id: 'off', url: '', lang: 'off', langName: 'Off' }, ...subtitles]}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.subtitleItem,
+                      (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemActive
+                    ]}
+                    onPress={() => {
+                      setSelectedSubtitle(item.lang === 'off' ? null : item.url);
+                      setShowSubtitlePicker(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.subtitleItemText,
+                      (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemTextActive
+                    ]}>
+                      {item.langName}
+                    </Text>
+                    {(item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && (
+                      <Ionicons name="checkmark" size={20} color="#B8A05C" />
+                    )}
+                  </TouchableOpacity>
+                )}
+                style={styles.subtitleList}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -797,6 +892,16 @@ export default function PlayerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#000',
+  },
+  videoContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  videoPlayer: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
     backgroundColor: '#000',
   },
   hevcWarningBanner: {
@@ -818,48 +923,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
     flex: 1,
-  },
-  header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    zIndex: 100,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginHorizontal: 12,
-  },
-  placeholder: {
-    width: 40,
-  },
-  webview: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  videoPlayer: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#000',
   },
   loadingOverlay: {
     position: 'absolute',
@@ -883,7 +946,7 @@ const styles = StyleSheet.create({
     width: '80%',
     alignItems: 'center',
   },
-  progressBar: {
+  progressBarBg: {
     width: '100%',
     height: 4,
     backgroundColor: '#333',
@@ -924,54 +987,42 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   button: {
-    backgroundColor: '#B8A05C',
+    backgroundColor: '#333',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
   },
-  statsOverlay: {
+  // Subtitle display
+  subtitleContainer: {
     position: 'absolute',
-    bottom: 20,
-    left: 0,
-    right: 0,
+    bottom: 80,
+    left: 20,
+    right: 20,
     alignItems: 'center',
-    zIndex: 60,
+    zIndex: 90,
   },
-  statsText: {
-    color: '#888',
-    fontSize: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  externalPlayerButton: {
-    position: 'absolute',
-    top: 70,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(184, 160, 92, 0.9)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    zIndex: 100,
-  },
-  externalPlayerText: {
+  subtitleText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 18,
     fontWeight: '600',
-    marginLeft: 6,
+    textAlign: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    textShadowColor: '#000',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
-  videoContainer: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
+  // Controls overlay
   webControlsOverlay: {
     position: 'absolute',
     top: 16,
@@ -993,6 +1044,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
   },
+  titleText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginHorizontal: 12,
+    textAlign: 'center',
+  },
   topRightControls: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1004,7 +1063,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 12,
+    marginLeft: 8,
   },
   ccActive: {
     backgroundColor: 'rgba(184, 160, 92, 0.5)',
@@ -1041,12 +1100,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 2,
     marginHorizontal: 12,
+    overflow: 'hidden',
   },
-  playerProgressBar: {
+  progressBarFill: {
     height: '100%',
     backgroundColor: '#B8A05C',
     borderRadius: 2,
   },
+  // Subtitle modal
   subtitleModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -1094,5 +1155,20 @@ const styles = StyleSheet.create({
   subtitleItemTextActive: {
     color: '#B8A05C',
     fontWeight: '600',
+  },
+  noSubtitlesContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noSubtitlesText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+  },
+  noSubtitlesHint: {
+    color: '#888',
+    fontSize: 14,
+    marginTop: 8,
   },
 });
