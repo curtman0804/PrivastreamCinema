@@ -1392,6 +1392,9 @@ const styles = StyleSheet.create({
   ccActive: {
     backgroundColor: 'rgba(184, 160, 92, 0.5)',
   },
+  castActive: {
+    backgroundColor: 'rgba(184, 160, 92, 0.5)',
+  },
   centerControls: {
     flex: 1,
     justifyContent: 'center',
