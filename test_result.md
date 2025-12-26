@@ -204,10 +204,34 @@ backend:
           7. ffmpeg optimization: copy codec for MP4, zerolatency for MKV
           8. Increased cache to 128MB, 8 async IO threads
 
+  - task: "Subtitles API (Series Episodes)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "User reported 'No subtitles available' for series episodes"
+      - working: true
+        agent: "main"
+        comment: |
+          FIXED: Subtitles for series episodes now working!
+          Root cause: The subtitles endpoint `/api/subtitles/{content_type}/{content_id}` was using 
+          `{content_id}` instead of `{content_id:path}`. This meant episode IDs like `tt4574334:1:1` 
+          were being truncated to just `tt4574334` because FastAPI interpreted the colons as path separators.
+          
+          Fix: Changed endpoint path to `/api/subtitles/{content_type}/{content_id:path}` to properly 
+          handle the colon-delimited episode format.
+          
+          Tested: GET /api/subtitles/series/tt4574334:1:1 now returns 35 subtitle options.
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 
 test_plan:
