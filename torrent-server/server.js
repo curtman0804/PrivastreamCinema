@@ -120,7 +120,11 @@ app.get('/stream/:infoHash', (req, res) => {
   let magnetURI = `magnet:?xt=urn:btih:${infoHash}`;
   trackers.forEach(t => { magnetURI += `&tr=${encodeURIComponent(t)}`; });
 
-  console.log('Stream request for:', infoHash);
+  // Get fileIdx and filename from query params for specific file selection
+  const requestedFileIdx = req.query.fileIdx !== undefined ? parseInt(req.query.fileIdx, 10) : null;
+  const requestedFilename = req.query.filename || null;
+
+  console.log('Stream request for:', infoHash, 'fileIdx:', requestedFileIdx, 'filename:', requestedFilename);
 
   // Check if torrent already added using our Map first
   let torrent = torrents.get(infoHashLower);
@@ -131,12 +135,48 @@ app.get('/stream/:infoHash', (req, res) => {
   console.log('Torrent from storage:', torrent ? 'found' : 'not found');
 
   const handleTorrent = (torrent) => {
-    // Find largest video file
-    const file = torrent.files.reduce((largest, file) => {
-      const isVideo = /\.(mp4|mkv|avi|webm|mov|m4v|ts)$/i.test(file.name);
-      if (!isVideo) return largest;
-      return (!largest || file.length > largest.length) ? file : largest;
-    }, null);
+    let file = null;
+    
+    // Method 1: Select by fileIdx if provided
+    if (requestedFileIdx !== null && requestedFileIdx >= 0 && requestedFileIdx < torrent.files.length) {
+      file = torrent.files[requestedFileIdx];
+      console.log('Selected file by fileIdx:', requestedFileIdx, '->', file?.name);
+    }
+    
+    // Method 2: Select by filename match if provided
+    if (!file && requestedFilename) {
+      // Try exact match first
+      file = torrent.files.find(f => f.name === requestedFilename);
+      // Try partial match (filename might be truncated)
+      if (!file) {
+        const searchName = requestedFilename.toLowerCase();
+        file = torrent.files.find(f => f.name.toLowerCase().includes(searchName) || searchName.includes(f.name.toLowerCase()));
+      }
+      // Try matching the episode pattern from filename
+      if (!file) {
+        const episodeMatch = requestedFilename.match(/S(\d{1,2})E(\d{1,2})/i);
+        if (episodeMatch) {
+          const episodePattern = new RegExp(`S0?${parseInt(episodeMatch[1])}E0?${parseInt(episodeMatch[2])}`, 'i');
+          file = torrent.files.find(f => {
+            const isVideo = /\.(mp4|mkv|avi|webm|mov|m4v|ts)$/i.test(f.name);
+            return isVideo && episodePattern.test(f.name);
+          });
+        }
+      }
+      if (file) {
+        console.log('Selected file by filename match:', file.name);
+      }
+    }
+    
+    // Method 3: Fallback to largest video file
+    if (!file) {
+      file = torrent.files.reduce((largest, f) => {
+        const isVideo = /\.(mp4|mkv|avi|webm|mov|m4v|ts)$/i.test(f.name);
+        if (!isVideo) return largest;
+        return (!largest || f.length > largest.length) ? f : largest;
+      }, null);
+      console.log('Selected largest video file as fallback:', file?.name);
+    }
 
     if (!file) {
       console.error('No video file found in torrent');
