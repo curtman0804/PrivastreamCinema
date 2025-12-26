@@ -58,6 +58,23 @@ export default function DetailsScreen() {
     );
   }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
 
+  // Get the next episode data
+  const nextEpisode = useMemo(() => {
+    if (!isEpisodePage || !content?.videos || !episodeSeason || !episodeNumber) return null;
+    
+    // First try to find next episode in the same season
+    const sameSeasonNext = content.videos.find(
+      ep => ep.season === episodeSeason && ep.episode === episodeNumber + 1
+    );
+    if (sameSeasonNext) return sameSeasonNext;
+    
+    // If no more episodes in current season, try first episode of next season
+    const nextSeasonFirst = content.videos.find(
+      ep => ep.season === episodeSeason + 1 && ep.episode === 1
+    );
+    return nextSeasonFirst || null;
+  }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
+
   // Get seasons from episodes
   const seasons = useMemo(() => {
     if (!content?.videos) return [];
