@@ -2545,10 +2545,15 @@ async def remove_from_library(item_type: str, item_id: str, current_user: User =
 TORRENT_SERVER_URL = "http://localhost:8002"
 
 @api_router.post("/stream/start/{info_hash}")
-async def start_stream(info_hash: str, current_user: User = Depends(get_current_user)):
+async def start_stream(
+    info_hash: str, 
+    fileIdx: Optional[int] = None,
+    filename: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
     """Start downloading a torrent via WebTorrent server"""
     try:
-        logger.info(f"Starting torrent download for {info_hash}")
+        logger.info(f"Starting torrent download for {info_hash}, fileIdx={fileIdx}, filename={filename}")
         
         # Trigger the WebTorrent server to start downloading
         # We make a GET request to /stream which adds the torrent
@@ -2557,9 +2562,19 @@ async def start_stream(info_hash: str, current_user: User = Depends(get_current_
             try:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
                     # Make a request to trigger torrent addition
-                    # The stream endpoint will add the torrent and start downloading
+                    # Pass fileIdx and filename as query params if provided
+                    params = {}
+                    if fileIdx is not None:
+                        params['fileIdx'] = fileIdx
+                    if filename:
+                        params['filename'] = filename
+                    
+                    url = f"{TORRENT_SERVER_URL}/stream/{info_hash}"
+                    if params:
+                        url += '?' + '&'.join(f"{k}={v}" for k, v in params.items())
+                    
                     response = await client.get(
-                        f"{TORRENT_SERVER_URL}/stream/{info_hash}",
+                        url,
                         headers={"Range": "bytes=0-1024"}  # Request just first 1KB to trigger start
                     )
                     logger.info(f"Torrent trigger response: {response.status_code}")
