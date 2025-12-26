@@ -143,10 +143,21 @@ export default function DetailsScreen() {
   const handleStreamSelect = async (stream: Stream) => {
     // Get the IMDB ID for subtitles - use baseId for episodes
     const imdbId = baseId || (id as string);
-    const contentTitle = content?.name || 'Video';
+    const contentTitle = currentEpisode 
+      ? `S${episodeSeason}E${episodeNumber} - ${currentEpisode.name || content?.name || 'Video'}`
+      : content?.name || 'Video';
     const cType = type as string || 'movie';
     
     console.log('[DETAILS] handleStreamSelect - passing to player:', { cType, imdbId, contentTitle });
+    
+    // Build next episode ID if available
+    const nextEpisodeData = nextEpisode ? {
+      nextEpisodeId: `${baseId}:${nextEpisode.season}:${nextEpisode.episode}`,
+      nextEpisodeTitle: `S${nextEpisode.season}E${nextEpisode.episode} - ${nextEpisode.name || 'Next Episode'}`,
+      seriesId: baseId || id,
+      season: String(episodeSeason),
+      episode: String(episodeNumber),
+    } : {};
     
     // Build fallback streams list (other streams of the same content)
     const buildFallbackUrls = async (): Promise<string[]> => {
