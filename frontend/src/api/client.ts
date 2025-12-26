@@ -478,19 +478,54 @@ export const api = {
     },
     
     fetchTPBStreams: async (type: string, id: string): Promise<Stream[]> => {
-      // For web: try multiple CORS proxy approaches
-      // For mobile: direct fetch (no CORS restrictions)
-      const isWeb = Platform.OS === 'web';
+      // Use allorigins proxy for ALL platforms - direct fetch is blocked by Cloudflare
       const TPB_BASE = 'https://thepiratebay-plus.strem.fun';
       const tpbUrl = `${TPB_BASE}/stream/${type}/${id}.json`;
       
       try {
         let data: any;
         
-        if (isWeb) {
-          // Try multiple approaches for web
-          
-          // Approach 1: Try backend proxy first
+        // Approach 1: Try allorigins (works for both web and mobile)
+        try {
+          console.log(`[TPB+] Trying allorigins proxy...`);
+          const allOriginsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(tpbUrl)}`;
+          const response = await fetch(allOriginsUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          });
+          if (response.ok) {
+            const result = await response.json();
+            if (result?.streams?.length > 0) {
+              console.log(`[TPB+] allorigins success: ${result.streams.length} streams`);
+              data = result;
+            }
+          }
+        } catch (e: any) {
+          console.log(`[TPB+] allorigins failed: ${e.message || e}`);
+        }
+        
+        // Approach 2: Try direct fetch as fallback (may work on some mobile networks)
+        if (!data?.streams?.length) {
+          try {
+            console.log(`[TPB+] Trying direct fetch...`);
+            const response = await fetch(tpbUrl, {
+              method: 'GET',
+              headers: { 'Accept': 'application/json' },
+            });
+            if (response.ok) {
+              const result = await response.json();
+              if (result?.streams?.length > 0) {
+                console.log(`[TPB+] Direct fetch success: ${result.streams.length} streams`);
+                data = result;
+              }
+            }
+          } catch (e: any) {
+            console.log(`[TPB+] Direct fetch failed: ${e.message || e}`);
+          }
+        }
+        
+        // Approach 3: Try backend proxy as last resort
+        if (!data?.streams?.length) {
           try {
             console.log(`[TPB+] Trying backend proxy...`);
             const response = await apiClient.get(`/api/addon-proxy/tpb/${type}/${id}`);
@@ -498,56 +533,13 @@ export const api = {
               console.log(`[TPB+] Backend proxy success: ${response.data.streams.length} streams`);
               data = response.data;
             }
-          } catch (e) {
-            console.log(`[TPB+] Backend proxy failed`);
+          } catch (e: any) {
+            console.log(`[TPB+] Backend proxy failed: ${e.message || e}`);
           }
-          
-          // Approach 2: Try public CORS proxy (corsproxy.io)
-          if (!data?.streams?.length) {
-            try {
-              console.log(`[TPB+] Trying corsproxy.io...`);
-              const corsProxyUrl = `https://corsproxy.io/?${encodeURIComponent(tpbUrl)}`;
-              const response = await fetch(corsProxyUrl, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-              });
-              if (response.ok) {
-                const result = await response.json();
-                if (result?.streams?.length > 0) {
-                  console.log(`[TPB+] corsproxy.io success: ${result.streams.length} streams`);
-                  data = result;
-                }
-              }
-            } catch (e) {
-              console.log(`[TPB+] corsproxy.io failed`);
-            }
-          }
-          
-          // Approach 3: Try allorigins
-          if (!data?.streams?.length) {
-            try {
-              console.log(`[TPB+] Trying allorigins...`);
-              const allOriginsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(tpbUrl)}`;
-              const response = await fetch(allOriginsUrl, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-              });
-              if (response.ok) {
-                const result = await response.json();
-                if (result?.streams?.length > 0) {
-                  console.log(`[TPB+] allorigins success: ${result.streams.length} streams`);
-                  data = result;
-                }
-              }
-            } catch (e) {
-              console.log(`[TPB+] allorigins failed`);
-            }
-          }
-          
-        } else {
-          // Direct fetch on mobile (no CORS)
-          console.log(`[TPB+] Direct fetch: ${tpbUrl}`);
-          const response = await fetch(tpbUrl, {
+        }
+        
+        const rawStreams = data?.streams || [];
+        console.log(`[TPB+] Raw streams count: ${rawStreams.length}`);
             method: 'GET',
             headers: { 'Accept': 'application/json' },
           });
