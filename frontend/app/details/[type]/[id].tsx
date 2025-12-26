@@ -233,6 +233,7 @@ export default function DetailsScreen() {
     
     if (stream.infoHash) {
       // Torrent stream - use torrent player
+      // Pass fileIdx if available (for selecting specific episode in season packs)
       router.push({
         pathname: '/player',
         params: { 
@@ -240,6 +241,8 @@ export default function DetailsScreen() {
           title: contentTitle,
           contentType: cType,
           contentId: imdbId,
+          fileIdx: stream.fileIdx !== undefined ? String(stream.fileIdx) : '',
+          filename: stream.filename || '',
           ...nextEpisodeData,
         },
       });
