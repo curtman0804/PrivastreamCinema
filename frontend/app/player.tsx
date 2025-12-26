@@ -31,6 +31,27 @@ if (Platform.OS !== 'web') {
   }
 }
 
+// Conditionally import Google Cast (only available in native builds)
+let CastButton: any = null;
+let GoogleCast: any = null;
+let useCastState: any = null;
+let useRemoteMediaClient: any = null;
+let CastState: any = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    const googleCastModule = require('react-native-google-cast');
+    CastButton = googleCastModule.CastButton;
+    GoogleCast = googleCastModule.default;
+    useCastState = googleCastModule.useCastState;
+    useRemoteMediaClient = googleCastModule.useRemoteMediaClient;
+    CastState = googleCastModule.CastState;
+    console.log('[CAST] Google Cast module loaded successfully');
+  } catch (e) {
+    console.log('[CAST] Google Cast not available (expected in Expo Go/web)');
+  }
+}
+
 const { width, height } = Dimensions.get('window');
 
 // Check if title suggests HEVC/x265 codec (not supported on most web browsers)
