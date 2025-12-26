@@ -225,6 +225,7 @@ export default function DetailsScreen() {
           contentType: cType,
           contentId: imdbId,
           fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks]),
+          ...nextEpisodeData,
         },
       });
       return;
@@ -239,6 +240,7 @@ export default function DetailsScreen() {
           title: contentTitle,
           contentType: cType,
           contentId: imdbId,
+          ...nextEpisodeData,
         },
       });
     } else if (stream.url) {
@@ -251,6 +253,7 @@ export default function DetailsScreen() {
           isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
           contentId: imdbId,
+          ...nextEpisodeData,
         },
       });
     }
