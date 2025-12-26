@@ -967,7 +967,7 @@ export default function PlayerScreen() {
         visible={showNextEpisodeModal}
         transparent
         animationType="fade"
-        onRequestClose={handleGoBack}
+        onRequestClose={dismissCreditsPopup}
       >
         <View style={styles.nextEpisodeModalOverlay}>
           <View style={styles.nextEpisodeModal}>
@@ -986,11 +986,11 @@ export default function PlayerScreen() {
             
             <View style={styles.nextEpisodeButtons}>
               <TouchableOpacity 
-                style={styles.goBackButton}
-                onPress={handleGoBack}
+                style={styles.watchCreditsButton}
+                onPress={dismissCreditsPopup}
               >
-                <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
-                <Text style={styles.goBackButtonText}>Go Back</Text>
+                <Ionicons name="eye" size={20} color="#FFFFFF" />
+                <Text style={styles.watchCreditsButtonText}>Watch Credits</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -998,6 +998,19 @@ export default function PlayerScreen() {
                 onPress={playNextEpisode}
               >
                 <Ionicons name="play" size={20} color="#000" />
+                <Text style={styles.playNextButtonText}>Play Next</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.goBackLink}
+              onPress={handleGoBack}
+            >
+              <Text style={styles.goBackLinkText}>Go Back to Stream Selection</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
                 <Text style={styles.playNextButtonText}>Play Next</Text>
               </TouchableOpacity>
             </View>
