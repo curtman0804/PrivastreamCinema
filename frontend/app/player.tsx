@@ -330,6 +330,18 @@ export default function PlayerScreen() {
     }
   }, [nextEpisodeId, contentType, router, showNextEpisodeModal, showCreditsPopup]);
   
+  // Dismiss credits popup (keep watching)
+  const dismissCreditsPopup = () => {
+    // Clear countdown
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+    setShowNextEpisodeModal(false);
+    // Reset credits shown so it can show again at actual end
+    creditsShownRef.current = false;
+  };
+  
   // Play next episode
   const playNextEpisode = () => {
     // Clear countdown
