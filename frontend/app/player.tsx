@@ -216,17 +216,20 @@ export default function PlayerScreen() {
     }
   };
   
-  // Update current subtitle based on position
+  // Update current subtitle based on position (with offset adjustment)
   useEffect(() => {
     if (subtitleCues.length > 0) {
+      // Apply offset: positive offset = subtitles appear later (subtract from position)
+      // negative offset = subtitles appear earlier (add to position)
+      const adjustedPosition = position - subtitleOffset;
       const currentCue = subtitleCues.find(
-        cue => position >= cue.start && position <= cue.end
+        cue => adjustedPosition >= cue.start && adjustedPosition <= cue.end
       );
       setCurrentSubtitleText(currentCue?.text || '');
     } else {
       setCurrentSubtitleText('');
     }
-  }, [position, subtitleCues]);
+  }, [position, subtitleCues, subtitleOffset]);
   
   // Load subtitle when selected
   useEffect(() => {
