@@ -345,9 +345,7 @@ export const api = {
     },
     
     fetchTorrentioStreams: async (type: string, id: string): Promise<Stream[]> => {
-      // For web: try multiple CORS proxy approaches
-      // For mobile: direct fetch (no CORS restrictions)
-      const isWeb = Platform.OS === 'web';
+      // Use allorigins proxy for ALL platforms - direct fetch is blocked by Cloudflare
       const TORRENTIO_BASE = 'https://torrentio.strem.fun';
       const CONFIG = 'sort=seeders|qualityfilter=480p,scr,cam';
       const torrentioUrl = `${TORRENTIO_BASE}/${CONFIG}/stream/${type}/${id}.json`;
@@ -355,10 +353,47 @@ export const api = {
       try {
         let data: any;
         
-        if (isWeb) {
-          // Try multiple approaches for web
-          
-          // Approach 1: Try backend proxy first
+        // Approach 1: Try allorigins (works for both web and mobile)
+        try {
+          console.log(`[TORRENTIO] Trying allorigins proxy...`);
+          const allOriginsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(torrentioUrl)}`;
+          const response = await fetch(allOriginsUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          });
+          if (response.ok) {
+            const result = await response.json();
+            if (result?.streams?.length > 0) {
+              console.log(`[TORRENTIO] allorigins success: ${result.streams.length} streams`);
+              data = result;
+            }
+          }
+        } catch (e: any) {
+          console.log(`[TORRENTIO] allorigins failed: ${e.message || e}`);
+        }
+        
+        // Approach 2: Try direct fetch as fallback (may work on some mobile networks)
+        if (!data?.streams?.length) {
+          try {
+            console.log(`[TORRENTIO] Trying direct fetch...`);
+            const response = await fetch(torrentioUrl, {
+              method: 'GET',
+              headers: { 'Accept': 'application/json' },
+            });
+            if (response.ok) {
+              const result = await response.json();
+              if (result?.streams?.length > 0) {
+                console.log(`[TORRENTIO] Direct fetch success: ${result.streams.length} streams`);
+                data = result;
+              }
+            }
+          } catch (e: any) {
+            console.log(`[TORRENTIO] Direct fetch failed: ${e.message || e}`);
+          }
+        }
+        
+        // Approach 3: Try backend proxy as last resort
+        if (!data?.streams?.length) {
           try {
             console.log(`[TORRENTIO] Trying backend proxy...`);
             const response = await apiClient.get(`/api/addon-proxy/torrentio/${type}/${id}`);
@@ -366,48 +401,10 @@ export const api = {
               console.log(`[TORRENTIO] Backend proxy success: ${response.data.streams.length} streams`);
               data = response.data;
             }
-          } catch (e) {
-            console.log(`[TORRENTIO] Backend proxy failed`);
+          } catch (e: any) {
+            console.log(`[TORRENTIO] Backend proxy failed: ${e.message || e}`);
           }
-          
-          // Approach 2: Try public CORS proxy (corsproxy.io)
-          if (!data?.streams?.length) {
-            try {
-              console.log(`[TORRENTIO] Trying corsproxy.io...`);
-              const corsProxyUrl = `https://corsproxy.io/?${encodeURIComponent(torrentioUrl)}`;
-              const response = await fetch(corsProxyUrl, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-              });
-              if (response.ok) {
-                const result = await response.json();
-                if (result?.streams?.length > 0) {
-                  console.log(`[TORRENTIO] corsproxy.io success: ${result.streams.length} streams`);
-                  data = result;
-                }
-              }
-            } catch (e) {
-              console.log(`[TORRENTIO] corsproxy.io failed`);
-            }
-          }
-          
-          // Approach 3: Try allorigins
-          if (!data?.streams?.length) {
-            try {
-              console.log(`[TORRENTIO] Trying allorigins...`);
-              const allOriginsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(torrentioUrl)}`;
-              const response = await fetch(allOriginsUrl, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-              });
-              if (response.ok) {
-                const result = await response.json();
-                if (result?.streams?.length > 0) {
-                  console.log(`[TORRENTIO] allorigins success: ${result.streams.length} streams`);
-                  data = result;
-                }
-              }
-            } catch (e) {
+        }
               console.log(`[TORRENTIO] allorigins failed`);
             }
           }
