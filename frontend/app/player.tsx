@@ -1350,6 +1350,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
+    marginBottom: 16,
+  },
+  watchCreditsButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#333',
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  watchCreditsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   goBackButton: {
     flex: 1,
@@ -1366,6 +1383,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  goBackLink: {
+    paddingVertical: 8,
+  },
+  goBackLinkText: {
+    color: '#888',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
   playNextButton: {
     flex: 1,
