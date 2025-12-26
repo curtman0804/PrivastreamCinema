@@ -998,7 +998,7 @@ export default function PlayerScreen() {
             </Text>
             
             <Text style={styles.countdownText}>
-              Returning to stream selection in {countdown}s
+              Playing next episode in {countdown}s
             </Text>
             
             <View style={styles.nextEpisodeButtons}>
@@ -1015,7 +1015,7 @@ export default function PlayerScreen() {
                 onPress={playNextEpisode}
               >
                 <Ionicons name="play" size={20} color="#000" />
-                <Text style={styles.playNextButtonText}>Play Next</Text>
+                <Text style={styles.playNextButtonText}>Play Now</Text>
               </TouchableOpacity>
             </View>
             
