@@ -15,7 +15,7 @@ const getBaseUrl = () => {
     return backendUrl;
   }
   // Fallback - try the packager hostname
-  return 'https://streamingnest.preview.emergentagent.com';
+  return 'https://privastream-10.preview.emergentagent.com';
 };
 
 const BASE_URL = getBaseUrl();
