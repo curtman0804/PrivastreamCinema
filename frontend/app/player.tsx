@@ -65,6 +65,9 @@ export default function PlayerScreen() {
     contentType, 
     contentId,
     fallbackStreams,
+    // File selection for torrents
+    fileIdx,
+    filename,
     // Next episode data
     nextEpisodeId,
     nextEpisodeTitle,
@@ -80,6 +83,8 @@ export default function PlayerScreen() {
     contentType?: string;
     contentId?: string;
     fallbackStreams?: string;
+    fileIdx?: string;
+    filename?: string;
     nextEpisodeId?: string;
     nextEpisodeTitle?: string;
     seriesId?: string;
