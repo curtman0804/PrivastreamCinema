@@ -313,6 +313,19 @@ export const api = {
           
           const beforeFilter = allStreams.length;
           allStreams = allStreams.filter((s: Stream) => {
+            // If Torrentio/TPB+ provided a specific filename, check that first
+            // Torrentio selects the correct episode file from season packs
+            if (s.filename) {
+              const filenameUpper = s.filename.toUpperCase();
+              // Check if filename contains correct episode marker
+              const filenamePattern = new RegExp(`S0?${sInt}E0?${eInt}`, 'i');
+              if (filenamePattern.test(s.filename)) {
+                console.log(`[FILTER] Approved via filename: ${s.filename.substring(0, 60)}`);
+                return true;
+              }
+            }
+            
+            // Fallback to checking title
             const combined = `${s.title || ''} ${s.name || ''}`;
             const result = isCorrectEpisode(combined);
             if (!result) {
