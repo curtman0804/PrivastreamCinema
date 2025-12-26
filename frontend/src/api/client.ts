@@ -577,14 +577,20 @@ export const api = {
                          name.includes('1080') ? '1080p' :
                          name.includes('720') ? '720p' : 'SD';
           
+          // Get the specific episode filename from behaviorHints (TPB+ may provide this)
+          const filename = stream.behaviorHints?.filename || '';
+          const fileIdx = stream.fileIdx;
+          
           return {
             name: `🏴‍☠️ ${name}`,
             title: title,
             infoHash: infoHash?.toLowerCase(),
-            sources: ['tracker:udp://tracker.opentrackr.org:1337/announce'],
+            sources: stream.sources || ['tracker:udp://tracker.opentrackr.org:1337/announce'],
             addon: 'ThePirateBay+',
             seeders: seeders,
             quality: quality,
+            filename: filename,  // Specific episode file
+            fileIdx: fileIdx,    // Index of the file in the torrent
           };
         }).filter((s: any) => s.infoHash);
         
