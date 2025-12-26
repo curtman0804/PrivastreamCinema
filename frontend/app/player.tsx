@@ -917,6 +917,49 @@ export default function PlayerScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Next Episode Modal */}
+      <Modal
+        visible={showNextEpisodeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={handleGoBack}
+      >
+        <View style={styles.nextEpisodeModalOverlay}>
+          <View style={styles.nextEpisodeModal}>
+            <View style={styles.nextEpisodeHeader}>
+              <Ionicons name="play-skip-forward" size={32} color="#B8A05C" />
+              <Text style={styles.nextEpisodeTitle}>Up Next</Text>
+            </View>
+            
+            <Text style={styles.nextEpisodeInfo}>
+              {nextEpisodeTitle || 'Next Episode'}
+            </Text>
+            
+            <Text style={styles.countdownText}>
+              Returning to stream selection in {countdown}s
+            </Text>
+            
+            <View style={styles.nextEpisodeButtons}>
+              <TouchableOpacity 
+                style={styles.goBackButton}
+                onPress={handleGoBack}
+              >
+                <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
+                <Text style={styles.goBackButtonText}>Go Back</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.playNextButton}
+                onPress={playNextEpisode}
+              >
+                <Ionicons name="play" size={20} color="#000" />
+                <Text style={styles.playNextButtonText}>Play Next</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
