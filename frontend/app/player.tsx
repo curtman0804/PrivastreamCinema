@@ -1389,6 +1389,71 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
   },
+  // Subtitle Sync Controls
+  syncControlsContainer: {
+    backgroundColor: '#252525',
+    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+  },
+  syncLabel: {
+    color: '#B8A05C',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  syncControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  syncButton: {
+    backgroundColor: '#333',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 50,
+    alignItems: 'center',
+  },
+  syncButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  syncValueContainer: {
+    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 70,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#B8A05C',
+  },
+  syncValue: {
+    color: '#B8A05C',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  resetSyncButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  resetSyncText: {
+    color: '#888',
+    fontSize: 12,
+    textAlign: 'center',
+    textDecorationLine: 'underline',
+  },
+  syncHint: {
+    color: '#666',
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 8,
+  },
   // Next Episode Modal
   nextEpisodeModalOverlay: {
     flex: 1,
