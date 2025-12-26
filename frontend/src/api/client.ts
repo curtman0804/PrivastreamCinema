@@ -116,7 +116,13 @@ export interface Stream {
   behaviorHints?: {
     bingeGroup?: string;
     notWebReady?: boolean;
+    filename?: string;
   };
+  filename?: string;
+  fileIdx?: number;
+  addon?: string;
+  seeders?: number;
+  quality?: string;
 }
 
 export interface LibraryResponse {
