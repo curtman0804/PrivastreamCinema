@@ -290,17 +290,17 @@ export default function PlayerScreen() {
       router.back();
     }
   }, [nextEpisodeId, contentType, router]);
-        { cancelable: false }
-      );
-    } else {
-      // No next episode, go back to previous screen
-      router.back();
-    }
-  }, [nextEpisodeId, nextEpisodeTitle, contentType]);
   
   // Play next episode
-  const playNextEpisode = async () => {
-    if (!nextEpisodeId || !seriesId) {
+  const playNextEpisode = () => {
+    // Clear countdown
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+    setShowNextEpisodeModal(false);
+    
+    if (!nextEpisodeId) {
       router.back();
       return;
     }
@@ -312,6 +312,26 @@ export default function PlayerScreen() {
       pathname: `/details/series/${nextEpisodeId}`,
     });
   };
+  
+  // Go back (cancel next episode)
+  const handleGoBack = () => {
+    // Clear countdown
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+    setShowNextEpisodeModal(false);
+    router.back();
+  };
+  
+  // Cleanup countdown on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+      }
+    };
+  }, []);
   
   // Toggle play/pause
   const togglePlayPause = async () => {
