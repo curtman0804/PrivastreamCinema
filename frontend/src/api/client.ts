@@ -696,6 +696,24 @@ export const api = {
       await apiClient.delete(`/api/admin/users/${userId}`);
     },
   },
+  subtitles: {
+    get: async (contentType: string, contentId: string): Promise<{
+      subtitles: Array<{
+        id: string;
+        url: string;
+        lang: string;
+        langName: string;
+      }>;
+    }> => {
+      try {
+        const response = await apiClient.get(`/api/subtitles/${contentType}/${contentId}`);
+        return response.data;
+      } catch (err) {
+        console.log('[API] Subtitles fetch error:', err);
+        return { subtitles: [] };
+      }
+    },
+  },
   stream: {
     start: async (infoHash: string, fileIdx?: number, filename?: string): Promise<{ status: string; info_hash: string }> => {
       // Pass fileIdx and filename to tell the torrent server which file to play
