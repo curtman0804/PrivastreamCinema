@@ -138,6 +138,10 @@ export default function PlayerScreen() {
   const [currentSubtitleText, setCurrentSubtitleText] = useState<string>('');
   const [subtitleOffset, setSubtitleOffset] = useState<number>(0); // Offset in ms (positive = subtitles appear later)
   
+  // Google Cast state
+  const [isCasting, setIsCasting] = useState(false);
+  const [castAvailable, setCastAvailable] = useState(false);
+  
   // Custom player controls state
   const [showControls, setShowControls] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
