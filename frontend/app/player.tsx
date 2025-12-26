@@ -167,6 +167,75 @@ export default function PlayerScreen() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
   
+  // Handle casting to Chromecast/Google Cast device
+  const handleCastToDevice = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      Alert.alert('Cast Not Available', 'Casting is only available in the mobile app. Please install the APK on your device to use casting.');
+      return;
+    }
+    
+    if (!GoogleCast) {
+      Alert.alert('Cast Not Available', 'Google Cast is not available. Please use a production build of the app.');
+      return;
+    }
+    
+    try {
+      console.log('[CAST] Attempting to cast:', streamUrl);
+      
+      // Get the cast session
+      const castSession = await GoogleCast.getCastSession();
+      
+      if (!castSession) {
+        // Show cast dialog to select device
+        await GoogleCast.showCastDialog();
+        return;
+      }
+      
+      // Prepare media info for casting
+      const mediaInfo = {
+        contentId: streamUrl,
+        contentType: 'video/mp4',
+        streamType: 'BUFFERED',
+        metadata: {
+          type: 'movie',
+          title: title || 'Video',
+          images: [
+            {
+              url: poster || '',
+            }
+          ]
+        }
+      };
+      
+      // Load media to cast device
+      await castSession.loadMedia({
+        mediaInfo,
+        autoplay: true,
+        playPosition: position / 1000, // Convert ms to seconds
+      });
+      
+      setIsCasting(true);
+      console.log('[CAST] Successfully started casting');
+      
+    } catch (error) {
+      console.error('[CAST] Error casting:', error);
+      Alert.alert('Cast Error', 'Failed to cast to device. Please make sure your device is connected to the same network as your Chromecast.');
+    }
+  }, [streamUrl, title, poster, position]);
+  
+  // Check cast availability on mount
+  useEffect(() => {
+    if (GoogleCast && Platform.OS !== 'web') {
+      // Check if casting is available
+      GoogleCast.getCastState().then((state: any) => {
+        console.log('[CAST] Cast state:', state);
+        setCastAvailable(state !== 'NoDevicesAvailable');
+      }).catch((e: any) => {
+        console.log('[CAST] Could not get cast state:', e);
+      });
+    }
+  }, []);
+
   // Parse VTT/SRT subtitle file
   const parseSubtitleFile = async (subtitleUrl: string) => {
     try {
