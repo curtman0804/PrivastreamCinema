@@ -945,6 +945,18 @@ export default function PlayerScreen() {
               </TouchableOpacity>
               
               <View style={styles.topRightControls}>
+                {/* Cast Button */}
+                <TouchableOpacity 
+                  style={[styles.controlButton, isCasting && styles.castActive]}
+                  onPress={handleCastToDevice}
+                >
+                  <Ionicons 
+                    name={isCasting ? "tv" : "tv-outline"} 
+                    size={24} 
+                    color={isCasting ? '#B8A05C' : '#FFFFFF'} 
+                  />
+                </TouchableOpacity>
+                
                 <TouchableOpacity 
                   style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
                   onPress={() => setShowSubtitlePicker(true)}
