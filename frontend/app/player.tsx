@@ -304,20 +304,25 @@ export default function PlayerScreen() {
     setShowNextEpisodeModal(true);
     setCountdown(15); // 15 seconds to decide
     
-    // Start countdown
+    // Start countdown - auto-play next episode when countdown ends
     countdownRef.current = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
-          // Time's up - go back to previous screen
+          // Time's up - AUTO-PLAY NEXT EPISODE
           if (countdownRef.current) clearInterval(countdownRef.current);
           setShowNextEpisodeModal(false);
-          router.back();
+          
+          // Navigate to next episode
+          console.log('[PLAYER] Countdown ended - auto-playing next episode:', nextEpisodeId);
+          router.replace({
+            pathname: `/details/series/${nextEpisodeId}`,
+          });
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-  }, [router]);
+  }, [router, nextEpisodeId]);
   
   // Handle playback end - show modal or go back (fallback for short videos)
   const handlePlaybackEnd = useCallback(() => {
