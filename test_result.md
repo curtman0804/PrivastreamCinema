@@ -338,3 +338,27 @@ agent_communication:
       All backend APIs are working correctly and meet the specified requirements.
       The discover page content organization has been fixed and no longer contains
       the unwanted "Calendar-Videos" or "Last-Videos" sections.
+  - agent: "main"
+    message: |
+      SUBTITLE FIX FOR SERIES EPISODES:
+      
+      Fixed a critical bug where subtitles showed "No subtitles available" for TV series episodes.
+      
+      Root cause:
+      The backend subtitles endpoint `/api/subtitles/{content_type}/{content_id}` was using 
+      a simple path parameter `{content_id}` instead of `{content_id:path}`. This caused
+      episode IDs like `tt4574334:1:1` (Stranger Things S01E01) to be truncated to just 
+      `tt4574334` because FastAPI interpreted the colons as path separators.
+      
+      Fix applied:
+      Changed `/api/subtitles/{content_type}/{content_id}` to `/api/subtitles/{content_type}/{content_id:path}`
+      in /app/backend/server.py line 1757.
+      
+      Also changed the CC button icon:
+      Changed the CC button icon in player.tsx from "text" to "chatbubble-ellipses-outline"
+      for a more intuitive chat bubble appearance.
+      
+      Verification:
+      - Backend test: GET /api/subtitles/series/tt4574334:1:1 returns 35 subtitle options ✅
+      - Frontend logs confirm: "[SUBTITLES] Setting 35 subtitle options" ✅
+      - Chat bubble icon visible in player UI ✅
