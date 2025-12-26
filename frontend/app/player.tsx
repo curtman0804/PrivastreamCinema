@@ -239,8 +239,14 @@ export default function PlayerScreen() {
   
   // Next episode modal state
   const [showNextEpisodeModal, setShowNextEpisodeModal] = useState(false);
-  const [countdown, setCountdown] = useState(10);
+  const [countdown, setCountdown] = useState(15);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  const creditsShownRef = useRef(false); // Track if we've shown the credits popup
+  
+  // Credits detection settings
+  const CREDITS_TIME_REMAINING_MS = 90000; // Show popup when 90 seconds remaining
+  const CREDITS_PERCENTAGE = 0.95; // Or when 95% complete
+  const MIN_DURATION_FOR_CREDITS = 300000; // Only detect credits for videos > 5 minutes
   
   // Handle playback status updates
   const handlePlaybackStatus = (status: AVPlaybackStatus) => {
@@ -261,40 +267,68 @@ export default function PlayerScreen() {
         }
       }
       
-      // Check if playback ended
+      // Credits detection - show "Up Next" popup when credits start
+      const currentDuration = status.durationMillis || 0;
+      const currentPosition = status.positionMillis || 0;
+      const timeRemaining = currentDuration - currentPosition;
+      const percentComplete = currentDuration > 0 ? currentPosition / currentDuration : 0;
+      
+      // Only show credits popup for series with next episode, and only once
+      if (
+        nextEpisodeId && 
+        contentType === 'series' && 
+        !creditsShownRef.current && 
+        !showNextEpisodeModal &&
+        currentDuration > MIN_DURATION_FOR_CREDITS && // Video must be > 5 min
+        (timeRemaining <= CREDITS_TIME_REMAINING_MS || percentComplete >= CREDITS_PERCENTAGE)
+      ) {
+        console.log(`[PLAYER] Credits detected! Time remaining: ${(timeRemaining/1000).toFixed(0)}s, ${(percentComplete*100).toFixed(1)}% complete`);
+        creditsShownRef.current = true;
+        showCreditsPopup();
+      }
+      
+      // Check if playback ended - go back if modal was dismissed
       if (status.didJustFinish) {
         console.log('[PLAYER] Playback ended');
         setIsEnded(true);
-        handlePlaybackEnd();
+        if (!showNextEpisodeModal) {
+          // Modal was dismissed or never shown, go back
+          router.back();
+        }
       }
     }
   };
   
-  // Handle playback end - show modal or go back
+  // Show the credits/next episode popup
+  const showCreditsPopup = useCallback(() => {
+    setShowNextEpisodeModal(true);
+    setCountdown(15); // 15 seconds to decide
+    
+    // Start countdown
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          // Time's up - go back to previous screen
+          if (countdownRef.current) clearInterval(countdownRef.current);
+          setShowNextEpisodeModal(false);
+          router.back();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [router]);
+  
+  // Handle playback end - show modal or go back (fallback for short videos)
   const handlePlaybackEnd = useCallback(() => {
-    if (nextEpisodeId && contentType === 'series') {
-      // Show next episode modal with countdown
-      setShowNextEpisodeModal(true);
-      setCountdown(10);
-      
-      // Start countdown
-      countdownRef.current = setInterval(() => {
-        setCountdown(prev => {
-          if (prev <= 1) {
-            // Time's up - go back to previous screen
-            if (countdownRef.current) clearInterval(countdownRef.current);
-            setShowNextEpisodeModal(false);
-            router.back();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      // No next episode - go back immediately
+    if (nextEpisodeId && contentType === 'series' && !creditsShownRef.current) {
+      // Credits weren't detected (short video), show popup now
+      showCreditsPopup();
+    } else if (!showNextEpisodeModal) {
+      // No next episode or popup was dismissed - go back
       router.back();
     }
-  }, [nextEpisodeId, contentType, router]);
+  }, [nextEpisodeId, contentType, router, showNextEpisodeModal, showCreditsPopup]);
   
   // Play next episode
   const playNextEpisode = () => {
