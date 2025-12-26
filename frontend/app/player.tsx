@@ -1011,12 +1011,6 @@ export default function PlayerScreen() {
           </View>
         </View>
       </Modal>
-                <Text style={styles.playNextButtonText}>Play Next</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
