@@ -313,6 +313,52 @@ export const api = {
           
           const beforeFilter = allStreams.length;
           allStreams = allStreams.filter((s: Stream) => {
+            const titleAndName = `${s.title || ''} ${s.name || ''}`.toUpperCase();
+            
+            // FIRST: Check if title clearly indicates WRONG season
+            // Look for patterns like "Season 4", "S04", "Сезон: 4", etc.
+            const wrongSeasonPatterns = [
+              // English patterns
+              /SEASON\s*(\d+)/gi,
+              /\bS(\d{1,2})\b(?!E)/gi,  // S04 without E (season pack indicator)
+              // Russian patterns
+              /СЕЗОН[:\s]*(\d+)/gi,
+              /СЕЗОНЫ?[:\s]*(\d+)/gi,
+            ];
+            
+            for (const pattern of wrongSeasonPatterns) {
+              let match;
+              pattern.lastIndex = 0; // Reset regex
+              while ((match = pattern.exec(titleAndName)) !== null) {
+                const foundSeason = parseInt(match[1], 10);
+                if (foundSeason !== sInt) {
+                  console.log(`[FILTER] Rejected (wrong season ${foundSeason} in title): ${titleAndName.substring(0, 60)}`);
+                  return false;
+                }
+              }
+            }
+            
+            // Check for multi-season packs in title (e.g., "S01-S04", "Seasons 1 to 3", "S01-03")
+            const multiSeasonPatterns = [
+              /S(\d{1,2})\s*[-–]\s*S?(\d{1,2})(?!E)/gi,  // S01-S04 or S01-04 (without E)
+              /SEASONS?\s*(\d+)\s*(?:TO|[-–])\s*(\d+)/gi,  // Seasons 1 to 3
+              /СЕЗОНЫ?\s*(\d+)\s*[-–]\s*(\d+)/gi,  // Russian season ranges
+            ];
+            
+            for (const pattern of multiSeasonPatterns) {
+              let match;
+              pattern.lastIndex = 0;
+              while ((match = pattern.exec(titleAndName)) !== null) {
+                const startS = parseInt(match[1], 10);
+                const endS = parseInt(match[2], 10);
+                // If our target season is in this range but it's a multi-season pack, reject
+                if (startS !== endS) {
+                  console.log(`[FILTER] Rejected (multi-season pack S${startS}-S${endS}): ${titleAndName.substring(0, 60)}`);
+                  return false;
+                }
+              }
+            }
+            
             // If Torrentio/TPB+ provided a specific filename, check that STRICTLY
             if (s.filename) {
               const filenameUpper = s.filename.toUpperCase();
