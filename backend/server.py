@@ -1754,7 +1754,7 @@ async def get_all_streams(
 
 # ==================== SUBTITLES ====================
 
-@api_router.get("/subtitles/{content_type}/{content_id}")
+@api_router.get("/subtitles/{content_type}/{content_id:path}")
 async def get_subtitles(content_type: str, content_id: str, current_user: User = Depends(get_current_user)):
     """Get subtitles from OpenSubtitles addon"""
     try:
