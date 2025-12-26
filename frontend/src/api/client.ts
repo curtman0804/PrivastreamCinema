@@ -313,19 +313,59 @@ export const api = {
           
           const beforeFilter = allStreams.length;
           allStreams = allStreams.filter((s: Stream) => {
-            // If Torrentio/TPB+ provided a specific filename, check that first
-            // Torrentio selects the correct episode file from season packs
+            // If Torrentio/TPB+ provided a specific filename, check that STRICTLY
             if (s.filename) {
               const filenameUpper = s.filename.toUpperCase();
-              // Check if filename contains correct episode marker
-              const filenamePattern = new RegExp(`S0?${sInt}E0?${eInt}`, 'i');
-              if (filenamePattern.test(s.filename)) {
-                console.log(`[FILTER] Approved via filename: ${s.filename.substring(0, 60)}`);
-                return true;
+              
+              // Check if filename contains the EXACT target episode marker
+              const targetPattern = new RegExp(`S0?${sInt}E0?${eInt}\\b`, 'i');
+              if (!targetPattern.test(s.filename)) {
+                console.log(`[FILTER] Rejected (filename no match): ${s.filename.substring(0, 60)}`);
+                return false;
               }
+              
+              // Now check that the filename doesn't contain OTHER episodes
+              const allEpisodesInFilename: Array<{s: number, e: number}> = [];
+              const sxePattern = /S(\d{1,2})E(\d{1,2})/gi;
+              let match;
+              while ((match = sxePattern.exec(filenameUpper)) !== null) {
+                allEpisodesInFilename.push({ s: parseInt(match[1], 10), e: parseInt(match[2], 10) });
+              }
+              
+              // Check for episode ranges in filename (S01E01-E03 or S01E01-03)
+              const rangeInFilename = /S(\d{1,2})E(\d{1,2})\s*[-–]\s*E?(\d{1,2})/gi;
+              let rangeMatch;
+              while ((rangeMatch = rangeInFilename.exec(filenameUpper)) !== null) {
+                const s = parseInt(rangeMatch[1], 10);
+                const startE = parseInt(rangeMatch[2], 10);
+                const endE = parseInt(rangeMatch[3], 10);
+                // Add all episodes in the range
+                for (let e = startE; e <= endE; e++) {
+                  if (!allEpisodesInFilename.some(ep => ep.s === s && ep.e === e)) {
+                    allEpisodesInFilename.push({ s, e });
+                  }
+                }
+              }
+              
+              // If multiple different episodes found in filename, reject
+              const uniqueEps = allEpisodesInFilename.filter((ep, idx, arr) => 
+                arr.findIndex(e => e.s === ep.s && e.e === ep.e) === idx
+              );
+              
+              if (uniqueEps.length > 1) {
+                // Check if ALL episodes match our target
+                const hasOtherEpisodes = uniqueEps.some(ep => ep.s !== sInt || ep.e !== eInt);
+                if (hasOtherEpisodes) {
+                  console.log(`[FILTER] Rejected (multi-ep filename): ${s.filename.substring(0, 60)}`);
+                  return false;
+                }
+              }
+              
+              console.log(`[FILTER] Approved via filename: ${s.filename.substring(0, 60)}`);
+              return true;
             }
             
-            // Fallback to checking title
+            // No filename - check title strictly
             const combined = `${s.title || ''} ${s.name || ''}`;
             const result = isCorrectEpisode(combined);
             if (!result) {
