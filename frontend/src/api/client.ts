@@ -405,24 +405,6 @@ export const api = {
             console.log(`[TORRENTIO] Backend proxy failed: ${e.message || e}`);
           }
         }
-              console.log(`[TORRENTIO] allorigins failed`);
-            }
-          }
-          
-        } else {
-          // Direct fetch on mobile (no CORS)
-          console.log(`[TORRENTIO] Direct fetch: ${torrentioUrl}`);
-          const response = await fetch(torrentioUrl, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
-          });
-          
-          if (response.ok) {
-            data = await response.json();
-          } else {
-            console.log(`[TORRENTIO] Response status: ${response.status}`);
-          }
-        }
         
         const rawStreams = data?.streams || [];
         console.log(`[TORRENTIO] Raw streams count: ${rawStreams.length}`);
