@@ -335,7 +335,7 @@ export default function PlayerScreen() {
     }
   }, [nextEpisodeId, contentType, router, showNextEpisodeModal, showCreditsPopup]);
   
-  // Dismiss credits popup (keep watching)
+  // Dismiss credits popup (keep watching) - DON'T reset creditsShownRef
   const dismissCreditsPopup = () => {
     // Clear countdown
     if (countdownRef.current) {
@@ -343,8 +343,8 @@ export default function PlayerScreen() {
       countdownRef.current = null;
     }
     setShowNextEpisodeModal(false);
-    // Reset credits shown so it can show again at actual end
-    creditsShownRef.current = false;
+    // Do NOT reset creditsShownRef - we don't want popup to reappear
+    // User chose to watch credits, popup will not show again for this video
   };
   
   // Play next episode
