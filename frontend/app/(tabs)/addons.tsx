@@ -84,6 +84,44 @@ export default function AddonsScreen() {
 
   const [deletingAddonId, setDeletingAddonId] = useState<string | null>(null);
   
+  // Handle sharing addon URL
+  const handleShareAddon = async (addon: Addon) => {
+    const addonUrl = addon.url || '';
+    const addonName = addon.manifest.name;
+    
+    if (!addonUrl) {
+      Alert.alert('No URL', 'This addon does not have a shareable URL.');
+      return;
+    }
+    
+    if (Platform.OS === 'web') {
+      // On web, copy to clipboard
+      try {
+        await navigator.clipboard.writeText(addonUrl);
+        alert(`Addon URL copied to clipboard!\n\n${addonUrl}`);
+      } catch (e) {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = addonUrl;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        alert(`Addon URL copied to clipboard!\n\n${addonUrl}`);
+      }
+    } else {
+      // On mobile, use Share API
+      try {
+        await Share.share({
+          message: `Check out this Stremio addon: ${addonName}\n\n${addonUrl}`,
+          title: `Share ${addonName} Addon`,
+        });
+      } catch (error) {
+        console.log('Share error:', error);
+      }
+    }
+  };
+  
   const handleUninstall = async (addon: Addon) => {
     if (deletingAddonId) return; // Prevent double-tap
     
