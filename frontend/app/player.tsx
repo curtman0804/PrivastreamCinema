@@ -879,7 +879,11 @@ export default function PlayerScreen() {
       {/* Video Player */}
       {streamUrl && !error && !isLoading && (
         Platform.OS === 'web' ? (
-          <View style={styles.videoContainer}>
+          <TouchableOpacity 
+            activeOpacity={1}
+            style={styles.videoContainer}
+            onPress={() => fadeControls(!showControls)}
+          >
             {/* HEVC Warning Banner for Web */}
             {isHEVCContent(title) && (
               <View style={styles.hevcWarningBanner}>
@@ -933,11 +937,12 @@ export default function PlayerScreen() {
                 <Text style={styles.subtitleText}>{currentSubtitleText}</Text>
               </View>
             )}
-            {/* Web Controls Overlay - always visible */}
-            <View style={styles.webControlsOverlay}>
-              <TouchableOpacity style={styles.controlButton} onPress={handleBack}>
-                <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
-              </TouchableOpacity>
+            {/* Web Controls Overlay - fades in/out */}
+            {showControls && (
+              <Animated.View style={[styles.webControlsOverlay, { opacity: controlsOpacity }]}>
+                <TouchableOpacity style={styles.controlButton} onPress={handleBack}>
+                  <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+                </TouchableOpacity>
               
               <View style={styles.topRightControls}>
                 {/* Cast Button */}
