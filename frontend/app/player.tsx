@@ -455,6 +455,11 @@ export default function PlayerScreen() {
           clearTimeout(playbackTimeoutRef.current);
           playbackTimeoutRef.current = null;
         }
+        
+        // Save progress immediately when playback starts (force save)
+        if (status.durationMillis && status.durationMillis > 0) {
+          saveWatchProgress(status.positionMillis, status.durationMillis, true);
+        }
       }
       
       // Resume from saved position if coming from "Continue Watching"
