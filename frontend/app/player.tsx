@@ -99,6 +99,7 @@ export default function PlayerScreen() {
     // Visual assets
     backdrop,
     poster,
+    logo,
   } = useLocalSearchParams<{
     url?: string;
     title?: string;
@@ -117,6 +118,7 @@ export default function PlayerScreen() {
     episode?: string;
     backdrop?: string;
     poster?: string;
+    logo?: string;
   }>();
   const router = useRouter();
   
