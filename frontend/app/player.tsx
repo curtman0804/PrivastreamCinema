@@ -419,17 +419,35 @@ export default function PlayerScreen() {
           clearTimeout(playbackTimeoutRef.current);
           playbackTimeoutRef.current = null;
         }
+      }
+      
+      // Resume from saved position if coming from "Continue Watching"
+      // This runs on every status update until successful
+      if (pendingResumePosition && pendingResumePosition > 0 && !hasResumedRef.current && videoRef.current) {
+        const resumeMs = pendingResumePosition * 1000;
+        const totalDuration = status.durationMillis || 0;
+        const currentPos = status.positionMillis || 0;
         
-        // Resume from saved position if coming from "Continue Watching"
-        if (pendingResumePosition && pendingResumePosition > 0 && videoRef.current) {
-          console.log(`[PLAYER] Resuming from position: ${pendingResumePosition}s`);
-          const resumeMs = pendingResumePosition * 1000;
-          // Only resume if we haven't watched most of it (< 95%)
-          const totalDuration = status.durationMillis || 0;
-          if (totalDuration > 0 && resumeMs < totalDuration * 0.95) {
+        // Only attempt resume if:
+        // 1. We have duration info
+        // 2. We haven't watched most of it (< 95%)
+        // 3. We're not already near the target position
+        if (totalDuration > 0 && resumeMs < totalDuration * 0.95) {
+          const positionDiff = Math.abs(currentPos - resumeMs);
+          // If we're more than 2 seconds away from target, seek
+          if (positionDiff > 2000) {
+            console.log(`[PLAYER] Resuming from position: ${pendingResumePosition}s (current: ${currentPos/1000}s)`);
             videoRef.current.setPositionAsync(resumeMs);
+          } else {
+            // We're at or near the target position, mark as resumed
+            console.log(`[PLAYER] Resume complete - at position: ${currentPos/1000}s`);
+            hasResumedRef.current = true;
+            setPendingResumePosition(null);
           }
-          setPendingResumePosition(null); // Clear after seeking
+        } else if (totalDuration > 0) {
+          // Duration is known but position is past 95%, don't resume
+          hasResumedRef.current = true;
+          setPendingResumePosition(null);
         }
       }
       
