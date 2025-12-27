@@ -279,6 +279,7 @@ export default function DetailsScreen() {
           poster: content?.poster || '',
           logo: content?.logo || '',
           ...nextEpisodeData,
+          ...resumeData,
         },
       });
     } else if (stream.url) {
@@ -295,6 +296,7 @@ export default function DetailsScreen() {
           poster: content?.poster || '',
           logo: content?.logo || '',
           ...nextEpisodeData,
+          ...resumeData,
         },
       });
     }
