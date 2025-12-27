@@ -1626,27 +1626,28 @@ const styles = StyleSheet.create({
   logoWrapper: {
     position: 'relative',
     width: '80%',
+    maxWidth: 500,
     height: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 32,
   },
   logoUnfilled: {
     position: 'absolute',
+    left: 0,
+    top: 0,
     width: '100%',
     height: '100%',
-    opacity: 0.3,
-    tintColor: '#888',
+    opacity: 0.2,
   },
   logoFillClip: {
     position: 'absolute',
     left: 0,
     top: 0,
-    bottom: 0,
+    height: '100%',
     overflow: 'hidden',
   },
   logoFilled: {
     width: Dimensions.get('window').width * 0.8,
+    maxWidth: 500,
     height: '100%',
   },
   // Title as progress bar - Stremio style (fallback)
