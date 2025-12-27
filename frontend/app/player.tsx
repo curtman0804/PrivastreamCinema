@@ -198,12 +198,17 @@ export default function PlayerScreen() {
         season: season ? parseInt(season) : undefined,
         episode: episode ? parseInt(episode) : undefined,
         series_id: seriesId || undefined,
+        // Save stream info for resuming playback
+        stream_info_hash: infoHash || undefined,
+        stream_url: directUrl || url || undefined,
+        stream_file_idx: fileIdx ? parseInt(fileIdx) : undefined,
+        stream_filename: filename || undefined,
       });
       console.log('[PLAYER] Watch progress saved:', currentPosition / 1000, '/', totalDuration / 1000);
     } catch (err) {
       console.log('[PLAYER] Failed to save watch progress:', err);
     }
-  }, [contentId, contentType, title, poster, backdrop, logo, season, episode, seriesId, isLive]);
+  }, [contentId, contentType, title, poster, backdrop, logo, season, episode, seriesId, isLive, infoHash, directUrl, url, fileIdx, filename]);
   
   // Format time helper
   const formatTime = (ms: number) => {
