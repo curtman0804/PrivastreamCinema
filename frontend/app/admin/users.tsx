@@ -83,30 +83,51 @@ export default function AdminUsersScreen() {
 
   const handleDeleteUser = (user: User) => {
     if (user.id === currentUser?.id) {
-      Alert.alert('Error', 'You cannot delete your own account');
+      if (Platform.OS === 'web') {
+        window.alert('You cannot delete your own account');
+      } else {
+        Alert.alert('Error', 'You cannot delete your own account');
+      }
       return;
     }
 
-    Alert.alert(
-      'Delete User',
-      `Are you sure you want to delete "${user.username}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.admin.deleteUser(user.id);
-              await fetchUsers();
-              Alert.alert('Success', 'User deleted');
-            } catch (error: any) {
-              Alert.alert('Error', error.response?.data?.detail || 'Failed to delete user');
-            }
+    const doDelete = async () => {
+      try {
+        await api.admin.deleteUser(user.id);
+        await fetchUsers();
+        if (Platform.OS === 'web') {
+          window.alert('User deleted');
+        } else {
+          Alert.alert('Success', 'User deleted');
+        }
+      } catch (error: any) {
+        const errorMsg = error.response?.data?.detail || 'Failed to delete user';
+        if (Platform.OS === 'web') {
+          window.alert(`Error: ${errorMsg}`);
+        } else {
+          Alert.alert('Error', errorMsg);
+        }
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Are you sure you want to delete "${user.username}"?`)) {
+        doDelete();
+      }
+    } else {
+      Alert.alert(
+        'Delete User',
+        `Are you sure you want to delete "${user.username}"?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: doDelete,
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const renderUser = ({ item }: { item: User }) => (
