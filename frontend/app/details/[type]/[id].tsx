@@ -231,6 +231,7 @@ export default function DetailsScreen() {
           fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks]),
           backdrop: content?.background || '',
           poster: content?.poster || '',
+          logo: content?.logo || '',
           ...nextEpisodeData,
         },
       });
@@ -251,6 +252,7 @@ export default function DetailsScreen() {
           filename: stream.filename || '',
           backdrop: content?.background || '',
           poster: content?.poster || '',
+          logo: content?.logo || '',
           ...nextEpisodeData,
         },
       });
@@ -266,6 +268,7 @@ export default function DetailsScreen() {
           contentId: subtitleContentId,
           backdrop: content?.background || '',
           poster: content?.poster || '',
+          logo: content?.logo || '',
           ...nextEpisodeData,
         },
       });
