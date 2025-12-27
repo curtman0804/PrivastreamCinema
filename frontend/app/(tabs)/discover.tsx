@@ -8,14 +8,19 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Pressable,
+  FlatList,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
-import { ContentItem } from '../../src/api/client';
+import { ContentItem, api, WatchProgress } from '../../src/api/client';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CONTINUE_ITEM_WIDTH = (SCREEN_WIDTH - 48) / 2.5; // Show ~2.5 items
 
 export default function DiscoverScreen() {
   const router = useRouter();
