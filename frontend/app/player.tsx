@@ -915,15 +915,14 @@ export default function PlayerScreen() {
               Platform.OS === 'web' ? (
                 <div style={{
                   position: 'relative',
-                  width: '80%',
-                  maxWidth: 600,
-                  height: 120,
-                  marginBottom: 32,
+                  width: '70%',
+                  maxWidth: 500,
+                  height: 100,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}>
-                  {/* Faded logo (background) */}
+                  {/* Single logo with opacity mask effect */}
                   <img 
                     src={logo}
                     alt={title || 'Loading'}
@@ -932,11 +931,10 @@ export default function PlayerScreen() {
                       width: '100%',
                       height: '100%',
                       objectFit: 'contain',
-                      opacity: 0.3,
-                      filter: 'grayscale(100%)',
+                      opacity: 0.2,
                     }}
                   />
-                  {/* Filled logo (foreground with clip) */}
+                  {/* Filled portion - clips from left based on progress */}
                   <div style={{
                     position: 'absolute',
                     left: 0,
@@ -950,9 +948,9 @@ export default function PlayerScreen() {
                       src={logo}
                       alt={title || 'Loading'}
                       style={{
-                        width: '100%',
-                        minWidth: 600,
                         height: '100%',
+                        width: 500,
+                        maxWidth: '70vw',
                         objectFit: 'contain',
                         objectPosition: 'left center',
                       }}
@@ -962,13 +960,11 @@ export default function PlayerScreen() {
               ) : (
                 // Native: Logo with overlay fill effect
                 <View style={styles.logoWrapper}>
-                  {/* Faded logo (background) */}
                   <Image
                     source={{ uri: logo }}
                     style={styles.logoUnfilled}
                     resizeMode="contain"
                   />
-                  {/* Filled logo (foreground with clip) */}
                   <View style={[styles.logoFillClip, { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }]}>
                     <Image
                       source={{ uri: logo }}
@@ -985,15 +981,14 @@ export default function PlayerScreen() {
                   position: 'relative',
                   width: '100%',
                   textAlign: 'center',
-                  marginBottom: 32,
                 }}>
                   <h1 style={{
-                    fontSize: 48,
+                    fontSize: 42,
                     fontWeight: 800,
                     margin: 0,
                     padding: 0,
                     letterSpacing: 2,
-                    background: `linear-gradient(90deg, #FFFFFF ${downloadProgress || 0}%, rgba(255,255,255,0.3) ${downloadProgress || 0}%)`,
+                    background: `linear-gradient(90deg, #FFFFFF ${downloadProgress || 0}%, rgba(255,255,255,0.2) ${downloadProgress || 0}%)`,
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     backgroundClip: 'text',
@@ -1023,22 +1018,19 @@ export default function PlayerScreen() {
               )
             )}
             
-            {/* Loading Status */}
-            <Text style={styles.loadingStatusText}>{loadingStatus}</Text>
-            
-            {/* Stats Row */}
-            {infoHash && (
-              <View style={styles.loadingStatsRow}>
+            {/* Stats Row - Only show for torrents */}
+            {infoHash && downloadProgress < 100 && (
+              <View style={[styles.loadingStatsRow, { marginTop: 40 }]}>
                 <View style={styles.loadingStat}>
-                  <Ionicons name="people-outline" size={16} color="#FFFFFF" />
-                  <Text style={styles.loadingStatText}>{peers} peers</Text>
+                  <Ionicons name="people-outline" size={14} color="rgba(255,255,255,0.6)" />
+                  <Text style={styles.loadingStatText}>{peers}</Text>
                 </View>
                 <View style={styles.loadingStat}>
-                  <Ionicons name="arrow-down-outline" size={16} color="#FFFFFF" />
+                  <Ionicons name="arrow-down-outline" size={14} color="rgba(255,255,255,0.6)" />
                   <Text style={styles.loadingStatText}>{formatSpeed(downloadSpeed)}</Text>
                 </View>
                 <View style={styles.loadingStat}>
-                  <Ionicons name="disc-outline" size={16} color="#FFFFFF" />
+                  <Ionicons name="disc-outline" size={14} color="rgba(255,255,255,0.6)" />
                   <Text style={styles.loadingStatText}>{downloadProgress.toFixed(0)}%</Text>
                 </View>
               </View>
