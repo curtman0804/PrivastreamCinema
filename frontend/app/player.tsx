@@ -906,27 +906,50 @@ export default function PlayerScreen() {
           
           {/* Content */}
           <View style={styles.loadingContent}>
-            {/* Title as Loading Bar - Stremio Style */}
-            <View style={styles.titleWrapper}>
-              {/* Base layer - unfilled text (dark/gray) */}
-              <Text style={styles.titleUnfilled} numberOfLines={1} adjustsFontSizeToFit>
-                {title || 'Loading...'}
-              </Text>
-              
-              {/* Fill layer - clips from left to show progress */}
-              <View style={styles.titleFillContainer}>
-                <View 
-                  style={[
-                    styles.titleFillClip, 
-                    { width: `${Math.min(Math.max(downloadProgress || 5, 5), 100)}%` }
-                  ]}
-                >
-                  <Text style={styles.titleFilled} numberOfLines={1}>
-                    {title || 'Loading...'}
-                  </Text>
+            {/* Title as Loading Bar - Exact Stremio Style */}
+            {Platform.OS === 'web' ? (
+              // Web: Use CSS background-clip for proper text fill effect
+              <div style={{
+                position: 'relative',
+                width: '100%',
+                textAlign: 'center',
+                marginBottom: 32,
+              }}>
+                <h1 style={{
+                  fontSize: 48,
+                  fontWeight: 800,
+                  margin: 0,
+                  padding: 0,
+                  letterSpacing: 2,
+                  background: `linear-gradient(90deg, #FFFFFF ${downloadProgress || 0}%, rgba(255,255,255,0.3) ${downloadProgress || 0}%)`,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  transition: 'background 0.3s ease',
+                }}>
+                  {title || 'Loading...'}
+                </h1>
+              </div>
+            ) : (
+              // Native: Use overlay technique
+              <View style={styles.titleWrapper}>
+                <Text style={styles.titleUnfilled} numberOfLines={1} adjustsFontSizeToFit>
+                  {title || 'Loading...'}
+                </Text>
+                <View style={styles.titleFillContainer}>
+                  <View 
+                    style={[
+                      styles.titleFillClip, 
+                      { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }
+                    ]}
+                  >
+                    <Text style={styles.titleFilled} numberOfLines={1}>
+                      {title || 'Loading...'}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
+            )}
             
             {/* Loading Status */}
             <Text style={styles.loadingStatusText}>{loadingStatus}</Text>
@@ -935,16 +958,16 @@ export default function PlayerScreen() {
             {infoHash && (
               <View style={styles.loadingStatsRow}>
                 <View style={styles.loadingStat}>
-                  <Ionicons name="people-outline" size={16} color="#B8A05C" />
+                  <Ionicons name="people-outline" size={16} color="#FFFFFF" />
                   <Text style={styles.loadingStatText}>{peers} peers</Text>
                 </View>
                 <View style={styles.loadingStat}>
-                  <Ionicons name="arrow-down-outline" size={16} color="#B8A05C" />
+                  <Ionicons name="arrow-down-outline" size={16} color="#FFFFFF" />
                   <Text style={styles.loadingStatText}>{formatSpeed(downloadSpeed)}</Text>
                 </View>
                 <View style={styles.loadingStat}>
-                  <Ionicons name="disc-outline" size={16} color="#B8A05C" />
-                  <Text style={styles.loadingStatText}>{downloadProgress.toFixed(1)}%</Text>
+                  <Ionicons name="disc-outline" size={16} color="#FFFFFF" />
+                  <Text style={styles.loadingStatText}>{downloadProgress.toFixed(0)}%</Text>
                 </View>
               </View>
             )}
