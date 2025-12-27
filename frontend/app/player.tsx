@@ -469,26 +469,32 @@ export default function PlayerScreen() {
         const totalDuration = status.durationMillis || 0;
         const currentPos = status.positionMillis || 0;
         
-        // Only attempt resume if:
-        // 1. We have duration info
-        // 2. We haven't watched most of it (< 95%)
-        // 3. We're not already near the target position
-        if (totalDuration > 0 && resumeMs < totalDuration * 0.95) {
-          const positionDiff = Math.abs(currentPos - resumeMs);
-          // If we're more than 2 seconds away from target, seek
-          if (positionDiff > 2000) {
-            console.log(`[PLAYER] Resuming from position: ${pendingResumePosition}s (current: ${currentPos/1000}s)`);
-            videoRef.current.setPositionAsync(resumeMs);
-          } else {
-            // We're at or near the target position, mark as resumed
-            console.log(`[PLAYER] Resume complete - at position: ${currentPos/1000}s`);
+        console.log(`[PLAYER] Resume check: pending=${pendingResumePosition}s, current=${currentPos/1000}s, duration=${totalDuration/1000}s`);
+        
+        // Only attempt resume if we have duration info
+        if (totalDuration > 0) {
+          // Check if position is past 95%, then don't resume (start from beginning)
+          if (resumeMs >= totalDuration * 0.95) {
+            console.log(`[PLAYER] Resume position past 95%, not resuming`);
             hasResumedRef.current = true;
             setPendingResumePosition(null);
+          } else {
+            const positionDiff = Math.abs(currentPos - resumeMs);
+            // If we're more than 3 seconds away from target, seek
+            if (positionDiff > 3000) {
+              console.log(`[PLAYER] Seeking to resume position: ${pendingResumePosition}s`);
+              videoRef.current.setPositionAsync(resumeMs).then(() => {
+                console.log(`[PLAYER] Seek completed to ${pendingResumePosition}s`);
+              }).catch((err) => {
+                console.log(`[PLAYER] Seek failed:`, err);
+              });
+            } else {
+              // We're at or near the target position, mark as resumed
+              console.log(`[PLAYER] Resume complete - at position: ${currentPos/1000}s`);
+              hasResumedRef.current = true;
+              setPendingResumePosition(null);
+            }
           }
-        } else if (totalDuration > 0) {
-          // Duration is known but position is past 95%, don't resume
-          hasResumedRef.current = true;
-          setPendingResumePosition(null);
         }
       }
       
