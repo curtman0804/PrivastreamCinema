@@ -176,14 +176,22 @@ export default function PlayerScreen() {
   const lastProgressSaveRef = useRef<number>(0);
   const progressSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Refs to store current position/duration for saving on exit
+  const currentPositionRef = useRef(0);
+  const currentDurationRef = useRef(0);
+  
   // Save watch progress to backend
-  const saveWatchProgress = useCallback(async (currentPosition: number, totalDuration: number) => {
+  const saveWatchProgress = useCallback(async (currentPosition: number, totalDuration: number, force: boolean = false) => {
     // Don't save if no content info or if it's live TV
     if (!contentId || !contentType || isLive === 'true' || totalDuration <= 0) return;
     
-    // Don't save too frequently (minimum 10 seconds between saves)
+    // Update refs for exit save
+    currentPositionRef.current = currentPosition;
+    currentDurationRef.current = totalDuration;
+    
+    // Don't save too frequently (minimum 5 seconds between saves) unless forced
     const now = Date.now();
-    if (now - lastProgressSaveRef.current < 10000) return;
+    if (!force && now - lastProgressSaveRef.current < 5000) return;
     lastProgressSaveRef.current = now;
     
     try {
@@ -209,6 +217,34 @@ export default function PlayerScreen() {
     } catch (err) {
       console.log('[PLAYER] Failed to save watch progress:', err);
     }
+  }, [contentId, contentType, title, poster, backdrop, logo, season, episode, seriesId, isLive, infoHash, directUrl, url, fileIdx, filename]);
+  
+  // Save progress when component unmounts (user exits player)
+  useEffect(() => {
+    return () => {
+      // Save current progress on exit
+      if (currentPositionRef.current > 0 && currentDurationRef.current > 0 && contentId && contentType && isLive !== 'true') {
+        console.log('[PLAYER] Saving progress on exit:', currentPositionRef.current / 1000, 's');
+        // Use a synchronous-ish approach since we're unmounting
+        api.watchProgress.save({
+          content_id: contentId,
+          content_type: contentType,
+          title: title || 'Unknown',
+          poster: poster || undefined,
+          backdrop: backdrop || undefined,
+          logo: logo || undefined,
+          progress: currentPositionRef.current / 1000,
+          duration: currentDurationRef.current / 1000,
+          season: season ? parseInt(season) : undefined,
+          episode: episode ? parseInt(episode) : undefined,
+          series_id: seriesId || undefined,
+          stream_info_hash: infoHash || undefined,
+          stream_url: directUrl || url || undefined,
+          stream_file_idx: fileIdx ? parseInt(fileIdx) : undefined,
+          stream_filename: filename || undefined,
+        }).catch(err => console.log('[PLAYER] Failed to save on exit:', err));
+      }
+    };
   }, [contentId, contentType, title, poster, backdrop, logo, season, episode, seriesId, isLive, infoHash, directUrl, url, fileIdx, filename]);
   
   // Format time helper
