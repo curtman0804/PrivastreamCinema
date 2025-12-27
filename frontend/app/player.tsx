@@ -495,6 +495,12 @@ export default function PlayerScreen() {
   
   // Fade controls in/out
   const fadeControls = (show: boolean) => {
+    // Clear any existing timeout
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = null;
+    }
+    
     Animated.timing(controlsOpacity, {
       toValue: show ? 1 : 0,
       duration: 300,
@@ -502,8 +508,50 @@ export default function PlayerScreen() {
     }).start(() => {
       if (!show) setShowControls(false);
     });
-    if (show) setShowControls(true);
+    if (show) {
+      setShowControls(true);
+      // Auto-hide controls after 3 seconds
+      controlsTimeoutRef.current = setTimeout(() => {
+        fadeControls(false);
+      }, 3000);
+    }
   };
+  
+  // Show controls on any interaction and reset auto-hide timer
+  const showControlsWithTimeout = () => {
+    // Clear existing timeout
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = null;
+    }
+    
+    // Show controls if hidden
+    if (!showControls) {
+      setShowControls(true);
+      Animated.timing(controlsOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+    
+    // Set new auto-hide timeout
+    controlsTimeoutRef.current = setTimeout(() => {
+      fadeControls(false);
+    }, 3000);
+  };
+  
+  // Initial show controls with auto-hide
+  useEffect(() => {
+    if (streamUrl && !error && !isLoading) {
+      showControlsWithTimeout();
+    }
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, [streamUrl, error, isLoading]);
   
   // Try next fallback stream
   const tryNextStream = () => {
