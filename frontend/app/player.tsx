@@ -927,10 +927,11 @@ export default function PlayerScreen() {
       {/* Video Player */}
       {streamUrl && !error && !isLoading && (
         Platform.OS === 'web' ? (
-          <TouchableOpacity 
-            activeOpacity={1}
+          <View 
             style={styles.videoContainer}
-            onPress={() => fadeControls(!showControls)}
+            // @ts-ignore - web-specific events
+            onMouseMove={() => showControlsWithTimeout()}
+            onMouseEnter={() => showControlsWithTimeout()}
           >
             {/* HEVC Warning Banner for Web */}
             {isHEVCContent(title) && (
@@ -946,6 +947,7 @@ export default function PlayerScreen() {
               controls
               autoPlay
               playsInline
+              onMouseMove={() => showControlsWithTimeout()}
               onEnded={() => handlePlaybackEnd()}
               onTimeUpdate={(e: any) => {
                 const video = e.target;
