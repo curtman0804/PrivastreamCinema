@@ -913,16 +913,18 @@ export default function PlayerScreen() {
                 {title || 'Loading...'}
               </Text>
               
-              {/* Fill layer - clips to show progress */}
-              <View 
-                style={[
-                  styles.titleFillClip, 
-                  { width: `${Math.min(Math.max(downloadProgress || 5, 5), 100)}%` }
-                ]}
-              >
-                <Text style={styles.titleFilled} numberOfLines={1}>
-                  {title || 'Loading...'}
-                </Text>
+              {/* Fill layer - clips from left to show progress */}
+              <View style={styles.titleFillContainer}>
+                <View 
+                  style={[
+                    styles.titleFillClip, 
+                    { width: `${Math.min(Math.max(downloadProgress || 5, 5), 100)}%` }
+                  ]}
+                >
+                  <Text style={styles.titleFilled} numberOfLines={1}>
+                    {title || 'Loading...'}
+                  </Text>
+                </View>
               </View>
             </View>
             
