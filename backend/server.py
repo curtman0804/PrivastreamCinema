@@ -477,6 +477,11 @@ class WatchProgress(BaseModel):
     episode: Optional[int] = None  # For series
     episode_title: Optional[str] = None  # Episode title
     series_id: Optional[str] = None  # Parent series ID for episodes
+    # Stream info for resuming playback
+    stream_info_hash: Optional[str] = None  # Torrent info hash
+    stream_url: Optional[str] = None  # Direct stream URL
+    stream_file_idx: Optional[int] = None  # File index for torrents
+    stream_filename: Optional[str] = None  # Filename for torrents
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
