@@ -176,13 +176,13 @@ export default function DiscoverScreen() {
         >
           <View style={styles.continueImageContainer}>
             <Image
-              source={{ uri: item.backdrop || item.poster || '' }}
+              source={{ uri: item.poster || item.backdrop || '' }}
               style={styles.continueImage}
               contentFit="cover"
             />
             {/* Play icon overlay */}
             <View style={styles.playOverlay}>
-              <Ionicons name="play-circle" size={40} color="rgba(255,255,255,0.9)" />
+              <Ionicons name="play-circle" size={32} color="rgba(255,255,255,0.9)" />
             </View>
             {/* Progress bar */}
             <View style={styles.progressBarContainer}>
@@ -194,16 +194,6 @@ export default function DiscoverScreen() {
               />
             </View>
           </View>
-          <Text style={styles.continueTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-          {/* Show episode info if it's a series */}
-          {item.season !== undefined && item.episode !== undefined && (
-            <Text style={styles.continueEpisode} numberOfLines={1}>
-              S{item.season} E{item.episode}
-              {item.episode_title ? ` - ${item.episode_title}` : ''}
-            </Text>
-          )}
         </TouchableOpacity>
         {/* Remove button */}
         <TouchableOpacity
@@ -211,7 +201,7 @@ export default function DiscoverScreen() {
           onPress={() => handleRemoveFromContinueWatching(item)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="close-circle" size={22} color="rgba(255,255,255,0.7)" />
+          <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
       </View>
     );
