@@ -20,7 +20,9 @@ import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CONTINUE_ITEM_WIDTH = (SCREEN_WIDTH - 48) / 2.5; // Show ~2.5 items
+const BASE_WIDTH = Math.min(SCREEN_WIDTH, 500);
+const POSTER_WIDTH = (BASE_WIDTH - 48) / 3; // Same as ContentCard
+const POSTER_HEIGHT = POSTER_WIDTH * 1.5; // 2:3 aspect ratio like movie posters
 
 export default function DiscoverScreen() {
   const router = useRouter();
