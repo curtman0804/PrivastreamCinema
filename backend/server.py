@@ -463,6 +463,22 @@ class LibraryItem(BaseModel):
     year: Optional[str] = None
     added_at: datetime = Field(default_factory=datetime.utcnow)
 
+class WatchProgress(BaseModel):
+    content_id: str  # IMDB ID (e.g., tt1234567 or tt1234567:1:1 for episodes)
+    content_type: str  # movie, series
+    title: str
+    poster: Optional[str] = None
+    backdrop: Optional[str] = None
+    logo: Optional[str] = None
+    progress: float  # Current position in seconds
+    duration: float  # Total duration in seconds
+    percent_watched: float  # Percentage watched (0-100)
+    season: Optional[int] = None  # For series
+    episode: Optional[int] = None  # For series
+    episode_title: Optional[str] = None  # Episode title
+    series_id: Optional[str] = None  # Parent series ID for episodes
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
 
 # ==================== HELPERS ====================
 
