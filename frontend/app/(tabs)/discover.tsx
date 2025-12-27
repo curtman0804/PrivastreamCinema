@@ -443,9 +443,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
   },
+  continueItemWrapper: {
+    position: 'relative',
+    marginRight: 12,
+  },
   continueItem: {
     width: CONTINUE_ITEM_WIDTH,
-    marginRight: 12,
+  },
+  removeButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+    padding: 2,
   },
   continueImageContainer: {
     width: '100%',
