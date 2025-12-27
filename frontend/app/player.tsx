@@ -1389,33 +1389,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
   },
-  titleContainer: {
+  // Title as progress bar - Stremio style
+  titleWrapper: {
     position: 'relative',
     width: '100%',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 32,
+    height: 60,
   },
-  titleBackground: {
-    fontSize: 42,
+  titleUnfilled: {
+    fontSize: 36,
     fontWeight: '800',
-    color: 'rgba(255, 255, 255, 0.2)',
+    color: 'rgba(255, 255, 255, 0.25)',
     textAlign: 'center',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-  },
-  titleFillMask: {
+    letterSpacing: 1,
     position: 'absolute',
-    top: 0,
-    left: 0,
-    overflow: 'hidden',
+    width: '100%',
   },
-  titleForeground: {
-    fontSize: 42,
+  titleFillClip: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  titleFilled: {
+    fontSize: 36,
     fontWeight: '800',
     color: '#B8A05C',
-    textAlign: 'center',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
+    textAlign: 'left',
+    letterSpacing: 1,
     width: Dimensions.get('window').width - 48,
   },
   loadingStatusText: {
