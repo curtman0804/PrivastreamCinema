@@ -90,6 +90,71 @@ export default function DiscoverScreen() {
     });
   };
 
+  // Handle continue watching item press - resume playback
+  const handleContinueWatchingPress = (item: WatchProgress) => {
+    // Navigate directly to player with the saved position
+    router.push({
+      pathname: '/player',
+      params: {
+        contentId: item.content_id,
+        contentType: item.content_type,
+        title: item.title,
+        poster: item.poster || '',
+        backdrop: item.backdrop || '',
+        logo: item.logo || '',
+        resumePosition: String(item.progress || 0),
+        season: item.season !== undefined ? String(item.season) : '',
+        episode: item.episode !== undefined ? String(item.episode) : '',
+        episodeTitle: item.episode_title || '',
+        seriesId: item.series_id || '',
+      },
+    });
+  };
+
+  // Render a continue watching item with progress bar
+  const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) => {
+    const percentWatched = item.percent_watched || 0;
+    
+    return (
+      <TouchableOpacity
+        style={styles.continueItem}
+        onPress={() => handleContinueWatchingPress(item)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.continueImageContainer}>
+          <Image
+            source={{ uri: item.backdrop || item.poster || '' }}
+            style={styles.continueImage}
+            contentFit="cover"
+          />
+          {/* Play icon overlay */}
+          <View style={styles.playOverlay}>
+            <Ionicons name="play-circle" size={40} color="rgba(255,255,255,0.9)" />
+          </View>
+          {/* Progress bar */}
+          <View style={styles.progressBarContainer}>
+            <View 
+              style={[
+                styles.progressBarFill, 
+                { width: `${Math.min(percentWatched, 100)}%` }
+              ]} 
+            />
+          </View>
+        </View>
+        <Text style={styles.continueTitle} numberOfLines={1}>
+          {item.title}
+        </Text>
+        {/* Show episode info if it's a series */}
+        {item.season !== undefined && item.episode !== undefined && (
+          <Text style={styles.continueEpisode} numberOfLines={1}>
+            S{item.season} E{item.episode}
+            {item.episode_title ? ` - ${item.episode_title}` : ''}
+          </Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
   // Show loading only on initial load
   if (isLoadingDiscover && !discoverData) {
     return (
