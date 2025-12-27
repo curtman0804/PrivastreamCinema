@@ -413,6 +413,18 @@ export default function PlayerScreen() {
           clearTimeout(playbackTimeoutRef.current);
           playbackTimeoutRef.current = null;
         }
+        
+        // Resume from saved position if coming from "Continue Watching"
+        if (pendingResumePosition && pendingResumePosition > 0 && videoRef.current) {
+          console.log(`[PLAYER] Resuming from position: ${pendingResumePosition}s`);
+          const resumeMs = pendingResumePosition * 1000;
+          // Only resume if we haven't watched most of it (< 95%)
+          const totalDuration = status.durationMillis || 0;
+          if (totalDuration > 0 && resumeMs < totalDuration * 0.95) {
+            videoRef.current.setPositionAsync(resumeMs);
+          }
+          setPendingResumePosition(null); // Clear after seeking
+        }
       }
       
       // Credits detection - show "Up Next" popup when credits start
