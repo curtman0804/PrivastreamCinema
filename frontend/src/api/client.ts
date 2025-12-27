@@ -145,6 +145,11 @@ export interface WatchProgress {
   episode?: number;
   episode_title?: string;
   series_id?: string;
+  // Stream info for resuming playback
+  stream_info_hash?: string;
+  stream_url?: string;
+  stream_file_idx?: number;
+  stream_filename?: string;
   updated_at?: string;
 }
 
