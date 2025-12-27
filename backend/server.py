@@ -2556,6 +2556,67 @@ async def remove_from_library(item_type: str, item_id: str, current_user: User =
     return {"message": "Removed from library"}
 
 
+# ==================== WATCH PROGRESS / CONTINUE WATCHING ====================
+
+@api_router.get("/watch-progress")
+async def get_watch_progress(current_user: User = Depends(get_current_user)):
+    """Get all watch progress for current user (Continue Watching list)"""
+    progress_items = await db.watch_progress.find(
+        {"user_id": current_user.id},
+        {"_id": 0}
+    ).sort("updated_at", -1).to_list(50)
+    
+    # Filter out items that are mostly watched (>95%) or barely started (<2%)
+    continue_watching = [
+        item for item in progress_items 
+        if 2 <= item.get("percent_watched", 0) <= 95
+    ]
+    
+    return {"continueWatching": continue_watching}
+
+@api_router.get("/watch-progress/{content_id:path}")
+async def get_content_progress(content_id: str, current_user: User = Depends(get_current_user)):
+    """Get watch progress for a specific content"""
+    progress = await db.watch_progress.find_one(
+        {"user_id": current_user.id, "content_id": content_id},
+        {"_id": 0}
+    )
+    return {"progress": progress}
+
+@api_router.post("/watch-progress")
+async def save_watch_progress(progress: WatchProgress, current_user: User = Depends(get_current_user)):
+    """Save or update watch progress for content"""
+    progress_dict = progress.dict()
+    progress_dict["user_id"] = current_user.id
+    progress_dict["updated_at"] = datetime.utcnow()
+    
+    # Calculate percent watched
+    if progress.duration > 0:
+        progress_dict["percent_watched"] = min((progress.progress / progress.duration) * 100, 100)
+    else:
+        progress_dict["percent_watched"] = 0
+    
+    # Upsert - update if exists, insert if not
+    await db.watch_progress.update_one(
+        {"user_id": current_user.id, "content_id": progress.content_id},
+        {"$set": progress_dict},
+        upsert=True
+    )
+    
+    return {"message": "Progress saved", "percent_watched": progress_dict["percent_watched"]}
+
+@api_router.delete("/watch-progress/{content_id:path}")
+async def delete_watch_progress(content_id: str, current_user: User = Depends(get_current_user)):
+    """Delete watch progress for content (clear from continue watching)"""
+    result = await db.watch_progress.delete_one({
+        "user_id": current_user.id,
+        "content_id": content_id
+    })
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Progress not found")
+    return {"message": "Progress deleted"}
+
+
 # ==================== TORRENT STREAMING ENDPOINTS (WebTorrent Proxy) ====================
 
 TORRENT_SERVER_URL = "http://localhost:8002"
