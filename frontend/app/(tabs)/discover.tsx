@@ -200,8 +200,8 @@ export default function DiscoverScreen() {
         </Pressable>
       </View>
 
-      {/* Welcome Screen - No Addons */}
-      {!hasContent && !isLoadingDiscover ? (
+      {/* Welcome Screen - No Addons and No Continue Watching */}
+      {!hasContent && continueWatching.length === 0 && !isLoadingDiscover ? (
         <View style={styles.welcomeContainer}>
           <Text style={styles.welcomeText}>Welcome To</Text>
           <Image
