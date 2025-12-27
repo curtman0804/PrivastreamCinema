@@ -846,7 +846,8 @@ export default function PlayerScreen() {
             // Pass fileIdx to getVideoUrl for file selection
             const videoUrl = api.stream.getVideoUrl(infoHash, parsedFileIdx);
             setStreamUrl(videoUrl);
-            setIsLoading(false);
+            // Keep isLoading true - it will be set to false when video actually starts playing
+            // This keeps the Stremio loading screen visible until playback begins
             return;
           } else if (status.status === 'not_found' || status.status === 'invalid') {
             setError('Failed to start. Try selecting a different stream with more seeders.');
