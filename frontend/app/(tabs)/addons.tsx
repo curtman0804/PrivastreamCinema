@@ -519,8 +519,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 68, 68, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  shareButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(184, 160, 92, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addonActions: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     marginLeft: 8,
-    alignSelf: 'center',
   },
   loadingContainer: {
     flex: 1,
