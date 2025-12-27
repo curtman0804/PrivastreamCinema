@@ -218,6 +218,24 @@ export default function DiscoverScreen() {
             />
           }
         >
+          {/* Continue Watching Section */}
+          {continueWatching.length > 0 && (
+            <View style={styles.continueWatchingSection}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="play-circle" size={20} color="#B8A05C" />
+                <Text style={styles.sectionTitle}>Continue Watching</Text>
+              </View>
+              <FlatList
+                data={continueWatching}
+                renderItem={renderContinueWatchingItem}
+                keyExtractor={(item) => item.content_id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.continueList}
+              />
+            </View>
+          )}
+          
           {Object.entries(discoverData?.services || {}).map(([serviceName, content]) => (
             <View key={serviceName}>
               {content?.movies && content.movies.length > 0 && (
