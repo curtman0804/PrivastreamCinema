@@ -126,10 +126,23 @@ export default function PlayerScreen() {
   const router = useRouter();
   
   // Resume position in seconds (from continue watching)
-  const [pendingResumePosition, setPendingResumePosition] = useState<number | null>(
-    resumePosition ? parseFloat(resumePosition) : null
-  );
+  const parsedResumePosition = resumePosition ? parseFloat(resumePosition) : null;
+  console.log(`[PLAYER] Route params - resumePosition: "${resumePosition}", parsed: ${parsedResumePosition}`);
+  
+  const [pendingResumePosition, setPendingResumePosition] = useState<number | null>(parsedResumePosition);
   const hasResumedRef = useRef(false); // Track if we've already attempted resume
+  
+  // Update pending resume position when route param changes
+  useEffect(() => {
+    if (resumePosition) {
+      const parsed = parseFloat(resumePosition);
+      if (!isNaN(parsed) && parsed > 0) {
+        console.log(`[PLAYER] Setting pending resume position from route param: ${parsed}s`);
+        setPendingResumePosition(parsed);
+        hasResumedRef.current = false; // Reset resume flag
+      }
+    }
+  }, [resumePosition]);
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
