@@ -997,16 +997,16 @@ export default function PlayerScreen() {
       )}
 
       {/* Video Player */}
-      {streamUrl && !error && !isLoading && (
+      {streamUrl && !error && (
         Platform.OS === 'web' ? (
           <View 
-            style={styles.videoContainer}
+            style={[styles.videoContainer, isLoading && { position: 'absolute', opacity: 0 }]}
             // @ts-ignore - web-specific events
-            onMouseMove={() => showControlsWithTimeout()}
-            onMouseEnter={() => showControlsWithTimeout()}
+            onMouseMove={() => !isLoading && showControlsWithTimeout()}
+            onMouseEnter={() => !isLoading && showControlsWithTimeout()}
           >
             {/* HEVC Warning Banner for Web */}
-            {isHEVCContent(title) && (
+            {isHEVCContent(title) && !isLoading && (
               <View style={styles.hevcWarningBanner}>
                 <Ionicons name="warning" size={16} color="#FFA500" />
                 <Text style={styles.hevcWarningText}>
@@ -1019,7 +1019,11 @@ export default function PlayerScreen() {
               controls
               autoPlay
               playsInline
-              onMouseMove={() => showControlsWithTimeout()}
+              onCanPlay={() => {
+                console.log('[PLAYER] Video can play - hiding loading screen');
+                setIsLoading(false);
+              }}
+              onMouseMove={() => !isLoading && showControlsWithTimeout()}
               onEnded={() => handlePlaybackEnd()}
               onTimeUpdate={(e: any) => {
                 const video = e.target;
