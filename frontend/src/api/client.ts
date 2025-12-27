@@ -766,6 +766,48 @@ export const api = {
       return `${baseUrl}/api/stream/video/${infoHash}${params}`;
     },
   },
+  watchProgress: {
+    // Get all continue watching items
+    getAll: async (): Promise<{ continueWatching: WatchProgress[] }> => {
+      try {
+        const response = await apiClient.get('/api/watch-progress');
+        return response.data;
+      } catch (err) {
+        console.log('[API] Watch progress fetch error:', err);
+        return { continueWatching: [] };
+      }
+    },
+    // Get progress for specific content
+    get: async (contentId: string): Promise<{ progress: WatchProgress | null }> => {
+      try {
+        const response = await apiClient.get(`/api/watch-progress/${encodeURIComponent(contentId)}`);
+        return response.data;
+      } catch (err) {
+        console.log('[API] Watch progress get error:', err);
+        return { progress: null };
+      }
+    },
+    // Save watch progress
+    save: async (progress: Omit<WatchProgress, 'percent_watched' | 'updated_at'>): Promise<{ message: string; percent_watched: number }> => {
+      try {
+        const response = await apiClient.post('/api/watch-progress', progress);
+        return response.data;
+      } catch (err) {
+        console.log('[API] Watch progress save error:', err);
+        return { message: 'Error', percent_watched: 0 };
+      }
+    },
+    // Delete watch progress (remove from continue watching)
+    delete: async (contentId: string): Promise<{ message: string }> => {
+      try {
+        const response = await apiClient.delete(`/api/watch-progress/${encodeURIComponent(contentId)}`);
+        return response.data;
+      } catch (err) {
+        console.log('[API] Watch progress delete error:', err);
+        return { message: 'Error' };
+      }
+    },
+  },
 };
 
 export default apiClient;
