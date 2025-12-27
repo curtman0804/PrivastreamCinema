@@ -68,10 +68,13 @@ export default function DiscoverScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchAddons();
-    await fetchDiscover();
+    await Promise.all([
+      fetchAddons(),
+      fetchDiscover(),
+      fetchContinueWatching(),
+    ]);
     setRefreshing(false);
-  }, []);
+  }, [fetchContinueWatching]);
 
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
