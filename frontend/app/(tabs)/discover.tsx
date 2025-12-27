@@ -450,7 +450,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   continueItem: {
-    width: CONTINUE_ITEM_WIDTH,
+    width: POSTER_WIDTH,
   },
   removeButton: {
     position: 'absolute',
@@ -459,10 +459,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 12,
     padding: 2,
+    zIndex: 10,
   },
   continueImageContainer: {
-    width: '100%',
-    aspectRatio: 16 / 9,
+    width: POSTER_WIDTH,
+    height: POSTER_HEIGHT,
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
