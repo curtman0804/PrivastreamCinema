@@ -102,7 +102,7 @@ export default function DiscoverScreen() {
           // Stream source
           infoHash: item.stream_info_hash || '',
           directUrl: item.stream_url || '',
-          fileIdx: item.stream_file_idx !== undefined ? String(item.stream_file_idx) : '',
+          fileIdx: item.stream_file_idx != null ? String(item.stream_file_idx) : '',
           filename: item.stream_filename || '',
           // Content info
           title: item.title || '',
@@ -115,8 +115,8 @@ export default function DiscoverScreen() {
           // Resume position
           resumePosition: String(item.progress || 0),
           // Series info
-          season: item.season !== undefined ? String(item.season) : '',
-          episode: item.episode !== undefined ? String(item.episode) : '',
+          season: item.season != null ? String(item.season) : '',
+          episode: item.episode != null ? String(item.episode) : '',
           seriesId: item.series_id || '',
         },
       });
