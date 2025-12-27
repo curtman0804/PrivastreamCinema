@@ -972,7 +972,7 @@ export default function PlayerScreen() {
             
             setLoadingStatus('Starting playback...');
             // Pass fileIdx to getVideoUrl for file selection
-            const videoUrl = api.stream.getVideoUrl(infoHash, parsedFileIdx);
+            const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
             setStreamUrl(videoUrl);
             // Keep isLoading true - it will be set to false when video actually starts playing
             // This keeps the Stremio loading screen visible until playback begins
