@@ -86,28 +86,38 @@ export default function AddonsScreen() {
   
   // Handle sharing addon URL
   const handleShareAddon = async (addon: Addon) => {
-    const addonUrl = addon.url || '';
+    // Try manifestUrl first, then url as fallback
+    const addonUrl = (addon as any).manifestUrl || addon.url || '';
     const addonName = addon.manifest.name;
     
     if (!addonUrl) {
-      Alert.alert('No URL', 'This addon does not have a shareable URL.');
+      if (Platform.OS === 'web') {
+        alert('This addon does not have a shareable URL.');
+      } else {
+        Alert.alert('No URL', 'This addon does not have a shareable URL.');
+      }
       return;
     }
     
     if (Platform.OS === 'web') {
-      // On web, copy to clipboard
+      // On web, copy to clipboard and show alert
       try {
-        await navigator.clipboard.writeText(addonUrl);
-        alert(`Addon URL copied to clipboard!\n\n${addonUrl}`);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(addonUrl);
+        } else {
+          // Fallback for older browsers
+          const textArea = document.createElement('textarea');
+          textArea.value = addonUrl;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-9999px';
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+        }
+        window.alert(`${addonName} addon URL copied to clipboard!\n\n${addonUrl}`);
       } catch (e) {
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = addonUrl;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        alert(`Addon URL copied to clipboard!\n\n${addonUrl}`);
+        window.alert(`Addon URL:\n\n${addonUrl}`);
       }
     } else {
       // On mobile, use Share API
