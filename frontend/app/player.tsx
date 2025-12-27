@@ -1088,17 +1088,16 @@ export default function PlayerScreen() {
                     overflow: 'hidden',
                     transition: 'width 0.3s ease',
                   }}>
+                    {/* This image must match the PARENT container size, not the clip container */}
                     <img 
                       src={logo}
                       alt={title || 'Loading'}
                       style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: 0,
+                        display: 'block',
                         height: '100%',
-                        width: '100%',
-                        minWidth: 500,
-                        maxWidth: 500,
+                        width: 'auto',
+                        minWidth: 'calc(70vw)',
+                        maxWidth: '500px',
                         objectFit: 'contain',
                         objectPosition: 'left center',
                       }}
