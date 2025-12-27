@@ -100,6 +100,8 @@ export default function PlayerScreen() {
     backdrop,
     poster,
     logo,
+    // Resume position (from continue watching)
+    resumePosition,
   } = useLocalSearchParams<{
     url?: string;
     title?: string;
@@ -119,8 +121,14 @@ export default function PlayerScreen() {
     backdrop?: string;
     poster?: string;
     logo?: string;
+    resumePosition?: string;
   }>();
   const router = useRouter();
+  
+  // Resume position in seconds (from continue watching)
+  const [pendingResumePosition, setPendingResumePosition] = useState<number | null>(
+    resumePosition ? parseFloat(resumePosition) : null
+  );
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
