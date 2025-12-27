@@ -970,8 +970,9 @@ export default function PlayerScreen() {
                   </TouchableOpacity>
                 )}
               </View>
-            </View>
-          </View>
+            </Animated.View>
+            )}
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity 
             activeOpacity={1} 
