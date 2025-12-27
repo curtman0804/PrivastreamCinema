@@ -472,7 +472,7 @@ class WatchProgress(BaseModel):
     logo: Optional[str] = None
     progress: float  # Current position in seconds
     duration: float  # Total duration in seconds
-    percent_watched: float  # Percentage watched (0-100)
+    percent_watched: Optional[float] = 0  # Percentage watched (0-100) - calculated on backend
     season: Optional[int] = None  # For series
     episode: Optional[int] = None  # For series
     episode_title: Optional[str] = None  # Episode title
