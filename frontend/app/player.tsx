@@ -163,6 +163,40 @@ export default function PlayerScreen() {
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
   
+  // Watch progress tracking
+  const lastProgressSaveRef = useRef<number>(0);
+  const progressSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Save watch progress to backend
+  const saveWatchProgress = useCallback(async (currentPosition: number, totalDuration: number) => {
+    // Don't save if no content info or if it's live TV
+    if (!contentId || !contentType || isLive === 'true' || totalDuration <= 0) return;
+    
+    // Don't save too frequently (minimum 10 seconds between saves)
+    const now = Date.now();
+    if (now - lastProgressSaveRef.current < 10000) return;
+    lastProgressSaveRef.current = now;
+    
+    try {
+      await api.watchProgress.save({
+        content_id: contentId,
+        content_type: contentType,
+        title: title || 'Unknown',
+        poster: poster || undefined,
+        backdrop: backdrop || undefined,
+        logo: logo || undefined,
+        progress: currentPosition / 1000, // Convert ms to seconds
+        duration: totalDuration / 1000, // Convert ms to seconds
+        season: season ? parseInt(season) : undefined,
+        episode: episode ? parseInt(episode) : undefined,
+        series_id: seriesId || undefined,
+      });
+      console.log('[PLAYER] Watch progress saved:', currentPosition / 1000, '/', totalDuration / 1000);
+    } catch (err) {
+      console.log('[PLAYER] Failed to save watch progress:', err);
+    }
+  }, [contentId, contentType, title, poster, backdrop, logo, season, episode, seriesId, isLive]);
+  
   // Format time helper
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
