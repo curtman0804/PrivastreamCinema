@@ -909,49 +909,118 @@ export default function PlayerScreen() {
           
           {/* Content */}
           <View style={styles.loadingContent}>
-            {/* Title as Loading Bar - Exact Stremio Style */}
-            {Platform.OS === 'web' ? (
-              // Web: Use CSS background-clip for proper text fill effect
-              <div style={{
-                position: 'relative',
-                width: '100%',
-                textAlign: 'center',
-                marginBottom: 32,
-              }}>
-                <h1 style={{
-                  fontSize: 48,
-                  fontWeight: 800,
-                  margin: 0,
-                  padding: 0,
-                  letterSpacing: 2,
-                  background: `linear-gradient(90deg, #FFFFFF ${downloadProgress || 0}%, rgba(255,255,255,0.3) ${downloadProgress || 0}%)`,
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                  transition: 'background 0.3s ease',
+            {/* Logo/Title as Loading Bar - Exact Stremio Style */}
+            {logo ? (
+              // Use the actual movie logo image with fill effect
+              Platform.OS === 'web' ? (
+                <div style={{
+                  position: 'relative',
+                  width: '80%',
+                  maxWidth: 600,
+                  height: 120,
+                  marginBottom: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}>
-                  {title || 'Loading...'}
-                </h1>
-              </div>
-            ) : (
-              // Native: Use overlay technique
-              <View style={styles.titleWrapper}>
-                <Text style={styles.titleUnfilled} numberOfLines={1} adjustsFontSizeToFit>
-                  {title || 'Loading...'}
-                </Text>
-                <View style={styles.titleFillContainer}>
-                  <View 
-                    style={[
-                      styles.titleFillClip, 
-                      { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }
-                    ]}
-                  >
-                    <Text style={styles.titleFilled} numberOfLines={1}>
-                      {title || 'Loading...'}
-                    </Text>
+                  {/* Faded logo (background) */}
+                  <img 
+                    src={logo}
+                    alt={title || 'Loading'}
+                    style={{
+                      position: 'absolute',
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      opacity: 0.3,
+                      filter: 'grayscale(100%)',
+                    }}
+                  />
+                  {/* Filled logo (foreground with clip) */}
+                  <div style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%`,
+                    height: '100%',
+                    overflow: 'hidden',
+                    transition: 'width 0.3s ease',
+                  }}>
+                    <img 
+                      src={logo}
+                      alt={title || 'Loading'}
+                      style={{
+                        width: '100%',
+                        minWidth: 600,
+                        height: '100%',
+                        objectFit: 'contain',
+                        objectPosition: 'left center',
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                // Native: Logo with overlay fill effect
+                <View style={styles.logoWrapper}>
+                  {/* Faded logo (background) */}
+                  <Image
+                    source={{ uri: logo }}
+                    style={styles.logoUnfilled}
+                    resizeMode="contain"
+                  />
+                  {/* Filled logo (foreground with clip) */}
+                  <View style={[styles.logoFillClip, { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }]}>
+                    <Image
+                      source={{ uri: logo }}
+                      style={styles.logoFilled}
+                      resizeMode="contain"
+                    />
                   </View>
                 </View>
-              </View>
+              )
+            ) : (
+              // Fallback to text title if no logo
+              Platform.OS === 'web' ? (
+                <div style={{
+                  position: 'relative',
+                  width: '100%',
+                  textAlign: 'center',
+                  marginBottom: 32,
+                }}>
+                  <h1 style={{
+                    fontSize: 48,
+                    fontWeight: 800,
+                    margin: 0,
+                    padding: 0,
+                    letterSpacing: 2,
+                    background: `linear-gradient(90deg, #FFFFFF ${downloadProgress || 0}%, rgba(255,255,255,0.3) ${downloadProgress || 0}%)`,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    transition: 'background 0.3s ease',
+                  }}>
+                    {title || 'Loading...'}
+                  </h1>
+                </div>
+              ) : (
+                <View style={styles.titleWrapper}>
+                  <Text style={styles.titleUnfilled} numberOfLines={1} adjustsFontSizeToFit>
+                    {title || 'Loading...'}
+                  </Text>
+                  <View style={styles.titleFillContainer}>
+                    <View 
+                      style={[
+                        styles.titleFillClip, 
+                        { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }
+                      ]}
+                    >
+                      <Text style={styles.titleFilled} numberOfLines={1}>
+                        {title || 'Loading...'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )
             )}
             
             {/* Loading Status */}
