@@ -1044,16 +1044,15 @@ export default function PlayerScreen() {
                   width: '70%',
                   maxWidth: 500,
                   height: 100,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
                 }}>
-                  {/* Single logo with opacity mask effect */}
+                  {/* Background logo - faded */}
                   <img 
                     src={logo}
                     alt={title || 'Loading'}
                     style={{
                       position: 'absolute',
+                      left: 0,
+                      top: 0,
                       width: '100%',
                       height: '100%',
                       objectFit: 'contain',
@@ -1074,9 +1073,13 @@ export default function PlayerScreen() {
                       src={logo}
                       alt={title || 'Loading'}
                       style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
                         height: '100%',
-                        width: 500,
-                        maxWidth: '70vw',
+                        width: '100%',
+                        minWidth: 500,
+                        maxWidth: 500,
                         objectFit: 'contain',
                         objectPosition: 'left center',
                       }}
