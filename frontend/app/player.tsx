@@ -1138,6 +1138,11 @@ export default function PlayerScreen() {
                 setPosition(currentTime);
                 setDuration(totalDuration);
                 
+                // Save watch progress periodically
+                if (!video.paused && totalDuration > 0) {
+                  saveWatchProgress(currentTime, totalDuration);
+                }
+                
                 // Credits detection for web
                 if (
                   nextEpisodeId && 
