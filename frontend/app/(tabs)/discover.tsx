@@ -481,15 +481,4 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#B8A05C',
   },
-  continueTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  continueEpisode: {
-    color: '#888888',
-    fontSize: 11,
-    marginTop: 2,
-  },
 });
