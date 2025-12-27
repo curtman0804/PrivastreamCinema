@@ -26,11 +26,34 @@ export default function DiscoverScreen() {
   const router = useRouter();
   const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons, addons } = useContentStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
+  const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+
+  // Fetch continue watching data
+  const fetchContinueWatching = useCallback(async () => {
+    try {
+      setIsLoadingProgress(true);
+      const response = await api.watchProgress.getAll();
+      setContinueWatching(response.continueWatching || []);
+    } catch (err) {
+      console.log('[Discover] Error fetching continue watching:', err);
+    } finally {
+      setIsLoadingProgress(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchAddons();
     fetchDiscover();
+    fetchContinueWatching();
   }, []);
+
+  // Re-fetch continue watching when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchContinueWatching();
+    }, [fetchContinueWatching])
+  );
 
   // Check if there's any content to display
   const hasContent = useMemo(() => {
