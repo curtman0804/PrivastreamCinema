@@ -906,16 +906,21 @@ export default function PlayerScreen() {
           
           {/* Content */}
           <View style={styles.loadingContent}>
-            {/* Title with Fill Animation */}
-            <View style={styles.titleContainer}>
-              {/* Background Title (Gray) */}
-              <Text style={styles.titleBackground}>
+            {/* Title as Loading Bar - Stremio Style */}
+            <View style={styles.titleWrapper}>
+              {/* Base layer - unfilled text (dark/gray) */}
+              <Text style={styles.titleUnfilled} numberOfLines={1} adjustsFontSizeToFit>
                 {title || 'Loading...'}
               </Text>
               
-              {/* Foreground Title (Fills based on progress) */}
-              <View style={[styles.titleFillMask, { width: `${Math.min(downloadProgress || 10, 100)}%` }]}>
-                <Text style={styles.titleForeground}>
+              {/* Fill layer - clips to show progress */}
+              <View 
+                style={[
+                  styles.titleFillClip, 
+                  { width: `${Math.min(Math.max(downloadProgress || 5, 5), 100)}%` }
+                ]}
+              >
+                <Text style={styles.titleFilled} numberOfLines={1}>
                   {title || 'Loading...'}
                 </Text>
               </View>
