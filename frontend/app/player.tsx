@@ -95,6 +95,9 @@ export default function PlayerScreen() {
     seriesId,
     season,
     episode,
+    // Visual assets
+    backdrop,
+    poster,
   } = useLocalSearchParams<{
     url?: string;
     title?: string;
@@ -111,6 +114,8 @@ export default function PlayerScreen() {
     seriesId?: string;
     season?: string;
     episode?: string;
+    backdrop?: string;
+    poster?: string;
   }>();
   const router = useRouter();
   
