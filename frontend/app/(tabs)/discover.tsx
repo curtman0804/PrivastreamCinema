@@ -90,23 +90,39 @@ export default function DiscoverScreen() {
     });
   };
 
-  // Handle continue watching item press - resume playback
+  // Handle continue watching item press - navigate to details page
   const handleContinueWatchingPress = (item: WatchProgress) => {
-    // Navigate directly to player with the saved position
+    // For series episodes, navigate to the series details page with episode info
+    // For movies, navigate to the movie details page
+    // The details page will handle stream fetching and can auto-play
+    
+    // Determine the correct ID and type to navigate to
+    let targetId = item.content_id;
+    let targetType = item.content_type;
+    
+    // For series episodes (content_id like "tt1234567:1:5"), navigate to the series
+    if (item.series_id) {
+      targetId = item.series_id;
+      targetType = 'series';
+    } else if (item.content_type === 'series' && item.content_id.includes(':')) {
+      // Extract series ID from episode ID (format: tt1234567:season:episode)
+      const parts = item.content_id.split(':');
+      if (parts.length >= 1) {
+        targetId = parts[0];
+      }
+    }
+    
+    const encodedId = encodeURIComponent(targetId);
     router.push({
-      pathname: '/player',
+      pathname: `/details/${targetType}/${encodedId}`,
       params: {
-        contentId: item.content_id,
-        contentType: item.content_type,
-        title: item.title,
+        name: item.title || '',
         poster: item.poster || '',
-        backdrop: item.backdrop || '',
-        logo: item.logo || '',
+        // Pass resume info so details page can show "Resume" button
+        resumeEpisodeId: item.content_type === 'series' ? item.content_id : '',
         resumePosition: String(item.progress || 0),
-        season: item.season !== undefined ? String(item.season) : '',
-        episode: item.episode !== undefined ? String(item.episode) : '',
-        episodeTitle: item.episode_title || '',
-        seriesId: item.series_id || '',
+        resumeSeason: item.season !== undefined ? String(item.season) : '',
+        resumeEpisode: item.episode !== undefined ? String(item.episode) : '',
       },
     });
   };
