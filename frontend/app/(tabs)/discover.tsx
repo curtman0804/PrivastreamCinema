@@ -90,13 +90,38 @@ export default function DiscoverScreen() {
     });
   };
 
-  // Handle continue watching item press - navigate to details page
+  // Handle continue watching item press - navigate directly to player if stream info available
   const handleContinueWatchingPress = (item: WatchProgress) => {
-    // For series episodes, navigate to the series details page with episode info
-    // For movies, navigate to the movie details page
-    // The details page will handle stream fetching and can auto-play
+    // If we have stream info, go directly to player and resume
+    if (item.stream_info_hash || item.stream_url) {
+      router.push({
+        pathname: '/player',
+        params: {
+          // Stream source
+          infoHash: item.stream_info_hash || '',
+          directUrl: item.stream_url || '',
+          fileIdx: item.stream_file_idx !== undefined ? String(item.stream_file_idx) : '',
+          filename: item.stream_filename || '',
+          // Content info
+          title: item.title || '',
+          contentType: item.content_type,
+          contentId: item.content_id,
+          // Visual assets
+          poster: item.poster || '',
+          backdrop: item.backdrop || '',
+          logo: item.logo || '',
+          // Resume position
+          resumePosition: String(item.progress || 0),
+          // Series info
+          season: item.season !== undefined ? String(item.season) : '',
+          episode: item.episode !== undefined ? String(item.episode) : '',
+          seriesId: item.series_id || '',
+        },
+      });
+      return;
+    }
     
-    // Determine the correct ID and type to navigate to
+    // No stream info - navigate to details page to select a stream
     let targetId = item.content_id;
     let targetType = item.content_type;
     
@@ -105,7 +130,6 @@ export default function DiscoverScreen() {
       targetId = item.series_id;
       targetType = 'series';
     } else if (item.content_type === 'series' && item.content_id.includes(':')) {
-      // Extract series ID from episode ID (format: tt1234567:season:episode)
       const parts = item.content_id.split(':');
       if (parts.length >= 1) {
         targetId = parts[0];
@@ -118,7 +142,6 @@ export default function DiscoverScreen() {
       params: {
         name: item.title || '',
         poster: item.poster || '',
-        // Pass resume info so details page can show "Resume" button
         resumeEpisodeId: item.content_type === 'series' ? item.content_id : '',
         resumePosition: String(item.progress || 0),
         resumeSeason: item.season !== undefined ? String(item.season) : '',
@@ -127,47 +150,68 @@ export default function DiscoverScreen() {
     });
   };
 
-  // Render a continue watching item with progress bar
+  // Handle removing item from continue watching
+  const handleRemoveFromContinueWatching = async (item: WatchProgress) => {
+    try {
+      await api.watchProgress.delete(item.content_id);
+      // Update local state immediately
+      setContinueWatching(prev => prev.filter(i => i.content_id !== item.content_id));
+    } catch (err) {
+      console.log('[Discover] Error removing from continue watching:', err);
+    }
+  };
+
+  // Render a continue watching item with progress bar and remove button
   const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) => {
     const percentWatched = item.percent_watched || 0;
     
     return (
-      <TouchableOpacity
-        style={styles.continueItem}
-        onPress={() => handleContinueWatchingPress(item)}
-        activeOpacity={0.8}
-      >
-        <View style={styles.continueImageContainer}>
-          <Image
-            source={{ uri: item.backdrop || item.poster || '' }}
-            style={styles.continueImage}
-            contentFit="cover"
-          />
-          {/* Play icon overlay */}
-          <View style={styles.playOverlay}>
-            <Ionicons name="play-circle" size={40} color="rgba(255,255,255,0.9)" />
-          </View>
-          {/* Progress bar */}
-          <View style={styles.progressBarContainer}>
-            <View 
-              style={[
-                styles.progressBarFill, 
-                { width: `${Math.min(percentWatched, 100)}%` }
-              ]} 
+      <View style={styles.continueItemWrapper}>
+        <TouchableOpacity
+          style={styles.continueItem}
+          onPress={() => handleContinueWatchingPress(item)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.continueImageContainer}>
+            <Image
+              source={{ uri: item.backdrop || item.poster || '' }}
+              style={styles.continueImage}
+              contentFit="cover"
             />
+            {/* Play icon overlay */}
+            <View style={styles.playOverlay}>
+              <Ionicons name="play-circle" size={40} color="rgba(255,255,255,0.9)" />
+            </View>
+            {/* Progress bar */}
+            <View style={styles.progressBarContainer}>
+              <View 
+                style={[
+                  styles.progressBarFill, 
+                  { width: `${Math.min(percentWatched, 100)}%` }
+                ]} 
+              />
+            </View>
           </View>
-        </View>
-        <Text style={styles.continueTitle} numberOfLines={1}>
-          {item.title}
-        </Text>
-        {/* Show episode info if it's a series */}
-        {item.season !== undefined && item.episode !== undefined && (
-          <Text style={styles.continueEpisode} numberOfLines={1}>
-            S{item.season} E{item.episode}
-            {item.episode_title ? ` - ${item.episode_title}` : ''}
+          <Text style={styles.continueTitle} numberOfLines={1}>
+            {item.title}
           </Text>
-        )}
-      </TouchableOpacity>
+          {/* Show episode info if it's a series */}
+          {item.season !== undefined && item.episode !== undefined && (
+            <Text style={styles.continueEpisode} numberOfLines={1}>
+              S{item.season} E{item.episode}
+              {item.episode_title ? ` - ${item.episode_title}` : ''}
+            </Text>
+          )}
+        </TouchableOpacity>
+        {/* Remove button */}
+        <TouchableOpacity
+          style={styles.removeButton}
+          onPress={() => handleRemoveFromContinueWatching(item)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="close-circle" size={22} color="rgba(255,255,255,0.7)" />
+        </TouchableOpacity>
+      </View>
     );
   };
 
