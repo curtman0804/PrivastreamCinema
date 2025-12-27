@@ -932,10 +932,12 @@ export default function PlayerScreen() {
       setLoadingStatus('Starting torrent engine...');
       
       // Parse fileIdx if provided (for selecting specific episode in season packs)
-      const parsedFileIdx = fileIdx ? parseInt(fileIdx, 10) : undefined;
-      console.log(`[PLAYER] Starting torrent with fileIdx=${parsedFileIdx}, filename=${filename || 'auto'}`);
+      // Handle empty string, null, undefined, and NaN cases
+      const parsedFileIdx = fileIdx && fileIdx !== '' ? parseInt(fileIdx, 10) : undefined;
+      const validFileIdx = parsedFileIdx !== undefined && !isNaN(parsedFileIdx) ? parsedFileIdx : undefined;
+      console.log(`[PLAYER] Starting torrent with fileIdx=${validFileIdx}, filename=${filename || 'auto'}`);
       
-      await api.stream.start(infoHash, parsedFileIdx, filename || undefined);
+      await api.stream.start(infoHash, validFileIdx, filename || undefined);
       
       let pollInterval = 500;
       
