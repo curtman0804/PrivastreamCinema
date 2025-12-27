@@ -888,24 +888,59 @@ export default function PlayerScreen() {
     <View style={styles.container}>
       <StatusBar hidden />
 
-      {/* Loading Overlay */}
+      {/* Stremio-Style Loading Screen */}
       {isLoading && !error && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#B8A05C" />
-          <Text style={styles.loadingText}>{loadingStatus}</Text>
+        <View style={styles.stremioLoadingContainer}>
+          {/* Backdrop Image */}
+          {(backdrop || poster) && (
+            <Image
+              source={{ uri: backdrop || poster }}
+              style={styles.loadingBackdrop}
+              blurRadius={Platform.OS === 'web' ? 0 : 3}
+            />
+          )}
           
-          {infoHash && (
-            <View style={styles.progressInfo}>
-              <View style={styles.progressBarBg}>
-                <View style={[styles.progressFill, { width: `${Math.min(downloadProgress, 100)}%` }]} />
-              </View>
-              <View style={styles.statsRow}>
-                <Text style={styles.statText}>{peers} peers</Text>
-                <Text style={styles.statText}>{formatSpeed(downloadSpeed)}</Text>
-                <Text style={styles.statText}>{downloadProgress.toFixed(1)}%</Text>
+          {/* Dark Overlay */}
+          <View style={styles.loadingDarkOverlay} />
+          
+          {/* Content */}
+          <View style={styles.loadingContent}>
+            {/* Title with Fill Animation */}
+            <View style={styles.titleContainer}>
+              {/* Background Title (Gray) */}
+              <Text style={styles.titleBackground}>
+                {title || 'Loading...'}
+              </Text>
+              
+              {/* Foreground Title (Fills based on progress) */}
+              <View style={[styles.titleFillMask, { width: `${Math.min(downloadProgress || 10, 100)}%` }]}>
+                <Text style={styles.titleForeground}>
+                  {title || 'Loading...'}
+                </Text>
               </View>
             </View>
-          )}
+            
+            {/* Loading Status */}
+            <Text style={styles.loadingStatusText}>{loadingStatus}</Text>
+            
+            {/* Stats Row */}
+            {infoHash && (
+              <View style={styles.loadingStatsRow}>
+                <View style={styles.loadingStat}>
+                  <Ionicons name="people-outline" size={16} color="#B8A05C" />
+                  <Text style={styles.loadingStatText}>{peers} peers</Text>
+                </View>
+                <View style={styles.loadingStat}>
+                  <Ionicons name="arrow-down-outline" size={16} color="#B8A05C" />
+                  <Text style={styles.loadingStatText}>{formatSpeed(downloadSpeed)}</Text>
+                </View>
+                <View style={styles.loadingStat}>
+                  <Ionicons name="disc-outline" size={16} color="#B8A05C" />
+                  <Text style={styles.loadingStatText}>{downloadProgress.toFixed(1)}%</Text>
+                </View>
+              </View>
+            )}
+          </View>
         </View>
       )}
 
