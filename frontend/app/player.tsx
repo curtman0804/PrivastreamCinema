@@ -390,6 +390,11 @@ export default function PlayerScreen() {
       setPosition(status.positionMillis);
       setDuration(status.durationMillis || 0);
       
+      // Save watch progress periodically
+      if (status.isPlaying && status.durationMillis && status.durationMillis > 0) {
+        saveWatchProgress(status.positionMillis, status.durationMillis);
+      }
+      
       // Mark playback as started when video is actually playing
       if (status.isPlaying && !playbackStarted) {
         console.log('[PLAYER] Playback started successfully!');
