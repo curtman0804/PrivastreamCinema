@@ -131,6 +131,23 @@ export interface LibraryResponse {
   channels: ContentItem[];
 }
 
+export interface WatchProgress {
+  content_id: string;
+  content_type: string;
+  title: string;
+  poster?: string;
+  backdrop?: string;
+  logo?: string;
+  progress: number;
+  duration: number;
+  percent_watched: number;
+  season?: number;
+  episode?: number;
+  episode_title?: string;
+  series_id?: string;
+  updated_at?: string;
+}
+
 export interface SearchResult {
   id: string;
   name: string;
