@@ -363,4 +363,69 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
   },
+  // Continue Watching Styles
+  continueWatchingSection: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  continueList: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  continueItem: {
+    width: CONTINUE_ITEM_WIDTH,
+    marginRight: 12,
+  },
+  continueImageContainer: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#1a1a1a',
+    position: 'relative',
+  },
+  continueImage: {
+    width: '100%',
+    height: '100%',
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  progressBarContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#B8A05C',
+  },
+  continueTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  continueEpisode: {
+    color: '#888888',
+    fontSize: 11,
+    marginTop: 2,
+  },
 });
