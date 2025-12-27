@@ -2560,17 +2560,24 @@ async def remove_from_library(item_type: str, item_id: str, current_user: User =
 
 @api_router.get("/watch-progress")
 async def get_watch_progress(current_user: User = Depends(get_current_user)):
-    """Get all watch progress for current user (Continue Watching list)"""
+    """Get all watch progress for current user (Continue Watching list)
+    
+    Matches Stremio's behavior:
+    - Shows items with ANY watch progress (time_offset > 0)
+    - Filters out items that are nearly complete (>95%)
+    - Sorted by most recently watched
+    """
     progress_items = await db.watch_progress.find(
         {"user_id": current_user.id},
         {"_id": 0}
     ).sort("updated_at", -1).to_list(50)
     
-    # Filter out items that are mostly watched (>95%) or barely started (<0.05%)
-    # 0.05% = ~5 seconds for a 3-hour movie, ~3 seconds for a 1-hour episode
+    # Stremio shows items with ANY progress (time_offset > 0)
+    # We filter out items that are mostly watched (>95%) 
+    # but show everything else regardless of how little was watched
     continue_watching = [
         item for item in progress_items 
-        if 0.05 <= item.get("percent_watched", 0) <= 95
+        if item.get("progress", 0) > 0 and item.get("percent_watched", 0) <= 95
     ]
     
     return {"continueWatching": continue_watching}
