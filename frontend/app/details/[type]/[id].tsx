@@ -229,6 +229,8 @@ export default function DetailsScreen() {
           contentType: cType,
           contentId: subtitleContentId,
           fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks]),
+          backdrop: content?.background || '',
+          poster: content?.poster || '',
           ...nextEpisodeData,
         },
       });
@@ -247,6 +249,8 @@ export default function DetailsScreen() {
           contentId: subtitleContentId,
           fileIdx: stream.fileIdx !== undefined ? String(stream.fileIdx) : '',
           filename: stream.filename || '',
+          backdrop: content?.background || '',
+          poster: content?.poster || '',
           ...nextEpisodeData,
         },
       });
@@ -260,6 +264,8 @@ export default function DetailsScreen() {
           isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
           contentId: subtitleContentId,
+          backdrop: content?.background || '',
+          poster: content?.poster || '',
           ...nextEpisodeData,
         },
       });
