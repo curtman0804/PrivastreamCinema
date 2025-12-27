@@ -207,24 +207,39 @@ export default function AddonsScreen() {
           ))}
         </View>
       </View>
-      <Pressable
-        style={({ pressed }) => [
-          styles.deleteButton,
-          pressed && { opacity: 0.6, transform: [{ scale: 0.95 }] }
-        ]}
-        onPress={() => {
-          console.log('Delete button pressed for:', item.manifest.name, 'ID:', item.id);
-          handleUninstall(item);
-        }}
-        hitSlop={10}
-        disabled={deletingAddonId === item.id}
-      >
-        {deletingAddonId === item.id ? (
-          <ActivityIndicator size="small" color="#FF4444" />
-        ) : (
-          <Ionicons name="trash-outline" size={22} color="#FF4444" />
-        )}
-      </Pressable>
+      <View style={styles.addonActions}>
+        {/* Share Button */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.shareButton,
+            pressed && { opacity: 0.6, transform: [{ scale: 0.95 }] }
+          ]}
+          onPress={() => handleShareAddon(item)}
+          hitSlop={10}
+        >
+          <Ionicons name="share-outline" size={22} color="#B8A05C" />
+        </Pressable>
+        
+        {/* Delete Button */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.deleteButton,
+            pressed && { opacity: 0.6, transform: [{ scale: 0.95 }] }
+          ]}
+          onPress={() => {
+            console.log('Delete button pressed for:', item.manifest.name, 'ID:', item.id);
+            handleUninstall(item);
+          }}
+          hitSlop={10}
+          disabled={deletingAddonId === item.id}
+        >
+          {deletingAddonId === item.id ? (
+            <ActivityIndicator size="small" color="#FF4444" />
+          ) : (
+            <Ionicons name="trash-outline" size={22} color="#FF4444" />
+          )}
+        </Pressable>
+      </View>
     </View>
   );
 
