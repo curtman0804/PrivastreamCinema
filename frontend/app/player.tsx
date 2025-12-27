@@ -129,6 +129,7 @@ export default function PlayerScreen() {
   const [pendingResumePosition, setPendingResumePosition] = useState<number | null>(
     resumePosition ? parseFloat(resumePosition) : null
   );
+  const hasResumedRef = useRef(false); // Track if we've already attempted resume
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
