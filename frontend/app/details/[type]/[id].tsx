@@ -177,6 +177,16 @@ export default function DetailsScreen() {
       episode: String(episodeNumber),
     } : {};
     
+    // Check if we should resume from a saved position
+    // Only resume if the content matches what was being watched
+    const shouldResume = resumePosition && parseFloat(resumePosition) > 0 && (
+      // For movies, just check the ID
+      (type === 'movie' && !resumeEpisodeId) ||
+      // For series, check if it's the same episode
+      (type === 'series' && resumeEpisodeId === subtitleContentId)
+    );
+    const resumeData = shouldResume ? { resumePosition } : {};
+    
     // Build fallback streams list (other streams of the same content)
     const buildFallbackUrls = async (): Promise<string[]> => {
       const authToken = await AsyncStorage.getItem('auth_token');
