@@ -2566,10 +2566,11 @@ async def get_watch_progress(current_user: User = Depends(get_current_user)):
         {"_id": 0}
     ).sort("updated_at", -1).to_list(50)
     
-    # Filter out items that are mostly watched (>95%) or barely started (<2%)
+    # Filter out items that are mostly watched (>95%) or barely started (<0.5%)
+    # Lower threshold to 0.5% so items appear after just a few seconds of watching
     continue_watching = [
         item for item in progress_items 
-        if 2 <= item.get("percent_watched", 0) <= 95
+        if 0.5 <= item.get("percent_watched", 0) <= 95
     ]
     
     return {"continueWatching": continue_watching}
