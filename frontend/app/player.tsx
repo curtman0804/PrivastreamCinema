@@ -1490,7 +1490,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
   },
-  // Title as progress bar - Stremio style
+  // Logo as progress bar - Stremio style
+  logoWrapper: {
+    position: 'relative',
+    width: '80%',
+    height: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  logoUnfilled: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    opacity: 0.3,
+    tintColor: '#888',
+  },
+  logoFillClip: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    overflow: 'hidden',
+  },
+  logoFilled: {
+    width: Dimensions.get('window').width * 0.8,
+    height: '100%',
+  },
+  // Title as progress bar - Stremio style (fallback)
   titleWrapper: {
     position: 'relative',
     width: '100%',
