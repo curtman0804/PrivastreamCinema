@@ -9,12 +9,12 @@ const getBaseUrl = () => {
   if (Platform.OS === 'web') {
     return '';
   }
-  // For mobile (Expo Go), use the full backend URL
+  // For mobile (Expo Go or standalone app), use the full backend URL
   const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl;
   if (backendUrl) {
     return backendUrl;
   }
-  // Fallback - try the packager hostname
+  // Production backend URL (deployed on Emergent)
   return 'https://stream-cinema-125.preview.emergentagent.com';
 };
 
