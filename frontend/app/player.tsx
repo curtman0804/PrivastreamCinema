@@ -80,6 +80,9 @@ interface SubtitleCue {
 }
 
 export default function PlayerScreen() {
+  // Keep screen awake during playback
+  useKeepAwake();
+  
   const { 
     url, 
     title, 
@@ -126,6 +129,29 @@ export default function PlayerScreen() {
     resumePosition?: string;
   }>();
   const router = useRouter();
+  
+  // Hide navigation bar on Android for immersive video experience
+  useEffect(() => {
+    const setupImmersiveMode = async () => {
+      if (Platform.OS === 'android') {
+        try {
+          await NavigationBar.setVisibilityAsync('hidden');
+          await NavigationBar.setBehaviorAsync('overlay-swipe');
+        } catch (e) {
+          console.log('Could not hide navigation bar:', e);
+        }
+      }
+    };
+    
+    setupImmersiveMode();
+    
+    return () => {
+      // Restore navigation bar when leaving player
+      if (Platform.OS === 'android') {
+        NavigationBar.setVisibilityAsync('visible').catch(() => {});
+      }
+    };
+  }, []);
   
   // Resume position in seconds (from continue watching)
   const parsedResumePosition = resumePosition ? parseFloat(resumePosition) : null;
