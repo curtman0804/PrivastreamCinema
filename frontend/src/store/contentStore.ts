@@ -167,8 +167,13 @@ export const useContentStore = create<ContentState>((set, get) => ({
     set({ isLoadingStreams: true, streams: [], error: null });
     
     try {
-      // Use the unified streams endpoint that fetches from all addons
-      const result = await api.addons.getAllStreams(type, id);
+      // Cache streams for 10 minutes
+      const cacheKey = `streams_${type}_${id}`;
+      const result = await cachedFetch(
+        cacheKey,
+        () => api.addons.getAllStreams(type, id),
+        CACHE_DURATIONS.SHORT
+      );
       const allStreams = result.streams || [];
       set({ streams: allStreams, isLoadingStreams: false });
       return allStreams;
@@ -182,7 +187,8 @@ export const useContentStore = create<ContentState>((set, get) => ({
   addToLibrary: async (item: ContentItem) => {
     try {
       await api.library.add(item);
-      await get().fetchLibrary();
+      await clearCache('library'); // Clear library cache after adding
+      await get().fetchLibrary(true);
     } catch (error: any) {
       set({ error: error.message });
     }
@@ -191,7 +197,8 @@ export const useContentStore = create<ContentState>((set, get) => ({
   removeFromLibrary: async (type: string, id: string) => {
     try {
       await api.library.remove(type, id);
-      await get().fetchLibrary();
+      await clearCache('library'); // Clear library cache after removing
+      await get().fetchLibrary(true);
     } catch (error: any) {
       set({ error: error.message });
     }
