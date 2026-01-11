@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
+import { cachedFetch, CACHE_DURATIONS, clearCache } from '../utils/cache';
 
 interface CurrentPlaying {
   contentType: string;
@@ -26,9 +27,9 @@ interface ContentState {
   isLoadingMoreSearch: boolean;
   isLoadingStreams: boolean;
   error: string | null;
-  fetchDiscover: () => Promise<void>;
-  fetchAddons: () => Promise<void>;
-  fetchLibrary: () => Promise<void>;
+  fetchDiscover: (forceRefresh?: boolean) => Promise<void>;
+  fetchAddons: (forceRefresh?: boolean) => Promise<void>;
+  fetchLibrary: (forceRefresh?: boolean) => Promise<void>;
   search: (query: string) => Promise<void>;
   loadMoreSearch: () => Promise<void>;
   fetchStreams: (type: string, id: string) => Promise<Stream[]>;
@@ -58,20 +59,34 @@ export const useContentStore = create<ContentState>((set, get) => ({
   isLoadingStreams: false,
   error: null,
 
-  fetchDiscover: async () => {
+  fetchDiscover: async (forceRefresh = false) => {
     set({ isLoadingDiscover: true, error: null });
     try {
-      const data = await api.content.getDiscover();
+      if (forceRefresh) {
+        await clearCache('discover');
+      }
+      const data = await cachedFetch(
+        'discover',
+        () => api.content.getDiscover(),
+        CACHE_DURATIONS.MEDIUM // 30 minutes
+      );
       set({ discoverData: data, isLoadingDiscover: false });
     } catch (error: any) {
       set({ error: error.message, isLoadingDiscover: false });
     }
   },
 
-  fetchAddons: async () => {
+  fetchAddons: async (forceRefresh = false) => {
     set({ isLoadingAddons: true, error: null });
     try {
-      const data = await api.addons.getAll();
+      if (forceRefresh) {
+        await clearCache('addons');
+      }
+      const data = await cachedFetch(
+        'addons',
+        () => api.addons.getAll(),
+        CACHE_DURATIONS.LONG // 2 hours
+      );
       set({ addons: data, isLoadingAddons: false });
     } catch (error: any) {
       set({ error: error.message, isLoadingAddons: false });
