@@ -18,7 +18,8 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": false,
-      "package": "com.privastream.cinema"
+      "package": "com.privastream.cinema",
+      "allowBackup": false
     },
     "web": {
       "bundler": "metro",
