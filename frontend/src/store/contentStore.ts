@@ -26,9 +26,9 @@ interface ContentState {
   isLoadingMoreSearch: boolean;
   isLoadingStreams: boolean;
   error: string | null;
-  fetchDiscover: () => Promise<void>;
-  fetchAddons: () => Promise<void>;
-  fetchLibrary: () => Promise<void>;
+  fetchDiscover: (forceRefresh?: boolean) => Promise<void>;
+  fetchAddons: (forceRefresh?: boolean) => Promise<void>;
+  fetchLibrary: (forceRefresh?: boolean) => Promise<void>;
   search: (query: string) => Promise<void>;
   loadMoreSearch: () => Promise<void>;
   fetchStreams: (type: string, id: string) => Promise<Stream[]>;
@@ -36,9 +36,10 @@ interface ContentState {
   removeFromLibrary: (type: string, id: string) => Promise<void>;
   clearSearch: () => void;
   setCurrentPlaying: (info: CurrentPlaying | null) => void;
+  resetStore: () => void;
 }
 
-export const useContentStore = create<ContentState>((set, get) => ({
+const initialState = {
   discoverData: null,
   addons: [],
   library: null,
@@ -57,33 +58,44 @@ export const useContentStore = create<ContentState>((set, get) => ({
   isLoadingMoreSearch: false,
   isLoadingStreams: false,
   error: null,
+};
 
-  fetchDiscover: async () => {
+export const useContentStore = create<ContentState>((set, get) => ({
+  ...initialState,
+
+  resetStore: () => {
+    set(initialState);
+  },
+
+  fetchDiscover: async (forceRefresh = false) => {
     set({ isLoadingDiscover: true, error: null });
     try {
       const data = await api.content.getDiscover();
       set({ discoverData: data, isLoadingDiscover: false });
     } catch (error: any) {
-      set({ error: error.message, isLoadingDiscover: false });
+      console.log('[ContentStore] fetchDiscover error:', error);
+      set({ error: error.message, isLoadingDiscover: false, discoverData: null });
     }
   },
 
-  fetchAddons: async () => {
+  fetchAddons: async (forceRefresh = false) => {
     set({ isLoadingAddons: true, error: null });
     try {
       const data = await api.addons.getAll();
-      set({ addons: data, isLoadingAddons: false });
+      set({ addons: data || [], isLoadingAddons: false });
     } catch (error: any) {
-      set({ error: error.message, isLoadingAddons: false });
+      console.log('[ContentStore] fetchAddons error:', error);
+      set({ error: error.message, isLoadingAddons: false, addons: [] });
     }
   },
 
-  fetchLibrary: async () => {
+  fetchLibrary: async (forceRefresh = false) => {
     set({ isLoadingLibrary: true, error: null });
     try {
       const data = await api.library.get();
       set({ library: data, isLoadingLibrary: false });
     } catch (error: any) {
+      console.log('[ContentStore] fetchLibrary error:', error);
       set({ error: error.message, isLoadingLibrary: false });
     }
   },
@@ -108,20 +120,20 @@ export const useContentStore = create<ContentState>((set, get) => ({
         isLoadingSearch: false 
       });
     } catch (error: any) {
+      console.log('[ContentStore] search error:', error);
       set({ error: error.message, isLoadingSearch: false });
     }
   },
 
   loadMoreSearch: async () => {
-    const { currentSearchQuery, searchSkip, isLoadingMoreSearch, searchHasMore, searchMovies, searchSeries } = get();
-    if (!currentSearchQuery || isLoadingMoreSearch || !searchHasMore) return;
+    const { currentSearchQuery, searchSkip, searchMovies, searchSeries, isLoadingMoreSearch } = get();
+    if (!currentSearchQuery || isLoadingMoreSearch) return;
     
     set({ isLoadingMoreSearch: true });
     try {
       const data = await api.content.search(currentSearchQuery, searchSkip, 30);
       const newMovies = data.movies || [];
       const newSeries = data.series || [];
-      
       set({ 
         searchMovies: [...searchMovies, ...newMovies],
         searchSeries: [...searchSeries, ...newSeries],
@@ -131,6 +143,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
         isLoadingMoreSearch: false 
       });
     } catch (error: any) {
+      console.log('[ContentStore] loadMoreSearch error:', error);
       set({ error: error.message, isLoadingMoreSearch: false });
     }
   },
@@ -139,13 +152,12 @@ export const useContentStore = create<ContentState>((set, get) => ({
     set({ isLoadingStreams: true, streams: [], error: null });
     
     try {
-      // Use the unified streams endpoint that fetches from all addons
       const result = await api.addons.getAllStreams(type, id);
       const allStreams = result.streams || [];
       set({ streams: allStreams, isLoadingStreams: false });
       return allStreams;
-    } catch (error) {
-      console.log('Failed to fetch streams:', error);
+    } catch (error: any) {
+      console.log('[ContentStore] fetchStreams error:', error);
       set({ streams: [], isLoadingStreams: false });
       return [];
     }
@@ -156,6 +168,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
       await api.library.add(item);
       await get().fetchLibrary();
     } catch (error: any) {
+      console.log('[ContentStore] addToLibrary error:', error);
       set({ error: error.message });
     }
   },
@@ -165,6 +178,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
       await api.library.remove(type, id);
       await get().fetchLibrary();
     } catch (error: any) {
+      console.log('[ContentStore] removeFromLibrary error:', error);
       set({ error: error.message });
     }
   },
@@ -173,7 +187,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     set({ searchResults: [], searchMovies: [], searchSeries: [], searchHasMore: false, searchSkip: 0, currentSearchQuery: '' });
   },
 
-  setCurrentPlaying: (info) => {
+  setCurrentPlaying: (info: CurrentPlaying | null) => {
     set({ currentPlaying: info });
   },
 }));

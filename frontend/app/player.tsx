@@ -21,6 +21,8 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Modal, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useKeepAwake } from 'expo-keep-awake';
+import * as NavigationBar from 'expo-navigation-bar';
 
 // Conditionally import WebView only on native (fallback for HLS)
 let WebView: any = null;
@@ -78,6 +80,31 @@ interface SubtitleCue {
 }
 
 export default function PlayerScreen() {
+  // Keep screen awake during playback
+  useKeepAwake();
+  
+  // Hide navigation bar on Android for immersive video experience
+  useEffect(() => {
+    const setupImmersiveMode = async () => {
+      if (Platform.OS === 'android') {
+        try {
+          await NavigationBar.setVisibilityAsync('hidden');
+          await NavigationBar.setBehaviorAsync('overlay-swipe');
+        } catch (e) {
+          console.log('Could not hide navigation bar:', e);
+        }
+      }
+    };
+    
+    setupImmersiveMode();
+    
+    return () => {
+      if (Platform.OS === 'android') {
+        NavigationBar.setVisibilityAsync('visible').catch(() => {});
+      }
+    };
+  }, []);
+
   const { 
     url, 
     title, 
@@ -87,20 +114,16 @@ export default function PlayerScreen() {
     contentType, 
     contentId,
     fallbackStreams,
-    // File selection for torrents
     fileIdx,
     filename,
-    // Next episode data
     nextEpisodeId,
     nextEpisodeTitle,
     seriesId,
     season,
     episode,
-    // Visual assets
     backdrop,
     poster,
     logo,
-    // Resume position (from continue watching)
     resumePosition,
   } = useLocalSearchParams<{
     url?: string;

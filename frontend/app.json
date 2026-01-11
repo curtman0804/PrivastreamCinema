@@ -18,7 +18,8 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": false,
-      "package": "com.privastream.cinema"
+      "package": "com.privastream.cinema",
+      "allowBackup": false
     },
     "web": {
       "bundler": "metro",
@@ -36,7 +37,12 @@
           "backgroundColor": "#000000"
         }
       ],
-      "react-native-google-cast"
+      [
+        "react-native-google-cast",
+        {
+          "receiverAppId": "CC1AD845"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -46,7 +52,7 @@
       "eas": {
         "projectId": "734879b5-3cae-4195-b064-cc0c7617b7ae"
       },
-      "backendUrl": "https://stream-cinema-125.preview.emergentagent.com"
+      "backendUrl": "https://privastream-cinema-3.preview.emergentagent.com"
     },
     "owner": "choyt"
   }

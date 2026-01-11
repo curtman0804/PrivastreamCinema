@@ -11,9 +11,10 @@ interface AuthState {
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   loadStoredAuth: () => Promise<void>;
+  clearAuth: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
   isLoading: true,
@@ -51,10 +52,22 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
 
+  clearAuth: async () => {
+    await AsyncStorage.removeItem('auth_token');
+    await AsyncStorage.removeItem('user');
+    set({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+  },
+
   loadStoredAuth: async () => {
     try {
       const token = await AsyncStorage.getItem('auth_token');
       const userStr = await AsyncStorage.getItem('user');
+      
       if (token && userStr) {
         const user = JSON.parse(userStr);
         set({
@@ -67,6 +80,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ isLoading: false });
       }
     } catch (error) {
+      console.log('[AUTH] Error loading stored auth:', error);
       set({ isLoading: false });
     }
   },

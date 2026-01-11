@@ -9,13 +9,9 @@ const getBaseUrl = () => {
   if (Platform.OS === 'web') {
     return '';
   }
-  // For mobile (Expo Go), use the full backend URL
-  const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl;
-  if (backendUrl) {
-    return backendUrl;
-  }
-  // Fallback - try the packager hostname
-  return 'https://stream-cinema-125.preview.emergentagent.com';
+  // Production backend URL - hardcoded for standalone APK builds
+  // This ensures the app always connects to the correct backend
+  return 'https://privastream-cinema-3.preview.emergentagent.com';
 };
 
 const BASE_URL = getBaseUrl();
@@ -36,6 +32,20 @@ apiClient.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+// Handle 401/403 responses - clear invalid auth
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      // Token is invalid or expired - clear stored auth
+      console.log('[API] Auth error, clearing stored credentials');
+      await AsyncStorage.removeItem('auth_token');
+      await AsyncStorage.removeItem('user');
+    }
+    return Promise.reject(error);
+  }
+);
 
 export interface User {
   id: string;
@@ -766,7 +776,8 @@ export const api = {
     },
     getVideoUrl: (infoHash: string, fileIdx?: number): string => {
       // Return the full URL for the video stream with optional fileIdx
-      const baseUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+      // Use the hardcoded backend URL for mobile builds
+      const baseUrl = Platform.OS === 'web' ? '' : 'https://privastream-cinema-3.preview.emergentagent.com';
       const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
       return `${baseUrl}/api/stream/video/${infoHash}${params}`;
     },
