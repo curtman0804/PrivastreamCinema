@@ -9,12 +9,8 @@ const getBaseUrl = () => {
   if (Platform.OS === 'web') {
     return '';
   }
-  // For mobile (Expo Go or standalone app), use the full backend URL
-  const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl;
-  if (backendUrl) {
-    return backendUrl;
-  }
-  // Production backend URL (deployed on Emergent)
+  // Production backend URL - hardcoded for standalone APK builds
+  // This ensures the app always connects to the correct backend
   return 'https://privastream-cinema-3.preview.emergentagent.com';
 };
 
