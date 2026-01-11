@@ -776,7 +776,8 @@ export const api = {
     },
     getVideoUrl: (infoHash: string, fileIdx?: number): string => {
       // Return the full URL for the video stream with optional fileIdx
-      const baseUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+      // Use the hardcoded backend URL for mobile builds
+      const baseUrl = Platform.OS === 'web' ? '' : 'https://privastream-cinema-3.preview.emergentagent.com';
       const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
       return `${baseUrl}/api/stream/video/${infoHash}${params}`;
     },
