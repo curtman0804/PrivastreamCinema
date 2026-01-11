@@ -21,6 +21,8 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Modal, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useKeepAwake } from 'expo-keep-awake';
+import * as NavigationBar from 'expo-navigation-bar';
 
 // Conditionally import WebView only on native (fallback for HLS)
 let WebView: any = null;
