@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
-import { cachedFetch, CACHE_DURATIONS, clearCache } from '../utils/cache';
 
 interface CurrentPlaying {
   contentType: string;
@@ -37,9 +36,10 @@ interface ContentState {
   removeFromLibrary: (type: string, id: string) => Promise<void>;
   clearSearch: () => void;
   setCurrentPlaying: (info: CurrentPlaying | null) => void;
+  resetStore: () => void;
 }
 
-export const useContentStore = create<ContentState>((set, get) => ({
+const initialState = {
   discoverData: null,
   addons: [],
   library: null,
@@ -58,54 +58,44 @@ export const useContentStore = create<ContentState>((set, get) => ({
   isLoadingMoreSearch: false,
   isLoadingStreams: false,
   error: null,
+};
+
+export const useContentStore = create<ContentState>((set, get) => ({
+  ...initialState,
+
+  resetStore: () => {
+    set(initialState);
+  },
 
   fetchDiscover: async (forceRefresh = false) => {
     set({ isLoadingDiscover: true, error: null });
     try {
-      if (forceRefresh) {
-        await clearCache('discover');
-      }
-      const data = await cachedFetch(
-        'discover',
-        () => api.content.getDiscover(),
-        CACHE_DURATIONS.MEDIUM // 30 minutes
-      );
+      const data = await api.content.getDiscover();
       set({ discoverData: data, isLoadingDiscover: false });
     } catch (error: any) {
-      set({ error: error.message, isLoadingDiscover: false });
+      console.log('[ContentStore] fetchDiscover error:', error);
+      set({ error: error.message, isLoadingDiscover: false, discoverData: null });
     }
   },
 
   fetchAddons: async (forceRefresh = false) => {
     set({ isLoadingAddons: true, error: null });
     try {
-      if (forceRefresh) {
-        await clearCache('addons');
-      }
-      const data = await cachedFetch(
-        'addons',
-        () => api.addons.getAll(),
-        CACHE_DURATIONS.LONG // 2 hours
-      );
-      set({ addons: data, isLoadingAddons: false });
+      const data = await api.addons.getAll();
+      set({ addons: data || [], isLoadingAddons: false });
     } catch (error: any) {
-      set({ error: error.message, isLoadingAddons: false });
+      console.log('[ContentStore] fetchAddons error:', error);
+      set({ error: error.message, isLoadingAddons: false, addons: [] });
     }
   },
 
   fetchLibrary: async (forceRefresh = false) => {
     set({ isLoadingLibrary: true, error: null });
     try {
-      if (forceRefresh) {
-        await clearCache('library');
-      }
-      const data = await cachedFetch(
-        'library',
-        () => api.library.get(),
-        CACHE_DURATIONS.SHORT // 5 minutes - library changes more often
-      );
+      const data = await api.library.get();
       set({ library: data, isLoadingLibrary: false });
     } catch (error: any) {
+      console.log('[ContentStore] fetchLibrary error:', error);
       set({ error: error.message, isLoadingLibrary: false });
     }
   },
@@ -117,13 +107,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
     set({ isLoadingSearch: true, error: null, currentSearchQuery: query, searchSkip: 0 });
     try {
-      // Cache search results for 5 minutes
-      const cacheKey = `search_${query.toLowerCase().trim()}`;
-      const data = await cachedFetch(
-        cacheKey,
-        () => api.content.search(query, 0, 30),
-        CACHE_DURATIONS.SHORT
-      );
+      const data = await api.content.search(query, 0, 30);
       const movies = data.movies || [];
       const series = data.series || [];
       const results = [...movies, ...series];
@@ -136,20 +120,20 @@ export const useContentStore = create<ContentState>((set, get) => ({
         isLoadingSearch: false 
       });
     } catch (error: any) {
+      console.log('[ContentStore] search error:', error);
       set({ error: error.message, isLoadingSearch: false });
     }
   },
 
   loadMoreSearch: async () => {
-    const { currentSearchQuery, searchSkip, isLoadingMoreSearch, searchHasMore, searchMovies, searchSeries } = get();
-    if (!currentSearchQuery || isLoadingMoreSearch || !searchHasMore) return;
+    const { currentSearchQuery, searchSkip, searchMovies, searchSeries, isLoadingMoreSearch } = get();
+    if (!currentSearchQuery || isLoadingMoreSearch) return;
     
     set({ isLoadingMoreSearch: true });
     try {
       const data = await api.content.search(currentSearchQuery, searchSkip, 30);
       const newMovies = data.movies || [];
       const newSeries = data.series || [];
-      
       set({ 
         searchMovies: [...searchMovies, ...newMovies],
         searchSeries: [...searchSeries, ...newSeries],
@@ -159,6 +143,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
         isLoadingMoreSearch: false 
       });
     } catch (error: any) {
+      console.log('[ContentStore] loadMoreSearch error:', error);
       set({ error: error.message, isLoadingMoreSearch: false });
     }
   },
@@ -167,18 +152,12 @@ export const useContentStore = create<ContentState>((set, get) => ({
     set({ isLoadingStreams: true, streams: [], error: null });
     
     try {
-      // Cache streams for 10 minutes
-      const cacheKey = `streams_${type}_${id}`;
-      const result = await cachedFetch(
-        cacheKey,
-        () => api.addons.getAllStreams(type, id),
-        CACHE_DURATIONS.SHORT
-      );
+      const result = await api.addons.getAllStreams(type, id);
       const allStreams = result.streams || [];
       set({ streams: allStreams, isLoadingStreams: false });
       return allStreams;
-    } catch (error) {
-      console.log('Failed to fetch streams:', error);
+    } catch (error: any) {
+      console.log('[ContentStore] fetchStreams error:', error);
       set({ streams: [], isLoadingStreams: false });
       return [];
     }
@@ -187,9 +166,9 @@ export const useContentStore = create<ContentState>((set, get) => ({
   addToLibrary: async (item: ContentItem) => {
     try {
       await api.library.add(item);
-      await clearCache('library'); // Clear library cache after adding
-      await get().fetchLibrary(true);
+      await get().fetchLibrary();
     } catch (error: any) {
+      console.log('[ContentStore] addToLibrary error:', error);
       set({ error: error.message });
     }
   },
@@ -197,9 +176,9 @@ export const useContentStore = create<ContentState>((set, get) => ({
   removeFromLibrary: async (type: string, id: string) => {
     try {
       await api.library.remove(type, id);
-      await clearCache('library'); // Clear library cache after removing
-      await get().fetchLibrary(true);
+      await get().fetchLibrary();
     } catch (error: any) {
+      console.log('[ContentStore] removeFromLibrary error:', error);
       set({ error: error.message });
     }
   },
@@ -208,7 +187,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     set({ searchResults: [], searchMovies: [], searchSeries: [], searchHasMore: false, searchSkip: 0, currentSearchQuery: '' });
   },
 
-  setCurrentPlaying: (info) => {
+  setCurrentPlaying: (info: CurrentPlaying | null) => {
     set({ currentPlaying: info });
   },
 }));
