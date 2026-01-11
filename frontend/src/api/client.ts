@@ -15,7 +15,7 @@ const getBaseUrl = () => {
     return backendUrl;
   }
   // Production backend URL (deployed on Emergent)
-  return 'https://stream-cinema-125.preview.emergentagent.com';
+  return 'https://privastream-cinema-3.preview.emergentagent.com';
 };
 
 const BASE_URL = getBaseUrl();
