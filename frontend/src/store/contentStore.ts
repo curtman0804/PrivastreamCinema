@@ -93,10 +93,17 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
-  fetchLibrary: async () => {
+  fetchLibrary: async (forceRefresh = false) => {
     set({ isLoadingLibrary: true, error: null });
     try {
-      const data = await api.library.get();
+      if (forceRefresh) {
+        await clearCache('library');
+      }
+      const data = await cachedFetch(
+        'library',
+        () => api.library.get(),
+        CACHE_DURATIONS.SHORT // 5 minutes - library changes more often
+      );
       set({ library: data, isLoadingLibrary: false });
     } catch (error: any) {
       set({ error: error.message, isLoadingLibrary: false });
@@ -110,7 +117,13 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
     set({ isLoadingSearch: true, error: null, currentSearchQuery: query, searchSkip: 0 });
     try {
-      const data = await api.content.search(query, 0, 30);
+      // Cache search results for 5 minutes
+      const cacheKey = `search_${query.toLowerCase().trim()}`;
+      const data = await cachedFetch(
+        cacheKey,
+        () => api.content.search(query, 0, 30),
+        CACHE_DURATIONS.SHORT
+      );
       const movies = data.movies || [];
       const series = data.series || [];
       const results = [...movies, ...series];
