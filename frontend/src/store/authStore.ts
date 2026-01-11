@@ -11,9 +11,10 @@ interface AuthState {
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   loadStoredAuth: () => Promise<void>;
+  clearAuth: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
   isLoading: true,
@@ -51,22 +52,53 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
 
+  clearAuth: async () => {
+    await AsyncStorage.removeItem('auth_token');
+    await AsyncStorage.removeItem('user');
+    set({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+  },
+
   loadStoredAuth: async () => {
     try {
       const token = await AsyncStorage.getItem('auth_token');
       const userStr = await AsyncStorage.getItem('user');
+      
       if (token && userStr) {
-        const user = JSON.parse(userStr);
-        set({
-          user,
-          token,
-          isAuthenticated: true,
-          isLoading: false,
-        });
+        // Validate the token by making a test API call
+        try {
+          // Try to fetch addons - this requires authentication
+          const response = await api.addons.getAll();
+          // If we get here, the token is valid
+          const user = JSON.parse(userStr);
+          set({
+            user,
+            token,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+        } catch (error: any) {
+          // Token is invalid or expired - clear everything
+          console.log('[AUTH] Stored token is invalid, clearing auth');
+          await AsyncStorage.removeItem('auth_token');
+          await AsyncStorage.removeItem('user');
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+        }
       } else {
+        // No stored auth
         set({ isLoading: false });
       }
     } catch (error) {
+      console.log('[AUTH] Error loading stored auth:', error);
       set({ isLoading: false });
     }
   },
