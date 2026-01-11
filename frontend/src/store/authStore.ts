@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, User, AuthResponse } from '../api/client';
+import { clearAllCache } from '../utils/cache';
 
 interface AuthState {
   user: User | null;
@@ -21,6 +22,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
 
   login: async (username: string, password: string) => {
+    // Clear any cached data from previous user before logging in
+    await clearAllCache();
+    
     const response: AuthResponse = await api.auth.login(username, password);
     await AsyncStorage.setItem('auth_token', response.token);
     await AsyncStorage.setItem('user', JSON.stringify(response.user));
@@ -32,6 +36,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   register: async (username: string, email: string, password: string) => {
+    // Clear any cached data before registering
+    await clearAllCache();
+    
     const response: AuthResponse = await api.auth.register(username, email, password);
     await AsyncStorage.setItem('auth_token', response.token);
     await AsyncStorage.setItem('user', JSON.stringify(response.user));
@@ -43,6 +50,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    // Clear all cached data when logging out
+    await clearAllCache();
+    
     await AsyncStorage.removeItem('auth_token');
     await AsyncStorage.removeItem('user');
     set({
@@ -53,6 +63,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearAuth: async () => {
+    // Clear all cached data
+    await clearAllCache();
+    
     await AsyncStorage.removeItem('auth_token');
     await AsyncStorage.removeItem('user');
     set({
@@ -84,6 +97,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         } catch (error: any) {
           // Token is invalid or expired - clear everything
           console.log('[AUTH] Stored token is invalid, clearing auth');
+          await clearAllCache();
           await AsyncStorage.removeItem('auth_token');
           await AsyncStorage.removeItem('user');
           set({
