@@ -33,6 +33,20 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Handle 401/403 responses - clear invalid auth
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      // Token is invalid or expired - clear stored auth
+      console.log('[API] Auth error, clearing stored credentials');
+      await AsyncStorage.removeItem('auth_token');
+      await AsyncStorage.removeItem('user');
+    }
+    return Promise.reject(error);
+  }
+);
+
 export interface User {
   id: string;
   username: string;
