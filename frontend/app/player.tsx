@@ -12,6 +12,9 @@ import {
   Alert,
   Animated,
   Image,
+  TVEventHandler,
+  useTVEventHandler,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -23,6 +26,9 @@ import { Modal, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as NavigationBar from 'expo-navigation-bar';
+
+// Check if running on TV
+const isTV = Platform.isTV || Platform.OS === 'android';
 
 // Conditionally import WebView only on native (fallback for HLS)
 let WebView: any = null;
