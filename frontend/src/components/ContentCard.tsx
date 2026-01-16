@@ -70,15 +70,10 @@ const styles = StyleSheet.create({
   },
   focused: {
     borderWidth: 4,
-    borderColor: '#FFFFFF',
+    borderColor: '#B8A05C',
     borderRadius: 10,
-    transform: [{ scale: 1.15 }],
-    shadowColor: '#B8A05C',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 15,
+    transform: [{ scale: 1.1 }],
     elevation: 10,
-    backgroundColor: 'rgba(184, 160, 92, 0.3)',
   },
   imageContainer: {
     borderRadius: 8,
