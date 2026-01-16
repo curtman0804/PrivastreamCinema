@@ -1,9 +1,10 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { ContentItem, SearchResult } from '../api/client';
@@ -22,6 +23,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   showRating = false, // Default to false - cleaner look
 }) => {
   const { width } = useWindowDimensions();
+  const [isFocused, setIsFocused] = useState(false);
   const baseWidth = Math.min(width, 500); // Cap max width for web
   const CARD_WIDTH = (baseWidth - 48) / 3;
   
@@ -35,8 +37,14 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   return (
     <TouchableOpacity
-      style={[styles.container, { width: cardWidth }]}
+      style={[
+        styles.container, 
+        { width: cardWidth },
+        isFocused && styles.focused,
+      ]}
       onPress={onPress}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
       activeOpacity={0.8}
     >
       <View style={[styles.imageContainer, { height: cardHeight }]}>
@@ -59,6 +67,12 @@ const styles = StyleSheet.create({
   container: {
     marginRight: 12,
     marginBottom: 8,
+  },
+  focused: {
+    borderWidth: 3,
+    borderColor: '#B8A05C',
+    borderRadius: 10,
+    transform: [{ scale: 1.08 }],
   },
   imageContainer: {
     borderRadius: 8,
