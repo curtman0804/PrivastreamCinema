@@ -1,10 +1,11 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
   useWindowDimensions,
   Platform,
+  findNodeHandle,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { ContentItem, SearchResult } from '../api/client';
@@ -16,27 +17,45 @@ interface ContentCardProps {
   showRating?: boolean;
 }
 
+// Fixed poster aspect ratio (standard movie poster is 2:3)
+const POSTER_ASPECT_RATIO = 1.5;
+
 const ContentCardComponent: React.FC<ContentCardProps> = ({
   item,
   onPress,
   size = 'medium',
-  showRating = false, // Default to false - cleaner look
+  showRating = false,
 }) => {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [isFocused, setIsFocused] = useState(false);
-  const baseWidth = Math.min(width, 500); // Cap max width for web
-  const CARD_WIDTH = (baseWidth - 48) / 3;
+  const buttonRef = useRef<TouchableOpacity>(null);
   
-  const cardWidth = size === 'small' ? CARD_WIDTH * 0.8 : size === 'large' ? CARD_WIDTH * 1.2 : CARD_WIDTH;
-  const cardHeight = cardWidth * 1.5;
+  // Detect TV/landscape mode
+  const isTV = width > height;
+  
+  // Calculate card width based on screen size and mode
+  let cardWidth: number;
+  if (isTV) {
+    // TV mode: show more cards, smaller size
+    const numCards = size === 'small' ? 8 : size === 'large' ? 5 : 6;
+    cardWidth = (width - 80) / numCards;
+  } else {
+    // Mobile mode
+    const baseWidth = Math.min(width, 500);
+    const CARD_WIDTH = (baseWidth - 48) / 3;
+    cardWidth = size === 'small' ? CARD_WIDTH * 0.8 : size === 'large' ? CARD_WIDTH * 1.2 : CARD_WIDTH;
+  }
+  
+  // Fixed height based on aspect ratio
+  const cardHeight = cardWidth * POSTER_ASPECT_RATIO;
 
-  // Guard against undefined/null item
   if (!item) {
     return null;
   }
 
   return (
     <TouchableOpacity
+      ref={buttonRef}
       style={[
         styles.container, 
         { width: cardWidth },
@@ -46,6 +65,9 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       activeOpacity={0.8}
+      accessible={true}
+      accessibilityRole="button"
+      accessibilityLabel={item.name || item.title || 'Content'}
     >
       <View style={[styles.imageContainer, { height: cardHeight }]}>
         <Image
@@ -56,6 +78,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           recyclingKey={item.id || item.imdb_id}
           cachePolicy="memory-disk"
         />
+        {isFocused && <View style={styles.focusOverlay} />}
       </View>
     </TouchableOpacity>
   );
@@ -69,19 +92,29 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   focused: {
-    borderWidth: 4,
-    borderColor: '#B8A05C',
-    borderRadius: 10,
     transform: [{ scale: 1.1 }],
-    elevation: 10,
+    zIndex: 10,
   },
   imageContainer: {
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
+    borderWidth: 3,
+    borderColor: 'transparent',
   },
   image: {
     width: '100%',
     height: '100%',
+  },
+  focusOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 4,
+    borderColor: '#B8A05C',
+    borderRadius: 5,
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
   },
 });
