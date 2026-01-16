@@ -10,6 +10,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +25,11 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const { width, height } = useWindowDimensions();
+  
+  // Detect if we're on a TV/landscape mode
+  const isTV = width > height || width > 800;
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -49,62 +55,80 @@ export default function LoginScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isTV && styles.scrollContentTV
+          ]}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.header}>
-            <Image
-              source={require('../../assets/images/logo_splash.png')}
-              style={styles.logo}
-              contentFit="contain"
-            />
-          </View>
-
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color="#888888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Username"
-                placeholderTextColor="#888888"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
+          <View style={[styles.formWrapper, isTV && styles.formWrapperTV]}>
+            <View style={styles.header}>
+              <Image
+                source={require('../../assets/images/logo_splash.png')}
+                style={[styles.logo, isTV && styles.logoTV]}
+                contentFit="contain"
               />
             </View>
 
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#888888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor="#888888"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-              />
-              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888888" />
+            <View style={[styles.form, isTV && styles.formTV]}>
+              <View style={[
+                styles.inputContainer,
+                focusedField === 'username' && styles.inputFocused
+              ]}>
+                <Ionicons name="person-outline" size={20} color="#888888" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Username"
+                  placeholderTextColor="#888888"
+                  value={username}
+                  onChangeText={setUsername}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onFocus={() => setFocusedField('username')}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+
+              <View style={[
+                styles.inputContainer,
+                focusedField === 'password' && styles.inputFocused
+              ]}>
+                <Ionicons name="lock-closed-outline" size={20} color="#888888" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="#888888"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
+                />
+                <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888888" />
+                </Pressable>
+              </View>
+
+              <Pressable
+                style={({ pressed, focused }) => [
+                  styles.loginButton,
+                  isLoading && styles.loginButtonDisabled,
+                  pressed && { opacity: 0.8 },
+                  focusedField === 'button' && styles.loginButtonFocused,
+                ]}
+                onPress={handleLogin}
+                onFocus={() => setFocusedField('button')}
+                onBlur={() => setFocusedField(null)}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.loginButtonText}>Sign In</Text>
+                )}
               </Pressable>
             </View>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.loginButton,
-                isLoading && styles.loginButtonDisabled,
-                pressed && { opacity: 0.8 }
-              ]}
-              onPress={handleLogin}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.loginButtonText}>Sign In</Text>
-              )}
-            </Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -125,6 +149,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
+  scrollContentTV: {
+    alignItems: 'center',
+  },
+  formWrapper: {
+    width: '100%',
+  },
+  formWrapperTV: {
+    maxWidth: 450,
+    width: '100%',
+  },
   header: {
     alignItems: 'center',
     marginBottom: 40,
@@ -133,7 +167,14 @@ const styles = StyleSheet.create({
     width: 280,
     height: 200,
   },
+  logoTV: {
+    width: 300,
+    height: 150,
+  },
   form: {
+    width: '100%',
+  },
+  formTV: {
     width: '100%',
   },
   inputContainer: {
@@ -144,6 +185,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 16,
     height: 56,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  inputFocused: {
+    borderColor: '#B8A05C',
   },
   inputIcon: {
     marginRight: 12,
@@ -163,6 +209,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  loginButtonFocused: {
+    borderColor: '#FFFFFF',
+    transform: [{ scale: 1.02 }],
   },
   loginButtonDisabled: {
     opacity: 0.7,
