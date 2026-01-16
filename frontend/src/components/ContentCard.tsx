@@ -2,10 +2,10 @@ import React, { memo, useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   useWindowDimensions,
   Platform,
-  findNodeHandle,
+  Text,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { ContentItem, SearchResult } from '../api/client';
@@ -28,17 +28,16 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 }) => {
   const { width, height } = useWindowDimensions();
   const [isFocused, setIsFocused] = useState(false);
-  const buttonRef = useRef<TouchableOpacity>(null);
   
   // Detect TV/landscape mode
-  const isTV = width > height;
+  const isTV = width > height || width > 800;
   
   // Calculate card width based on screen size and mode
   let cardWidth: number;
   if (isTV) {
-    // TV mode: show more cards, smaller size
-    const numCards = size === 'small' ? 8 : size === 'large' ? 5 : 6;
-    cardWidth = (width - 80) / numCards;
+    // TV mode: show more cards, appropriate size for 10-foot UI
+    const numCards = size === 'small' ? 7 : size === 'large' ? 4 : 5;
+    cardWidth = Math.min((width - 100) / numCards, 180);
   } else {
     // Mobile mode
     const baseWidth = Math.min(width, 500);
@@ -54,8 +53,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   }
 
   return (
-    <TouchableOpacity
-      ref={buttonRef}
+    <Pressable
       style={[
         styles.container, 
         { width: cardWidth },
@@ -64,12 +62,15 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       onPress={onPress}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
-      activeOpacity={0.8}
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={item.name || item.title || 'Content'}
     >
-      <View style={[styles.imageContainer, { height: cardHeight }]}>
+      <View style={[
+        styles.imageContainer, 
+        { height: cardHeight },
+        isFocused && styles.imageContainerFocused,
+      ]}>
         <Image
           source={{ uri: item.poster }}
           style={styles.image}
@@ -78,9 +79,18 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           recyclingKey={item.id || item.imdb_id}
           cachePolicy="memory-disk"
         />
-        {isFocused && <View style={styles.focusOverlay} />}
+        {/* Gold focus border overlay */}
+        {isFocused && (
+          <View style={styles.focusBorder} />
+        )}
       </View>
-    </TouchableOpacity>
+      {/* Optional: Show title on TV when focused */}
+      {isTV && isFocused && (item.name || item.title) && (
+        <Text style={styles.focusedTitle} numberOfLines={2}>
+          {item.name || item.title}
+        </Text>
+      )}
+    </Pressable>
   );
 };
 
@@ -93,7 +103,7 @@ const styles = StyleSheet.create({
   },
   focused: {
     transform: [{ scale: 1.1 }],
-    zIndex: 10,
+    zIndex: 100,
   },
   imageContainer: {
     borderRadius: 8,
@@ -102,19 +112,34 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'transparent',
   },
+  imageContainerFocused: {
+    borderColor: '#FFD700',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 15,
+  },
   image: {
     width: '100%',
     height: '100%',
   },
-  focusOverlay: {
+  focusBorder: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
     borderWidth: 4,
-    borderColor: '#B8A05C',
+    borderColor: '#FFD700',
     borderRadius: 5,
-    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+  },
+  focusedTitle: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 6,
+    paddingHorizontal: 2,
   },
 });

@@ -1,10 +1,11 @@
-import React, { memo } from 'react';
+import React, { memo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentCard } from './ContentCard';
@@ -26,6 +27,10 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   onItemPress,
   onSeeAll,
 }) => {
+  const { width, height } = useWindowDimensions();
+  const isTV = width > height || width > 800;
+  const [seeAllFocused, setSeeAllFocused] = useState(false);
+  
   // Filter out undefined/null items
   const validItems = (items || []).filter(Boolean);
   if (validItems.length === 0) return null;
@@ -40,17 +45,38 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const keyExtractor = (item: ContentItem, index: number) => 
     item.id || item.imdb_id || `item-${index}`;
 
+  // Calculate item width for getItemLayout
+  const numCards = isTV ? 5 : 3;
+  const itemWidth = isTV 
+    ? Math.min((width - 100) / numCards, 180) + 12 
+    : ((Math.min(width, 500) - 48) / 3) + 12;
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>{serviceName}</Text>
+          <Text style={[styles.title, isTV && styles.titleTV]}>{serviceName}</Text>
         </View>
         {onSeeAll && (
-          <TouchableOpacity onPress={onSeeAll} style={styles.seeAllButton}>
-            <Text style={styles.seeAllText}>See All</Text>
-            <Ionicons name="chevron-forward" size={16} color="#B8A05C" />
-          </TouchableOpacity>
+          <Pressable 
+            onPress={onSeeAll} 
+            style={[
+              styles.seeAllButton,
+              seeAllFocused && styles.seeAllButtonFocused,
+            ]}
+            onFocus={() => setSeeAllFocused(true)}
+            onBlur={() => setSeeAllFocused(false)}
+          >
+            <Text style={[
+              styles.seeAllText,
+              seeAllFocused && styles.seeAllTextFocused,
+            ]}>See All</Text>
+            <Ionicons 
+              name="chevron-forward" 
+              size={16} 
+              color={seeAllFocused ? '#FFFFFF' : '#B8A05C'} 
+            />
+          </Pressable>
         )}
       </View>
       <FlatList
@@ -59,14 +85,14 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        initialNumToRender={5}
+        contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
+        initialNumToRender={isTV ? 7 : 5}
         maxToRenderPerBatch={5}
         windowSize={5}
         removeClippedSubviews={true}
         getItemLayout={(data, index) => ({
-          length: 120,
-          offset: 120 * index,
+          length: itemWidth,
+          offset: itemWidth * index,
           index,
         })}
       />
@@ -94,16 +120,34 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
+  titleTV: {
+    fontSize: 22,
+  },
   seeAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  seeAllButtonFocused: {
+    borderColor: '#FFD700',
+    backgroundColor: '#B8A05C',
   },
   seeAllText: {
     color: '#B8A05C',
     fontSize: 14,
     fontWeight: '500',
   },
+  seeAllTextFocused: {
+    color: '#FFFFFF',
+  },
   scrollContent: {
     paddingHorizontal: 16,
+  },
+  scrollContentTV: {
+    paddingHorizontal: 24,
   },
 });
