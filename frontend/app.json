@@ -3,7 +3,7 @@
     "name": "PrivastreamCinema",
     "slug": "privastreamcinema",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/logo_launcher.png",
     "scheme": "privastreamcinema",
     "userInterfaceStyle": "automatic",
