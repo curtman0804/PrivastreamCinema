@@ -677,6 +677,85 @@ export default function PlayerScreen() {
       }
     }
   };
+
+  // Handle TV remote / hardware button events
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    
+    let tvEventHandler: any;
+    
+    try {
+      // Try to use TVEventHandler for Fire Stick / Android TV
+      tvEventHandler = new TVEventHandler();
+      tvEventHandler.enable(null, (cmp: any, evt: any) => {
+        if (!evt || !evt.eventType) return;
+        
+        console.log('[TV] Remote event:', evt.eventType);
+        
+        switch (evt.eventType) {
+          case 'playPause':
+          case 'select':
+            // Center button or play/pause button
+            if (showControls) {
+              togglePlayPause();
+            } else {
+              showControlsWithTimeout();
+            }
+            break;
+          case 'play':
+            if (videoRef.current && !isPlaying) {
+              videoRef.current.playAsync();
+            }
+            break;
+          case 'pause':
+            if (videoRef.current && isPlaying) {
+              videoRef.current.pauseAsync();
+            }
+            break;
+          case 'left':
+            // Seek back 10 seconds
+            if (videoRef.current && showControls) {
+              videoRef.current.getStatusAsync().then((status: any) => {
+                if (status.isLoaded) {
+                  const newPos = Math.max(0, status.positionMillis - 10000);
+                  videoRef.current?.setPositionAsync(newPos);
+                }
+              });
+            } else {
+              showControlsWithTimeout();
+            }
+            break;
+          case 'right':
+            // Seek forward 10 seconds
+            if (videoRef.current && showControls) {
+              videoRef.current.getStatusAsync().then((status: any) => {
+                if (status.isLoaded && status.durationMillis) {
+                  const newPos = Math.min(status.durationMillis, status.positionMillis + 10000);
+                  videoRef.current?.setPositionAsync(newPos);
+                }
+              });
+            } else {
+              showControlsWithTimeout();
+            }
+            break;
+          case 'up':
+          case 'down':
+            showControlsWithTimeout();
+            break;
+        }
+      });
+    } catch (e) {
+      console.log('[TV] TVEventHandler not available:', e);
+    }
+    
+    return () => {
+      if (tvEventHandler) {
+        try {
+          tvEventHandler.disable();
+        } catch (e) {}
+      }
+    };
+  }, [isPlaying, showControls]);
   
   // Fade controls in/out
   const fadeControls = (show: boolean) => {
