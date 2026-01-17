@@ -42,7 +42,16 @@ export default function LoginScreen() {
       await login(username.trim(), password);
       router.replace('/(tabs)/discover');
     } catch (error: any) {
-      Alert.alert('Login Failed', error.response?.data?.detail || 'Invalid credentials');
+      // Better error message for debugging
+      let errorMessage = 'Invalid credentials';
+      if (error.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to server. Check your internet connection.';
+      } else if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      Alert.alert('Login Failed', errorMessage);
     } finally {
       setIsLoading(false);
     }
