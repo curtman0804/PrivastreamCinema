@@ -1,16 +1,16 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Platform } from 'react-native';
+import { StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const isTV = width > height || width > 800;
   
-  // Calculate proper bottom padding for devices with navigation buttons
-  // Use minimum of 20 for Android devices with soft navigation buttons
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 20 : 10);
-  const tabBarHeight = 65 + bottomPadding;
+  const tabBarHeight = isTV ? 70 : 60 + bottomPadding;
 
   return (
     <Tabs
@@ -18,15 +18,22 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarStyle: [
           styles.tabBar,
+          isTV && styles.tabBarTV,
           {
             height: tabBarHeight,
-            paddingBottom: bottomPadding,
+            paddingBottom: isTV ? 8 : bottomPadding,
           }
         ],
         tabBarActiveTintColor: '#B8A05C',
         tabBarInactiveTintColor: '#888888',
-        tabBarLabelStyle: styles.tabBarLabel,
-        tabBarItemStyle: styles.tabBarItem,
+        tabBarLabelStyle: [
+          styles.tabBarLabel,
+          isTV && styles.tabBarLabelTV,
+        ],
+        tabBarItemStyle: [
+          styles.tabBarItem,
+          isTV && styles.tabBarItemTV,
+        ],
       }}
     >
       <Tabs.Screen
@@ -34,7 +41,7 @@ export default function TabsLayout() {
         options={{
           title: 'Discover',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="compass" size={size} color={color} />
+            <Ionicons name="compass" size={isTV ? 26 : size} color={color} />
           ),
         }}
       />
@@ -43,7 +50,7 @@ export default function TabsLayout() {
         options={{
           title: 'Search',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search" size={size} color={color} />
+            <Ionicons name="search" size={isTV ? 26 : size} color={color} />
           ),
         }}
       />
@@ -52,7 +59,7 @@ export default function TabsLayout() {
         options={{
           title: 'Library',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bookmark" size={size} color={color} />
+            <Ionicons name="bookmark" size={isTV ? 26 : size} color={color} />
           ),
         }}
       />
@@ -61,7 +68,7 @@ export default function TabsLayout() {
         options={{
           title: 'Addons',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="extension-puzzle" size={size} color={color} />
+            <Ionicons name="extension-puzzle" size={isTV ? 26 : size} color={color} />
           ),
         }}
       />
@@ -70,7 +77,7 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
+            <Ionicons name="person" size={isTV ? 26 : size} color={color} />
           ),
         }}
       />
@@ -83,13 +90,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderTopColor: '#2a2a2a',
     borderTopWidth: 1,
-    paddingTop: 8,
+    paddingTop: 6,
+  },
+  tabBarTV: {
+    paddingHorizontal: 40,
   },
   tabBarLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
+  },
+  tabBarLabelTV: {
+    fontSize: 12,
   },
   tabBarItem: {
     paddingVertical: 4,
+  },
+  tabBarItemTV: {
+    paddingVertical: 6,
+    paddingHorizontal: 16,
   },
 });

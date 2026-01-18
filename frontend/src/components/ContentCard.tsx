@@ -15,29 +15,48 @@ interface ContentCardProps {
   showRating?: boolean;
 }
 
+// Fixed poster aspect ratio (standard movie poster is 2:3)
+const POSTER_ASPECT_RATIO = 1.5;
+
 const ContentCardComponent: React.FC<ContentCardProps> = ({
   item,
   onPress,
   size = 'medium',
-  showRating = false, // Default to false - cleaner look
+  showRating = false,
 }) => {
-  const { width } = useWindowDimensions();
-  const baseWidth = Math.min(width, 500); // Cap max width for web
-  const CARD_WIDTH = (baseWidth - 48) / 3;
+  const { width, height } = useWindowDimensions();
   
-  const cardWidth = size === 'small' ? CARD_WIDTH * 0.8 : size === 'large' ? CARD_WIDTH * 1.2 : CARD_WIDTH;
-  const cardHeight = cardWidth * 1.5;
+  // Responsive breakpoints
+  const isTV = width > 1000;
+  const isTablet = width > 600 && width <= 1000;
+  
+  // Calculate number of columns based on screen size
+  const getNumColumns = () => {
+    if (isTV) return size === 'small' ? 10 : size === 'large' ? 6 : 8;
+    if (isTablet) return size === 'small' ? 6 : size === 'large' ? 4 : 5;
+    return size === 'small' ? 4 : size === 'large' ? 2 : 3;
+  };
+  
+  const numColumns = getNumColumns();
+  const horizontalPadding = isTV ? 48 : isTablet ? 32 : 16;
+  const gap = isTV ? 12 : 10;
+  
+  // Calculate card width based on screen width
+  const cardWidth = (width - (horizontalPadding * 2) - (gap * (numColumns + 1))) / numColumns;
+  const cardHeight = cardWidth * POSTER_ASPECT_RATIO;
 
-  // Guard against undefined/null item
   if (!item) {
     return null;
   }
 
   return (
     <TouchableOpacity
-      style={[styles.container, { width: cardWidth }]}
+      style={[styles.container, { width: cardWidth, marginRight: gap, marginBottom: gap }]}
       onPress={onPress}
-      activeOpacity={0.8}
+      activeOpacity={0.7}
+      accessible={true}
+      accessibilityRole="button"
+      accessibilityLabel={item.name || item.title || 'Content'}
     >
       <View style={[styles.imageContainer, { height: cardHeight }]}>
         <Image
@@ -57,11 +76,9 @@ export const ContentCard = memo(ContentCardComponent);
 
 const styles = StyleSheet.create({
   container: {
-    marginRight: 12,
-    marginBottom: 8,
   },
   imageContainer: {
-    borderRadius: 8,
+    borderRadius: 6,
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
   },

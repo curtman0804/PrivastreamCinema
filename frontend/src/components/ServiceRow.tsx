@@ -5,6 +5,7 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentCard } from './ContentCard';
@@ -17,7 +18,6 @@ interface ServiceRowProps {
   onSeeAll?: () => void;
 }
 
-// Memoized content card to prevent re-renders
 const MemoizedContentCard = memo(ContentCard);
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
@@ -26,6 +26,19 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   onItemPress,
   onSeeAll,
 }) => {
+  const { width, height } = useWindowDimensions();
+  
+  // Responsive breakpoints
+  const isTV = width > 1000;
+  const isTablet = width > 600 && width <= 1000;
+  
+  const horizontalPadding = isTV ? 48 : isTablet ? 32 : 16;
+  const gap = isTV ? 12 : 10;
+  
+  // Calculate number of columns
+  const numColumns = isTV ? 8 : isTablet ? 5 : 3;
+  const itemWidth = (width - (horizontalPadding * 2) - (gap * (numColumns + 1))) / numColumns + gap;
+  
   // Filter out undefined/null items
   const validItems = (items || []).filter(Boolean);
   if (validItems.length === 0) return null;
@@ -42,12 +55,18 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>{serviceName}</Text>
+          <Text style={[styles.title, isTV && styles.titleTV, isTablet && styles.titleTablet]}>
+            {serviceName}
+          </Text>
         </View>
         {onSeeAll && (
-          <TouchableOpacity onPress={onSeeAll} style={styles.seeAllButton}>
+          <TouchableOpacity 
+            onPress={onSeeAll} 
+            style={styles.seeAllButton}
+            activeOpacity={0.7}
+          >
             <Text style={styles.seeAllText}>See All</Text>
             <Ionicons name="chevron-forward" size={16} color="#B8A05C" />
           </TouchableOpacity>
@@ -59,14 +78,14 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        initialNumToRender={5}
+        contentContainerStyle={{ paddingHorizontal: horizontalPadding }}
+        initialNumToRender={isTV ? 10 : 5}
         maxToRenderPerBatch={5}
         windowSize={5}
         removeClippedSubviews={true}
         getItemLayout={(data, index) => ({
-          length: 120,
-          offset: 120 * index,
+          length: itemWidth,
+          offset: itemWidth * index,
           index,
         })}
       />
@@ -76,14 +95,13 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   titleContainer: {
     flexDirection: 'row',
@@ -91,19 +109,24 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  titleTV: {
+    fontSize: 20,
+  },
+  titleTablet: {
     fontSize: 18,
-    fontWeight: '700',
   },
   seeAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   seeAllText: {
     color: '#B8A05C',
     fontSize: 14,
     fontWeight: '500',
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
   },
 });

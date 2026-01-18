@@ -2,16 +2,11 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../src/store/authStore';
-import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function Index() {
   const router = useRouter();
-  const { isAuthenticated, isLoading, loadStoredAuth } = useAuthStore();
-
-  useEffect(() => {
-    // Load stored auth on mount
-    loadStoredAuth();
-  }, []);
+  const { isAuthenticated, isLoading } = useAuthStore();
 
   useEffect(() => {
     if (!isLoading) {
@@ -26,15 +21,11 @@ export default function Index() {
   return (
     <View style={styles.container}>
       <View style={styles.logoContainer}>
-        <Image
-          source={require('../assets/images/logo.png')}
-          style={styles.logo}
-          contentFit="contain"
-        />
+        <Ionicons name="tv" size={64} color="#8B5CF6" />
         <Text style={styles.title}>PrivastreamCinema</Text>
         <Text style={styles.subtitle}>Stream Privately</Text>
       </View>
-      <ActivityIndicator size="large" color="#B8A05C" style={styles.loader} />
+      <ActivityIndicator size="large" color="#8B5CF6" style={styles.loader} />
     </View>
   );
 }
@@ -49,10 +40,6 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
   },
-  logo: {
-    width: 150,
-    height: 150,
-  },
   title: {
     fontSize: 32,
     fontWeight: '800',
@@ -61,7 +48,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: '#B8A05C',
+    color: '#8B5CF6',
     marginTop: 8,
   },
   loader: {

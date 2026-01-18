@@ -4,12 +4,13 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  Pressable,
+  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Alert,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +25,10 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
+  const { width, height } = useWindowDimensions();
+  
+  const isTV = width > height || width > 800;
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -36,7 +41,15 @@ export default function LoginScreen() {
       await login(username.trim(), password);
       router.replace('/(tabs)/discover');
     } catch (error: any) {
-      Alert.alert('Login Failed', error.response?.data?.detail || 'Invalid credentials');
+      let errorMessage = 'Invalid credentials';
+      if (error.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to server. Check your internet connection.';
+      } else if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      Alert.alert('Login Failed', errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -49,62 +62,83 @@ export default function LoginScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.scrollContent,
+            isTV && styles.scrollContentTV
+          ]}
+          keyboardShouldPersistTaps="always"
         >
-          <View style={styles.header}>
-            <Image
-              source={require('../../assets/images/logo_splash.png')}
-              style={styles.logo}
-              contentFit="contain"
-            />
-          </View>
-
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color="#888888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Username"
-                placeholderTextColor="#888888"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
+          <View style={[styles.formWrapper, isTV && styles.formWrapperTV]}>
+            <View style={styles.header}>
+              <Image
+                source={require('../../assets/images/logo_splash.png')}
+                style={[styles.logo, isTV && styles.logoTV]}
+                contentFit="contain"
               />
             </View>
 
-            <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#888888" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor="#888888"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-              />
-              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888888" />
-              </Pressable>
-            </View>
+            <View style={styles.form}>
+              <View style={[
+                styles.inputContainer,
+                focusedInput === 'username' && styles.inputFocused
+              ]}>
+                <Ionicons name="person-outline" size={20} color="#888888" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Username"
+                  placeholderTextColor="#888888"
+                  value={username}
+                  onChangeText={setUsername}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onFocus={() => setFocusedInput('username')}
+                  onBlur={() => setFocusedInput(null)}
+                  editable={!isLoading}
+                />
+              </View>
 
-            <Pressable
-              style={({ pressed }) => [
-                styles.loginButton,
-                isLoading && styles.loginButtonDisabled,
-                pressed && { opacity: 0.8 }
-              ]}
-              onPress={handleLogin}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.loginButtonText}>Sign In</Text>
-              )}
-            </Pressable>
+              <View style={[
+                styles.inputContainer,
+                focusedInput === 'password' && styles.inputFocused
+              ]}>
+                <Ionicons name="lock-closed-outline" size={20} color="#888888" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="#888888"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  onFocus={() => setFocusedInput('password')}
+                  onBlur={() => setFocusedInput(null)}
+                  editable={!isLoading}
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowPassword(!showPassword)} 
+                  style={styles.eyeButton}
+                  disabled={isLoading}
+                >
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888888" />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.loginButton,
+                  isLoading && styles.loginButtonDisabled,
+                ]}
+                onPress={handleLogin}
+                disabled={isLoading}
+                activeOpacity={0.7}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.loginButtonText}>Sign In</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -125,13 +159,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
+  scrollContentTV: {
+    alignItems: 'center',
+  },
+  formWrapper: {
+    width: '100%',
+  },
+  formWrapperTV: {
+    maxWidth: 450,
+    width: '100%',
+  },
   header: {
     alignItems: 'center',
     marginBottom: 40,
   },
   logo: {
     width: 280,
-    height: 200,
+    height: 120,
+  },
+  logoTV: {
+    width: 350,
+    height: 150,
   },
   form: {
     width: '100%',
@@ -144,6 +192,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 16,
     height: 56,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  inputFocused: {
+    borderColor: '#B8A05C',
   },
   inputIcon: {
     marginRight: 12,

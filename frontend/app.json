@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "PrivastreamCinema",
+    "name": "Privastream Cinema",
     "slug": "privastreamcinema",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/logo_launcher.png",
     "scheme": "privastreamcinema",
     "userInterfaceStyle": "automatic",
@@ -36,12 +36,6 @@
           "resizeMode": "contain",
           "backgroundColor": "#000000"
         }
-      ],
-      [
-        "react-native-google-cast",
-        {
-          "receiverAppId": "CC1AD845"
-        }
       ]
     ],
     "experiments": {
@@ -52,7 +46,7 @@
       "eas": {
         "projectId": "734879b5-3cae-4195-b064-cc0c7617b7ae"
       },
-      "backendUrl": "https://privastream-cinema-3.preview.emergentagent.com"
+      "backendUrl": "https://streamsphere-86.preview.emergentagent.com"
     },
     "owner": "choyt"
   }

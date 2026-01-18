@@ -22,13 +22,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (username: string, password: string) => {
     const response: AuthResponse = await api.auth.login(username, password);
+    
+    // Save to storage first
     await AsyncStorage.setItem('auth_token', response.token);
     await AsyncStorage.setItem('user', JSON.stringify(response.user));
+    
+    // Then update state - this must happen after storage is complete
     set({
       user: response.user,
       token: response.token,
       isAuthenticated: true,
+      isLoading: false,
     });
+    
+    // Return the response for any callers that need it
+    return;
   },
 
   register: async (username: string, email: string, password: string) => {
@@ -39,12 +47,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: response.user,
       token: response.token,
       isAuthenticated: true,
+      isLoading: false,
     });
   },
 
   logout: async () => {
-    await AsyncStorage.removeItem('auth_token');
-    await AsyncStorage.removeItem('user');
+    // Clear storage first
+    await AsyncStorage.multiRemove(['auth_token', 'user']);
+    
+    // Then update state
     set({
       user: null,
       token: null,
@@ -53,8 +64,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearAuth: async () => {
-    await AsyncStorage.removeItem('auth_token');
-    await AsyncStorage.removeItem('user');
+    await AsyncStorage.multiRemove(['auth_token', 'user']);
     set({
       user: null,
       token: null,
@@ -65,23 +75,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   loadStoredAuth: async () => {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
-      const userStr = await AsyncStorage.getItem('user');
+      const [token, userStr] = await AsyncStorage.multiGet(['auth_token', 'user']);
       
-      if (token && userStr) {
-        const user = JSON.parse(userStr);
+      if (token[1] && userStr[1]) {
+        const user = JSON.parse(userStr[1]);
         set({
           user,
-          token,
+          token: token[1],
           isAuthenticated: true,
           isLoading: false,
         });
       } else {
-        set({ isLoading: false });
+        set({ isLoading: false, isAuthenticated: false });
       }
     } catch (error) {
       console.log('[AUTH] Error loading stored auth:', error);
-      set({ isLoading: false });
+      set({ isLoading: false, isAuthenticated: false });
     }
   },
 }));

@@ -7,9 +7,8 @@ import {
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
-  Pressable,
   FlatList,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -19,28 +18,31 @@ import { useContentStore } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const BASE_WIDTH = Math.min(SCREEN_WIDTH, 500);
-const POSTER_WIDTH = (BASE_WIDTH - 48) / 3; // Same as ContentCard
-const POSTER_HEIGHT = POSTER_WIDTH * 1.5; // 2:3 aspect ratio like movie posters
-
 export default function DiscoverScreen() {
   const router = useRouter();
-  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons, addons } = useContentStore();
+  const { width, height } = useWindowDimensions();
+  
+  // Responsive: detect TV/landscape
+  const isTV = width > 1000;
+  const isTablet = width > 600 && width <= 1000;
+  
+  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons } = useContentStore();
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
-  const [isLoadingProgress, setIsLoadingProgress] = useState(false);
 
-  // Fetch continue watching data
+  // Calculate poster dimensions
+  const numColumns = isTV ? 8 : isTablet ? 5 : 3;
+  const horizontalPadding = isTV ? 48 : isTablet ? 32 : 16;
+  const gap = isTV ? 12 : 10;
+  const POSTER_WIDTH = (width - (horizontalPadding * 2) - (gap * (numColumns - 1))) / numColumns;
+  const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
+
   const fetchContinueWatching = useCallback(async () => {
     try {
-      setIsLoadingProgress(true);
       const response = await api.watchProgress.getAll();
       setContinueWatching(response.continueWatching || []);
     } catch (err) {
       console.log('[Discover] Error fetching continue watching:', err);
-    } finally {
-      setIsLoadingProgress(false);
     }
   }, []);
 
@@ -50,14 +52,12 @@ export default function DiscoverScreen() {
     fetchContinueWatching();
   }, []);
 
-  // Re-fetch continue watching when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       fetchContinueWatching();
     }, [fetchContinueWatching])
   );
 
-  // Check if there's any content to display
   const hasContent = useMemo(() => {
     if (!discoverData?.services) return false;
     return Object.values(discoverData.services).some(
@@ -80,9 +80,7 @@ export default function DiscoverScreen() {
 
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
-    // Encode the ID to handle URLs and special characters in content IDs
     const encodedId = encodeURIComponent(id);
-    // Pass content info for porn/external addons that don't have meta endpoints
     router.push({
       pathname: `/details/${item.type}/${encodedId}`,
       params: {
@@ -92,29 +90,22 @@ export default function DiscoverScreen() {
     });
   };
 
-  // Handle continue watching item press - navigate directly to player if stream info available
   const handleContinueWatchingPress = (item: WatchProgress) => {
-    // If we have stream info, go directly to player and resume
     if (item.stream_info_hash || item.stream_url) {
       router.push({
         pathname: '/player',
         params: {
-          // Stream source
           infoHash: item.stream_info_hash || '',
           directUrl: item.stream_url || '',
           fileIdx: item.stream_file_idx != null ? String(item.stream_file_idx) : '',
           filename: item.stream_filename || '',
-          // Content info
           title: item.title || '',
           contentType: item.content_type,
           contentId: item.content_id,
-          // Visual assets
           poster: item.poster || '',
           backdrop: item.backdrop || '',
           logo: item.logo || '',
-          // Resume position
           resumePosition: String(item.progress || 0),
-          // Series info
           season: item.season != null ? String(item.season) : '',
           episode: item.episode != null ? String(item.episode) : '',
           seriesId: item.series_id || '',
@@ -123,11 +114,9 @@ export default function DiscoverScreen() {
       return;
     }
     
-    // No stream info - navigate to details page to select a stream
     let targetId = item.content_id;
     let targetType = item.content_type;
     
-    // For series episodes (content_id like "tt1234567:1:5"), navigate to the series
     if (item.series_id) {
       targetId = item.series_id;
       targetType = 'series';
@@ -144,70 +133,54 @@ export default function DiscoverScreen() {
       params: {
         name: item.title || '',
         poster: item.poster || '',
-        resumeEpisodeId: item.content_type === 'series' ? item.content_id : '',
-        resumePosition: String(item.progress || 0),
-        resumeSeason: item.season !== undefined ? String(item.season) : '',
-        resumeEpisode: item.episode !== undefined ? String(item.episode) : '',
       },
     });
   };
 
-  // Handle removing item from continue watching
   const handleRemoveFromContinueWatching = async (item: WatchProgress) => {
     try {
       await api.watchProgress.delete(item.content_id);
-      // Update local state immediately
       setContinueWatching(prev => prev.filter(i => i.content_id !== item.content_id));
     } catch (err) {
       console.log('[Discover] Error removing from continue watching:', err);
     }
   };
 
-  // Render a continue watching item with progress bar and remove button
   const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) => {
     const percentWatched = item.percent_watched || 0;
     
     return (
-      <View style={styles.continueItemWrapper}>
+      <View style={[styles.continueItemWrapper, { marginRight: gap }]}>
         <TouchableOpacity
-          style={styles.continueItem}
+          style={[styles.continueItem, { width: POSTER_WIDTH }]}
           onPress={() => handleContinueWatchingPress(item)}
-          activeOpacity={0.8}
+          activeOpacity={0.7}
         >
-          <View style={styles.continueImageContainer}>
+          <View style={[styles.continueImageContainer, { width: POSTER_WIDTH, height: POSTER_HEIGHT }]}>
             <Image
               source={{ uri: item.poster || item.backdrop || '' }}
               style={styles.continueImage}
               contentFit="cover"
             />
-            {/* Play icon overlay */}
             <View style={styles.playOverlay}>
-              <Ionicons name="play-circle" size={32} color="rgba(255,255,255,0.9)" />
+              <Ionicons name="play-circle" size={isTV ? 36 : 28} color="rgba(255,255,255,0.9)" />
             </View>
-            {/* Progress bar */}
             <View style={styles.progressBarContainer}>
-              <View 
-                style={[
-                  styles.progressBarFill, 
-                  { width: `${Math.min(percentWatched, 100)}%` }
-                ]} 
-              />
+              <View style={[styles.progressBarFill, { width: `${Math.min(percentWatched, 100)}%` }]} />
             </View>
           </View>
         </TouchableOpacity>
-        {/* Remove button */}
         <TouchableOpacity
           style={styles.removeButton}
           onPress={() => handleRemoveFromContinueWatching(item)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.8)" />
+          <Ionicons name="close-circle" size={18} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
       </View>
     );
   };
 
-  // Show loading only on initial load
   if (isLoadingDiscover && !discoverData) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -221,43 +194,44 @@ export default function DiscoverScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <Image
           source={require('../../assets/images/logo_launcher.png')}
-          style={styles.headerLogo}
+          style={[styles.headerLogo, isTV && styles.headerLogoTV]}
           contentFit="contain"
         />
-        <Text style={styles.headerTitle}>Privastream Cinema</Text>
-        <Pressable 
-          style={styles.searchButton}
+        <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Privastream Cinema</Text>
+        <TouchableOpacity 
+          style={[styles.searchButton, isTV && styles.searchButtonTV]}
           onPress={() => router.push('/(tabs)/search')}
+          activeOpacity={0.7}
         >
-          <Ionicons name="search" size={22} color="#FFFFFF" />
-        </Pressable>
+          <Ionicons name="search" size={isTV ? 24 : 20} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
-      {/* Welcome Screen - No Addons and No Continue Watching */}
+      {/* Welcome Screen - No Addons */}
       {!hasContent && continueWatching.length === 0 && !isLoadingDiscover ? (
         <View style={styles.welcomeContainer}>
-          <Text style={styles.welcomeText}>Welcome To</Text>
+          <Text style={[styles.welcomeText, isTV && styles.welcomeTextTV]}>Welcome To</Text>
           <Image
             source={require('../../assets/images/logo_splash.png')}
-            style={styles.welcomeLogo}
+            style={[styles.welcomeLogo, isTV && styles.welcomeLogoTV]}
             contentFit="contain"
           />
-          <Text style={styles.welcomeSubtext}>
+          <Text style={[styles.welcomeSubtext, isTV && styles.welcomeSubtextTV]}>
             Go to the Addons tab to get started
           </Text>
           <TouchableOpacity 
-            style={styles.goToAddonsButton}
+            style={[styles.goToAddonsButton, isTV && styles.goToAddonsButtonTV]}
             onPress={() => router.push('/(tabs)/addons')}
+            activeOpacity={0.7}
           >
-            <Ionicons name="extension-puzzle-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.goToAddonsText}>Go to Addons</Text>
+            <Ionicons name="extension-puzzle-outline" size={isTV ? 22 : 18} color="#FFFFFF" />
+            <Text style={[styles.goToAddonsText, isTV && styles.goToAddonsTextTV]}>Go to Addons</Text>
           </TouchableOpacity>
         </View>
       ) : (
-        /* Content ScrollView */
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
@@ -273,9 +247,9 @@ export default function DiscoverScreen() {
           {/* Continue Watching Section */}
           {continueWatching.length > 0 && (
             <View style={styles.continueWatchingSection}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="play-circle" size={20} color="#B8A05C" />
-                <Text style={styles.sectionTitle}>Continue Watching</Text>
+              <View style={[styles.sectionHeader, { paddingHorizontal: horizontalPadding }]}>
+                <Ionicons name="play-circle" size={isTV ? 20 : 16} color="#B8A05C" />
+                <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>Continue Watching</Text>
               </View>
               <FlatList
                 data={continueWatching}
@@ -283,7 +257,7 @@ export default function DiscoverScreen() {
                 keyExtractor={(item) => item.content_id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.continueList}
+                contentContainerStyle={{ paddingHorizontal: horizontalPadding }}
               />
             </View>
           )}
@@ -345,7 +319,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 10,
   },
@@ -354,29 +327,40 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 8,
   },
+  headerLogoTV: {
+    width: 44,
+    height: 44,
+  },
   headerTitle: {
     flex: 1,
     fontSize: 20,
     fontWeight: '700',
     color: '#FFFFFF',
-    fontFamily: 'System',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+  },
+  headerTitleTV: {
+    fontSize: 24,
   },
   searchButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#1a1a1a',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  searchButtonTV: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   scrollView: {
     flex: 1,
   },
   bottomPadding: {
-    height: 100,
+    height: 80,
   },
-  // Welcome Screen Styles
+  // Welcome Screen
   welcomeContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -385,76 +369,79 @@ const styles = StyleSheet.create({
   },
   welcomeText: {
     color: '#888888',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '500',
-    marginBottom: 12,
+    marginBottom: 10,
+  },
+  welcomeTextTV: {
+    fontSize: 24,
   },
   welcomeLogo: {
-    width: 300,
-    height: 130,
-    marginBottom: 40,
+    width: 250,
+    height: 110,
+    marginBottom: 30,
+  },
+  welcomeLogoTV: {
+    width: 350,
+    height: 150,
   },
   welcomeSubtext: {
     color: '#666666',
-    fontSize: 17,
+    fontSize: 15,
     textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  welcomeSubtextTV: {
+    fontSize: 18,
     lineHeight: 26,
-    marginBottom: 32,
   },
   goToAddonsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#B8A05C',
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 10,
+    gap: 8,
+  },
+  goToAddonsButtonTV: {
+    paddingHorizontal: 30,
     paddingVertical: 16,
-    borderRadius: 14,
-    gap: 10,
   },
   goToAddonsText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '600',
   },
-  // Continue Watching Styles
+  goToAddonsTextTV: {
+    fontSize: 18,
+  },
+  // Continue Watching
   continueWatchingSection: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: 10,
+    gap: 6,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '600',
     color: '#FFFFFF',
   },
-  continueList: {
-    paddingHorizontal: 16,
-    gap: 12,
+  sectionTitleTV: {
+    fontSize: 20,
   },
   continueItemWrapper: {
     position: 'relative',
-    marginRight: 12,
   },
   continueItem: {
-    width: POSTER_WIDTH,
-  },
-  removeButton: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
-    padding: 2,
-    zIndex: 10,
   },
   continueImageContainer: {
-    width: POSTER_WIDTH,
-    height: POSTER_HEIGHT,
-    borderRadius: 8,
+    borderRadius: 6,
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
     position: 'relative',
@@ -474,11 +461,20 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 4,
+    height: 3,
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: '#B8A05C',
+  },
+  removeButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 10,
+    padding: 2,
+    zIndex: 10,
   },
 });
