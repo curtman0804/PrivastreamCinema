@@ -541,11 +541,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
     position: 'relative',
-    borderWidth: 3,
-    borderColor: 'transparent',
-  },
-  continueImageContainerFocused: {
-    borderColor: '#FFD700',
   },
   continueImage: {
     width: '100%',
@@ -576,8 +571,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderWidth: 4,
-    borderColor: '#FFD700',
+    borderColor: 'transparent',
     borderRadius: 5,
+  },
+  focusBorderOverlayVisible: {
+    borderColor: '#FFD700',
   },
   removeButton: {
     position: 'absolute',
