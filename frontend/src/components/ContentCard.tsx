@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,7 +15,6 @@ interface ContentCardProps {
   showRating?: boolean;
 }
 
-// Fixed poster aspect ratio (standard movie poster is 2:3)
 const POSTER_ASPECT_RATIO = 1.5;
 
 const ContentCardComponent: React.FC<ContentCardProps> = ({
@@ -25,24 +24,25 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   showRating = false,
 }) => {
   const { width, height } = useWindowDimensions();
+  const [isFocused, setIsFocused] = useState(false);
   
-  // Responsive breakpoints
-  const isTV = width > 1000;
-  const isTablet = width > 600 && width <= 1000;
+  // Better TV detection - landscape orientation OR wide screen
+  const isLandscape = width > height;
+  const isTV = isLandscape || width > 800;
+  const isTablet = !isTV && width > 600;
   
-  // Calculate number of columns based on screen size
+  // More posters per row on TV (7 like Stremio)
   const getNumColumns = () => {
-    if (isTV) return size === 'small' ? 10 : size === 'large' ? 6 : 8;
-    if (isTablet) return size === 'small' ? 6 : size === 'large' ? 4 : 5;
-    return size === 'small' ? 4 : size === 'large' ? 2 : 3;
+    if (isTV) return 7;
+    if (isTablet) return 5;
+    return 3;
   };
   
   const numColumns = getNumColumns();
-  const horizontalPadding = isTV ? 48 : isTablet ? 32 : 16;
-  const gap = isTV ? 12 : 10;
+  const horizontalPadding = isTV ? 40 : isTablet ? 32 : 16;
+  const gap = isTV ? 14 : 10;
   
-  // Calculate card width based on screen width
-  const cardWidth = (width - (horizontalPadding * 2) - (gap * (numColumns + 1))) / numColumns;
+  const cardWidth = (width - (horizontalPadding * 2) - (gap * (numColumns - 1))) / numColumns;
   const cardHeight = cardWidth * POSTER_ASPECT_RATIO;
 
   if (!item) {
@@ -51,14 +51,24 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   return (
     <TouchableOpacity
-      style={[styles.container, { width: cardWidth, marginRight: gap, marginBottom: gap }]}
+      style={[
+        styles.container, 
+        { width: cardWidth, marginRight: gap, marginBottom: gap },
+        isFocused && styles.containerFocused,
+      ]}
       onPress={onPress}
-      activeOpacity={0.7}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      activeOpacity={0.9}
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={item.name || item.title || 'Content'}
     >
-      <View style={[styles.imageContainer, { height: cardHeight }]}>
+      <View style={[
+        styles.imageContainer, 
+        { height: cardHeight },
+        isFocused && styles.imageContainerFocused,
+      ]}>
         <Image
           source={{ uri: item.poster }}
           style={styles.image}
@@ -67,6 +77,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           recyclingKey={item.id || item.imdb_id}
           cachePolicy="memory-disk"
         />
+        {isFocused && <View style={styles.focusOverlay} />}
       </View>
     </TouchableOpacity>
   );
@@ -77,13 +88,33 @@ export const ContentCard = memo(ContentCardComponent);
 const styles = StyleSheet.create({
   container: {
   },
+  containerFocused: {
+    transform: [{ scale: 1.08 }],
+    zIndex: 100,
+  },
   imageContainer: {
-    borderRadius: 6,
+    borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  imageContainerFocused: {
+    borderColor: '#B8A05C',
+    borderWidth: 4,
   },
   image: {
     width: '100%',
     height: '100%',
+  },
+  focusOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 4,
+    borderColor: '#B8A05C',
+    borderRadius: 5,
   },
 });

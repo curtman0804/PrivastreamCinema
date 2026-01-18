@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -27,19 +27,22 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   onSeeAll,
 }) => {
   const { width, height } = useWindowDimensions();
+  const [seeAllFocused, setSeeAllFocused] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
   
-  // Responsive breakpoints
-  const isTV = width > 1000;
-  const isTablet = width > 600 && width <= 1000;
+  // Better TV detection
+  const isLandscape = width > height;
+  const isTV = isLandscape || width > 800;
+  const isTablet = !isTV && width > 600;
   
-  const horizontalPadding = isTV ? 48 : isTablet ? 32 : 16;
-  const gap = isTV ? 12 : 10;
+  const horizontalPadding = isTV ? 40 : isTablet ? 32 : 16;
+  const gap = isTV ? 14 : 10;
   
-  // Calculate number of columns
-  const numColumns = isTV ? 8 : isTablet ? 5 : 3;
-  const itemWidth = (width - (horizontalPadding * 2) - (gap * (numColumns + 1))) / numColumns + gap;
+  // 7 posters per row on TV
+  const numColumns = isTV ? 7 : isTablet ? 5 : 3;
+  const itemWidth = (width - (horizontalPadding * 2) - (gap * (numColumns - 1))) / numColumns;
+  const snapInterval = itemWidth + gap;
   
-  // Filter out undefined/null items
   const validItems = (items || []).filter(Boolean);
   if (validItems.length === 0) return null;
 
@@ -64,28 +67,44 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         {onSeeAll && (
           <TouchableOpacity 
             onPress={onSeeAll} 
-            style={styles.seeAllButton}
+            onFocus={() => setSeeAllFocused(true)}
+            onBlur={() => setSeeAllFocused(false)}
+            style={[
+              styles.seeAllButton,
+              seeAllFocused && styles.seeAllButtonFocused,
+            ]}
             activeOpacity={0.7}
           >
-            <Text style={styles.seeAllText}>See All</Text>
-            <Ionicons name="chevron-forward" size={16} color="#B8A05C" />
+            <Text style={[
+              styles.seeAllText,
+              seeAllFocused && styles.seeAllTextFocused,
+            ]}>See All</Text>
+            <Ionicons 
+              name="chevron-forward" 
+              size={16} 
+              color={seeAllFocused ? '#FFFFFF' : '#B8A05C'} 
+            />
           </TouchableOpacity>
         )}
       </View>
       <FlatList
+        ref={flatListRef}
         horizontal
         data={validItems}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: horizontalPadding }}
-        initialNumToRender={isTV ? 10 : 5}
-        maxToRenderPerBatch={5}
-        windowSize={5}
+        snapToInterval={snapInterval}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        initialNumToRender={numColumns + 2}
+        maxToRenderPerBatch={numColumns}
+        windowSize={3}
         removeClippedSubviews={true}
         getItemLayout={(data, index) => ({
-          length: itemWidth,
-          offset: itemWidth * index,
+          length: snapInterval,
+          offset: snapInterval * index,
           index,
         })}
       />
@@ -95,13 +114,13 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   titleContainer: {
     flexDirection: 'row',
@@ -121,12 +140,22 @@ const styles = StyleSheet.create({
   seeAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  seeAllButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
   },
   seeAllText: {
     color: '#B8A05C',
     fontSize: 14,
     fontWeight: '500',
+  },
+  seeAllTextFocused: {
+    color: '#FFFFFF',
   },
 });
