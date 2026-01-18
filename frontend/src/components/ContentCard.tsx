@@ -1,11 +1,12 @@
-import React, { memo, useState, useRef } from 'react';
+import React, { memo, useState, useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
-  Pressable,
+  TouchableOpacity,
   useWindowDimensions,
   Platform,
   Text,
+  TVFocusGuideView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { ContentItem, SearchResult } from '../api/client';
@@ -33,11 +34,15 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const isTV = width > height || width > 800;
   
   // Calculate card width based on screen size and mode
+  // Show 7 cards on TV for a Stremio-like layout
   let cardWidth: number;
   if (isTV) {
-    // TV mode: show more cards, appropriate size for 10-foot UI
-    const numCards = size === 'small' ? 7 : size === 'large' ? 4 : 5;
-    cardWidth = Math.min((width - 100) / numCards, 180);
+    const numCards = 7;
+    const horizontalPadding = 48; // 24px padding on each side
+    const gapsBetweenCards = (numCards - 1) * 12; // 12px gap between cards
+    cardWidth = (width - horizontalPadding - gapsBetweenCards) / numCards;
+    // Cap the max width
+    cardWidth = Math.min(cardWidth, 160);
   } else {
     // Mobile mode
     const baseWidth = Math.min(width, 500);
@@ -48,20 +53,29 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   // Fixed height based on aspect ratio
   const cardHeight = cardWidth * POSTER_ASPECT_RATIO;
 
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+  }, []);
+
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+  }, []);
+
   if (!item) {
     return null;
   }
 
   return (
-    <Pressable
+    <TouchableOpacity
       style={[
         styles.container, 
         { width: cardWidth },
         isFocused && styles.focused,
       ]}
       onPress={onPress}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      activeOpacity={0.8}
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={item.name || item.title || 'Content'}
@@ -79,18 +93,19 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           recyclingKey={item.id || item.imdb_id}
           cachePolicy="memory-disk"
         />
-        {/* Gold focus border overlay */}
-        {isFocused && (
-          <View style={styles.focusBorder} />
-        )}
+        {/* Visible focus indicator - always rendered but only visible when focused */}
+        <View style={[
+          styles.focusIndicator,
+          isFocused && styles.focusIndicatorVisible,
+        ]} />
       </View>
-      {/* Optional: Show title on TV when focused */}
+      {/* Show title on TV when focused */}
       {isTV && isFocused && (item.name || item.title) && (
         <Text style={styles.focusedTitle} numberOfLines={2}>
           {item.name || item.title}
         </Text>
       )}
-    </Pressable>
+    </TouchableOpacity>
   );
 };
 
@@ -102,41 +117,42 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   focused: {
-    transform: [{ scale: 1.1 }],
+    transform: [{ scale: 1.08 }],
     zIndex: 100,
   },
   imageContainer: {
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
-    borderWidth: 3,
-    borderColor: 'transparent',
   },
   imageContainerFocused: {
-    borderColor: '#FFD700',
+    // Shadow for depth
     shadowColor: '#FFD700',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
-    shadowRadius: 10,
-    elevation: 15,
+    shadowRadius: 12,
+    elevation: 20,
   },
   image: {
     width: '100%',
     height: '100%',
   },
-  focusBorder: {
+  focusIndicator: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
     borderWidth: 4,
+    borderColor: 'transparent',
+    borderRadius: 8,
+  },
+  focusIndicatorVisible: {
     borderColor: '#FFD700',
-    borderRadius: 5,
   },
   focusedTitle: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
     marginTop: 6,

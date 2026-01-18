@@ -1,10 +1,10 @@
-import React, { memo, useRef, useState } from 'react';
+import React, { memo, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  Pressable,
+  TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,21 +35,24 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const validItems = (items || []).filter(Boolean);
   if (validItems.length === 0) return null;
 
-  const renderItem = ({ item }: { item: ContentItem }) => (
+  const renderItem = useCallback(({ item }: { item: ContentItem }) => (
     <MemoizedContentCard
       item={item}
       onPress={() => onItemPress(item)}
     />
-  );
+  ), [onItemPress]);
 
-  const keyExtractor = (item: ContentItem, index: number) => 
-    item.id || item.imdb_id || `item-${index}`;
+  const keyExtractor = useCallback((item: ContentItem, index: number) => 
+    item.id || item.imdb_id || `item-${index}`, []);
 
-  // Calculate item width for getItemLayout
-  const numCards = isTV ? 5 : 3;
-  const itemWidth = isTV 
-    ? Math.min((width - 100) / numCards, 180) + 12 
-    : ((Math.min(width, 500) - 48) / 3) + 12;
+  // Calculate item width for getItemLayout - must match ContentCard
+  const numCards = isTV ? 7 : 3;
+  const horizontalPadding = isTV ? 48 : 32;
+  const gapsBetweenCards = (numCards - 1) * 12;
+  let cardWidth = isTV 
+    ? Math.min((width - horizontalPadding - gapsBetweenCards) / numCards, 160)
+    : ((Math.min(width, 500) - 48) / 3);
+  const itemWidth = cardWidth + 12; // card width + marginRight
 
   return (
     <View style={styles.container}>
@@ -58,7 +61,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
           <Text style={[styles.title, isTV && styles.titleTV]}>{serviceName}</Text>
         </View>
         {onSeeAll && (
-          <Pressable 
+          <TouchableOpacity 
             onPress={onSeeAll} 
             style={[
               styles.seeAllButton,
@@ -66,6 +69,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
             ]}
             onFocus={() => setSeeAllFocused(true)}
             onBlur={() => setSeeAllFocused(false)}
+            activeOpacity={0.7}
           >
             <Text style={[
               styles.seeAllText,
@@ -76,7 +80,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
               size={16} 
               color={seeAllFocused ? '#FFFFFF' : '#B8A05C'} 
             />
-          </Pressable>
+          </TouchableOpacity>
         )}
       </View>
       <FlatList
@@ -86,10 +90,10 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         keyExtractor={keyExtractor}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
-        initialNumToRender={isTV ? 7 : 5}
+        initialNumToRender={isTV ? 8 : 5}
         maxToRenderPerBatch={5}
         windowSize={5}
-        removeClippedSubviews={true}
+        removeClippedSubviews={false}
         getItemLayout={(data, index) => ({
           length: itemWidth,
           offset: itemWidth * index,
@@ -121,7 +125,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   titleTV: {
-    fontSize: 22,
+    fontSize: 20,
   },
   seeAllButton: {
     flexDirection: 'row',
@@ -129,7 +133,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: 'transparent',
   },
   seeAllButtonFocused: {
