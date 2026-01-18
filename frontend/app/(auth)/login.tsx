@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
-  Pressable,
+  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -20,29 +20,37 @@ import { useAuthStore } from '../../src/store/authStore';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuthStore();
+  const { login, isAuthenticated } = useAuthStore();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [inputFocused, setInputFocused] = useState<string | null>(null);
   const { width, height } = useWindowDimensions();
   
-  // Detect if we're on a TV/landscape mode
   const isTV = width > height || width > 800;
 
+  // Navigate when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace('/(tabs)/discover');
+    }
+  }, [isAuthenticated]);
+
   const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
+    const trimmedUsername = username.trim();
+    const trimmedPassword = password.trim();
+    
+    if (!trimmedUsername || !trimmedPassword) {
       Alert.alert('Error', 'Please enter username and password');
       return;
     }
 
     setIsLoading(true);
+    
     try {
-      await login(username.trim(), password);
-      router.replace('/(tabs)/discover');
+      await login(trimmedUsername, trimmedPassword);
     } catch (error: any) {
-      // Better error message for debugging
       let errorMessage = 'Invalid credentials';
       if (error.message?.includes('Network Error')) {
         errorMessage = 'Cannot connect to server. Check your internet connection.';
@@ -52,7 +60,6 @@ export default function LoginScreen() {
         errorMessage = error.message;
       }
       Alert.alert('Login Failed', errorMessage);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -68,7 +75,7 @@ export default function LoginScreen() {
             styles.scrollContent,
             isTV && styles.scrollContentTV
           ]}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
         >
           <View style={[styles.formWrapper, isTV && styles.formWrapperTV]}>
             <View style={styles.header}>
@@ -79,10 +86,10 @@ export default function LoginScreen() {
               />
             </View>
 
-            <View style={[styles.form, isTV && styles.formTV]}>
+            <View style={styles.form}>
               <View style={[
                 styles.inputContainer,
-                focusedField === 'username' && styles.inputFocused
+                inputFocused === 'username' && styles.inputFocused
               ]}>
                 <Ionicons name="person-outline" size={20} color="#888888" style={styles.inputIcon} />
                 <TextInput
@@ -93,14 +100,15 @@ export default function LoginScreen() {
                   onChangeText={setUsername}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  onFocus={() => setFocusedField('username')}
-                  onBlur={() => setFocusedField(null)}
+                  onFocus={() => setInputFocused('username')}
+                  onBlur={() => setInputFocused(null)}
+                  editable={!isLoading}
                 />
               </View>
 
               <View style={[
                 styles.inputContainer,
-                focusedField === 'password' && styles.inputFocused
+                inputFocused === 'password' && styles.inputFocused
               ]}>
                 <Ionicons name="lock-closed-outline" size={20} color="#888888" style={styles.inputIcon} />
                 <TextInput
@@ -111,32 +119,34 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  onFocus={() => setFocusedField('password')}
-                  onBlur={() => setFocusedField(null)}
+                  onFocus={() => setInputFocused('password')}
+                  onBlur={() => setInputFocused(null)}
+                  editable={!isLoading}
                 />
-                <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                <TouchableOpacity 
+                  onPress={() => setShowPassword(!showPassword)} 
+                  style={styles.eyeButton}
+                  disabled={isLoading}
+                >
                   <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888888" />
-                </Pressable>
+                </TouchableOpacity>
               </View>
 
-              <Pressable
-                style={({ pressed, focused }) => [
+              <TouchableOpacity
+                style={[
                   styles.loginButton,
                   isLoading && styles.loginButtonDisabled,
-                  pressed && { opacity: 0.8 },
-                  focusedField === 'button' && styles.loginButtonFocused,
                 ]}
                 onPress={handleLogin}
-                onFocus={() => setFocusedField('button')}
-                onBlur={() => setFocusedField(null)}
                 disabled={isLoading}
+                activeOpacity={0.7}
               >
                 {isLoading ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <Text style={styles.loginButtonText}>Sign In</Text>
                 )}
-              </Pressable>
+              </TouchableOpacity>
             </View>
           </View>
         </ScrollView>
@@ -183,9 +193,6 @@ const styles = StyleSheet.create({
   form: {
     width: '100%',
   },
-  formTV: {
-    width: '100%',
-  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -218,12 +225,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
-    borderWidth: 3,
-    borderColor: 'transparent',
-  },
-  loginButtonFocused: {
-    borderColor: '#FFFFFF',
-    transform: [{ scale: 1.02 }],
   },
   loginButtonDisabled: {
     opacity: 0.7,
