@@ -243,7 +243,7 @@ export default function DiscoverScreen() {
           contentFit="contain"
         />
         <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Privastream Cinema</Text>
-        <Pressable 
+        <TouchableOpacity 
           style={[
             styles.searchButton,
             isTV && styles.searchButtonTV,
@@ -252,9 +252,10 @@ export default function DiscoverScreen() {
           onPress={() => router.push('/(tabs)/search')}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setSearchFocused(false)}
+          activeOpacity={0.7}
         >
           <Ionicons name="search" size={isTV ? 28 : 22} color="#FFFFFF" />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       {/* Welcome Screen - No Addons and No Continue Watching */}
