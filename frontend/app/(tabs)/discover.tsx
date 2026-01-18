@@ -164,7 +164,7 @@ export default function DiscoverScreen() {
     
     return (
       <View style={styles.continueItemWrapper}>
-        <Pressable
+        <TouchableOpacity
           style={[
             styles.continueItem,
             { width: POSTER_WIDTH },
@@ -173,11 +173,11 @@ export default function DiscoverScreen() {
           onPress={() => handleContinueWatchingPress(item)}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
+          activeOpacity={0.8}
         >
           <View style={[
             styles.continueImageContainer,
             { width: POSTER_WIDTH, height: POSTER_HEIGHT },
-            isFocused && styles.continueImageContainerFocused,
           ]}>
             <Image
               source={{ uri: item.poster || item.backdrop || '' }}
@@ -197,12 +197,15 @@ export default function DiscoverScreen() {
                 ]} 
               />
             </View>
-            {/* Focus border */}
-            {isFocused && <View style={styles.focusBorderOverlay} />}
+            {/* Focus border - always rendered, visible when focused */}
+            <View style={[
+              styles.focusBorderOverlay,
+              isFocused && styles.focusBorderOverlayVisible,
+            ]} />
           </View>
-        </Pressable>
+        </TouchableOpacity>
         {/* Remove button */}
-        <Pressable
+        <TouchableOpacity
           style={[
             styles.removeButton,
             removeButtonFocused && styles.removeButtonFocused,
@@ -211,9 +214,10 @@ export default function DiscoverScreen() {
           onFocus={() => setRemoveButtonFocused(true)}
           onBlur={() => setRemoveButtonFocused(false)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
         >
           <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.8)" />
-        </Pressable>
+        </TouchableOpacity>
       </View>
     );
   };
