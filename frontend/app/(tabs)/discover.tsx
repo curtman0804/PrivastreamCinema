@@ -6,7 +6,7 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
-  Pressable,
+  TouchableOpacity,
   FlatList,
   useWindowDimensions,
 } from 'react-native';
