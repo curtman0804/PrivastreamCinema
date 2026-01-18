@@ -353,7 +353,7 @@ function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
   const [isFocused, setIsFocused] = useState(false);
   
   return (
-    <Pressable 
+    <TouchableOpacity 
       style={[
         styles.goToAddonsButton,
         isTV && styles.goToAddonsButtonTV,
@@ -362,10 +362,11 @@ function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
       onPress={() => router.push('/(tabs)/addons')}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
+      activeOpacity={0.7}
     >
       <Ionicons name="extension-puzzle-outline" size={isTV ? 24 : 20} color="#FFFFFF" />
       <Text style={[styles.goToAddonsText, isTV && styles.goToAddonsTextTV]}>Go to Addons</Text>
-    </Pressable>
+    </TouchableOpacity>
   );
 }
 
