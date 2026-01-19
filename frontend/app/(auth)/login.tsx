@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -20,26 +20,40 @@ import { useAuthStore } from '../../src/store/authStore';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuthStore();
+  const { login, isAuthenticated } = useAuthStore();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [focusedInput, setFocusedInput] = useState<string | null>(null);
+  const [inputFocused, setInputFocused] = useState<string | null>(null);
+  const [buttonFocused, setButtonFocused] = useState(false);
+  const [eyeFocused, setEyeFocused] = useState(false);
   const { width, height } = useWindowDimensions();
+  
+  const usernameRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
   
   const isTV = width > height || width > 800;
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace('/(tabs)/discover');
+    }
+  }, [isAuthenticated]);
+
   const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
+    const trimmedUsername = username.trim();
+    const trimmedPassword = password.trim();
+    
+    if (!trimmedUsername || !trimmedPassword) {
       Alert.alert('Error', 'Please enter username and password');
       return;
     }
 
     setIsLoading(true);
+    
     try {
-      await login(username.trim(), password);
-      router.replace('/(tabs)/discover');
+      await login(trimmedUsername, trimmedPassword);
     } catch (error: any) {
       let errorMessage = 'Invalid credentials';
       if (error.message?.includes('Network Error')) {
@@ -50,7 +64,6 @@ export default function LoginScreen() {
         errorMessage = error.message;
       }
       Alert.alert('Login Failed', errorMessage);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -80,10 +93,11 @@ export default function LoginScreen() {
             <View style={styles.form}>
               <View style={[
                 styles.inputContainer,
-                focusedInput === 'username' && styles.inputFocused
+                inputFocused === 'username' && styles.inputFocused
               ]}>
                 <Ionicons name="person-outline" size={20} color="#888888" style={styles.inputIcon} />
                 <TextInput
+                  ref={usernameRef}
                   style={styles.input}
                   placeholder="Username"
                   placeholderTextColor="#888888"
@@ -91,18 +105,22 @@ export default function LoginScreen() {
                   onChangeText={setUsername}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  onFocus={() => setFocusedInput('username')}
-                  onBlur={() => setFocusedInput(null)}
+                  onFocus={() => setInputFocused('username')}
+                  onBlur={() => setInputFocused(null)}
                   editable={!isLoading}
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  blurOnSubmit={false}
                 />
               </View>
 
               <View style={[
                 styles.inputContainer,
-                focusedInput === 'password' && styles.inputFocused
+                inputFocused === 'password' && styles.inputFocused
               ]}>
                 <Ionicons name="lock-closed-outline" size={20} color="#888888" style={styles.inputIcon} />
                 <TextInput
+                  ref={passwordRef}
                   style={styles.input}
                   placeholder="Password"
                   placeholderTextColor="#888888"
@@ -110,34 +128,43 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  onFocus={() => setFocusedInput('password')}
-                  onBlur={() => setFocusedInput(null)}
+                  onFocus={() => setInputFocused('password')}
+                  onBlur={() => setInputFocused(null)}
                   editable={!isLoading}
+                  returnKeyType="done"
+                  onSubmitEditing={handleLogin}
                 />
-                <TouchableOpacity 
+                <Pressable 
                   onPress={() => setShowPassword(!showPassword)} 
-                  style={styles.eyeButton}
+                  onFocus={() => setEyeFocused(true)}
+                  onBlur={() => setEyeFocused(false)}
+                  style={({ focused }) => [
+                    styles.eyeButton,
+                    (focused || eyeFocused) && styles.eyeButtonFocused,
+                  ]}
                   disabled={isLoading}
                 >
                   <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888888" />
-                </TouchableOpacity>
+                </Pressable>
               </View>
 
-              <TouchableOpacity
-                style={[
+              <Pressable
+                onPress={handleLogin}
+                onFocus={() => setButtonFocused(true)}
+                onBlur={() => setButtonFocused(false)}
+                disabled={isLoading}
+                style={({ pressed, focused }) => [
                   styles.loginButton,
                   isLoading && styles.loginButtonDisabled,
+                  (focused || buttonFocused) && styles.loginButtonFocused,
                 ]}
-                onPress={handleLogin}
-                disabled={isLoading}
-                activeOpacity={0.7}
               >
                 {isLoading ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <Text style={styles.loginButtonText}>Sign In</Text>
                 )}
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
         </ScrollView>
@@ -175,10 +202,10 @@ const styles = StyleSheet.create({
   },
   logo: {
     width: 280,
-    height: 120,
+    height: 200,
   },
   logoTV: {
-    width: 350,
+    width: 300,
     height: 150,
   },
   form: {
@@ -192,11 +219,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 16,
     height: 56,
-    borderWidth: 2,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   inputFocused: {
-    borderColor: '#B8A05C',
+    borderColor: '#FFD700',
   },
   inputIcon: {
     marginRight: 12,
@@ -208,6 +235,13 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     padding: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  eyeButtonFocused: {
+    borderColor: '#FFD700',
+    backgroundColor: '#333333',
   },
   loginButton: {
     backgroundColor: '#B8A05C',
@@ -216,9 +250,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
+    borderWidth: 4,
+    borderColor: 'transparent',
   },
   loginButtonDisabled: {
     opacity: 0.7,
+  },
+  loginButtonFocused: {
+    borderColor: '#FFD700',
+    transform: [{ scale: 1.02 }],
   },
   loginButtonText: {
     color: '#FFFFFF',

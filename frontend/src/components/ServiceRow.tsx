@@ -1,14 +1,14 @@
-import React, { memo, useState, useRef } from 'react';
+import React, { memo, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ContentCard } from './ContentCard';
+import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
 
 interface ServiceRowProps {
@@ -27,84 +27,73 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   onSeeAll,
 }) => {
   const { width, height } = useWindowDimensions();
+  const isTV = width > height || width > 800;
   const [seeAllFocused, setSeeAllFocused] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
-  
-  // Better TV detection
-  const isLandscape = width > height;
-  const isTV = isLandscape || width > 800;
-  const isTablet = !isTV && width > 600;
-  
-  const horizontalPadding = isTV ? 40 : isTablet ? 32 : 16;
-  const gap = isTV ? 14 : 10;
-  
-  // 7 posters per row on TV
-  const numColumns = isTV ? 7 : isTablet ? 5 : 3;
-  const itemWidth = (width - (horizontalPadding * 2) - (gap * (numColumns - 1))) / numColumns;
-  const snapInterval = itemWidth + gap;
   
   const validItems = (items || []).filter(Boolean);
   if (validItems.length === 0) return null;
 
-  const renderItem = ({ item }: { item: ContentItem }) => (
+  const renderItem = useCallback(({ item }: { item: ContentItem }) => (
     <MemoizedContentCard
       item={item}
       onPress={() => onItemPress(item)}
     />
-  );
+  ), [onItemPress]);
 
-  const keyExtractor = (item: ContentItem, index: number) => 
-    item.id || item.imdb_id || `item-${index}`;
+  const keyExtractor = useCallback((item: ContentItem, index: number) => 
+    item.id || item.imdb_id || `item-${index}`, []);
+
+  const cardWidth = getCardWidth(width, isTV, 'medium');
+  const itemWidth = cardWidth + 12;
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
+      <View style={styles.header}>
         <View style={styles.titleContainer}>
-          <Text style={[styles.title, isTV && styles.titleTV, isTablet && styles.titleTablet]}>
-            {serviceName}
-          </Text>
+          <Text style={[styles.title, isTV && styles.titleTV]}>{serviceName}</Text>
         </View>
         {onSeeAll && (
-          <TouchableOpacity 
+          <Pressable 
             onPress={onSeeAll} 
             onFocus={() => setSeeAllFocused(true)}
             onBlur={() => setSeeAllFocused(false)}
-            style={[
+            style={({ focused }) => [
               styles.seeAllButton,
-              seeAllFocused && styles.seeAllButtonFocused,
+              (focused || seeAllFocused) && styles.seeAllButtonFocused,
             ]}
-            activeOpacity={0.7}
           >
-            <Text style={[
-              styles.seeAllText,
-              seeAllFocused && styles.seeAllTextFocused,
-            ]}>See All</Text>
-            <Ionicons 
-              name="chevron-forward" 
-              size={16} 
-              color={seeAllFocused ? '#FFFFFF' : '#B8A05C'} 
-            />
-          </TouchableOpacity>
+            {({ focused }) => (
+              <>
+                <Text style={[
+                  styles.seeAllText,
+                  (focused || seeAllFocused) && styles.seeAllTextFocused,
+                ]}>See All</Text>
+                <Ionicons 
+                  name="chevron-forward" 
+                  size={16} 
+                  color={(focused || seeAllFocused) ? '#FFFFFF' : '#B8A05C'} 
+                />
+              </>
+            )}
+          </Pressable>
         )}
       </View>
       <FlatList
-        ref={flatListRef}
         horizontal
         data={validItems}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: horizontalPadding }}
-        snapToInterval={snapInterval}
-        snapToAlignment="start"
+        contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
+        initialNumToRender={isTV ? 8 : 5}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        removeClippedSubviews={false}
+        snapToInterval={itemWidth}
         decelerationRate="fast"
-        initialNumToRender={numColumns + 2}
-        maxToRenderPerBatch={numColumns}
-        windowSize={3}
-        removeClippedSubviews={true}
         getItemLayout={(data, index) => ({
-          length: snapInterval,
-          offset: snapInterval * index,
+          length: itemWidth,
+          offset: itemWidth * index,
           index,
         })}
       />
@@ -120,6 +109,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 16,
     marginBottom: 12,
   },
   titleContainer: {
@@ -128,14 +118,11 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
   },
   titleTV: {
     fontSize: 20,
-  },
-  titleTablet: {
-    fontSize: 18,
   },
   seeAllButton: {
     flexDirection: 'row',
@@ -143,12 +130,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,
-    borderWidth: 2,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   seeAllButtonFocused: {
-    borderColor: '#B8A05C',
-    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+    borderColor: '#FFD700',
+    backgroundColor: '#B8A05C',
   },
   seeAllText: {
     color: '#B8A05C',
@@ -157,5 +144,11 @@ const styles = StyleSheet.create({
   },
   seeAllTextFocused: {
     color: '#FFFFFF',
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+  },
+  scrollContentTV: {
+    paddingHorizontal: 24,
   },
 });

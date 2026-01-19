@@ -11,7 +11,7 @@ const getBaseUrl = () => {
   }
   // Production backend URL - hardcoded for standalone APK builds
   // This ensures the app always connects to the correct backend
-  return 'https://streamsphere-86.preview.emergentagent.com';
+  return 'https://cinestream-1336.preview.emergentagent.com';
 };
 
 const BASE_URL = getBaseUrl();

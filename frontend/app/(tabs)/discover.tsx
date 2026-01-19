@@ -6,7 +6,7 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
-  TouchableOpacity,
+  Pressable,
   FlatList,
   useWindowDimensions,
 } from 'react-native';
@@ -17,34 +17,31 @@ import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
+import { getCardWidth } from '../../src/components/ContentCard';
 
 export default function DiscoverScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
+  const isTV = width > height || width > 800;
   
-  // Better TV detection
-  const isLandscape = width > height;
-  const isTV = isLandscape || width > 800;
-  const isTablet = !isTV && width > 600;
-  
-  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons } = useContentStore();
+  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons, addons } = useContentStore();
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
+  const [isLoadingProgress, setIsLoadingProgress] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
 
-  // 7 posters per row on TV
-  const numColumns = isTV ? 7 : isTablet ? 5 : 3;
-  const horizontalPadding = isTV ? 40 : isTablet ? 32 : 16;
-  const gap = isTV ? 14 : 10;
-  const POSTER_WIDTH = (width - (horizontalPadding * 2) - (gap * (numColumns - 1))) / numColumns;
+  const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
   const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
 
   const fetchContinueWatching = useCallback(async () => {
     try {
+      setIsLoadingProgress(true);
       const response = await api.watchProgress.getAll();
       setContinueWatching(response.continueWatching || []);
     } catch (err) {
       console.log('[Discover] Error fetching continue watching:', err);
+    } finally {
+      setIsLoadingProgress(false);
     }
   }, []);
 
@@ -135,6 +132,10 @@ export default function DiscoverScreen() {
       params: {
         name: item.title || '',
         poster: item.poster || '',
+        resumeEpisodeId: item.content_type === 'series' ? item.content_id : '',
+        resumePosition: String(item.progress || 0),
+        resumeSeason: item.season !== undefined ? String(item.season) : '',
+        resumeEpisode: item.episode !== undefined ? String(item.episode) : '',
       },
     });
   };
@@ -148,61 +149,15 @@ export default function DiscoverScreen() {
     }
   };
 
-  const ContinueWatchingCard = ({ item }: { item: WatchProgress }) => {
-    const [isFocused, setIsFocused] = useState(false);
-    const [removeFocused, setRemoveFocused] = useState(false);
-    const percentWatched = item.percent_watched || 0;
-    
-    return (
-      <View style={[styles.continueItemWrapper, { marginRight: gap }]}>
-        <TouchableOpacity
-          style={[
-            styles.continueItem, 
-            { width: POSTER_WIDTH },
-            isFocused && styles.continueItemFocused,
-          ]}
-          onPress={() => handleContinueWatchingPress(item)}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          activeOpacity={0.9}
-        >
-          <View style={[
-            styles.continueImageContainer, 
-            { width: POSTER_WIDTH, height: POSTER_HEIGHT },
-            isFocused && styles.continueImageContainerFocused,
-          ]}>
-            <Image
-              source={{ uri: item.poster || item.backdrop || '' }}
-              style={styles.continueImage}
-              contentFit="cover"
-            />
-            <View style={styles.playOverlay}>
-              <Ionicons name="play-circle" size={isTV ? 40 : 32} color="rgba(255,255,255,0.9)" />
-            </View>
-            <View style={styles.progressBarContainer}>
-              <View style={[styles.progressBarFill, { width: `${Math.min(percentWatched, 100)}%` }]} />
-            </View>
-            {isFocused && <View style={styles.focusOverlay} />}
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.removeButton,
-            removeFocused && styles.removeButtonFocused,
-          ]}
-          onPress={() => handleRemoveFromContinueWatching(item)}
-          onFocus={() => setRemoveFocused(true)}
-          onBlur={() => setRemoveFocused(false)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.8)" />
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
   const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) => (
-    <ContinueWatchingCard item={item} />
+    <ContinueWatchingItem
+      item={item}
+      posterWidth={POSTER_WIDTH}
+      posterHeight={POSTER_HEIGHT}
+      isTV={isTV}
+      onPress={() => handleContinueWatchingPress(item)}
+      onRemove={() => handleRemoveFromContinueWatching(item)}
+    />
   );
 
   if (isLoadingDiscover && !discoverData) {
@@ -215,34 +170,44 @@ export default function DiscoverScreen() {
     );
   }
 
+  const itemWidth = POSTER_WIDTH + 12;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
+      <View style={[styles.header, isTV && styles.headerTV]}>
         <Image
           source={require('../../assets/images/logo_launcher.png')}
           style={[styles.headerLogo, isTV && styles.headerLogoTV]}
           contentFit="contain"
         />
         <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Privastream Cinema</Text>
-        <TouchableOpacity 
-          style={[
-            styles.searchButton, 
-            isTV && styles.searchButtonTV,
-            searchFocused && styles.searchButtonFocused,
-          ]}
-          onPress={() => router.push('/(tabs)/search')}
+        <Pressable 
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setSearchFocused(false)}
-          activeOpacity={0.7}
+          onPress={() => router.push('/(tabs)/search')}
+          style={({ focused }) => [
+            styles.searchButton,
+            isTV && styles.searchButtonTV,
+            (focused || searchFocused) && styles.searchButtonFocused,
+          ]}
         >
-          <Ionicons name="search" size={isTV ? 24 : 22} color="#FFFFFF" />
-        </TouchableOpacity>
+          <Ionicons name="search" size={isTV ? 28 : 22} color="#FFFFFF" />
+        </Pressable>
       </View>
 
-      {/* Welcome Screen - No Addons */}
       {!hasContent && continueWatching.length === 0 && !isLoadingDiscover ? (
-        <WelcomeScreen router={router} isTV={isTV} />
+        <View style={styles.welcomeContainer}>
+          <Text style={[styles.welcomeText, isTV && styles.welcomeTextTV]}>Welcome To</Text>
+          <Image
+            source={require('../../assets/images/logo_splash.png')}
+            style={[styles.welcomeLogo, isTV && styles.welcomeLogoTV]}
+            contentFit="contain"
+          />
+          <Text style={[styles.welcomeSubtext, isTV && styles.welcomeSubtextTV]}>
+            Go to the Addons tab to get started
+          </Text>
+          <GoToAddonsButton router={router} isTV={isTV} />
+        </View>
       ) : (
         <ScrollView
           style={styles.scrollView}
@@ -256,11 +221,10 @@ export default function DiscoverScreen() {
             />
           }
         >
-          {/* Continue Watching Section */}
           {continueWatching.length > 0 && (
             <View style={styles.continueWatchingSection}>
-              <View style={[styles.sectionHeader, { paddingHorizontal: horizontalPadding }]}>
-                <Ionicons name="play-circle" size={isTV ? 20 : 18} color="#B8A05C" />
+              <View style={styles.sectionHeader}>
+                <Ionicons name="play-circle" size={isTV ? 24 : 20} color="#B8A05C" />
                 <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>Continue Watching</Text>
               </View>
               <FlatList
@@ -269,10 +233,14 @@ export default function DiscoverScreen() {
                 keyExtractor={(item) => item.content_id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: horizontalPadding }}
-                snapToInterval={POSTER_WIDTH + gap}
-                snapToAlignment="start"
+                contentContainerStyle={[styles.continueList, isTV && styles.continueListTV]}
+                snapToInterval={itemWidth}
                 decelerationRate="fast"
+                getItemLayout={(data, index) => ({
+                  length: itemWidth,
+                  offset: itemWidth * index,
+                  index,
+                })}
               />
             </View>
           )}
@@ -321,35 +289,93 @@ export default function DiscoverScreen() {
   );
 }
 
-// Welcome Screen Component
-function WelcomeScreen({ router, isTV }: { router: any; isTV: boolean }) {
-  const [buttonFocused, setButtonFocused] = useState(false);
+function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
+  const [isFocused, setIsFocused] = useState(false);
   
   return (
-    <View style={styles.welcomeContainer}>
-      <Text style={[styles.welcomeText, isTV && styles.welcomeTextTV]}>Welcome To</Text>
-      <Image
-        source={require('../../assets/images/logo_splash.png')}
-        style={[styles.welcomeLogo, isTV && styles.welcomeLogoTV]}
-        contentFit="contain"
-      />
-      <Text style={[styles.welcomeSubtext, isTV && styles.welcomeSubtextTV]}>
-        Go to the Addons tab to get started
-      </Text>
-      <TouchableOpacity 
-        style={[
-          styles.goToAddonsButton,
-          isTV && styles.goToAddonsButtonTV,
-          buttonFocused && styles.goToAddonsButtonFocused,
+    <Pressable 
+      onPress={() => router.push('/(tabs)/addons')}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      style={({ focused }) => [
+        styles.goToAddonsButton,
+        isTV && styles.goToAddonsButtonTV,
+        (focused || isFocused) && styles.goToAddonsButtonFocused,
+      ]}
+    >
+      <Ionicons name="extension-puzzle-outline" size={isTV ? 24 : 20} color="#FFFFFF" />
+      <Text style={[styles.goToAddonsText, isTV && styles.goToAddonsTextTV]}>Go to Addons</Text>
+    </Pressable>
+  );
+}
+
+function ContinueWatchingItem({ 
+  item, 
+  posterWidth, 
+  posterHeight, 
+  isTV, 
+  onPress, 
+  onRemove 
+}: { 
+  item: WatchProgress; 
+  posterWidth: number; 
+  posterHeight: number; 
+  isTV: boolean;
+  onPress: () => void;
+  onRemove: () => void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [removeButtonFocused, setRemoveButtonFocused] = useState(false);
+  const percentWatched = item.percent_watched || 0;
+  
+  return (
+    <View style={[styles.continueItemWrapper, { width: posterWidth }]}>
+      <Pressable
+        onPress={onPress}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        style={({ focused }) => [
+          styles.continueItem,
+          (focused || isFocused) && styles.continueItemFocused,
         ]}
-        onPress={() => router.push('/(tabs)/addons')}
-        onFocus={() => setButtonFocused(true)}
-        onBlur={() => setButtonFocused(false)}
-        activeOpacity={0.7}
       >
-        <Ionicons name="extension-puzzle-outline" size={isTV ? 24 : 20} color="#FFFFFF" />
-        <Text style={[styles.goToAddonsText, isTV && styles.goToAddonsTextTV]}>Go to Addons</Text>
-      </TouchableOpacity>
+        {({ focused }) => (
+          <View style={[
+            styles.continueImageContainer,
+            { width: posterWidth, height: posterHeight },
+            (focused || isFocused) && styles.continueImageContainerFocused,
+          ]}>
+            <Image
+              source={{ uri: item.poster || item.backdrop || '' }}
+              style={styles.continueImage}
+              contentFit="cover"
+            />
+            <View style={styles.playOverlay}>
+              <Ionicons name="play-circle" size={isTV ? 40 : 32} color="rgba(255,255,255,0.9)" />
+            </View>
+            <View style={styles.progressBarContainer}>
+              <View 
+                style={[
+                  styles.progressBarFill, 
+                  { width: `${Math.min(percentWatched, 100)}%` }
+                ]} 
+              />
+            </View>
+          </View>
+        )}
+      </Pressable>
+      <Pressable
+        onPress={onRemove}
+        onFocus={() => setRemoveButtonFocused(true)}
+        onBlur={() => setRemoveButtonFocused(false)}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        style={({ focused }) => [
+          styles.removeButton,
+          (focused || removeButtonFocused) && styles.removeButtonFocused,
+        ]}
+      >
+        <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.8)" />
+      </Pressable>
     </View>
   );
 }
@@ -367,46 +393,53 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     gap: 10,
   },
+  headerTV: {
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+  },
   headerLogo: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: 8,
   },
   headerLogoTV: {
-    width: 42,
-    height: 42,
+    width: 50,
+    height: 50,
   },
   headerTitle: {
     flex: 1,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
+    fontFamily: 'System',
+    letterSpacing: 0.5,
   },
   headerTitleTV: {
-    fontSize: 22,
+    fontSize: 28,
   },
   searchButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#1a1a1a',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   searchButtonTV: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   searchButtonFocused: {
-    borderColor: '#B8A05C',
+    borderColor: '#FFD700',
     backgroundColor: '#2a2a2a',
+    transform: [{ scale: 1.1 }],
   },
   scrollView: {
     flex: 1,
@@ -414,7 +447,6 @@ const styles = StyleSheet.create({
   bottomPadding: {
     height: 100,
   },
-  // Welcome Screen
   welcomeContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -428,27 +460,27 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   welcomeTextTV: {
-    fontSize: 26,
+    fontSize: 28,
   },
   welcomeLogo: {
-    width: 280,
-    height: 120,
-    marginBottom: 32,
+    width: 300,
+    height: 130,
+    marginBottom: 40,
   },
   welcomeLogoTV: {
-    width: 360,
-    height: 150,
+    width: 400,
+    height: 170,
   },
   welcomeSubtext: {
     color: '#666666',
-    fontSize: 16,
+    fontSize: 17,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 28,
+    lineHeight: 26,
+    marginBottom: 32,
   },
   welcomeSubtextTV: {
-    fontSize: 18,
-    lineHeight: 28,
+    fontSize: 22,
+    lineHeight: 32,
   },
   goToAddonsButton: {
     flexDirection: 'row',
@@ -456,46 +488,54 @@ const styles = StyleSheet.create({
     backgroundColor: '#B8A05C',
     paddingHorizontal: 28,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     gap: 10,
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   goToAddonsButtonTV: {
-    paddingHorizontal: 32,
-    paddingVertical: 18,
+    paddingHorizontal: 36,
+    paddingVertical: 20,
   },
   goToAddonsButtonFocused: {
-    borderColor: '#FFFFFF',
+    borderColor: '#FFD700',
+    transform: [{ scale: 1.05 }],
   },
   goToAddonsText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
   },
   goToAddonsTextTV: {
-    fontSize: 18,
+    fontSize: 22,
   },
-  // Continue Watching
   continueWatchingSection: {
     marginBottom: 24,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 16,
     marginBottom: 12,
     gap: 8,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   sectionTitleTV: {
-    fontSize: 20,
+    fontSize: 22,
+  },
+  continueList: {
+    paddingHorizontal: 16,
+  },
+  continueListTV: {
+    paddingHorizontal: 24,
   },
   continueItemWrapper: {
     position: 'relative',
+    marginRight: 12,
   },
   continueItem: {
   },
@@ -508,12 +548,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
     position: 'relative',
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   continueImageContainerFocused: {
-    borderColor: '#B8A05C',
-    borderWidth: 4,
+    borderColor: '#FFD700',
   },
   continueImage: {
     width: '100%',
@@ -537,28 +576,19 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#B8A05C',
   },
-  focusOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderWidth: 4,
-    borderColor: '#B8A05C',
-    borderRadius: 5,
-  },
   removeButton: {
     position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 12,
-    padding: 4,
-    zIndex: 20,
+    padding: 2,
+    zIndex: 10,
     borderWidth: 2,
     borderColor: 'transparent',
   },
   removeButtonFocused: {
-    borderColor: '#B8A05C',
+    borderColor: '#FFD700',
+    backgroundColor: 'rgba(255,0,0,0.8)',
   },
 });
