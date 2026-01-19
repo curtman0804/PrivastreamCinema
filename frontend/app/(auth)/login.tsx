@@ -4,14 +4,13 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Alert,
   ActivityIndicator,
   useWindowDimensions,
-  findNodeHandle,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,12 +27,12 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [inputFocused, setInputFocused] = useState<string | null>(null);
   const [buttonFocused, setButtonFocused] = useState(false);
+  const [eyeFocused, setEyeFocused] = useState(false);
   const { width, height } = useWindowDimensions();
   
   // Refs for focus management
   const usernameRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
-  const buttonRef = useRef<TouchableOpacity>(null);
   
   const isTV = width > height || width > 800;
 
@@ -137,34 +136,37 @@ export default function LoginScreen() {
                   returnKeyType="done"
                   onSubmitEditing={handleLogin}
                 />
-                <TouchableOpacity 
+                <Pressable 
                   onPress={() => setShowPassword(!showPassword)} 
-                  style={styles.eyeButton}
+                  onFocus={() => setEyeFocused(true)}
+                  onBlur={() => setEyeFocused(false)}
+                  style={({ focused }) => [
+                    styles.eyeButton,
+                    (focused || eyeFocused) && styles.eyeButtonFocused,
+                  ]}
                   disabled={isLoading}
                 >
                   <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888888" />
-                </TouchableOpacity>
+                </Pressable>
               </View>
 
-              <TouchableOpacity
-                ref={buttonRef}
-                style={[
-                  styles.loginButton,
-                  isLoading && styles.loginButtonDisabled,
-                  buttonFocused && styles.loginButtonFocused,
-                ]}
+              <Pressable
                 onPress={handleLogin}
                 onFocus={() => setButtonFocused(true)}
                 onBlur={() => setButtonFocused(false)}
                 disabled={isLoading}
-                activeOpacity={0.7}
+                style={({ pressed, focused }) => [
+                  styles.loginButton,
+                  isLoading && styles.loginButtonDisabled,
+                  (focused || buttonFocused) && styles.loginButtonFocused,
+                ]}
               >
                 {isLoading ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <Text style={styles.loginButtonText}>Sign In</Text>
                 )}
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
         </ScrollView>
@@ -219,7 +221,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 16,
     height: 56,
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   inputFocused: {
@@ -235,6 +237,13 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     padding: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  eyeButtonFocused: {
+    borderColor: '#FFD700',
+    backgroundColor: '#333333',
   },
   loginButton: {
     backgroundColor: '#B8A05C',
@@ -243,7 +252,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   loginButtonDisabled: {
