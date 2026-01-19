@@ -6,7 +6,7 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
-  TouchableOpacity,
+  Pressable,
   FlatList,
   useWindowDimensions,
 } from 'react-native';
@@ -191,19 +191,18 @@ export default function DiscoverScreen() {
           contentFit="contain"
         />
         <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Privastream Cinema</Text>
-        <TouchableOpacity 
-          style={[
-            styles.searchButton,
-            isTV && styles.searchButtonTV,
-            searchFocused && styles.searchButtonFocused,
-          ]}
-          onPress={() => router.push('/(tabs)/search')}
+        <Pressable 
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setSearchFocused(false)}
-          activeOpacity={0.7}
+          onPress={() => router.push('/(tabs)/search')}
+          style={({ focused }) => [
+            styles.searchButton,
+            isTV && styles.searchButtonTV,
+            (focused || searchFocused) && styles.searchButtonFocused,
+          ]}
         >
           <Ionicons name="search" size={isTV ? 28 : 22} color="#FFFFFF" />
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {/* Welcome Screen - No Addons and No Continue Watching */}
@@ -308,20 +307,19 @@ function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
   const [isFocused, setIsFocused] = useState(false);
   
   return (
-    <TouchableOpacity 
-      style={[
-        styles.goToAddonsButton,
-        isTV && styles.goToAddonsButtonTV,
-        isFocused && styles.goToAddonsButtonFocused,
-      ]}
+    <Pressable 
       onPress={() => router.push('/(tabs)/addons')}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
-      activeOpacity={0.7}
+      style={({ focused }) => [
+        styles.goToAddonsButton,
+        isTV && styles.goToAddonsButtonTV,
+        (focused || isFocused) && styles.goToAddonsButtonFocused,
+      ]}
     >
       <Ionicons name="extension-puzzle-outline" size={isTV ? 24 : 20} color="#FFFFFF" />
       <Text style={[styles.goToAddonsText, isTV && styles.goToAddonsTextTV]}>Go to Addons</Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -347,52 +345,52 @@ function ContinueWatchingItem({
   
   return (
     <View style={[styles.continueItemWrapper, { width: posterWidth }]}>
-      <TouchableOpacity
-        style={[
-          styles.continueItem,
-          isFocused && styles.continueItemFocused,
-        ]}
+      <Pressable
         onPress={onPress}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
-        activeOpacity={0.8}
-      >
-        <View style={[
-          styles.continueImageContainer,
-          { width: posterWidth, height: posterHeight },
-          isFocused && styles.continueImageContainerFocused,
-        ]}>
-          <Image
-            source={{ uri: item.poster || item.backdrop || '' }}
-            style={styles.continueImage}
-            contentFit="cover"
-          />
-          <View style={styles.playOverlay}>
-            <Ionicons name="play-circle" size={isTV ? 40 : 32} color="rgba(255,255,255,0.9)" />
-          </View>
-          <View style={styles.progressBarContainer}>
-            <View 
-              style={[
-                styles.progressBarFill, 
-                { width: `${Math.min(percentWatched, 100)}%` }
-              ]} 
-            />
-          </View>
-        </View>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[
-          styles.removeButton,
-          removeButtonFocused && styles.removeButtonFocused,
+        style={({ focused }) => [
+          styles.continueItem,
+          (focused || isFocused) && styles.continueItemFocused,
         ]}
+      >
+        {({ focused }) => (
+          <View style={[
+            styles.continueImageContainer,
+            { width: posterWidth, height: posterHeight },
+            (focused || isFocused) && styles.continueImageContainerFocused,
+          ]}>
+            <Image
+              source={{ uri: item.poster || item.backdrop || '' }}
+              style={styles.continueImage}
+              contentFit="cover"
+            />
+            <View style={styles.playOverlay}>
+              <Ionicons name="play-circle" size={isTV ? 40 : 32} color="rgba(255,255,255,0.9)" />
+            </View>
+            <View style={styles.progressBarContainer}>
+              <View 
+                style={[
+                  styles.progressBarFill, 
+                  { width: `${Math.min(percentWatched, 100)}%` }
+                ]} 
+              />
+            </View>
+          </View>
+        )}
+      </Pressable>
+      <Pressable
         onPress={onRemove}
         onFocus={() => setRemoveButtonFocused(true)}
         onBlur={() => setRemoveButtonFocused(false)}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        activeOpacity={0.7}
+        style={({ focused }) => [
+          styles.removeButton,
+          (focused || removeButtonFocused) && styles.removeButtonFocused,
+        ]}
       >
         <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.8)" />
-      </TouchableOpacity>
+      </Pressable>
     </View>
   );
 }
@@ -445,7 +443,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   searchButtonTV: {
@@ -508,7 +506,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 14,
     gap: 10,
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   goToAddonsButtonTV: {
@@ -567,7 +565,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
     position: 'relative',
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   continueImageContainerFocused: {
