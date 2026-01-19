@@ -5,21 +5,22 @@ import {
   Pressable,
   useWindowDimensions,
   Text,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { ContentItem, SearchResult } from '../api/client';
+import { ContentItem, SearchResult, api } from '../api/client';
 
 interface ContentCardProps {
   item: ContentItem | SearchResult;
   onPress: () => void;
   size?: 'small' | 'medium' | 'large';
   showRating?: boolean;
+  inLibrary?: boolean;
+  onLibraryChange?: () => void;
 }
 
-// Fixed poster aspect ratio (standard movie poster is 2:3)
 const POSTER_ASPECT_RATIO = 1.5;
 
-// Calculate card width - exported for use in other components
 export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 'medium') => {
   if (isTV) {
     const numCards = 7;
@@ -39,18 +40,55 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   onPress,
   size = 'medium',
   showRating = false,
+  inLibrary = false,
+  onLibraryChange,
 }) => {
   const { width, height } = useWindowDimensions();
   const [isFocused, setIsFocused] = useState(false);
+  const [isInLibrary, setIsInLibrary] = useState(inLibrary);
   
-  // Detect TV/landscape mode
   const isTV = width > height || width > 800;
-  
-  // Use shared card width calculation
   const cardWidth = getCardWidth(width, isTV, size);
-  
-  // Fixed height based on aspect ratio
   const cardHeight = cardWidth * POSTER_ASPECT_RATIO;
+
+  const handleLongPress = useCallback(async () => {
+    const contentId = item.imdb_id || item.id;
+    const contentName = item.name || item.title || 'this item';
+    
+    Alert.alert(
+      isInLibrary ? 'Remove from Library?' : 'Add to Library?',
+      isInLibrary 
+        ? `Remove "${contentName}" from your library?`
+        : `Add "${contentName}" to your library?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: isInLibrary ? 'Remove' : 'Add',
+          style: isInLibrary ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              if (isInLibrary) {
+                await api.library.remove(contentId);
+                setIsInLibrary(false);
+              } else {
+                await api.library.add({
+                  content_id: contentId,
+                  content_type: item.type || 'movie',
+                  name: contentName,
+                  poster: item.poster || '',
+                });
+                setIsInLibrary(true);
+              }
+              onLibraryChange?.();
+            } catch (error) {
+              console.log('Library error:', error);
+              Alert.alert('Error', 'Failed to update library');
+            }
+          },
+        },
+      ]
+    );
+  }, [item, isInLibrary, onLibraryChange]);
 
   if (!item) {
     return null;
@@ -59,6 +97,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={handleLongPress}
+      delayLongPress={500}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       style={({ pressed, focused }) => [
@@ -69,6 +109,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={item.name || item.title || 'Content'}
+      accessibilityHint="Long press to add or remove from library"
     >
       {({ pressed, focused }) => (
         <>
@@ -85,8 +126,13 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
               recyclingKey={item.id || item.imdb_id}
               cachePolicy="memory-disk"
             />
+            {/* Library indicator */}
+            {isInLibrary && (
+              <View style={styles.libraryIndicator}>
+                <Text style={styles.libraryIndicatorText}>★</Text>
+              </View>
+            )}
           </View>
-          {/* Show title on TV when focused */}
           {isTV && (focused || isFocused) && (item.name || item.title) && (
             <Text style={styles.focusedTitle} numberOfLines={2}>
               {item.name || item.title}
@@ -122,6 +168,22 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+  },
+  libraryIndicator: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(184, 160, 92, 0.9)',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  libraryIndicatorText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   focusedTitle: {
     color: '#FFFFFF',
