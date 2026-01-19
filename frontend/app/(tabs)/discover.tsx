@@ -316,6 +316,82 @@ function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
   );
 }
 
+// Separate component for Continue Watching item to avoid hooks in render
+function ContinueWatchingItem({ 
+  item, 
+  posterWidth, 
+  posterHeight, 
+  isTV, 
+  onPress, 
+  onRemove 
+}: { 
+  item: WatchProgress; 
+  posterWidth: number; 
+  posterHeight: number; 
+  isTV: boolean;
+  onPress: () => void;
+  onRemove: () => void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [removeButtonFocused, setRemoveButtonFocused] = useState(false);
+  const percentWatched = item.percent_watched || 0;
+  
+  return (
+    <View style={styles.continueItemWrapper}>
+      <TouchableOpacity
+        style={[
+          styles.continueItem,
+          { width: posterWidth },
+          isFocused && styles.continueItemFocused,
+        ]}
+        onPress={onPress}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        activeOpacity={0.8}
+      >
+        <View style={[
+          styles.continueImageContainer,
+          { width: posterWidth, height: posterHeight },
+        ]}>
+          <Image
+            source={{ uri: item.poster || item.backdrop || '' }}
+            style={styles.continueImage}
+            contentFit="cover"
+          />
+          <View style={styles.playOverlay}>
+            <Ionicons name="play-circle" size={isTV ? 48 : 32} color="rgba(255,255,255,0.9)" />
+          </View>
+          <View style={styles.progressBarContainer}>
+            <View 
+              style={[
+                styles.progressBarFill, 
+                { width: `${Math.min(percentWatched, 100)}%` }
+              ]} 
+            />
+          </View>
+          <View style={[
+            styles.focusBorderOverlay,
+            isFocused && styles.focusBorderOverlayVisible,
+          ]} />
+        </View>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.removeButton,
+          removeButtonFocused && styles.removeButtonFocused,
+        ]}
+        onPress={onRemove}
+        onFocus={() => setRemoveButtonFocused(true)}
+        onBlur={() => setRemoveButtonFocused(false)}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.8)" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
