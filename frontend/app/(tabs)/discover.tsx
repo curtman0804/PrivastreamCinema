@@ -156,71 +156,17 @@ export default function DiscoverScreen() {
     }
   };
 
-  // Render a continue watching item with progress bar and remove button
-  const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) => {
-    const percentWatched = item.percent_watched || 0;
-    const [isFocused, setIsFocused] = useState(false);
-    const [removeButtonFocused, setRemoveButtonFocused] = useState(false);
-    
-    return (
-      <View style={styles.continueItemWrapper}>
-        <TouchableOpacity
-          style={[
-            styles.continueItem,
-            { width: POSTER_WIDTH },
-            isFocused && styles.continueItemFocused,
-          ]}
-          onPress={() => handleContinueWatchingPress(item)}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          activeOpacity={0.8}
-        >
-          <View style={[
-            styles.continueImageContainer,
-            { width: POSTER_WIDTH, height: POSTER_HEIGHT },
-          ]}>
-            <Image
-              source={{ uri: item.poster || item.backdrop || '' }}
-              style={styles.continueImage}
-              contentFit="cover"
-            />
-            {/* Play icon overlay */}
-            <View style={styles.playOverlay}>
-              <Ionicons name="play-circle" size={isTV ? 48 : 32} color="rgba(255,255,255,0.9)" />
-            </View>
-            {/* Progress bar */}
-            <View style={styles.progressBarContainer}>
-              <View 
-                style={[
-                  styles.progressBarFill, 
-                  { width: `${Math.min(percentWatched, 100)}%` }
-                ]} 
-              />
-            </View>
-            {/* Focus border - always rendered, visible when focused */}
-            <View style={[
-              styles.focusBorderOverlay,
-              isFocused && styles.focusBorderOverlayVisible,
-            ]} />
-          </View>
-        </TouchableOpacity>
-        {/* Remove button */}
-        <TouchableOpacity
-          style={[
-            styles.removeButton,
-            removeButtonFocused && styles.removeButtonFocused,
-          ]}
-          onPress={() => handleRemoveFromContinueWatching(item)}
-          onFocus={() => setRemoveButtonFocused(true)}
-          onBlur={() => setRemoveButtonFocused(false)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.8)" />
-        </TouchableOpacity>
-      </View>
-    );
-  };
+  // Render a continue watching item
+  const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) => (
+    <ContinueWatchingItem
+      item={item}
+      posterWidth={POSTER_WIDTH}
+      posterHeight={POSTER_HEIGHT}
+      isTV={isTV}
+      onPress={() => handleContinueWatchingPress(item)}
+      onRemove={() => handleRemoveFromContinueWatching(item)}
+    />
+  );
 
   // Show loading only on initial load
   if (isLoadingDiscover && !discoverData) {
