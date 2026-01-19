@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Alert,
   ActivityIndicator,
   useWindowDimensions,
+  findNodeHandle,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,7 +27,13 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [inputFocused, setInputFocused] = useState<string | null>(null);
+  const [buttonFocused, setButtonFocused] = useState(false);
   const { width, height } = useWindowDimensions();
+  
+  // Refs for focus management
+  const usernameRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const buttonRef = useRef<TouchableOpacity>(null);
   
   const isTV = width > height || width > 800;
 
@@ -93,6 +100,7 @@ export default function LoginScreen() {
               ]}>
                 <Ionicons name="person-outline" size={20} color="#888888" style={styles.inputIcon} />
                 <TextInput
+                  ref={usernameRef}
                   style={styles.input}
                   placeholder="Username"
                   placeholderTextColor="#888888"
@@ -103,6 +111,9 @@ export default function LoginScreen() {
                   onFocus={() => setInputFocused('username')}
                   onBlur={() => setInputFocused(null)}
                   editable={!isLoading}
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  blurOnSubmit={false}
                 />
               </View>
 
@@ -112,6 +123,7 @@ export default function LoginScreen() {
               ]}>
                 <Ionicons name="lock-closed-outline" size={20} color="#888888" style={styles.inputIcon} />
                 <TextInput
+                  ref={passwordRef}
                   style={styles.input}
                   placeholder="Password"
                   placeholderTextColor="#888888"
@@ -122,6 +134,8 @@ export default function LoginScreen() {
                   onFocus={() => setInputFocused('password')}
                   onBlur={() => setInputFocused(null)}
                   editable={!isLoading}
+                  returnKeyType="done"
+                  onSubmitEditing={handleLogin}
                 />
                 <TouchableOpacity 
                   onPress={() => setShowPassword(!showPassword)} 
@@ -133,11 +147,15 @@ export default function LoginScreen() {
               </View>
 
               <TouchableOpacity
+                ref={buttonRef}
                 style={[
                   styles.loginButton,
                   isLoading && styles.loginButtonDisabled,
+                  buttonFocused && styles.loginButtonFocused,
                 ]}
                 onPress={handleLogin}
+                onFocus={() => setButtonFocused(true)}
+                onBlur={() => setButtonFocused(false)}
                 disabled={isLoading}
                 activeOpacity={0.7}
               >
@@ -201,11 +219,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 16,
     height: 56,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: 'transparent',
   },
   inputFocused: {
-    borderColor: '#B8A05C',
+    borderColor: '#FFD700',
   },
   inputIcon: {
     marginRight: 12,
@@ -225,9 +243,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
+    borderWidth: 3,
+    borderColor: 'transparent',
   },
   loginButtonDisabled: {
     opacity: 0.7,
+  },
+  loginButtonFocused: {
+    borderColor: '#FFD700',
+    transform: [{ scale: 1.02 }],
   },
   loginButtonText: {
     color: '#FFFFFF',
