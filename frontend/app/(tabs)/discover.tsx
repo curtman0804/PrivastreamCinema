@@ -396,18 +396,6 @@ function ContinueWatchingItem({
           </View>
         )}
       </Pressable>
-      <Pressable
-        onPress={onRemove}
-        onFocus={() => setRemoveButtonFocused(true)}
-        onBlur={() => setRemoveButtonFocused(false)}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        style={({ focused }) => [
-          styles.removeButton,
-          (focused || removeButtonFocused) && styles.removeButtonFocused,
-        ]}
-      >
-        <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.8)" />
-      </Pressable>
     </View>
   );
 }
