@@ -9,8 +9,6 @@ export default function TabsLayout() {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
   
-  // Calculate proper bottom padding for devices with navigation buttons
-  // Use minimum of 20 for Android devices with soft navigation buttons
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 20 : 10);
   const tabBarHeight = isTV ? 80 : 65 + bottomPadding;
 
@@ -26,7 +24,7 @@ export default function TabsLayout() {
             paddingBottom: isTV ? 10 : bottomPadding,
           }
         ],
-        tabBarActiveTintColor: '#FFD700',
+        tabBarActiveTintColor: '#B8A05C',
         tabBarInactiveTintColor: '#888888',
         tabBarLabelStyle: [
           styles.tabBarLabel,
@@ -36,7 +34,6 @@ export default function TabsLayout() {
           styles.tabBarItem,
           isTV && styles.tabBarItemTV,
         ],
-        // Enable TV focus for tab bar
         tabBarButton: (props) => {
           const [isFocused, setIsFocused] = useState(false);
           return (
@@ -44,9 +41,9 @@ export default function TabsLayout() {
               {...props}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              style={[
+              style={({ focused }) => [
                 props.style,
-                isFocused && styles.tabItemFocused,
+                (focused || isFocused) && styles.tabItemFocused,
               ]}
             />
           );
@@ -142,10 +139,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tabItemFocused: {
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: '#FFD700',
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
   },
   iconFocused: {
     transform: [{ scale: 1.2 }],
