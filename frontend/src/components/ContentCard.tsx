@@ -2,7 +2,7 @@ import React, { memo, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   useWindowDimensions,
   Text,
 } from 'react-native';
@@ -52,59 +52,49 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   // Fixed height based on aspect ratio
   const cardHeight = cardWidth * POSTER_ASPECT_RATIO;
 
-  const handleFocus = useCallback(() => {
-    setIsFocused(true);
-  }, []);
-
-  const handleBlur = useCallback(() => {
-    setIsFocused(false);
-  }, []);
-
   if (!item) {
     return null;
   }
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.container, 
-        { width: cardWidth },
-        isFocused && styles.focused,
-      ]}
+    <Pressable
       onPress={onPress}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      activeOpacity={0.8}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      style={({ pressed, focused }) => [
+        styles.container,
+        { width: cardWidth },
+        (focused || isFocused) && styles.focused,
+      ]}
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={item.name || item.title || 'Content'}
     >
-      <View style={[
-        styles.imageContainer, 
-        { height: cardHeight },
-        isFocused && styles.imageContainerFocused,
-      ]}>
-        <Image
-          source={{ uri: item.poster }}
-          style={styles.image}
-          contentFit="cover"
-          transition={100}
-          recyclingKey={item.id || item.imdb_id}
-          cachePolicy="memory-disk"
-        />
-        {/* Visible focus indicator - always rendered but only visible when focused */}
-        <View style={[
-          styles.focusIndicator,
-          isFocused && styles.focusIndicatorVisible,
-        ]} />
-      </View>
-      {/* Show title on TV when focused */}
-      {isTV && isFocused && (item.name || item.title) && (
-        <Text style={styles.focusedTitle} numberOfLines={2}>
-          {item.name || item.title}
-        </Text>
+      {({ pressed, focused }) => (
+        <>
+          <View style={[
+            styles.imageContainer, 
+            { height: cardHeight },
+            (focused || isFocused) && styles.imageContainerFocused,
+          ]}>
+            <Image
+              source={{ uri: item.poster }}
+              style={styles.image}
+              contentFit="cover"
+              transition={100}
+              recyclingKey={item.id || item.imdb_id}
+              cachePolicy="memory-disk"
+            />
+          </View>
+          {/* Show title on TV when focused */}
+          {isTV && (focused || isFocused) && (item.name || item.title) && (
+            <Text style={styles.focusedTitle} numberOfLines={2}>
+              {item.name || item.title}
+            </Text>
+          )}
+        </>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 };
 
@@ -123,34 +113,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   imageContainerFocused: {
     borderColor: '#FFD700',
-    // Shadow for depth
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 12,
-    elevation: 20,
   },
   image: {
     width: '100%',
     height: '100%',
-  },
-  focusIndicator: {
-    position: 'absolute',
-    top: -3,
-    left: -3,
-    right: -3,
-    bottom: -3,
-    borderWidth: 4,
-    borderColor: 'transparent',
-    borderRadius: 10,
-  },
-  focusIndicatorVisible: {
-    borderColor: '#FFD700',
   },
   focusedTitle: {
     color: '#FFFFFF',
