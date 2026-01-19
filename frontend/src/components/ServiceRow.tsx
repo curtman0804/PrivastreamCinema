@@ -4,7 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,26 +56,29 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
           <Text style={[styles.title, isTV && styles.titleTV]}>{serviceName}</Text>
         </View>
         {onSeeAll && (
-          <TouchableOpacity 
+          <Pressable 
             onPress={onSeeAll} 
-            style={[
-              styles.seeAllButton,
-              seeAllFocused && styles.seeAllButtonFocused,
-            ]}
             onFocus={() => setSeeAllFocused(true)}
             onBlur={() => setSeeAllFocused(false)}
-            activeOpacity={0.7}
+            style={({ focused }) => [
+              styles.seeAllButton,
+              (focused || seeAllFocused) && styles.seeAllButtonFocused,
+            ]}
           >
-            <Text style={[
-              styles.seeAllText,
-              seeAllFocused && styles.seeAllTextFocused,
-            ]}>See All</Text>
-            <Ionicons 
-              name="chevron-forward" 
-              size={16} 
-              color={seeAllFocused ? '#FFFFFF' : '#B8A05C'} 
-            />
-          </TouchableOpacity>
+            {({ focused }) => (
+              <>
+                <Text style={[
+                  styles.seeAllText,
+                  (focused || seeAllFocused) && styles.seeAllTextFocused,
+                ]}>See All</Text>
+                <Ionicons 
+                  name="chevron-forward" 
+                  size={16} 
+                  color={(focused || seeAllFocused) ? '#FFFFFF' : '#B8A05C'} 
+                />
+              </>
+            )}
+          </Pressable>
         )}
       </View>
       <FlatList
@@ -130,7 +133,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,
-    borderWidth: 3,
+    borderWidth: 4,
     borderColor: 'transparent',
   },
   seeAllButtonFocused: {
