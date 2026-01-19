@@ -1,4 +1,4 @@
-import React, { memo, useRef, useState, useCallback } from 'react';
+import React, { memo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ContentCard } from './ContentCard';
+import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
 
 interface ServiceRowProps {
@@ -45,13 +45,8 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const keyExtractor = useCallback((item: ContentItem, index: number) => 
     item.id || item.imdb_id || `item-${index}`, []);
 
-  // Calculate item width for getItemLayout - must match ContentCard
-  const numCards = isTV ? 7 : 3;
-  const horizontalPadding = isTV ? 48 : 32;
-  const gapsBetweenCards = (numCards - 1) * 12;
-  let cardWidth = isTV 
-    ? Math.min((width - horizontalPadding - gapsBetweenCards) / numCards, 160)
-    : ((Math.min(width, 500) - 48) / 3);
+  // Use shared card width calculation
+  const cardWidth = getCardWidth(width, isTV, 'medium');
   const itemWidth = cardWidth + 12; // card width + marginRight
 
   return (
@@ -94,6 +89,8 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         maxToRenderPerBatch={5}
         windowSize={5}
         removeClippedSubviews={false}
+        snapToInterval={itemWidth}
+        decelerationRate="fast"
         getItemLayout={(data, index) => ({
           length: itemWidth,
           offset: itemWidth * index,
