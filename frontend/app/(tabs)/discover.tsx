@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
+import { getCardWidth } from '../../src/components/ContentCard';
 
 export default function DiscoverScreen() {
   const router = useRouter();
@@ -29,10 +30,8 @@ export default function DiscoverScreen() {
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
 
-  // Calculate poster dimensions
-  const POSTER_WIDTH = isTV 
-    ? Math.min((width - 100) / 5, 180) 
-    : (Math.min(width, 500) - 48) / 3;
+  // Use same card width calculation as ContentCard for consistency
+  const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
   const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
 
   // Fetch continue watching data
@@ -179,6 +178,9 @@ export default function DiscoverScreen() {
     );
   }
 
+  // Item width for snap scrolling
+  const itemWidth = POSTER_WIDTH + 12;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -246,6 +248,13 @@ export default function DiscoverScreen() {
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={[styles.continueList, isTV && styles.continueListTV]}
+                snapToInterval={itemWidth}
+                decelerationRate="fast"
+                getItemLayout={(data, index) => ({
+                  length: itemWidth,
+                  offset: itemWidth * index,
+                  index,
+                })}
               />
             </View>
           )}
@@ -337,11 +346,10 @@ function ContinueWatchingItem({
   const percentWatched = item.percent_watched || 0;
   
   return (
-    <View style={styles.continueItemWrapper}>
+    <View style={[styles.continueItemWrapper, { width: posterWidth }]}>
       <TouchableOpacity
         style={[
           styles.continueItem,
-          { width: posterWidth },
           isFocused && styles.continueItemFocused,
         ]}
         onPress={onPress}
@@ -352,6 +360,7 @@ function ContinueWatchingItem({
         <View style={[
           styles.continueImageContainer,
           { width: posterWidth, height: posterHeight },
+          isFocused && styles.continueImageContainerFocused,
         ]}>
           <Image
             source={{ uri: item.poster || item.backdrop || '' }}
@@ -359,7 +368,7 @@ function ContinueWatchingItem({
             contentFit="cover"
           />
           <View style={styles.playOverlay}>
-            <Ionicons name="play-circle" size={isTV ? 48 : 32} color="rgba(255,255,255,0.9)" />
+            <Ionicons name="play-circle" size={isTV ? 40 : 32} color="rgba(255,255,255,0.9)" />
           </View>
           <View style={styles.progressBarContainer}>
             <View 
@@ -369,10 +378,6 @@ function ContinueWatchingItem({
               ]} 
             />
           </View>
-          <View style={[
-            styles.focusBorderOverlay,
-            isFocused && styles.focusBorderOverlayVisible,
-          ]} />
         </View>
       </TouchableOpacity>
       <TouchableOpacity
@@ -543,11 +548,9 @@ const styles = StyleSheet.create({
   },
   continueList: {
     paddingHorizontal: 16,
-    gap: 12,
   },
   continueListTV: {
     paddingHorizontal: 24,
-    gap: 16,
   },
   continueItemWrapper: {
     position: 'relative',
@@ -556,7 +559,7 @@ const styles = StyleSheet.create({
   continueItem: {
   },
   continueItemFocused: {
-    transform: [{ scale: 1.1 }],
+    transform: [{ scale: 1.08 }],
     zIndex: 100,
   },
   continueImageContainer: {
@@ -564,6 +567,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
     position: 'relative',
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  continueImageContainerFocused: {
+    borderColor: '#FFD700',
   },
   continueImage: {
     width: '100%',
@@ -586,19 +594,6 @@ const styles = StyleSheet.create({
   progressBarFill: {
     height: '100%',
     backgroundColor: '#B8A05C',
-  },
-  focusBorderOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderWidth: 4,
-    borderColor: 'transparent',
-    borderRadius: 5,
-  },
-  focusBorderOverlayVisible: {
-    borderColor: '#FFD700',
   },
   removeButton: {
     position: 'absolute',
