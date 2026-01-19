@@ -1,12 +1,10 @@
-import React, { memo, useState, useRef, useCallback } from 'react';
+import React, { memo, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
   useWindowDimensions,
-  Platform,
   Text,
-  TVFocusGuideView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { ContentItem, SearchResult } from '../api/client';
@@ -21,6 +19,21 @@ interface ContentCardProps {
 // Fixed poster aspect ratio (standard movie poster is 2:3)
 const POSTER_ASPECT_RATIO = 1.5;
 
+// Calculate card width - exported for use in other components
+export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 'medium') => {
+  if (isTV) {
+    const numCards = 7;
+    const horizontalPadding = 48;
+    const gapsBetweenCards = (numCards - 1) * 12;
+    let cardWidth = (screenWidth - horizontalPadding - gapsBetweenCards) / numCards;
+    return Math.min(cardWidth, 160);
+  } else {
+    const baseWidth = Math.min(screenWidth, 500);
+    const CARD_WIDTH = (baseWidth - 48) / 3;
+    return size === 'small' ? CARD_WIDTH * 0.8 : size === 'large' ? CARD_WIDTH * 1.2 : CARD_WIDTH;
+  }
+};
+
 const ContentCardComponent: React.FC<ContentCardProps> = ({
   item,
   onPress,
@@ -33,22 +46,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   // Detect TV/landscape mode
   const isTV = width > height || width > 800;
   
-  // Calculate card width based on screen size and mode
-  // Show 7 cards on TV for a Stremio-like layout
-  let cardWidth: number;
-  if (isTV) {
-    const numCards = 7;
-    const horizontalPadding = 48; // 24px padding on each side
-    const gapsBetweenCards = (numCards - 1) * 12; // 12px gap between cards
-    cardWidth = (width - horizontalPadding - gapsBetweenCards) / numCards;
-    // Cap the max width
-    cardWidth = Math.min(cardWidth, 160);
-  } else {
-    // Mobile mode
-    const baseWidth = Math.min(width, 500);
-    const CARD_WIDTH = (baseWidth - 48) / 3;
-    cardWidth = size === 'small' ? CARD_WIDTH * 0.8 : size === 'large' ? CARD_WIDTH * 1.2 : CARD_WIDTH;
-  }
+  // Use shared card width calculation
+  const cardWidth = getCardWidth(width, isTV, size);
   
   // Fixed height based on aspect ratio
   const cardHeight = cardWidth * POSTER_ASPECT_RATIO;
@@ -124,8 +123,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
+    borderWidth: 3,
+    borderColor: 'transparent',
   },
   imageContainerFocused: {
+    borderColor: '#FFD700',
     // Shadow for depth
     shadowColor: '#FFD700',
     shadowOffset: { width: 0, height: 0 },
@@ -139,13 +141,13 @@ const styles = StyleSheet.create({
   },
   focusIndicator: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: -3,
+    left: -3,
+    right: -3,
+    bottom: -3,
     borderWidth: 4,
     borderColor: 'transparent',
-    borderRadius: 8,
+    borderRadius: 10,
   },
   focusIndicatorVisible: {
     borderColor: '#FFD700',
