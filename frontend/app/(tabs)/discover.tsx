@@ -340,13 +340,29 @@ function ContinueWatchingItem({
   onRemove: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-  const [removeButtonFocused, setRemoveButtonFocused] = useState(false);
   const percentWatched = item.percent_watched || 0;
+
+  const handleLongPress = () => {
+    Alert.alert(
+      'Remove from Continue Watching?',
+      `Remove "${item.title}" and clear watch progress?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: onRemove,
+        },
+      ]
+    );
+  };
   
   return (
     <View style={[styles.continueItemWrapper, { width: posterWidth }]}>
       <Pressable
         onPress={onPress}
+        onLongPress={handleLongPress}
+        delayLongPress={500}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         style={({ focused }) => [
