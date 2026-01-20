@@ -220,10 +220,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.progressFill,
     borderRadius: 2,
   },
-  focusOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(138, 90, 171, 0.1)',
-  },
   titleContainer: {
     paddingTop: 8,
     paddingHorizontal: 4,
