@@ -444,8 +444,8 @@ export default function DetailsScreen() {
         )}
 
         {/* Add to Library Button */}
-        <TouchableOpacity 
-          style={styles.libraryButton}
+        <Pressable 
+          style={({ focused }) => [styles.libraryButton, focused && styles.buttonFocused]}
           onPress={toggleLibrary}
         >
           <Ionicons 
@@ -456,7 +456,7 @@ export default function DetailsScreen() {
           <Text style={styles.libraryButtonText}>
             {inLibrary ? 'In Library' : 'Add to Library'}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
         {/* Description */}
         {content?.description && (
