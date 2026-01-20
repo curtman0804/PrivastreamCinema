@@ -487,13 +487,13 @@ export default function DetailsScreen() {
             <Text style={styles.sectionTitle}>Director</Text>
             <View style={styles.pillContainer}>
               {content.director.map((d, i) => (
-                <TouchableOpacity 
+                <Pressable 
                   key={i} 
-                  style={styles.directorPill}
+                  style={({ focused }) => [styles.directorPill, focused && styles.pillFocused]}
                   onPress={() => router.push(`/search?q=${encodeURIComponent(d)}`)}
                 >
                   <Text style={styles.directorPillText}>{d}</Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
