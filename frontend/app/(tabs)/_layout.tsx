@@ -4,13 +4,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Platform, View, useWindowDimensions, Pressable, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// Stremio-inspired colors
+const colors = {
+  primary: '#8A5AAB',
+  background: '#0F0F0F',
+  backgroundLight: '#161616',
+  surface: '#1E1E1E',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#B0B0B0',
+  textMuted: '#707070',
+};
+
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
   
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 20 : 10);
-  const tabBarHeight = isTV ? 80 : 65 + bottomPadding;
+  const tabBarHeight = isTV ? 70 : 60 + bottomPadding;
 
   return (
     <Tabs
@@ -21,11 +32,11 @@ export default function TabsLayout() {
           isTV && styles.tabBarTV,
           {
             height: tabBarHeight,
-            paddingBottom: isTV ? 10 : bottomPadding,
+            paddingBottom: isTV ? 8 : bottomPadding,
           }
         ],
-        tabBarActiveTintColor: '#B8A05C',
-        tabBarInactiveTintColor: '#888888',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: [
           styles.tabBarLabel,
           isTV && styles.tabBarLabelTV,
@@ -43,6 +54,7 @@ export default function TabsLayout() {
               onBlur={() => setIsFocused(false)}
               style={({ focused }) => [
                 props.style,
+                styles.tabButton,
                 (focused || isFocused) && styles.tabItemFocused,
               ]}
             />
@@ -53,22 +65,18 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="discover"
         options={{
-          title: 'Discover',
+          title: 'Board',
           tabBarIcon: ({ color, size, focused }) => (
-            <View style={focused && isTV ? styles.iconFocused : undefined}>
-              <Ionicons name="compass" size={isTV ? 28 : size} color={color} />
-            </View>
+            <Ionicons name="grid" size={isTV ? 24 : 22} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="search"
         options={{
-          title: 'Search',
+          title: 'Discover',
           tabBarIcon: ({ color, size, focused }) => (
-            <View style={focused && isTV ? styles.iconFocused : undefined}>
-              <Ionicons name="search" size={isTV ? 28 : size} color={color} />
-            </View>
+            <Ionicons name="compass" size={isTV ? 24 : 22} color={color} />
           ),
         }}
       />
@@ -77,9 +85,7 @@ export default function TabsLayout() {
         options={{
           title: 'Library',
           tabBarIcon: ({ color, size, focused }) => (
-            <View style={focused && isTV ? styles.iconFocused : undefined}>
-              <Ionicons name="bookmark" size={isTV ? 28 : size} color={color} />
-            </View>
+            <Ionicons name="library" size={isTV ? 24 : 22} color={color} />
           ),
         }}
       />
@@ -88,20 +94,16 @@ export default function TabsLayout() {
         options={{
           title: 'Addons',
           tabBarIcon: ({ color, size, focused }) => (
-            <View style={focused && isTV ? styles.iconFocused : undefined}>
-              <Ionicons name="extension-puzzle" size={isTV ? 28 : size} color={color} />
-            </View>
+            <Ionicons name="extension-puzzle" size={isTV ? 24 : 22} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: 'Settings',
           tabBarIcon: ({ color, size, focused }) => (
-            <View style={focused && isTV ? styles.iconFocused : undefined}>
-              <Ionicons name="person" size={isTV ? 28 : size} color={color} />
-            </View>
+            <Ionicons name="settings" size={isTV ? 24 : 22} color={color} />
           ),
         }}
       />
@@ -111,40 +113,43 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#1a1a1a',
-    borderTopColor: '#2a2a2a',
+    backgroundColor: colors.backgroundLight,
+    borderTopColor: colors.surface,
     borderTopWidth: 1,
-    paddingTop: 8,
+    paddingTop: 6,
   },
   tabBarTV: {
-    paddingHorizontal: 40,
-    borderTopWidth: 2,
-    borderTopColor: '#333333',
+    paddingHorizontal: 60,
+    borderTopWidth: 0,
+    backgroundColor: colors.background,
   },
   tabBarLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   tabBarLabelTV: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
   },
   tabBarItem: {
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   tabBarItemTV: {
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    marginHorizontal: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    marginHorizontal: 8,
+  },
+  tabButton: {
     borderRadius: 8,
   },
   tabItemFocused: {
-    borderWidth: 4,
-    borderColor: '#B8A05C',
-    borderRadius: 12,
-    backgroundColor: 'rgba(184, 160, 92, 0.2)',
-  },
-  iconFocused: {
-    transform: [{ scale: 1.2 }],
+    backgroundColor: 'rgba(138, 90, 171, 0.25)',
+    // Stremio-style subtle glow
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 4,
   },
 });

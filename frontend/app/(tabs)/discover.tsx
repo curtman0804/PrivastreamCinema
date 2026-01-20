@@ -19,6 +19,7 @@ import { useContentStore } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 import { getCardWidth } from '../../src/components/ContentCard';
+import { colors } from '../../src/styles/colors';
 
 export default function DiscoverScreen() {
   const router = useRouter();
@@ -29,7 +30,6 @@ export default function DiscoverScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
-  const [searchFocused, setSearchFocused] = useState(false);
 
   // Use same card width calculation as ContentCard for consistency
   const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
@@ -156,7 +156,7 @@ export default function DiscoverScreen() {
     }
   };
 
-  // Render a continue watching item
+  // Render a continue watching item (Stremio style)
   const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) => (
     <ContinueWatchingItem
       item={item}
@@ -173,55 +173,35 @@ export default function DiscoverScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#B8A05C" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </SafeAreaView>
     );
   }
 
   // Item width for snap scrolling
-  const itemWidth = POSTER_WIDTH + 12;
+  const itemWidth = POSTER_WIDTH + 16;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={[styles.header, isTV && styles.headerTV]}>
-        <Image
-          source={require('../../assets/images/logo_launcher.png')}
-          style={[styles.headerLogo, isTV && styles.headerLogoTV]}
-          contentFit="contain"
-        />
-        <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Privastream Cinema</Text>
-        <Pressable 
-          onFocus={() => setSearchFocused(true)}
-          onBlur={() => setSearchFocused(false)}
-          onPress={() => router.push('/(tabs)/search')}
-          style={({ focused }) => [
-            styles.searchButton,
-            isTV && styles.searchButtonTV,
-            (focused || searchFocused) && styles.searchButtonFocused,
-          ]}
-        >
-          <Ionicons name="search" size={isTV ? 28 : 22} color="#FFFFFF" />
-        </Pressable>
-      </View>
-
       {/* Welcome Screen - No Addons and No Continue Watching */}
       {!hasContent && continueWatching.length === 0 && !isLoadingDiscover ? (
         <View style={styles.welcomeContainer}>
-          <Text style={[styles.welcomeText, isTV && styles.welcomeTextTV]}>Welcome To</Text>
           <Image
             source={require('../../assets/images/logo_splash.png')}
             style={[styles.welcomeLogo, isTV && styles.welcomeLogoTV]}
             contentFit="contain"
           />
+          <Text style={[styles.welcomeText, isTV && styles.welcomeTextTV]}>
+            Welcome to Privastream Cinema
+          </Text>
           <Text style={[styles.welcomeSubtext, isTV && styles.welcomeSubtextTV]}>
-            Go to the Addons tab to get started
+            Install addons to start streaming
           </Text>
           <GoToAddonsButton router={router} isTV={isTV} />
         </View>
       ) : (
-        /* Content ScrollView */
+        /* Content ScrollView - Stremio Board style */
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
@@ -229,17 +209,18 @@ export default function DiscoverScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#B8A05C"
-              colors={['#B8A05C']}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
         >
-          {/* Continue Watching Section */}
+          {/* Continue Watching Section - Stremio style */}
           {continueWatching.length > 0 && (
-            <View style={styles.continueWatchingSection}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="play-circle" size={isTV ? 24 : 20} color="#B8A05C" />
-                <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>Continue Watching</Text>
+            <View style={styles.section}>
+              <View style={[styles.sectionHeader, isTV && styles.sectionHeaderTV]}>
+                <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>
+                  Continue Watching
+                </Text>
               </View>
               <FlatList
                 data={continueWatching}
@@ -247,7 +228,7 @@ export default function DiscoverScreen() {
                 keyExtractor={(item) => item.content_id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={[styles.continueList, isTV && styles.continueListTV]}
+                contentContainerStyle={[styles.rowContent, isTV && styles.rowContentTV]}
                 snapToInterval={itemWidth}
                 decelerationRate="fast"
                 getItemLayout={(data, index) => ({
@@ -259,11 +240,12 @@ export default function DiscoverScreen() {
             </View>
           )}
           
+          {/* Content Rows from Addons */}
           {Object.entries(discoverData?.services || {}).map(([serviceName, content]) => (
             <View key={serviceName}>
               {content?.movies && content.movies.length > 0 && (
                 <ServiceRow
-                  serviceName={serviceName}
+                  title={`${serviceName} Movies`}
                   items={content.movies.slice(0, 30)}
                   onItemPress={handleItemPress}
                   onSeeAll={content.movies.length > 10 ? () => {
@@ -273,7 +255,7 @@ export default function DiscoverScreen() {
               )}
               {content?.series && content.series.length > 0 && (
                 <ServiceRow
-                  serviceName={serviceName}
+                  title={`${serviceName} Series`}
                   items={content.series.slice(0, 30)}
                   onItemPress={handleItemPress}
                   onSeeAll={content.series.length > 10 ? () => {
@@ -283,7 +265,7 @@ export default function DiscoverScreen() {
               )}
               {content?.channels && content.channels.length > 0 && (
                 <ServiceRow
-                  serviceName={serviceName}
+                  title={`${serviceName} Channels`}
                   items={content.channels.slice(0, 30).map((ch: any) => ({
                     ...ch,
                     type: 'tv' as const,
@@ -303,7 +285,7 @@ export default function DiscoverScreen() {
   );
 }
 
-// Separate component for Go To Addons button with focus support
+// Go To Addons Button (Stremio style)
 function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
   const [isFocused, setIsFocused] = useState(false);
   
@@ -312,19 +294,15 @@ function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
       onPress={() => router.push('/(tabs)/addons')}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
-      style={({ focused }) => [
-        styles.goToAddonsButton,
-        isTV && styles.goToAddonsButtonTV,
-        (focused || isFocused) && styles.goToAddonsButtonFocused,
-      ]}
+      style={[styles.addonsButton, isFocused && styles.addonsButtonFocused]}
     >
-      <Ionicons name="extension-puzzle-outline" size={isTV ? 24 : 20} color="#FFFFFF" />
-      <Text style={[styles.goToAddonsText, isTV && styles.goToAddonsTextTV]}>Go to Addons</Text>
+      <Ionicons name="extension-puzzle" size={20} color={colors.textPrimary} />
+      <Text style={styles.addonsButtonText}>Install Addons</Text>
     </Pressable>
   );
 }
 
-// Separate component for Continue Watching item to avoid hooks in render
+// Continue Watching Item (Stremio style with play overlay)
 function ContinueWatchingItem({ 
   item, 
   posterWidth, 
@@ -346,120 +324,78 @@ function ContinueWatchingItem({
   const handleLongPress = () => {
     Alert.alert(
       'Remove from Continue Watching?',
-      `Remove "${item.title}" and clear watch progress?`,
+      `Remove "${item.title}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: onRemove,
-        },
+        { text: 'Remove', style: 'destructive', onPress: onRemove },
       ]
     );
   };
   
   return (
-    <View style={[styles.continueItemWrapper, { width: posterWidth }]}>
-      <Pressable
-        onPress={onPress}
-        onLongPress={handleLongPress}
-        delayLongPress={500}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
-        style={({ focused }) => [
-          styles.continueItem,
-          (focused || isFocused) && styles.continueItemFocused,
-        ]}
-      >
-        {({ focused }) => (
-          <View style={[
-            styles.continueImageContainer,
-            { width: posterWidth, height: posterHeight },
-            (focused || isFocused) && styles.continueImageContainerFocused,
-          ]}>
-            <Image
-              source={{ uri: item.poster || item.backdrop || '' }}
-              style={styles.continueImage}
-              contentFit="cover"
-            />
-            <View style={styles.playOverlay}>
-              <Ionicons name="play-circle" size={isTV ? 40 : 32} color="rgba(255,255,255,0.9)" />
-            </View>
-            <View style={styles.progressBarContainer}>
-              <View 
-                style={[
-                  styles.progressBarFill, 
-                  { width: `${Math.min(percentWatched, 100)}%` }
-                ]} 
-              />
-            </View>
+    <Pressable
+      onPress={onPress}
+      onLongPress={handleLongPress}
+      delayLongPress={500}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      style={[styles.continueItem, { width: posterWidth }]}
+    >
+      <View style={[
+        styles.continueImageContainer,
+        { height: posterHeight },
+        isFocused && styles.continueImageFocused,
+      ]}>
+        <Image
+          source={{ uri: item.poster || item.backdrop || '' }}
+          style={styles.continueImage}
+          contentFit="cover"
+        />
+        
+        {/* Play overlay - Stremio style */}
+        <View style={styles.playOverlay}>
+          <View style={styles.playButton}>
+            <Ionicons name="play" size={isTV ? 32 : 24} color={colors.textPrimary} />
           </View>
+        </View>
+        
+        {/* Dismiss button - Stremio style */}
+        {isFocused && (
+          <Pressable style={styles.dismissButton} onPress={onRemove}>
+            <Ionicons name="close" size={16} color={colors.textPrimary} />
+          </Pressable>
         )}
-      </Pressable>
-    </View>
+        
+        {/* Progress bar - Stremio style */}
+        <View style={styles.progressContainer}>
+          <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
+        </View>
+      </View>
+      
+      {/* Title */}
+      <View style={styles.continueTitle}>
+        <Text style={styles.continueTitleText} numberOfLines={2}>
+          {item.title}
+        </Text>
+        {item.season !== undefined && item.episode !== undefined && (
+          <Text style={styles.continueEpisode}>
+            S{item.season} E{item.episode}
+          </Text>
+        )}
+      </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  headerTV: {
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-  },
-  headerLogo: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
-  },
-  headerLogoTV: {
-    width: 50,
-    height: 50,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    fontFamily: 'System',
-    letterSpacing: 0.5,
-  },
-  headerTitleTV: {
-    fontSize: 28,
-  },
-  searchButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1a1a1a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 4,
-    borderColor: 'transparent',
-  },
-  searchButtonTV: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
-  searchButtonFocused: {
-    borderColor: '#B8A05C',
-    backgroundColor: '#2a2a2a',
-    transform: [{ scale: 1.1 }],
   },
   scrollView: {
     flex: 1,
@@ -467,114 +403,105 @@ const styles = StyleSheet.create({
   bottomPadding: {
     height: 100,
   },
-  // Welcome Screen Styles
+  // Welcome Screen
   welcomeContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
   },
+  welcomeLogo: {
+    width: 200,
+    height: 100,
+    marginBottom: 24,
+  },
+  welcomeLogoTV: {
+    width: 280,
+    height: 140,
+  },
   welcomeText: {
-    color: '#888888',
-    fontSize: 20,
-    fontWeight: '500',
-    marginBottom: 12,
+    color: colors.textPrimary,
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 8,
   },
   welcomeTextTV: {
     fontSize: 28,
   },
-  welcomeLogo: {
-    width: 300,
-    height: 130,
-    marginBottom: 40,
-  },
-  welcomeLogoTV: {
-    width: 400,
-    height: 170,
-  },
   welcomeSubtext: {
-    color: '#666666',
-    fontSize: 17,
-    textAlign: 'center',
-    lineHeight: 26,
+    color: colors.textSecondary,
+    fontSize: 16,
     marginBottom: 32,
   },
   welcomeSubtextTV: {
-    fontSize: 22,
-    lineHeight: 32,
+    fontSize: 18,
   },
-  goToAddonsButton: {
+  addonsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#B8A05C',
-    paddingHorizontal: 28,
-    paddingVertical: 16,
-    borderRadius: 14,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 8,
     gap: 10,
-    borderWidth: 4,
-    borderColor: 'transparent',
   },
-  goToAddonsButtonTV: {
-    paddingHorizontal: 36,
-    paddingVertical: 20,
-  },
-  goToAddonsButtonFocused: {
-    borderColor: '#B8A05C',
+  addonsButtonFocused: {
     transform: [{ scale: 1.05 }],
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  goToAddonsText: {
-    color: '#FFFFFF',
-    fontSize: 17,
+  addonsButtonText: {
+    color: colors.textPrimary,
+    fontSize: 16,
     fontWeight: '600',
   },
-  goToAddonsTextTV: {
-    fontSize: 22,
-  },
-  // Continue Watching Styles
-  continueWatchingSection: {
-    marginBottom: 24,
+  // Section styles
+  section: {
+    marginBottom: 32,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 16,
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: 16,
+  },
+  sectionHeaderTV: {
+    paddingHorizontal: 24,
   },
   sectionTitle: {
+    color: colors.textPrimary,
     fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontWeight: '600',
   },
   sectionTitleTV: {
     fontSize: 22,
   },
-  continueList: {
+  rowContent: {
     paddingHorizontal: 16,
   },
-  continueListTV: {
+  rowContentTV: {
     paddingHorizontal: 24,
   },
-  continueItemWrapper: {
-    position: 'relative',
-    marginRight: 12,
-  },
+  // Continue watching item - Stremio style
   continueItem: {
-  },
-  continueItemFocused: {
-    transform: [{ scale: 1.08 }],
-    zIndex: 100,
+    marginRight: 16,
   },
   continueImageContainer: {
-    borderRadius: 8,
+    borderRadius: 4,
     overflow: 'hidden',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: colors.backgroundLight,
     position: 'relative',
-    borderWidth: 4,
-    borderColor: 'transparent',
   },
-  continueImageContainerFocused: {
-    borderColor: '#B8A05C',
+  continueImageFocused: {
+    transform: [{ scale: 1.05 }],
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: colors.primary,
   },
   continueImage: {
     width: '100%',
@@ -584,33 +511,54 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
   },
-  progressBarContainer: {
+  playButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.textPrimary,
+  },
+  dismissButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     height: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
-  progressBarFill: {
+  progressBar: {
     height: '100%',
-    backgroundColor: '#B8A05C',
+    backgroundColor: colors.textPrimary,
   },
-  removeButton: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
-    padding: 2,
-    zIndex: 10,
-    borderWidth: 2,
-    borderColor: 'transparent',
+  continueTitle: {
+    paddingTop: 8,
+    paddingHorizontal: 4,
   },
-  removeButtonFocused: {
-    borderColor: '#B8A05C',
-    backgroundColor: 'rgba(255,0,0,0.8)',
+  continueTitleText: {
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  continueEpisode: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 2,
   },
 });
