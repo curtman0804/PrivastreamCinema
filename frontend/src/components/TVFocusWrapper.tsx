@@ -46,7 +46,7 @@ export const TVFocusWrapper: React.FC<TVFocusWrapperProps> = ({
 
   const defaultFocusStyle: ViewStyle = {
     borderWidth: 3,
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     transform: [{ scale: 1.05 }],
   };
 
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     right: -2,
     bottom: -2,
     borderWidth: 3,
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     borderRadius: 10,
     pointerEvents: 'none',
   },

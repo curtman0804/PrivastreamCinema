@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   inputFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
   },
   inputIcon: {
     marginRight: 12,
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   eyeButtonFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     backgroundColor: '#333333',
   },
   loginButton: {
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   loginButtonFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     transform: [{ scale: 1.02 }],
   },
   loginButtonText: {
