@@ -4,7 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   Dimensions,
   Linking,
