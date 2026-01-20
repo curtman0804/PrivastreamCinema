@@ -469,13 +469,13 @@ export default function DetailsScreen() {
             <Text style={styles.sectionTitle}>Genres</Text>
             <View style={styles.pillContainer}>
               {content.genre.map((g, i) => (
-                <TouchableOpacity 
+                <Pressable 
                   key={i} 
-                  style={styles.genrePill}
+                  style={({ focused }) => [styles.genrePill, focused && styles.pillFocused]}
                   onPress={() => router.push(`/search?q=${encodeURIComponent(g)}`)}
                 >
                   <Text style={styles.genrePillText}>{g}</Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
