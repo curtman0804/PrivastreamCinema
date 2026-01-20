@@ -369,12 +369,12 @@ export default function DetailsScreen() {
         />
         
         {/* Back Button */}
-        <TouchableOpacity 
-          style={styles.backButton} 
+        <Pressable 
+          style={({ focused }) => [styles.backButton, focused && styles.buttonFocused]} 
           onPress={() => router.back()}
         >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        </Pressable>
 
         {/* Logo or Title */}
         <View style={styles.heroContent}>
