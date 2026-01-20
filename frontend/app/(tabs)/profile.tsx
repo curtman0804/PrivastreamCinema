@@ -224,14 +224,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundLight,
     borderRadius: 12,
     overflow: 'hidden',
+    alignSelf: 'stretch',
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
+    minHeight: 72,
+    maxHeight: 72,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   menuItemFocused: {
-    backgroundColor: colors.surface,
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
   },
   menuIcon: {
     width: 40,

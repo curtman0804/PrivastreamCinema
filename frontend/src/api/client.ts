@@ -11,7 +11,7 @@ const getBaseUrl = () => {
   }
   // Production backend URL - hardcoded for standalone APK builds
   // This ensures the app always connects to the correct backend
-  return 'https://cinema-remote-1.preview.emergentagent.com';
+  return 'https://cinema-app-24.preview.emergentagent.com';
 };
 
 const BASE_URL = getBaseUrl();
