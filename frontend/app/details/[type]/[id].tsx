@@ -667,9 +667,9 @@ export default function DetailsScreen() {
                 {streams.map((stream, index) => {
                   const { source, details } = parseStreamInfo(stream);
                   return (
-                    <TouchableOpacity
+                    <Pressable
                       key={index}
-                      style={styles.streamItem}
+                      style={({ focused }) => [styles.streamItem, focused && styles.streamItemFocused]}
                       onPress={() => handleStreamSelect(stream)}
                     >
                       <View style={styles.streamIcon}>
@@ -682,7 +682,7 @@ export default function DetailsScreen() {
                         )}
                       </View>
                       <Ionicons name="chevron-forward" size={18} color="#666" />
-                    </TouchableOpacity>
+                    </Pressable>
                   );
                 })}
               </View>
