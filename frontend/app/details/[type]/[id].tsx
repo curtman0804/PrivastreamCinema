@@ -530,11 +530,12 @@ export default function DetailsScreen() {
               contentContainerStyle={styles.seasonScrollContent}
             >
               {seasons.map((season) => (
-                <TouchableOpacity
+                <Pressable
                   key={season}
-                  style={[
+                  style={({ focused }) => [
                     styles.seasonButton,
                     selectedSeason === season && styles.seasonButtonActive,
+                    focused && styles.buttonFocused,
                   ]}
                   onPress={() => setSelectedSeason(season)}
                 >
@@ -546,7 +547,7 @@ export default function DetailsScreen() {
                   >
                     Season {season}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </ScrollView>
 
