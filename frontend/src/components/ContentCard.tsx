@@ -150,11 +150,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
             <View style={[styles.progressBar, { width: `${Math.min(showProgress, 100)}%` }]} />
           </View>
         )}
-        
-        {/* Focus scale effect */}
-        {isFocused && (
-          <View style={styles.focusOverlay} />
-        )}
       </View>
       
       {/* Title bar (Stremio shows title below poster) */}
