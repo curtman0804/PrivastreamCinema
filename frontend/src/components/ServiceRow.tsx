@@ -10,9 +10,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
+import { colors } from '../styles/colors';
 
 interface ServiceRowProps {
-  serviceName: string;
+  title: string;
+  serviceName?: string;
   items: ContentItem[];
   onItemPress: (item: ContentItem) => void;
   onSeeAll?: () => void;
@@ -22,6 +24,7 @@ interface ServiceRowProps {
 const MemoizedContentCard = memo(ContentCard);
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
+  title,
   serviceName,
   items,
   onItemPress,
@@ -39,6 +42,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     <MemoizedContentCard
       item={item}
       onPress={() => onItemPress(item)}
+      showTitle={true}
     />
   ), [onItemPress]);
 
@@ -47,14 +51,16 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 
   // Use shared card width calculation
   const cardWidth = getCardWidth(width, isTV, 'medium');
-  const itemWidth = cardWidth + 12; // card width + marginRight
+  const itemWidth = cardWidth + 16; // card width + marginRight
+
+  // Display title - use serviceName or title
+  const displayTitle = title || serviceName || 'Content';
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <Text style={[styles.title, isTV && styles.titleTV]}>{serviceName}</Text>
-        </View>
+      {/* Row Header - Stremio style */}
+      <View style={[styles.header, isTV && styles.headerTV]}>
+        <Text style={[styles.title, isTV && styles.titleTV]}>{displayTitle}</Text>
         {onSeeAll && (
           <Pressable 
             onPress={onSeeAll} 
@@ -65,22 +71,20 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
               (focused || seeAllFocused) && styles.seeAllButtonFocused,
             ]}
           >
-            {({ focused }) => (
-              <>
-                <Text style={[
-                  styles.seeAllText,
-                  (focused || seeAllFocused) && styles.seeAllTextFocused,
-                ]}>See All</Text>
-                <Ionicons 
-                  name="chevron-forward" 
-                  size={16} 
-                  color={(focused || seeAllFocused) ? '#FFFFFF' : '#B8A05C'} 
-                />
-              </>
-            )}
+            <Text style={[
+              styles.seeAllText,
+              (seeAllFocused) && styles.seeAllTextFocused,
+            ]}>SEE ALL</Text>
+            <Ionicons 
+              name="chevron-forward" 
+              size={16} 
+              color={seeAllFocused ? colors.textPrimary : colors.textSecondary} 
+            />
           </Pressable>
         )}
       </View>
+      
+      {/* Content Row */}
       <FlatList
         horizontal
         data={validItems}
@@ -104,49 +108,52 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   );
 });
 
+// Also export with serviceName prop for backwards compatibility
+export const MetaRow = ServiceRow;
+
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  headerTV: {
+    paddingHorizontal: 24,
+    marginBottom: 20,
   },
   title: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   titleTV: {
-    fontSize: 20,
+    fontSize: 22,
   },
   seeAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 6,
-    borderWidth: 4,
-    borderColor: 'transparent',
+    borderRadius: 4,
   },
   seeAllButtonFocused: {
-    borderColor: '#B8A05C',
-    backgroundColor: '#B8A05C',
+    backgroundColor: colors.primary,
   },
   seeAllText: {
-    color: '#B8A05C',
-    fontSize: 14,
-    fontWeight: '500',
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
+    marginRight: 4,
   },
   seeAllTextFocused: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
   },
   scrollContent: {
     paddingHorizontal: 16,
