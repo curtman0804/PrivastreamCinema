@@ -16,7 +16,12 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "monochromeImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#0F0F0F"
+      },
+      "splash": {
+        "image": "./assets/images/logo_splash.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0F0F0F"
       },
       "edgeToEdgeEnabled": false,
       "package": "com.privastream.cinema",
@@ -33,9 +38,9 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/logo_splash.png",
-          "imageWidth": 200,
+          "imageWidth": 300,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#0F0F0F"
         }
       ],
       [
