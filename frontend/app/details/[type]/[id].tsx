@@ -505,13 +505,13 @@ export default function DetailsScreen() {
             <Text style={styles.sectionTitle}>Cast</Text>
             <View style={styles.pillContainer}>
               {content.cast.slice(0, 6).map((actor, i) => (
-                <TouchableOpacity 
+                <Pressable 
                   key={i} 
-                  style={styles.castPill}
+                  style={({ focused }) => [styles.castPill, focused && styles.pillFocused]}
                   onPress={() => router.push(`/search?q=${encodeURIComponent(actor)}`)}
                 >
                   <Text style={styles.castPillText}>{actor}</Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
