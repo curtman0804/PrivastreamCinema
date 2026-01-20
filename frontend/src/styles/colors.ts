@@ -1,0 +1,60 @@
+// PrivastreamCinema color palette
+// Stremio-inspired layout with tan accent
+
+export const colors = {
+  // Primary colors (tan theme)
+  primary: '#B8A05C',
+  primaryLight: '#D4BC78',
+  primaryDark: '#9A8540',
+  
+  // Background colors
+  background: '#0F0F0F',        // Main app background
+  backgroundLight: '#161616',   // Cards, elevated surfaces
+  backgroundLighter: '#1E1E1E', // Hover states
+  surface: '#242424',           // Input fields, modals
+  surfaceLight: '#2D2D2D',
+  overlay: 'rgba(0, 0, 0, 0.8)',
+  
+  // Text colors
+  textPrimary: '#FFFFFF',
+  textSecondary: '#B0B0B0',
+  textMuted: '#707070',
+  textDisabled: '#505050',
+  
+  // Focus/Selection (tan glow)
+  focusGlow: 'rgba(184, 160, 92, 0.6)',
+  focusBorder: '#B8A05C',
+  selectionBackground: 'rgba(184, 160, 92, 0.2)',
+  
+  // Status colors
+  success: '#4CAF50',
+  warning: '#FF9800',
+  error: '#F44336',
+  info: '#2196F3',
+  
+  // Progress bar
+  progressBackground: 'rgba(255, 255, 255, 0.3)',
+  progressFill: '#FFFFFF',
+  
+  // Border colors
+  border: '#2A2A2A',
+  borderLight: '#3A3A3A',
+};
+
+// Stremio poster shape ratios
+export const posterShapes = {
+  poster: 1.5,      // 2:3 aspect ratio (standard movie posters)
+  landscape: 0.5625, // 16:9 aspect ratio
+  square: 1,        // 1:1 aspect ratio
+};
+
+// Focus ring style (thin glow)
+export const focusStyle = {
+  shadowColor: colors.focusGlow,
+  shadowOffset: { width: 0, height: 0 },
+  shadowOpacity: 1,
+  shadowRadius: 8,
+  elevation: 8,
+};
+
+export default colors;

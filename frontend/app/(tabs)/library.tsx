@@ -6,26 +6,30 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
-  TouchableOpacity,
-  Dimensions,
+  Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
-import { ContentCard } from '../../src/components/ContentCard';
+import { ContentCard, getCardWidth } from '../../src/components/ContentCard';
 import { ContentItem } from '../../src/api/client';
-
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 64) / 3;
+import { colors } from '../../src/styles/colors';
 
 type FilterType = 'movies' | 'series' | 'tv';
 
 export default function LibraryScreen() {
   const router = useRouter();
+  const { width, height } = useWindowDimensions();
+  const isTV = width > height || width > 800;
+  
   const { library, isLoadingLibrary, fetchLibrary } = useContentStore();
   const [filter, setFilter] = useState<FilterType>('movies');
   const [refreshing, setRefreshing] = useState(false);
+  const [focusedFilter, setFocusedFilter] = useState<FilterType | null>(null);
+
+  const cardWidth = getCardWidth(width, isTV, 'medium');
 
   useEffect(() => {
     fetchLibrary();
@@ -33,7 +37,7 @@ export default function LibraryScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchLibrary();
+    await fetchLibrary(true);
     setRefreshing(false);
   }, []);
 
@@ -59,22 +63,33 @@ export default function LibraryScreen() {
   const filteredContent = getFilteredContent();
 
   const renderFilterButton = (type: FilterType, label: string) => (
-    <TouchableOpacity
-      style={[styles.filterButton, filter === type && styles.filterButtonActive]}
+    <Pressable
+      style={[
+        styles.filterButton, 
+        filter === type && styles.filterButtonActive,
+        focusedFilter === type && styles.filterButtonFocused,
+      ]}
       onPress={() => setFilter(type)}
+      onFocus={() => setFocusedFilter(type)}
+      onBlur={() => setFocusedFilter(null)}
     >
-      <Text style={[styles.filterText, filter === type && styles.filterTextActive]}>
+      <Text style={[
+        styles.filterText, 
+        filter === type && styles.filterTextActive,
+        focusedFilter === type && styles.filterTextFocused,
+      ]}>
         {label}
       </Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 
   const renderItem = ({ item }: { item: ContentItem }) => (
-    <View style={styles.cardWrapper}>
+    <View style={[styles.cardWrapper, { width: cardWidth + 16 }]}>
       <ContentCard
         item={item}
         onPress={() => handleItemPress(item)}
         size="medium"
+        onLibraryChange={() => fetchLibrary(true)}
       />
     </View>
   );
@@ -83,7 +98,7 @@ export default function LibraryScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#B8A05C" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </SafeAreaView>
     );
@@ -92,7 +107,7 @@ export default function LibraryScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Library</Text>
+        <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Library</Text>
       </View>
 
       <View style={styles.filterContainer}>
@@ -103,16 +118,17 @@ export default function LibraryScreen() {
 
       {filteredContent.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="bookmark-outline" size={64} color="#444444" />
+          <Ionicons name="bookmark-outline" size={64} color={colors.textMuted} />
           <Text style={styles.emptyText}>Your library is empty</Text>
-          <Text style={styles.emptySubtext}>Save movies and shows to watch later</Text>
+          <Text style={styles.emptySubtext}>Long-press on any poster to add it to your library</Text>
         </View>
       ) : (
         <FlatList
           data={filteredContent}
           renderItem={renderItem}
           keyExtractor={(item) => item.imdb_id || item.id}
-          numColumns={3}
+          numColumns={isTV ? 6 : 3}
+          key={isTV ? 'tv-grid' : 'mobile-grid'}
           contentContainerStyle={styles.listContent}
           columnWrapperStyle={styles.row}
           showsVerticalScrollIndicator={false}
@@ -120,8 +136,8 @@ export default function LibraryScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#B8A05C"
-              colors={['#B8A05C']}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
         />
@@ -133,18 +149,21 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: colors.background,
   },
   header: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+    borderBottomColor: colors.border,
   },
   headerTitle: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.textPrimary,
+  },
+  headerTitleTV: {
+    fontSize: 32,
   },
   filterContainer: {
     flexDirection: 'row',
@@ -156,18 +175,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: colors.backgroundLight,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   filterButtonActive: {
-    backgroundColor: '#B8A05C',
+    backgroundColor: colors.primary,
+  },
+  filterButtonFocused: {
+    borderColor: colors.primary,
   },
   filterText: {
-    color: '#888888',
+    color: colors.textMuted,
     fontSize: 14,
     fontWeight: '600',
   },
   filterTextActive: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
+  },
+  filterTextFocused: {
+    color: colors.textPrimary,
   },
   loadingContainer: {
     flex: 1,
@@ -181,26 +208,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   emptyText: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '600',
     marginTop: 16,
     textAlign: 'center',
   },
   emptySubtext: {
-    color: '#888888',
+    color: colors.textSecondary,
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
   },
   listContent: {
-    paddingHorizontal: 16,
+    // Extra padding at top to prevent focus border clipping
+    paddingTop: 12,
+    paddingHorizontal: 12,
     paddingBottom: 24,
   },
   row: {
     justifyContent: 'flex-start',
   },
   cardWrapper: {
-    width: CARD_WIDTH,
+    // Padding around each card to prevent focus clipping
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
 });

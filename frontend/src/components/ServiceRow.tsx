@@ -10,17 +10,21 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
+import { colors } from '../styles/colors';
 
 interface ServiceRowProps {
-  serviceName: string;
+  title: string;
+  serviceName?: string;
   items: ContentItem[];
   onItemPress: (item: ContentItem) => void;
   onSeeAll?: () => void;
 }
 
+// Memoized content card to prevent re-renders
 const MemoizedContentCard = memo(ContentCard);
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
+  title,
   serviceName,
   items,
   onItemPress,
@@ -30,6 +34,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const isTV = width > height || width > 800;
   const [seeAllFocused, setSeeAllFocused] = useState(false);
   
+  // Filter out undefined/null items
   const validItems = (items || []).filter(Boolean);
   if (validItems.length === 0) return null;
 
@@ -37,21 +42,25 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     <MemoizedContentCard
       item={item}
       onPress={() => onItemPress(item)}
+      showTitle={true}
     />
   ), [onItemPress]);
 
   const keyExtractor = useCallback((item: ContentItem, index: number) => 
     item.id || item.imdb_id || `item-${index}`, []);
 
+  // Use shared card width calculation
   const cardWidth = getCardWidth(width, isTV, 'medium');
-  const itemWidth = cardWidth + 12;
+  const itemWidth = cardWidth + 16; // card width + marginRight
+
+  // Display title - use serviceName or title
+  const displayTitle = title || serviceName || 'Content';
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <Text style={[styles.title, isTV && styles.titleTV]}>{serviceName}</Text>
-        </View>
+      {/* Row Header */}
+      <View style={[styles.header, isTV && styles.headerTV]}>
+        <Text style={[styles.title, isTV && styles.titleTV]}>{displayTitle}</Text>
         {onSeeAll && (
           <Pressable 
             onPress={onSeeAll} 
@@ -62,44 +71,47 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
               (focused || seeAllFocused) && styles.seeAllButtonFocused,
             ]}
           >
-            {({ focused }) => (
-              <>
-                <Text style={[
-                  styles.seeAllText,
-                  (focused || seeAllFocused) && styles.seeAllTextFocused,
-                ]}>See All</Text>
-                <Ionicons 
-                  name="chevron-forward" 
-                  size={16} 
-                  color={(focused || seeAllFocused) ? '#FFFFFF' : '#B8A05C'} 
-                />
-              </>
-            )}
+            <Text style={[
+              styles.seeAllText,
+              (seeAllFocused) && styles.seeAllTextFocused,
+            ]}>SEE ALL</Text>
+            <Ionicons 
+              name="chevron-forward" 
+              size={16} 
+              color={seeAllFocused ? colors.textPrimary : colors.textSecondary} 
+            />
           </Pressable>
         )}
       </View>
-      <FlatList
-        horizontal
-        data={validItems}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
-        initialNumToRender={isTV ? 8 : 5}
-        maxToRenderPerBatch={5}
-        windowSize={5}
-        removeClippedSubviews={false}
-        snapToInterval={itemWidth}
-        decelerationRate="fast"
-        getItemLayout={(data, index) => ({
-          length: itemWidth,
-          offset: itemWidth * index,
-          index,
-        })}
-      />
+      
+      {/* Content Row - with padding to prevent selector clipping */}
+      <View style={styles.rowContainer}>
+        <FlatList
+          horizontal
+          data={validItems}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
+          initialNumToRender={isTV ? 8 : 5}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          removeClippedSubviews={false}
+          snapToInterval={itemWidth}
+          decelerationRate="fast"
+          getItemLayout={(data, index) => ({
+            length: itemWidth,
+            offset: itemWidth * index,
+            index,
+          })}
+        />
+      </View>
     </View>
   );
 });
+
+// Also export with serviceName prop for backwards compatibility
+export const MetaRow = ServiceRow;
 
 const styles = StyleSheet.create({
   container: {
@@ -110,45 +122,53 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  headerTV: {
+    paddingHorizontal: 24,
     marginBottom: 12,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   title: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   titleTV: {
-    fontSize: 20,
+    fontSize: 22,
   },
   seeAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 6,
-    borderWidth: 4,
-    borderColor: 'transparent',
+    borderRadius: 4,
   },
   seeAllButtonFocused: {
-    borderColor: '#FFD700',
-    backgroundColor: '#B8A05C',
+    backgroundColor: colors.primary,
   },
   seeAllText: {
-    color: '#B8A05C',
-    fontSize: 14,
-    fontWeight: '500',
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
+    marginRight: 4,
   },
   seeAllTextFocused: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
+  },
+  rowContainer: {
+    // Add padding to prevent focus border from being clipped
+    paddingTop: 8,
+    paddingBottom: 8,
+    marginTop: -4,
   },
   scrollContent: {
     paddingHorizontal: 16,
+    paddingVertical: 4, // Extra padding for focus border
   },
   scrollContentTV: {
     paddingHorizontal: 24,
+    paddingVertical: 6,
   },
 });

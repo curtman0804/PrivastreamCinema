@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Platform, View, useWindowDimensions, TouchableOpacity } from 'react-native';
+import { StyleSheet, Platform, View, useWindowDimensions, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
@@ -34,15 +34,31 @@ export default function TabsLayout() {
           styles.tabBarItem,
           isTV && styles.tabBarItemTV,
         ],
-        tabBarButton: (props) => <FocusableTabButton {...props} isTV={isTV} />,
+        tabBarButton: (props) => {
+          const [isFocused, setIsFocused] = useState(false);
+          return (
+            <Pressable
+              {...props}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              style={({ focused }) => [
+                props.style,
+                styles.tabButton,
+                (focused || isFocused) && styles.tabItemFocused,
+              ]}
+            />
+          );
+        },
       }}
     >
       <Tabs.Screen
         name="discover"
         options={{
           title: 'Discover',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="compass" size={isTV ? 28 : size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={focused && isTV ? styles.iconFocused : undefined}>
+              <Ionicons name="compass" size={isTV ? 28 : size} color={color} />
+            </View>
           ),
         }}
       />
@@ -50,8 +66,10 @@ export default function TabsLayout() {
         name="search"
         options={{
           title: 'Search',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search" size={isTV ? 28 : size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={focused && isTV ? styles.iconFocused : undefined}>
+              <Ionicons name="search" size={isTV ? 28 : size} color={color} />
+            </View>
           ),
         }}
       />
@@ -59,8 +77,10 @@ export default function TabsLayout() {
         name="library"
         options={{
           title: 'Library',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bookmark" size={isTV ? 28 : size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={focused && isTV ? styles.iconFocused : undefined}>
+              <Ionicons name="bookmark" size={isTV ? 28 : size} color={color} />
+            </View>
           ),
         }}
       />
@@ -68,8 +88,10 @@ export default function TabsLayout() {
         name="addons"
         options={{
           title: 'Addons',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="extension-puzzle" size={isTV ? 28 : size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={focused && isTV ? styles.iconFocused : undefined}>
+              <Ionicons name="extension-puzzle" size={isTV ? 28 : size} color={color} />
+            </View>
           ),
         }}
       />
@@ -77,33 +99,14 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={isTV ? 28 : size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={focused && isTV ? styles.iconFocused : undefined}>
+              <Ionicons name="person" size={isTV ? 28 : size} color={color} />
+            </View>
           ),
         }}
       />
     </Tabs>
-  );
-}
-
-// Custom focusable tab button
-function FocusableTabButton({ children, style, onPress, isTV, ...rest }: any) {
-  const [isFocused, setIsFocused] = useState(false);
-  
-  return (
-    <TouchableOpacity
-      {...rest}
-      style={[
-        style,
-        isFocused && styles.tabButtonFocused,
-      ]}
-      onPress={onPress}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
-      activeOpacity={0.7}
-    >
-      {children}
-    </TouchableOpacity>
   );
 }
 
@@ -115,8 +118,9 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   tabBarTV: {
-    paddingHorizontal: 60,
+    paddingHorizontal: 40,
     borderTopWidth: 2,
+    borderTopColor: '#333333',
   },
   tabBarLabel: {
     fontSize: 11,
@@ -124,20 +128,28 @@ const styles = StyleSheet.create({
   },
   tabBarLabelTV: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   tabBarItem: {
     paddingVertical: 4,
   },
   tabBarItemTV: {
     paddingVertical: 8,
-    paddingHorizontal: 24,
-    marginHorizontal: 8,
+    paddingHorizontal: 20,
+    marginHorizontal: 10,
+    borderRadius: 8,
   },
-  tabButtonFocused: {
+  tabButton: {
+    borderRadius: 8,
+  },
+  tabItemFocused: {
+    // Same 2px border as posters for consistency
     borderWidth: 2,
     borderColor: '#B8A05C',
     borderRadius: 8,
     backgroundColor: 'rgba(184, 160, 92, 0.15)',
+  },
+  iconFocused: {
+    transform: [{ scale: 1.1 }],
   },
 });

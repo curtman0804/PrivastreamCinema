@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ScrollView,
   Platform,
@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
+import { colors } from '../../src/styles/colors';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -36,11 +37,7 @@ export default function ProfileScreen() {
         'Are you sure you want to logout?',
         [
           { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Logout',
-            style: 'destructive',
-            onPress: doLogout,
-          },
+          { text: 'Logout', style: 'destructive', onPress: doLogout },
         ]
       );
     }
@@ -49,24 +46,25 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={[styles.header, isTV && styles.headerTV]}>
-        <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Profile</Text>
+        <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Settings</Text>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={[styles.profileSection, isTV && styles.profileSectionTV]}>
-          <View style={[styles.avatarContainer, isTV && styles.avatarContainerTV]}>
-            <Ionicons name="person" size={isTV ? 44 : 40} color="#B8A05C" />
+        {/* Profile Section */}
+        <View style={styles.profileSection}>
+          <View style={styles.avatar}>
+            <Ionicons name="person" size={40} color={colors.primary} />
           </View>
           <View style={styles.profileInfo}>
-            <Text style={[styles.username, isTV && styles.usernameTV]}>{user?.username || 'User'}</Text>
-            <Text style={[styles.email, isTV && styles.emailTV]}>{user?.email || ''}</Text>
+            <Text style={styles.username}>{user?.username || 'User'}</Text>
+            <Text style={styles.email}>{user?.email || ''}</Text>
           </View>
         </View>
 
         {/* Admin Section */}
         {user?.is_admin && (
-          <View style={[styles.section, isTV && styles.sectionTV]}>
-            <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>Admin</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>ADMIN</Text>
             <View style={styles.menuCard}>
               <MenuItem
                 icon="people-outline"
@@ -79,16 +77,10 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        <View style={[styles.section, isTV && styles.sectionTV]}>
-          <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>Support</Text>
+        {/* General Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>GENERAL</Text>
           <View style={styles.menuCard}>
-            <MenuItem
-              icon="help-circle-outline"
-              title="Help Center"
-              subtitle="Get help with the app"
-              isTV={isTV}
-            />
-            <View style={styles.menuDivider} />
             <MenuItem
               icon="information-circle-outline"
               title="About"
@@ -98,7 +90,8 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <View style={[styles.section, isTV && styles.sectionTV]}>
+        {/* Account Section */}
+        <View style={styles.section}>
           <View style={styles.menuCard}>
             <MenuItem
               icon="log-out-outline"
@@ -117,6 +110,7 @@ export default function ProfileScreen() {
   );
 }
 
+// Menu Item Component
 function MenuItem({
   icon,
   title,
@@ -135,190 +129,139 @@ function MenuItem({
   isTV?: boolean;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-  
+
   return (
-    <TouchableOpacity
-      style={[
-        styles.menuItem,
-        isFocused && styles.menuItemFocused,
-        danger && isFocused && styles.menuItemFocusedDanger,
-      ]}
+    <Pressable
+      style={[styles.menuItem, isFocused && styles.menuItemFocused]}
       onPress={onPress}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
-      activeOpacity={0.7}
+      disabled={!onPress}
     >
-      <View style={[styles.menuIconContainer, danger && styles.menuIconDanger]}>
+      <View style={[styles.menuIcon, danger && styles.menuIconDanger]}>
         <Ionicons
           name={icon as any}
-          size={isTV ? 24 : 22}
-          color={danger ? '#FF4444' : '#B8A05C'}
+          size={22}
+          color={danger ? colors.error : colors.primary}
         />
       </View>
       <View style={styles.menuTextContainer}>
-        <Text style={[
-          styles.menuTitle, 
-          danger && styles.menuTitleDanger, 
-          isTV && styles.menuTitleTV
-        ]}>
+        <Text style={[styles.menuTitle, danger && styles.menuTitleDanger]}>
           {title}
         </Text>
-        {subtitle && (
-          <Text style={[styles.menuSubtitle, isTV && styles.menuSubtitleTV]}>
-            {subtitle}
-          </Text>
-        )}
+        {subtitle && <Text style={styles.menuSubtitle}>{subtitle}</Text>}
       </View>
       {showArrow && (
-        <Ionicons name="chevron-forward" size={22} color="#666666" />
+        <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: colors.background,
   },
   header: {
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+    borderBottomColor: colors.border,
   },
   headerTV: {
-    paddingHorizontal: 48,
+    paddingHorizontal: 32,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
   headerTitleTV: {
-    fontSize: 32,
+    fontSize: 28,
   },
   profileSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 24,
+    padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+    borderBottomColor: colors.border,
   },
-  profileSectionTV: {
-    paddingHorizontal: 48,
-  },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#1a1a1a',
+  avatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.backgroundLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarContainerTV: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
   profileInfo: {
-    marginLeft: 20,
+    marginLeft: 16,
   },
   username: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  usernameTV: {
-    fontSize: 26,
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
   email: {
-    fontSize: 15,
-    color: '#888888',
+    fontSize: 14,
+    color: colors.textSecondary,
     marginTop: 4,
   },
-  emailTV: {
-    fontSize: 17,
-  },
   section: {
-    marginTop: 28,
-    paddingHorizontal: 20,
-  },
-  sectionTV: {
-    paddingHorizontal: 48,
+    marginTop: 24,
+    paddingHorizontal: 16,
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#888888',
-    marginBottom: 10,
+    color: colors.textMuted,
+    marginBottom: 8,
     marginLeft: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  sectionTitleTV: {
-    fontSize: 15,
+    letterSpacing: 1,
   },
   menuCard: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 14,
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    borderRadius: 14,
   },
   menuItemFocused: {
-    borderColor: '#B8A05C',
-    backgroundColor: '#242424',
+    backgroundColor: colors.surface,
   },
-  menuItemFocusedDanger: {
-    borderColor: '#FF4444',
-  },
-  menuIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#2a2a2a',
+  menuIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
   menuIconDanger: {
-    backgroundColor: 'rgba(255, 68, 68, 0.15)',
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
   },
   menuTextContainer: {
     flex: 1,
-    marginLeft: 14,
+    marginLeft: 12,
   },
   menuTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  menuTitleTV: {
-    fontSize: 19,
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.textPrimary,
   },
   menuTitleDanger: {
-    color: '#FF4444',
+    color: colors.error,
   },
   menuSubtitle: {
     fontSize: 13,
-    color: '#888888',
-    marginTop: 3,
-  },
-  menuSubtitleTV: {
-    fontSize: 15,
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: '#2a2a2a',
-    marginLeft: 74,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   bottomPadding: {
-    height: 50,
+    height: 40,
   },
 });
