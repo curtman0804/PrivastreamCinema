@@ -639,8 +639,8 @@ export default function DetailsScreen() {
                 <Text style={styles.noStreamsText}>No streams found</Text>
                 {/* Show Open in Browser if content ID is a URL or contains a source URL */}
                 {(id?.startsWith('http') || id?.includes('RedTube') || id?.includes('pornhub')) && (
-                  <TouchableOpacity
-                    style={styles.openBrowserButton}
+                  <Pressable
+                    style={({ focused }) => [styles.openBrowserButton, focused && styles.buttonFocused]}
                     onPress={() => {
                       // Extract URL from content ID
                       let url = id;
@@ -659,7 +659,7 @@ export default function DetailsScreen() {
                   >
                     <Ionicons name="open-outline" size={18} color="#B8A05C" />
                     <Text style={styles.openBrowserText}>Open in Browser</Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 )}
               </View>
             ) : (
