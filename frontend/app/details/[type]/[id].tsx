@@ -584,8 +584,8 @@ export default function DetailsScreen() {
         {(id?.includes('RedTube') || id?.includes('pornhub') || id?.includes('porn_id')) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Watch on Website</Text>
-            <TouchableOpacity
-              style={styles.websiteLinkButton}
+            <Pressable
+              style={({ focused }) => [styles.websiteLinkButton, focused && styles.buttonFocused]}
               onPress={() => {
                 let url = '';
                 if (id?.includes('RedTube-movie-')) {
@@ -619,7 +619,7 @@ export default function DetailsScreen() {
                 </Text>
               </View>
               <Ionicons name="open-outline" size={20} color="#666" />
-            </TouchableOpacity>
+            </Pressable>
           </View>
         )}
 
