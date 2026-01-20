@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
   },
   searchButtonFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     backgroundColor: '#2a2a2a',
     transform: [{ scale: 1.1 }],
   },
@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   goToAddonsButtonFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     transform: [{ scale: 1.05 }],
   },
   goToAddonsText: {
@@ -574,7 +574,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   continueImageContainerFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
   },
   continueImage: {
     width: '100%',
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   removeButtonFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     backgroundColor: 'rgba(255,0,0,0.8)',
   },
 });

@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   },
   tabItemFocused: {
     borderWidth: 4,
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     borderRadius: 12,
     backgroundColor: 'rgba(184, 160, 92, 0.2)',
   },

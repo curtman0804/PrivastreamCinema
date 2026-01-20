@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   menuItemFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     backgroundColor: 'rgba(184, 160, 92, 0.1)',
   },
   menuIconContainer: {

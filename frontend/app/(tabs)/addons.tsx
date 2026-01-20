@@ -419,12 +419,12 @@ const styles = StyleSheet.create({
     borderRadius: 25,
   },
   buttonFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     transform: [{ scale: 1.1 }],
   },
   smallButtonFocused: {
     borderWidth: 2,
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     borderRadius: 8,
   },
   loadingContainer: {
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   addonCardFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
   },
   addonIconContainer: {
     width: 48,
@@ -602,11 +602,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   actionButtonFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     backgroundColor: 'rgba(184, 160, 92, 0.2)',
   },
   deleteButtonFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     backgroundColor: 'rgba(255, 68, 68, 0.2)',
   },
   modalOverlay: {
