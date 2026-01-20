@@ -554,9 +554,9 @@ export default function DetailsScreen() {
             {/* Episode List */}
             <View style={styles.episodeList}>
               {episodesForSeason.map((episode) => (
-                <TouchableOpacity
+                <Pressable
                   key={`${episode.season}-${episode.episode}`}
-                  style={styles.episodeCard}
+                  style={({ focused }) => [styles.episodeCard, focused && styles.cardFocused]}
                   onPress={() => handleEpisodePress(episode)}
                 >
                   <Image
@@ -574,7 +574,7 @@ export default function DetailsScreen() {
                       </Text>
                     )}
                   </View>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
