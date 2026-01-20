@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useAuthStore } from '../../src/store/authStore';
+import { colors } from '../../src/styles/colors';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -25,18 +26,14 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [inputFocused, setInputFocused] = useState<string | null>(null);
-  const [buttonFocused, setButtonFocused] = useState(false);
-  const [eyeFocused, setEyeFocused] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   const { width, height } = useWindowDimensions();
   
-  // Refs for focus management
   const usernameRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   
   const isTV = width > height || width > 800;
 
-  // Navigate when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       router.replace('/(tabs)/discover');
@@ -59,7 +56,7 @@ export default function LoginScreen() {
     } catch (error: any) {
       let errorMessage = 'Invalid credentials';
       if (error.message?.includes('Network Error')) {
-        errorMessage = 'Cannot connect to server. Check your internet connection.';
+        errorMessage = 'Cannot connect to server. Check your connection.';
       } else if (error.response?.data?.detail) {
         errorMessage = error.response.data.detail;
       } else if (error.message) {
@@ -77,13 +74,11 @@ export default function LoginScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            isTV && styles.scrollContentTV
-          ]}
+          contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
           keyboardShouldPersistTaps="always"
         >
           <View style={[styles.formWrapper, isTV && styles.formWrapperTV]}>
+            {/* Logo */}
             <View style={styles.header}>
               <Image
                 source={require('../../assets/images/logo_splash.png')}
@@ -92,77 +87,71 @@ export default function LoginScreen() {
               />
             </View>
 
+            {/* Form */}
             <View style={styles.form}>
-              <View style={[
-                styles.inputContainer,
-                inputFocused === 'username' && styles.inputFocused
-              ]}>
-                <Ionicons name="person-outline" size={20} color="#888888" style={styles.inputIcon} />
+              <Pressable
+                style={[styles.inputContainer, focusedField === 'username' && styles.inputFocused]}
+                onPress={() => usernameRef.current?.focus()}
+              >
+                <Ionicons name="person-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
                 <TextInput
                   ref={usernameRef}
                   style={styles.input}
                   placeholder="Username"
-                  placeholderTextColor="#888888"
+                  placeholderTextColor={colors.textMuted}
                   value={username}
                   onChangeText={setUsername}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  onFocus={() => setInputFocused('username')}
-                  onBlur={() => setInputFocused(null)}
+                  onFocus={() => setFocusedField('username')}
+                  onBlur={() => setFocusedField(null)}
                   editable={!isLoading}
                   returnKeyType="next"
                   onSubmitEditing={() => passwordRef.current?.focus()}
                   blurOnSubmit={false}
                 />
-              </View>
+              </Pressable>
 
-              <View style={[
-                styles.inputContainer,
-                inputFocused === 'password' && styles.inputFocused
-              ]}>
-                <Ionicons name="lock-closed-outline" size={20} color="#888888" style={styles.inputIcon} />
+              <Pressable
+                style={[styles.inputContainer, focusedField === 'password' && styles.inputFocused]}
+                onPress={() => passwordRef.current?.focus()}
+              >
+                <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
                 <TextInput
                   ref={passwordRef}
                   style={styles.input}
                   placeholder="Password"
-                  placeholderTextColor="#888888"
+                  placeholderTextColor={colors.textMuted}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  onFocus={() => setInputFocused('password')}
-                  onBlur={() => setInputFocused(null)}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
                   editable={!isLoading}
                   returnKeyType="done"
                   onSubmitEditing={handleLogin}
                 />
-                <Pressable 
-                  onPress={() => setShowPassword(!showPassword)} 
-                  onFocus={() => setEyeFocused(true)}
-                  onBlur={() => setEyeFocused(false)}
-                  style={({ focused }) => [
-                    styles.eyeButton,
-                    (focused || eyeFocused) && styles.eyeButtonFocused,
-                  ]}
-                  disabled={isLoading}
-                >
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888888" />
+                <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                  <Ionicons 
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'} 
+                    size={20} 
+                    color={colors.textMuted} 
+                  />
                 </Pressable>
-              </View>
+              </Pressable>
 
               <Pressable
                 onPress={handleLogin}
-                onFocus={() => setButtonFocused(true)}
-                onBlur={() => setButtonFocused(false)}
                 disabled={isLoading}
-                style={({ pressed, focused }) => [
+                style={({ focused }) => [
                   styles.loginButton,
                   isLoading && styles.loginButtonDisabled,
-                  (focused || buttonFocused) && styles.loginButtonFocused,
+                  focused && styles.loginButtonFocused,
                 ]}
               >
                 {isLoading ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color={colors.textPrimary} />
                 ) : (
                   <Text style={styles.loginButtonText}>Sign In</Text>
                 )}
@@ -178,7 +167,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: colors.background,
   },
   keyboardView: {
     flex: 1,
@@ -195,20 +184,20 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   formWrapperTV: {
-    maxWidth: 450,
+    maxWidth: 400,
     width: '100%',
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 48,
   },
   logo: {
-    width: 280,
-    height: 200,
+    width: 200,
+    height: 100,
   },
   logoTV: {
-    width: 300,
-    height: 150,
+    width: 240,
+    height: 120,
   },
   form: {
     width: '100%',
@@ -216,55 +205,50 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 8,
     marginBottom: 16,
     paddingHorizontal: 16,
     height: 56,
-    borderWidth: 4,
+    borderWidth: 2,
     borderColor: 'transparent',
   },
   inputFocused: {
-    borderColor: '#B8A05C',
+    borderColor: colors.primary,
   },
   inputIcon: {
     marginRight: 12,
   },
   input: {
     flex: 1,
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 16,
   },
   eyeButton: {
     padding: 8,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  eyeButtonFocused: {
-    borderColor: '#B8A05C',
-    backgroundColor: '#333333',
   },
   loginButton: {
-    backgroundColor: '#B8A05C',
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
     height: 56,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
-    borderWidth: 4,
-    borderColor: 'transparent',
   },
   loginButtonDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   loginButtonFocused: {
-    borderColor: '#B8A05C',
     transform: [{ scale: 1.02 }],
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 16,
+    elevation: 8,
   },
   loginButtonText: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });

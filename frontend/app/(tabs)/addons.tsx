@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { Addon, api } from '../../src/api/client';
 import { Image } from 'expo-image';
+import { colors } from '../../src/styles/colors';
 
 export default function AddonsScreen() {
   const { addons, isLoadingAddons, fetchAddons, fetchDiscover } = useContentStore();
@@ -27,10 +28,6 @@ export default function AddonsScreen() {
   const [addonUrl, setAddonUrl] = useState('');
   const [isInstalling, setIsInstalling] = useState(false);
   const [deletingAddonId, setDeletingAddonId] = useState<string | null>(null);
-  const [addButtonFocused, setAddButtonFocused] = useState(false);
-  const [installButtonFocused, setInstallButtonFocused] = useState(false);
-  const [modalInstallFocused, setModalInstallFocused] = useState(false);
-  const [modalCloseFocused, setModalCloseFocused] = useState(false);
   
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
@@ -144,9 +141,7 @@ export default function AddonsScreen() {
   };
 
   const renderAddon = ({ item }: { item: Addon }) => {
-    if (!item || !item.manifest) {
-      return null;
-    }
+    if (!item || !item.manifest) return null;
     
     return (
       <AddonCard 
@@ -165,43 +160,29 @@ export default function AddonsScreen() {
       <View style={[styles.header, isTV && styles.headerTV]}>
         <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Addons</Text>
         <Pressable
-          style={({ focused }) => [
-            styles.addButton,
-            isTV && styles.addButtonTV,
-            (focused || addButtonFocused) && styles.buttonFocused,
-          ]}
+          style={({ focused }) => [styles.addButton, focused && styles.addButtonFocused]}
           onPress={() => setShowModal(true)}
-          onFocus={() => setAddButtonFocused(true)}
-          onBlur={() => setAddButtonFocused(false)}
         >
-          <Ionicons name="add" size={isTV ? 28 : 24} color="#0c0c0c" />
+          <Ionicons name="add" size={24} color={colors.textPrimary} />
         </Pressable>
       </View>
 
       {isLoadingAddons && !refreshing ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#B8A05C" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading addons...</Text>
         </View>
       ) : addons.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="extension-puzzle-outline" size={isTV ? 80 : 64} color="#666" />
-          <Text style={[styles.emptyTitle, isTV && styles.emptyTitleTV]}>No Addons Installed</Text>
-          <Text style={[styles.emptySubtitle, isTV && styles.emptySubtitleTV]}>
-            Tap the + button to add Stremio addons
-          </Text>
+          <Ionicons name="extension-puzzle-outline" size={64} color={colors.textMuted} />
+          <Text style={styles.emptyTitle}>No Addons Installed</Text>
+          <Text style={styles.emptySubtitle}>Add Stremio addons to start streaming</Text>
           <Pressable
-            style={({ focused }) => [
-              styles.installButton,
-              isTV && styles.installButtonTV,
-              (focused || installButtonFocused) && styles.buttonFocused,
-            ]}
+            style={({ focused }) => [styles.installButton, focused && styles.installButtonFocused]}
             onPress={() => setShowModal(true)}
-            onFocus={() => setInstallButtonFocused(true)}
-            onBlur={() => setInstallButtonFocused(false)}
           >
-            <Ionicons name="add-circle-outline" size={isTV ? 24 : 20} color="#0c0c0c" />
-            <Text style={[styles.installButtonText, isTV && styles.installButtonTextTV]}>Install Addon</Text>
+            <Ionicons name="add-circle-outline" size={20} color={colors.textPrimary} />
+            <Text style={styles.installButtonText}>Install Addon</Text>
           </Pressable>
         </View>
       ) : (
@@ -209,18 +190,19 @@ export default function AddonsScreen() {
           data={addons}
           renderItem={renderAddon}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={[styles.listContent, isTV && styles.listContentTV]}
+          contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#B8A05C"
-              colors={['#B8A05C']}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
         />
       )}
 
+      {/* Install Modal */}
       <Modal
         visible={showModal}
         animationType="slide"
@@ -230,25 +212,17 @@ export default function AddonsScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, isTV && styles.modalContentTV]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, isTV && styles.modalTitleTV]}>Install Addon</Text>
-              <Pressable 
-                onPress={() => setShowModal(false)}
-                onFocus={() => setModalCloseFocused(true)}
-                onBlur={() => setModalCloseFocused(false)}
-                style={({ focused }) => [
-                  styles.modalCloseButton,
-                  (focused || modalCloseFocused) && styles.smallButtonFocused,
-                ]}
-              >
-                <Ionicons name="close" size={24} color="#fff" />
+              <Text style={styles.modalTitle}>Install Addon</Text>
+              <Pressable onPress={() => setShowModal(false)} style={styles.modalClose}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
               </Pressable>
             </View>
             
             <Text style={styles.modalLabel}>Manifest URL</Text>
             <TextInput
-              style={[styles.modalInput, isTV && styles.modalInputTV]}
+              style={styles.modalInput}
               placeholder="https://example.com/manifest.json"
-              placeholderTextColor="#666"
+              placeholderTextColor={colors.textMuted}
               value={addonUrl}
               onChangeText={setAddonUrl}
               autoCapitalize="none"
@@ -258,25 +232,22 @@ export default function AddonsScreen() {
             />
             
             <Text style={styles.modalHint}>
-              Paste one or more addon manifest URLs (separate with semicolon or new line)
+              Paste addon manifest URLs (separate with semicolon or new line)
             </Text>
             
             <Pressable
               style={({ focused }) => [
                 styles.modalButton,
-                isTV && styles.modalButtonTV,
                 isInstalling && styles.modalButtonDisabled,
-                (focused || modalInstallFocused) && styles.buttonFocused,
+                focused && styles.modalButtonFocused,
               ]}
               onPress={handleInstallAddon}
-              onFocus={() => setModalInstallFocused(true)}
-              onBlur={() => setModalInstallFocused(false)}
               disabled={isInstalling}
             >
               {isInstalling ? (
-                <ActivityIndicator size="small" color="#0c0c0c" />
+                <ActivityIndicator size="small" color={colors.textPrimary} />
               ) : (
-                <Text style={[styles.modalButtonText, isTV && styles.modalButtonTextTV]}>Install</Text>
+                <Text style={styles.modalButtonText}>Install</Text>
               )}
             </Pressable>
           </View>
@@ -286,7 +257,7 @@ export default function AddonsScreen() {
   );
 }
 
-// Separate component for addon card with focus support
+// Addon Card Component
 function AddonCard({ 
   addon, 
   isTV, 
@@ -302,85 +273,63 @@ function AddonCard({
   isDeleting: boolean;
   getAddonIcon: (types?: string[]) => string;
 }) {
-  const [cardFocused, setCardFocused] = useState(false);
-  const [shareFocused, setShareFocused] = useState(false);
-  const [deleteFocused, setDeleteFocused] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   return (
-    <View style={[
-      styles.addonCard,
-      isTV && styles.addonCardTV,
-      cardFocused && styles.addonCardFocused,
-    ]}>
-      <View style={[styles.addonIconContainer, isTV && styles.addonIconContainerTV]}>
+    <Pressable
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      style={[styles.addonCard, isFocused && styles.addonCardFocused]}
+    >
+      <View style={styles.addonIconContainer}>
         {addon.manifest.logo ? (
           <Image
             source={{ uri: addon.manifest.logo }}
-            style={[styles.addonLogo, isTV && styles.addonLogoTV]}
+            style={styles.addonLogo}
             contentFit="contain"
           />
         ) : (
           <Ionicons
             name={getAddonIcon(addon.manifest.types) as any}
-            size={isTV ? 36 : 32}
-            color="#B8A05C"
+            size={28}
+            color={colors.primary}
           />
         )}
       </View>
       <View style={styles.addonInfo}>
-        <Text style={[styles.addonName, isTV && styles.addonNameTV]}>{addon.manifest.name || 'Unknown Addon'}</Text>
-        <Text style={[styles.addonVersion, isTV && styles.addonVersionTV]}>v{addon.manifest.version || '?'}</Text>
-        <Text style={[styles.addonDescription, isTV && styles.addonDescriptionTV]} numberOfLines={2}>
+        <Text style={styles.addonName}>{addon.manifest.name || 'Unknown Addon'}</Text>
+        <Text style={styles.addonVersion}>v{addon.manifest.version || '?'}</Text>
+        <Text style={styles.addonDescription} numberOfLines={2}>
           {addon.manifest.description || 'No description'}
         </Text>
         <View style={styles.addonTypes}>
           {(addon.manifest.types || []).map((type, index) => (
-            <View key={index} style={[styles.typeBadge, isTV && styles.typeBadgeTV]}>
-              <Text style={[styles.typeBadgeText, isTV && styles.typeBadgeTextTV]}>{type}</Text>
+            <View key={index} style={styles.typeBadge}>
+              <Text style={styles.typeBadgeText}>{type}</Text>
             </View>
           ))}
         </View>
       </View>
       <View style={styles.addonActions}>
-        <Pressable
-          style={({ focused }) => [
-            styles.actionButton,
-            isTV && styles.actionButtonTV,
-            (focused || shareFocused) && styles.actionButtonFocused,
-          ]}
-          onPress={onShare}
-          onFocus={() => setShareFocused(true)}
-          onBlur={() => setShareFocused(false)}
-        >
-          <Ionicons name="share-outline" size={isTV ? 24 : 20} color="#B8A05C" />
+        <Pressable style={styles.actionButton} onPress={onShare}>
+          <Ionicons name="share-outline" size={20} color={colors.textSecondary} />
         </Pressable>
-        
-        <Pressable
-          style={({ focused }) => [
-            styles.actionButton,
-            isTV && styles.actionButtonTV,
-            (focused || deleteFocused) && styles.deleteButtonFocused,
-          ]}
-          onPress={onUninstall}
-          onFocus={() => setDeleteFocused(true)}
-          onBlur={() => setDeleteFocused(false)}
-          disabled={isDeleting}
-        >
+        <Pressable style={styles.actionButton} onPress={onUninstall} disabled={isDeleting}>
           {isDeleting ? (
-            <ActivityIndicator size="small" color="#FF4444" />
+            <ActivityIndicator size="small" color={colors.error} />
           ) : (
-            <Ionicons name="trash-outline" size={isTV ? 24 : 20} color="#FF4444" />
+            <Ionicons name="trash-outline" size={20} color={colors.error} />
           )}
         </Pressable>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -389,43 +338,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+    borderBottomColor: colors.border,
   },
   headerTV: {
     paddingHorizontal: 32,
-    paddingVertical: 20,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 24,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
   headerTitleTV: {
-    fontSize: 32,
+    fontSize: 28,
   },
   addButton: {
-    backgroundColor: '#B8A05C',
+    backgroundColor: colors.primary,
     width: 40,
     height: 40,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: 'transparent',
   },
-  addButtonTV: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  buttonFocused: {
-    borderColor: '#B8A05C',
+  addButtonFocused: {
     transform: [{ scale: 1.1 }],
-  },
-  smallButtonFocused: {
-    borderWidth: 2,
-    borderColor: '#B8A05C',
-    borderRadius: 8,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
+    elevation: 8,
   },
   loadingContainer: {
     flex: 1,
@@ -434,8 +374,8 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    color: '#999',
-    fontSize: 16,
+    color: colors.textSecondary,
+    fontSize: 14,
   },
   emptyContainer: {
     flex: 1,
@@ -445,146 +385,104 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontWeight: '600',
+    color: colors.textPrimary,
     marginTop: 16,
-  },
-  emptyTitleTV: {
-    fontSize: 26,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#999',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 8,
-  },
-  emptySubtitleTV: {
-    fontSize: 18,
   },
   installButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#B8A05C',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
     borderRadius: 8,
     marginTop: 24,
-    borderWidth: 3,
-    borderColor: 'transparent',
+    gap: 8,
   },
-  installButtonTV: {
-    paddingHorizontal: 28,
-    paddingVertical: 16,
-    borderRadius: 12,
+  installButtonFocused: {
+    transform: [{ scale: 1.05 }],
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
   },
   installButtonText: {
-    color: '#0c0c0c',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
-    marginLeft: 8,
-  },
-  installButtonTextTV: {
-    fontSize: 18,
   },
   listContent: {
     padding: 16,
   },
-  listContentTV: {
-    padding: 24,
-  },
   addonCard: {
     flexDirection: 'row',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 8,
     padding: 16,
     marginBottom: 12,
-    borderWidth: 3,
-    borderColor: 'transparent',
-  },
-  addonCardTV: {
-    padding: 20,
-    marginBottom: 16,
-    borderRadius: 16,
   },
   addonCardFocused: {
-    borderColor: '#B8A05C',
+    backgroundColor: colors.surface,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 4,
   },
   addonIconContainer: {
     width: 48,
     height: 48,
-    borderRadius: 10,
-    backgroundColor: '#2a2a2a',
+    borderRadius: 8,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  addonIconContainerTV: {
-    width: 60,
-    height: 60,
-    borderRadius: 14,
-    marginRight: 16,
-  },
   addonLogo: {
-    width: 36,
-    height: 36,
-    borderRadius: 6,
-  },
-  addonLogoTV: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 4,
   },
   addonInfo: {
     flex: 1,
   },
   addonName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  addonNameTV: {
-    fontSize: 18,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
   addonVersion: {
     fontSize: 12,
-    color: '#666',
+    color: colors.textMuted,
     marginTop: 2,
-  },
-  addonVersionTV: {
-    fontSize: 14,
   },
   addonDescription: {
     fontSize: 13,
-    color: '#999',
+    color: colors.textSecondary,
     marginTop: 4,
-  },
-  addonDescriptionTV: {
-    fontSize: 14,
   },
   addonTypes: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginTop: 8,
+    gap: 6,
   },
   typeBadge: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: colors.surface,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
-    marginRight: 6,
-    marginBottom: 4,
-  },
-  typeBadgeTV: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
   },
   typeBadgeText: {
     fontSize: 11,
-    color: '#B8A05C',
+    color: colors.primary,
     textTransform: 'capitalize',
-  },
-  typeBadgeTextTV: {
-    fontSize: 12,
   },
   addonActions: {
     justifyContent: 'center',
@@ -592,40 +490,24 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionButton: {
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  actionButtonTV: {
-    padding: 12,
-    borderRadius: 10,
-  },
-  actionButtonFocused: {
-    borderColor: '#B8A05C',
-    backgroundColor: 'rgba(184, 160, 92, 0.2)',
-  },
-  deleteButtonFocused: {
-    borderColor: '#B8A05C',
-    backgroundColor: 'rgba(255, 68, 68, 0.2)',
+    padding: 8,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#1a1a1a',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    backgroundColor: colors.backgroundLight,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 24,
     paddingBottom: 40,
   },
   modalContentTV: {
     marginHorizontal: 100,
     marginBottom: 50,
-    borderRadius: 20,
-    padding: 32,
+    borderRadius: 16,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -635,64 +517,50 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
-  modalTitleTV: {
-    fontSize: 24,
-  },
-  modalCloseButton: {
+  modalClose: {
     padding: 4,
-    borderRadius: 8,
   },
   modalLabel: {
     fontSize: 14,
-    color: '#999',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   modalInput: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: colors.surface,
     borderRadius: 8,
-    padding: 12,
-    color: '#fff',
+    padding: 14,
+    color: colors.textPrimary,
     fontSize: 14,
     minHeight: 80,
     textAlignVertical: 'top',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  modalInputTV: {
-    fontSize: 16,
-    padding: 16,
-    minHeight: 100,
   },
   modalHint: {
     fontSize: 12,
-    color: '#666',
+    color: colors.textMuted,
     marginTop: 8,
     marginBottom: 20,
   },
   modalButton: {
-    backgroundColor: '#B8A05C',
+    backgroundColor: colors.primary,
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: 'transparent',
-  },
-  modalButtonTV: {
-    padding: 18,
-    borderRadius: 12,
   },
   modalButtonDisabled: {
     opacity: 0.6,
   },
+  modalButtonFocused: {
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
+  },
   modalButtonText: {
-    color: '#0c0c0c',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
-  },
-  modalButtonTextTV: {
-    fontSize: 18,
   },
 });
