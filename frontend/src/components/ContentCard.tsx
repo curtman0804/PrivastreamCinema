@@ -157,13 +157,13 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     borderRadius: 8,
-    overflow: 'hidden',
+    overflow: 'visible',
     backgroundColor: '#1a1a1a',
     borderWidth: 4,
     borderColor: 'transparent',
   },
   imageContainerFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
   },
   image: {
     width: '100%',
