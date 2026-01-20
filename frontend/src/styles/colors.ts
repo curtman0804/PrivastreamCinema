@@ -1,16 +1,11 @@
-// Stremio-inspired color palette for PrivastreamCinema
-// Based on Stremio's design system
+// PrivastreamCinema color palette
+// Stremio-inspired layout with tan accent
 
 export const colors = {
-  // Primary colors
-  primary: '#8A5AAB',           // Stremio purple accent
-  primaryLight: '#A374C4',
-  primaryDark: '#6B4488',
-  
-  // Accent colors (our brand tan)
-  accent: '#B8A05C',
-  accentLight: '#D4BC78',
-  accentDark: '#9A8540',
+  // Primary colors (tan theme)
+  primary: '#B8A05C',
+  primaryLight: '#D4BC78',
+  primaryDark: '#9A8540',
   
   // Background colors
   background: '#0F0F0F',        // Main app background
@@ -26,10 +21,10 @@ export const colors = {
   textMuted: '#707070',
   textDisabled: '#505050',
   
-  // Focus/Selection
-  focusGlow: 'rgba(138, 90, 171, 0.6)',  // Purple glow for focus
-  focusBorder: '#8A5AAB',
-  selectionBackground: 'rgba(138, 90, 171, 0.2)',
+  // Focus/Selection (tan glow)
+  focusGlow: 'rgba(184, 160, 92, 0.6)',
+  focusBorder: '#B8A05C',
+  selectionBackground: 'rgba(184, 160, 92, 0.2)',
   
   // Status colors
   success: '#4CAF50',
