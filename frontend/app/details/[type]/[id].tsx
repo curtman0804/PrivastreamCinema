@@ -1032,4 +1032,25 @@ const styles = StyleSheet.create({
   bottomPadding: {
     height: 100,
   },
+  // Focus styles for TV navigation
+  buttonFocused: {
+    borderColor: '#B8A05C',
+    borderWidth: 2,
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+  },
+  pillFocused: {
+    borderColor: '#B8A05C',
+    borderWidth: 2,
+    transform: [{ scale: 1.05 }],
+  },
+  cardFocused: {
+    borderColor: '#B8A05C',
+    borderWidth: 2,
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
+  },
+  streamItemFocused: {
+    borderColor: '#B8A05C',
+    borderWidth: 2,
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+  },
 });
