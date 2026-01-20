@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   seeAllButtonFocused: {
-    borderColor: '#FFD700',
+    borderColor: '#B8A05C',
     backgroundColor: '#B8A05C',
   },
   seeAllText: {
