@@ -19,13 +19,173 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
+// Focusable Button Component - reusable for consistent TV focus
+function FocusableButton({ 
+  onPress, 
+  style, 
+  focusedStyle,
+  children,
+  disabled = false,
+}: {
+  onPress?: () => void;
+  style: any;
+  focusedStyle?: any;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    <Pressable
+      style={[style, isFocused && (focusedStyle || styles.defaultFocused)]}
+      onPress={onPress}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      disabled={disabled}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+// Focusable Pill Component
+function FocusablePill({ 
+  onPress, 
+  style, 
+  textStyle,
+  text,
+}: {
+  onPress?: () => void;
+  style: any;
+  textStyle: any;
+  text: string;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    <Pressable
+      style={[style, isFocused && styles.pillFocused]}
+      onPress={onPress}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+    >
+      <Text style={textStyle}>{text}</Text>
+    </Pressable>
+  );
+}
+
+// Focusable Stream Item Component
+function FocusableStreamItem({ 
+  onPress, 
+  source,
+  details,
+}: {
+  onPress: () => void;
+  source: string;
+  details?: string;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    <Pressable
+      style={[styles.streamItem, isFocused && styles.streamItemFocused]}
+      onPress={onPress}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+    >
+      <View style={styles.streamIcon}>
+        <Ionicons name="play" size={18} color="#B8A05C" />
+      </View>
+      <View style={styles.streamInfo}>
+        <Text style={styles.streamSource} numberOfLines={1}>{source}</Text>
+        {details && (
+          <Text style={styles.streamDetails} numberOfLines={2}>{details}</Text>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="#666" />
+    </Pressable>
+  );
+}
+
+// Focusable Episode Card Component
+function FocusableEpisodeCard({ 
+  onPress, 
+  episode,
+  fallbackPoster,
+}: {
+  onPress: () => void;
+  episode: Episode;
+  fallbackPoster?: string;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    <Pressable
+      style={[styles.episodeCard, isFocused && styles.cardFocused]}
+      onPress={onPress}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+    >
+      <Image
+        source={{ uri: episode.thumbnail || fallbackPoster }}
+        style={styles.episodeThumbnail}
+        contentFit="cover"
+      />
+      <View style={styles.episodeInfo}>
+        <Text style={styles.episodeTitle} numberOfLines={2}>
+          Episode {episode.episode}: {episode.name || `Episode ${episode.episode}`}
+        </Text>
+        {episode.overview && (
+          <Text style={styles.episodeOverview} numberOfLines={2}>
+            {episode.overview}
+          </Text>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
+// Focusable Season Button Component
+function FocusableSeasonButton({ 
+  onPress, 
+  season,
+  isActive,
+}: {
+  onPress: () => void;
+  season: number;
+  isActive: boolean;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    <Pressable
+      style={[
+        styles.seasonButton,
+        isActive && styles.seasonButtonActive,
+        isFocused && styles.seasonButtonFocused,
+      ]}
+      onPress={onPress}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+    >
+      <Text
+        style={[
+          styles.seasonButtonText,
+          isActive && styles.seasonButtonTextActive,
+        ]}
+      >
+        Season {season}
+      </Text>
+    </Pressable>
+  );
+}
+
 export default function DetailsScreen() {
   const { 
     type, 
     id: rawId, 
     name: passedName, 
     poster: passedPoster,
-    // Resume params from Continue Watching
     resumeEpisodeId,
     resumePosition,
     resumeSeason,
@@ -49,7 +209,6 @@ export default function DetailsScreen() {
     fetchLibrary,
   } = useContentStore();
   
-  // Decode the ID in case it contains URL-encoded characters
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   
   const [content, setContent] = useState<ContentItem | null>(null);
@@ -57,14 +216,11 @@ export default function DetailsScreen() {
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
 
-  // Check if this is an episode page (id contains season:episode)
-  // Also check for porn IDs which use colons
   const isEpisodePage = id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
   const episodeSeason = isEpisodePage ? parseInt(id?.split(':')[1] || '1') : null;
   const episodeNumber = isEpisodePage ? parseInt(id?.split(':')[2] || '1') : null;
 
-  // Get the specific episode data when on an episode page
   const currentEpisode = useMemo(() => {
     if (!isEpisodePage || !content?.videos || !episodeSeason || !episodeNumber) return null;
     return content.videos.find(
@@ -72,31 +228,26 @@ export default function DetailsScreen() {
     );
   }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
 
-  // Get the next episode data
   const nextEpisode = useMemo(() => {
     if (!isEpisodePage || !content?.videos || !episodeSeason || !episodeNumber) return null;
     
-    // First try to find next episode in the same season
     const sameSeasonNext = content.videos.find(
       ep => ep.season === episodeSeason && ep.episode === episodeNumber + 1
     );
     if (sameSeasonNext) return sameSeasonNext;
     
-    // If no more episodes in current season, try first episode of next season
     const nextSeasonFirst = content.videos.find(
       ep => ep.season === episodeSeason + 1 && ep.episode === 1
     );
     return nextSeasonFirst || null;
   }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
 
-  // Get seasons from episodes
   const seasons = useMemo(() => {
     if (!content?.videos) return [];
     const seasonSet = new Set(content.videos.map(ep => ep.season).filter(s => s > 0));
     return Array.from(seasonSet).sort((a, b) => a - b);
   }, [content?.videos]);
 
-  // Get episodes for selected season
   const episodesForSeason = useMemo(() => {
     if (!content?.videos) return [];
     return content.videos
@@ -104,19 +255,15 @@ export default function DetailsScreen() {
       .sort((a, b) => a.episode - b.episode);
   }, [content?.videos, selectedSeason]);
 
-  // Load content
   useEffect(() => {
     loadContent();
     fetchLibrary();
     
-    // Fetch streams for movies, episode pages, or TV channels
     if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
-      console.log('[DETAILS] Fetching streams:', { type, id, isEpisodePage, baseId, episodeSeason, episodeNumber });
       fetchStreams(type, id);
     }
   }, [id, type]);
 
-  // Set first available season
   useEffect(() => {
     if (seasons.length > 0 && !seasons.includes(selectedSeason)) {
       setSelectedSeason(seasons[0]);
@@ -136,13 +283,11 @@ export default function DetailsScreen() {
   const loadContent = async () => {
     setIsLoadingContent(true);
     try {
-      // Always fetch from API to get full metadata including episodes
       const contentId = isEpisodePage ? baseId : id;
       const data = await api.content.getMeta(type!, contentId!);
       setContent(data);
     } catch (error) {
       console.log('Failed to fetch meta:', error);
-      // Use passed name/poster from discover page if available
       setContent({
         id: id!,
         imdb_id: id,
@@ -155,20 +300,14 @@ export default function DetailsScreen() {
   };
 
   const handleStreamSelect = async (stream: Stream) => {
-    // Get the content ID for subtitles
-    // For series episodes: use full episode ID (tt1234567:1:1)
-    // For movies: use the movie ID
     const subtitleContentId = isEpisodePage 
-      ? `${baseId}:${episodeSeason}:${episodeNumber}`  // Full episode ID for subtitles
+      ? `${baseId}:${episodeSeason}:${episodeNumber}`
       : (id as string);
     const contentTitle = currentEpisode 
       ? `S${episodeSeason}E${episodeNumber} - ${currentEpisode.name || content?.name || 'Video'}`
       : content?.name || 'Video';
     const cType = type as string || 'movie';
     
-    console.log('[DETAILS] handleStreamSelect - passing to player:', { cType, subtitleContentId, contentTitle });
-    
-    // Build next episode ID if available
     const nextEpisodeData = nextEpisode ? {
       nextEpisodeId: `${baseId}:${nextEpisode.season}:${nextEpisode.episode}`,
       nextEpisodeTitle: `S${nextEpisode.season}E${nextEpisode.episode} - ${nextEpisode.name || 'Next Episode'}`,
@@ -177,25 +316,20 @@ export default function DetailsScreen() {
       episode: String(episodeNumber),
     } : {};
     
-    // Check if we should resume from a saved position
-    // Only resume if the content matches what was being watched
     const shouldResume = resumePosition && parseFloat(resumePosition) > 0 && (
-      // For movies, just check the ID
       (type === 'movie' && !resumeEpisodeId) ||
-      // For series, check if it's the same episode
       (type === 'series' && resumeEpisodeId === subtitleContentId)
     );
     const resumeData = shouldResume ? { resumePosition } : {};
     
-    // Build fallback streams list (other streams of the same content)
     const buildFallbackUrls = async (): Promise<string[]> => {
       const authToken = await AsyncStorage.getItem('auth_token');
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://cinema-app-24.preview.emergentagent.com';
       
       return streams
-        .filter(s => s !== stream) // Exclude current stream
-        .filter(s => s.url && s.url.startsWith('/api/proxy/')) // Only proxy streams for now
-        .slice(0, 5) // Limit to 5 fallbacks
+        .filter(s => s !== stream)
+        .filter(s => s.url && s.url.startsWith('/api/proxy/'))
+        .slice(0, 5)
         .map(s => {
           const separator = s.url!.includes('?') ? '&' : '?';
           const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
@@ -203,46 +337,32 @@ export default function DetailsScreen() {
         });
     };
     
-    // Also save to AsyncStorage as backup
     try {
       await AsyncStorage.setItem('currentPlaying', JSON.stringify({
         contentType: cType,
-        contentId: imdbId,
+        contentId: id,
         title: contentTitle,
       }));
     } catch (e) {
       console.log('[DETAILS] Error saving to AsyncStorage:', e);
     }
     
-    // Check if this is an external URL stream (xHamster, etc.) that needs to open in browser
     if (stream.externalUrl || stream.requiresWebView) {
       const externalUrl = stream.externalUrl || stream.url;
-      console.log('[DETAILS] Opening external URL in browser:', externalUrl);
-      
-      // Open in external browser - this is the only way to play IP-restricted content
       Linking.openURL(externalUrl).catch(err => {
         console.error('Error opening URL:', err);
       });
       return;
     }
     
-    // Check if this is a proxy stream - need to convert relative URL to absolute
     if (stream.url && stream.url.startsWith('/api/proxy/')) {
-      // Get the auth token to include in the URL for video player authentication
       const authToken = await AsyncStorage.getItem('auth_token');
-      
-      // Build the full URL - proxy URLs already have ?url= so we add &token=
       const separator = stream.url.includes('?') ? '&' : '?';
       const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
-      
-      // Get the backend URL from env or use default - works on both web and mobile
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://cinema-app-24.preview.emergentagent.com';
       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
-      console.log('[DETAILS] Using proxy stream:', absoluteUrl.substring(0, 150));
       
-      // Get fallback URLs
       const fallbacks = await buildFallbackUrls();
-      console.log('[DETAILS] Fallback streams available:', fallbacks.length);
       
       router.push({
         pathname: '/player',
@@ -264,8 +384,6 @@ export default function DetailsScreen() {
     }
     
     if (stream.infoHash) {
-      // Torrent stream - use torrent player
-      // Pass fileIdx if available (for selecting specific episode in season packs)
       router.push({
         pathname: '/player',
         params: { 
@@ -283,7 +401,6 @@ export default function DetailsScreen() {
         },
       });
     } else if (stream.url) {
-      // Direct URL stream (USA TV, etc.) - play directly
       router.push({
         pathname: '/player',
         params: { 
@@ -303,7 +420,6 @@ export default function DetailsScreen() {
   };
 
   const handleEpisodePress = (episode: Episode) => {
-    // Navigate to episode detail page
     const episodeId = `${baseId || id}:${episode.season}:${episode.episode}`;
     router.push({
       pathname: `/details/${type}/${episodeId}`,
@@ -342,6 +458,29 @@ export default function DetailsScreen() {
     };
   };
 
+  const openWebsiteLink = (contentId: string) => {
+    let url = '';
+    if (contentId?.includes('RedTube-movie-')) {
+      const videoId = contentId.split('RedTube-movie-')[1];
+      url = `https://www.redtube.com/${videoId}`;
+    } else if (contentId?.includes('pornhub-')) {
+      const videoId = contentId.split('pornhub-')[1];
+      url = `https://www.pornhub.com/view_video.php?viewkey=${videoId}`;
+    } else if (contentId?.includes('porn_id:')) {
+      const parts = contentId.split(':');
+      if (parts.length >= 2) {
+        const site = parts[1].split('-')[0];
+        const videoId = parts[parts.length - 1];
+        if (site === 'RedTube') {
+          url = `https://www.redtube.com/${videoId}`;
+        }
+      }
+    }
+    if (url) {
+      Linking.openURL(url).catch(err => console.log('Error opening URL:', err));
+    }
+  };
+
   if (isLoadingContent) {
     return (
       <View style={styles.loadingContainer}>
@@ -356,7 +495,7 @@ export default function DetailsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Hero Section - Show episode thumbnail if on episode page */}
+      {/* Hero Section */}
       <View style={styles.heroContainer}>
         <Image
           source={{ uri: (isEpisodePage && currentEpisode?.thumbnail) || content?.background || content?.poster }}
@@ -369,17 +508,17 @@ export default function DetailsScreen() {
         />
         
         {/* Back Button */}
-        <Pressable 
-          style={({ focused }) => [styles.backButton, focused && styles.buttonFocused]} 
+        <FocusableButton 
+          style={styles.backButton}
+          focusedStyle={styles.backButtonFocused}
           onPress={() => router.back()}
         >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </Pressable>
+        </FocusableButton>
 
         {/* Logo or Title */}
         <View style={styles.heroContent}>
           {isEpisodePage && currentEpisode ? (
-            // Episode title with season/episode number
             <View>
               <Text style={styles.episodeLabel}>
                 S{episodeSeason} E{episodeNumber}
@@ -405,7 +544,6 @@ export default function DetailsScreen() {
         {/* Episode-specific info */}
         {isEpisodePage && currentEpisode && (
           <>
-            {/* Episode Release Date */}
             {currentEpisode.released && (
               <View style={styles.metaRow}>
                 <Text style={styles.metaText}>
@@ -418,14 +556,13 @@ export default function DetailsScreen() {
               </View>
             )}
             
-            {/* Episode Description */}
             {currentEpisode.overview && (
               <Text style={styles.description}>{currentEpisode.overview}</Text>
             )}
           </>
         )}
 
-        {/* Metadata Row - only show for non-episode pages or if episode has no specific info */}
+        {/* Metadata Row */}
         {(!isEpisodePage || !currentEpisode) && (
           <View style={styles.metaRow}>
             {rating && rating > 0 && (
@@ -444,8 +581,9 @@ export default function DetailsScreen() {
         )}
 
         {/* Add to Library Button */}
-        <Pressable 
-          style={({ focused }) => [styles.libraryButton, focused && styles.buttonFocused]}
+        <FocusableButton 
+          style={styles.libraryButton}
+          focusedStyle={styles.libraryButtonFocused}
           onPress={toggleLibrary}
         >
           <Ionicons 
@@ -456,7 +594,7 @@ export default function DetailsScreen() {
           <Text style={styles.libraryButtonText}>
             {inLibrary ? 'In Library' : 'Add to Library'}
           </Text>
-        </Pressable>
+        </FocusableButton>
 
         {/* Description */}
         {content?.description && (
@@ -469,13 +607,13 @@ export default function DetailsScreen() {
             <Text style={styles.sectionTitle}>Genres</Text>
             <View style={styles.pillContainer}>
               {content.genre.map((g, i) => (
-                <Pressable 
+                <FocusablePill 
                   key={i} 
-                  style={({ focused }) => [styles.genrePill, focused && styles.pillFocused]}
+                  style={styles.genrePill}
+                  textStyle={styles.genrePillText}
+                  text={g}
                   onPress={() => router.push(`/search?q=${encodeURIComponent(g)}`)}
-                >
-                  <Text style={styles.genrePillText}>{g}</Text>
-                </Pressable>
+                />
               ))}
             </View>
           </View>
@@ -487,13 +625,13 @@ export default function DetailsScreen() {
             <Text style={styles.sectionTitle}>Director</Text>
             <View style={styles.pillContainer}>
               {content.director.map((d, i) => (
-                <Pressable 
+                <FocusablePill 
                   key={i} 
-                  style={({ focused }) => [styles.directorPill, focused && styles.pillFocused]}
+                  style={styles.directorPill}
+                  textStyle={styles.directorPillText}
+                  text={d}
                   onPress={() => router.push(`/search?q=${encodeURIComponent(d)}`)}
-                >
-                  <Text style={styles.directorPillText}>{d}</Text>
-                </Pressable>
+                />
               ))}
             </View>
           </View>
@@ -505,19 +643,19 @@ export default function DetailsScreen() {
             <Text style={styles.sectionTitle}>Cast</Text>
             <View style={styles.pillContainer}>
               {content.cast.slice(0, 6).map((actor, i) => (
-                <Pressable 
+                <FocusablePill 
                   key={i} 
-                  style={({ focused }) => [styles.castPill, focused && styles.pillFocused]}
+                  style={styles.castPill}
+                  textStyle={styles.castPillText}
+                  text={actor}
                   onPress={() => router.push(`/search?q=${encodeURIComponent(actor)}`)}
-                >
-                  <Text style={styles.castPillText}>{actor}</Text>
-                </Pressable>
+                />
               ))}
             </View>
           </View>
         )}
 
-        {/* Episodes Section - Only for series main page */}
+        {/* Episodes Section */}
         {type === 'series' && !isEpisodePage && seasons.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Episodes</Text>
@@ -530,85 +668,37 @@ export default function DetailsScreen() {
               contentContainerStyle={styles.seasonScrollContent}
             >
               {seasons.map((season) => (
-                <Pressable
+                <FocusableSeasonButton
                   key={season}
-                  style={({ focused }) => [
-                    styles.seasonButton,
-                    selectedSeason === season && styles.seasonButtonActive,
-                    focused && styles.buttonFocused,
-                  ]}
+                  season={season}
+                  isActive={selectedSeason === season}
                   onPress={() => setSelectedSeason(season)}
-                >
-                  <Text
-                    style={[
-                      styles.seasonButtonText,
-                      selectedSeason === season && styles.seasonButtonTextActive,
-                    ]}
-                  >
-                    Season {season}
-                  </Text>
-                </Pressable>
+                />
               ))}
             </ScrollView>
 
             {/* Episode List */}
             <View style={styles.episodeList}>
               {episodesForSeason.map((episode) => (
-                <Pressable
+                <FocusableEpisodeCard
                   key={`${episode.season}-${episode.episode}`}
-                  style={({ focused }) => [styles.episodeCard, focused && styles.cardFocused]}
+                  episode={episode}
+                  fallbackPoster={content?.poster}
                   onPress={() => handleEpisodePress(episode)}
-                >
-                  <Image
-                    source={{ uri: episode.thumbnail || content?.poster }}
-                    style={styles.episodeThumbnail}
-                    contentFit="cover"
-                  />
-                  <View style={styles.episodeInfo}>
-                    <Text style={styles.episodeTitle} numberOfLines={2}>
-                      Episode {episode.episode}: {episode.name || `Episode ${episode.episode}`}
-                    </Text>
-                    {episode.overview && (
-                      <Text style={styles.episodeOverview} numberOfLines={2}>
-                        {episode.overview}
-                      </Text>
-                    )}
-                  </View>
-                </Pressable>
+                />
               ))}
             </View>
           </View>
         )}
 
-        {/* Direct Website Link for Porn+ / RedTube / PornHub content */}
+        {/* Direct Website Link */}
         {(id?.includes('RedTube') || id?.includes('pornhub') || id?.includes('porn_id')) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Watch on Website</Text>
-            <Pressable
-              style={({ focused }) => [styles.websiteLinkButton, focused && styles.buttonFocused]}
-              onPress={() => {
-                let url = '';
-                if (id?.includes('RedTube-movie-')) {
-                  const videoId = id.split('RedTube-movie-')[1];
-                  url = `https://www.redtube.com/${videoId}`;
-                } else if (id?.includes('pornhub-')) {
-                  const videoId = id.split('pornhub-')[1];
-                  url = `https://www.pornhub.com/view_video.php?viewkey=${videoId}`;
-                } else if (id?.includes('porn_id:')) {
-                  // Try to extract site and ID
-                  const parts = id.split(':');
-                  if (parts.length >= 2) {
-                    const site = parts[1].split('-')[0];
-                    const videoId = parts[parts.length - 1];
-                    if (site === 'RedTube') {
-                      url = `https://www.redtube.com/${videoId}`;
-                    }
-                  }
-                }
-                if (url) {
-                  Linking.openURL(url).catch(err => console.log('Error opening URL:', err));
-                }
-              }}
+            <FocusableButton
+              style={styles.websiteLinkButton}
+              focusedStyle={styles.websiteLinkButtonFocused}
+              onPress={() => openWebsiteLink(id!)}
             >
               <Ionicons name="globe-outline" size={22} color="#B8A05C" />
               <View style={styles.websiteLinkContent}>
@@ -619,11 +709,11 @@ export default function DetailsScreen() {
                 </Text>
               </View>
               <Ionicons name="open-outline" size={20} color="#666" />
-            </Pressable>
+            </FocusableButton>
           </View>
         )}
 
-        {/* Streams Section - For movies, episode pages, OR TV channels */}
+        {/* Streams Section */}
         {(type === 'movie' || type === 'tv' || isEpisodePage) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Available Streams</Text>
@@ -637,29 +727,15 @@ export default function DetailsScreen() {
               <View style={styles.noStreams}>
                 <Ionicons name="cloud-offline-outline" size={32} color="#666" />
                 <Text style={styles.noStreamsText}>No streams found</Text>
-                {/* Show Open in Browser if content ID is a URL or contains a source URL */}
                 {(id?.startsWith('http') || id?.includes('RedTube') || id?.includes('pornhub')) && (
-                  <Pressable
-                    style={({ focused }) => [styles.openBrowserButton, focused && styles.buttonFocused]}
-                    onPress={() => {
-                      // Extract URL from content ID
-                      let url = id;
-                      if (id?.includes('RedTube-movie-')) {
-                        // Extract RedTube video ID and create URL
-                        const videoId = id.split('RedTube-movie-')[1];
-                        url = `https://www.redtube.com/${videoId}`;
-                      } else if (id?.includes('pornhub-')) {
-                        const videoId = id.split('pornhub-')[1];
-                        url = `https://www.pornhub.com/view_video.php?viewkey=${videoId}`;
-                      }
-                      if (url) {
-                        Linking.openURL(url).catch(err => console.log('Error opening URL:', err));
-                      }
-                    }}
+                  <FocusableButton
+                    style={styles.openBrowserButton}
+                    focusedStyle={styles.openBrowserButtonFocused}
+                    onPress={() => openWebsiteLink(id!)}
                   >
                     <Ionicons name="open-outline" size={18} color="#B8A05C" />
                     <Text style={styles.openBrowserText}>Open in Browser</Text>
-                  </Pressable>
+                  </FocusableButton>
                 )}
               </View>
             ) : (
@@ -667,22 +743,12 @@ export default function DetailsScreen() {
                 {streams.map((stream, index) => {
                   const { source, details } = parseStreamInfo(stream);
                   return (
-                    <Pressable
+                    <FocusableStreamItem
                       key={index}
-                      style={({ focused }) => [styles.streamItem, focused && styles.streamItemFocused]}
+                      source={source}
+                      details={details}
                       onPress={() => handleStreamSelect(stream)}
-                    >
-                      <View style={styles.streamIcon}>
-                        <Ionicons name="play" size={18} color="#B8A05C" />
-                      </View>
-                      <View style={styles.streamInfo}>
-                        <Text style={styles.streamSource} numberOfLines={1}>{source}</Text>
-                        {details && (
-                          <Text style={styles.streamDetails} numberOfLines={2}>{details}</Text>
-                        )}
-                      </View>
-                      <Ionicons name="chevron-forward" size={18} color="#666" />
-                    </Pressable>
+                    />
                   );
                 })}
               </View>
@@ -708,7 +774,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f0f11',
   },
   heroContainer: {
-    height: height * 0.45,
+    height: height * 0.40,
     position: 'relative',
   },
   heroImage: {
@@ -726,12 +792,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 50,
     left: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  backButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
   },
   heroContent: {
     position: 'absolute',
@@ -741,8 +813,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoImage: {
-    width: width * 0.7,
-    height: 100,
+    width: width * 0.6,
+    height: 80,
   },
   heroTitle: {
     fontSize: 28,
@@ -808,8 +880,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 8,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#444',
+  },
+  libraryButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
   },
   libraryButtonText: {
     color: '#FFFFFF',
@@ -844,7 +920,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: 'rgba(184, 160, 92, 0.2)',
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: 'rgba(184, 160, 92, 0.3)',
   },
   genrePillText: {
@@ -856,7 +932,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 8,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#333',
   },
   castPillText: {
@@ -868,13 +944,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: 'rgba(184, 160, 92, 0.15)',
     borderRadius: 8,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: 'rgba(184, 160, 92, 0.3)',
   },
   directorPillText: {
     color: '#B8A05C',
     fontSize: 13,
     fontWeight: '500',
+  },
+  pillFocused: {
+    borderColor: '#B8A05C',
+    borderWidth: 2,
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
+    transform: [{ scale: 1.05 }],
   },
   seasonScroll: {
     marginBottom: 16,
@@ -887,12 +969,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 8,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#333',
   },
   seasonButtonActive: {
     backgroundColor: '#B8A05C',
     borderColor: '#B8A05C',
+  },
+  seasonButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
   },
   seasonButtonText: {
     color: '#AAAAAA',
@@ -910,8 +996,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 10,
     padding: 12,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#222',
+  },
+  cardFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
   },
   episodeThumbnail: {
     width: 130,
@@ -963,8 +1053,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 8,
     marginTop: 16,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#B8A05C',
+  },
+  openBrowserButtonFocused: {
+    backgroundColor: 'rgba(184, 160, 92, 0.5)',
+    borderColor: '#D4C78A',
   },
   openBrowserText: {
     color: '#B8A05C',
@@ -978,8 +1072,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(184, 160, 92, 0.15)',
     padding: 16,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: 'rgba(184, 160, 92, 0.3)',
+  },
+  websiteLinkButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
   },
   websiteLinkContent: {
     flex: 1,
@@ -1004,8 +1102,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 10,
     padding: 14,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#222',
+  },
+  streamItemFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.25)',
   },
   streamIcon: {
     width: 36,
@@ -1032,25 +1134,9 @@ const styles = StyleSheet.create({
   bottomPadding: {
     height: 100,
   },
-  // Focus styles for TV navigation
-  buttonFocused: {
+  defaultFocused: {
     borderColor: '#B8A05C',
     borderWidth: 2,
-    backgroundColor: 'rgba(184, 160, 92, 0.2)',
-  },
-  pillFocused: {
-    borderColor: '#B8A05C',
-    borderWidth: 2,
-    transform: [{ scale: 1.05 }],
-  },
-  cardFocused: {
-    borderColor: '#B8A05C',
-    borderWidth: 2,
-    backgroundColor: 'rgba(184, 160, 92, 0.15)',
-  },
-  streamItemFocused: {
-    borderColor: '#B8A05C',
-    borderWidth: 2,
-    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
   },
 });
