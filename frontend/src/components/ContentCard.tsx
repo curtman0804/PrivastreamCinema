@@ -179,13 +179,12 @@ const styles = StyleSheet.create({
   },
   posterFocused: {
     transform: [{ scale: 1.05 }],
-    // Stremio-style thin glow instead of thick border
+    // Consistent 2px border like tab bar
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 12,
     elevation: 12,
-    // Also add a subtle border
     borderWidth: 2,
     borderColor: colors.primary,
   },
