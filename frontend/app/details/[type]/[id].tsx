@@ -190,7 +190,7 @@ export default function DetailsScreen() {
     // Build fallback streams list (other streams of the same content)
     const buildFallbackUrls = async (): Promise<string[]> => {
       const authToken = await AsyncStorage.getItem('auth_token');
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://cinestream-1336.preview.emergentagent.com';
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://cinema-remote-1.preview.emergentagent.com';
       
       return streams
         .filter(s => s !== stream) // Exclude current stream
@@ -236,7 +236,7 @@ export default function DetailsScreen() {
       const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
       
       // Get the backend URL from env or use default - works on both web and mobile
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://cinestream-1336.preview.emergentagent.com';
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://cinema-remote-1.preview.emergentagent.com';
       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
       console.log('[DETAILS] Using proxy stream:', absoluteUrl.substring(0, 150));
       
