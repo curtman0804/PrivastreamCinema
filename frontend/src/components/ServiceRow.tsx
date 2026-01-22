@@ -199,8 +199,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
+    paddingVertical: 12, // Add vertical padding to prevent clipping of focused items
   },
   scrollContentTV: {
     paddingHorizontal: 24,
+    paddingVertical: 16, // More padding on TV
+  },
+  flatListStyle: {
+    overflow: 'visible', // Allow focused items to show outside bounds
   },
 });
