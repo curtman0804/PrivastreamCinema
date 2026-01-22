@@ -132,6 +132,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         keyExtractor={keyExtractor}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
+        style={styles.flatListStyle}
         initialNumToRender={isTV ? 8 : 5}
         maxToRenderPerBatch={5}
         windowSize={7}
