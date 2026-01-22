@@ -15,6 +15,7 @@ import { colors, posterShapes } from '../styles/colors';
 interface ContentCardProps {
   item: ContentItem | SearchResult;
   onPress: () => void;
+  onCardFocus?: () => void; // New prop for scroll handling
   size?: 'small' | 'medium' | 'large';
   posterShape?: 'poster' | 'landscape' | 'square';
   showTitle?: boolean;
@@ -42,6 +43,7 @@ export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 
 const ContentCardComponent: React.FC<ContentCardProps> = ({
   item,
   onPress,
+  onCardFocus,
   size = 'medium',
   posterShape = 'poster',
   showTitle = true,
@@ -57,6 +59,11 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const cardWidth = getCardWidth(width, isTV, size);
   const aspectRatio = posterShapes[posterShape];
   const cardHeight = cardWidth * aspectRatio;
+
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+    onCardFocus?.(); // Notify parent about focus for scrolling
+  }, [onCardFocus]);
 
   const handleLongPress = useCallback(async () => {
     const contentId = item.imdb_id || item.id;
@@ -104,7 +111,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       onPress={onPress}
       onLongPress={handleLongPress}
       delayLongPress={500}
-      onFocus={() => setIsFocused(true)}
+      onFocus={handleFocus}
       onBlur={() => setIsFocused(false)}
       style={[styles.container, { width: cardWidth }]}
       accessible={true}
