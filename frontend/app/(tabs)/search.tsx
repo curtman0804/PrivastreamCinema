@@ -1,67 +1,47 @@
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   ActivityIndicator,
-  Dimensions,
-  TouchableOpacity,
-  SectionList,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { SearchBar } from '../../src/components/SearchBar';
-import { ContentCard } from '../../src/components/ContentCard';
+import { ServiceRow } from '../../src/components/ServiceRow';
 import { SearchResult } from '../../src/api/client';
-
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 64) / 3;
 
 export default function SearchScreen() {
   const router = useRouter();
-  const { q: queryParam, type: searchType } = useLocalSearchParams<{ q?: string; type?: string }>();
+  const { q: queryParam } = useLocalSearchParams<{ q?: string }>();
   const { 
     searchResults, 
     searchMovies,
     searchSeries,
-    searchHasMore,
     isLoadingSearch, 
-    isLoadingMoreSearch,
     search, 
-    loadMoreSearch,
     clearSearch 
   } = useContentStore();
   const [hasSearched, setHasSearched] = useState(false);
   const [currentQuery, setCurrentQuery] = useState<string>('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'movie' | 'series'>('all');
   const hasTriggeredInitialSearch = useRef(false);
 
-  // Get filtered results based on active filter
-  const filteredResults = useMemo(() => {
-    if (activeFilter === 'movie') return searchMovies;
-    if (activeFilter === 'series') return searchSeries;
-    return searchResults;
-  }, [searchResults, searchMovies, searchSeries, activeFilter]);
-
-  // Auto-trigger search when navigated to with a query parameter (from genre/cast/director tags)
+  // Auto-trigger search when navigated to with a query parameter
   useEffect(() => {
     if (queryParam && !hasTriggeredInitialSearch.current) {
       hasTriggeredInitialSearch.current = true;
       const decodedQuery = decodeURIComponent(queryParam);
       setCurrentQuery(decodedQuery);
       setHasSearched(true);
-      // Set filter type if passed
-      if (searchType === 'movie' || searchType === 'series') {
-        setActiveFilter(searchType);
-      }
       search(decodedQuery);
     }
-  }, [queryParam, searchType, search]);
+  }, [queryParam, search]);
 
-  // Reset when component unmounts or query changes
+  // Reset when component unmounts
   useEffect(() => {
     return () => {
       hasTriggeredInitialSearch.current = false;
@@ -94,67 +74,12 @@ export default function SearchScreen() {
     clearSearch();
     setHasSearched(false);
     setCurrentQuery('');
-    setActiveFilter('all');
     hasTriggeredInitialSearch.current = false;
-    // Navigate back to search without query param
     router.replace('/search');
   };
 
-  const handleLoadMore = useCallback(() => {
-    if (!isLoadingMoreSearch && searchHasMore) {
-      loadMoreSearch();
-    }
-  }, [isLoadingMoreSearch, searchHasMore, loadMoreSearch]);
-
-  const renderItem = ({ item }: { item: SearchResult }) => (
-    <View style={styles.cardWrapper}>
-      <ContentCard
-        item={item}
-        onPress={() => handleItemPress(item)}
-        size="medium"
-      />
-    </View>
-  );
-
-  const renderSectionHeader = ({ section }: { section: { title: string; data: SearchResult[] } }) => (
-    <View style={styles.sectionHeader}>
-      <Ionicons 
-        name={section.title === 'Movies' ? 'film-outline' : 'tv-outline'} 
-        size={20} 
-        color="#B8A05C" 
-      />
-      <Text style={styles.sectionTitle}>{section.title}</Text>
-      <Text style={styles.sectionCount}>({section.data.length})</Text>
-    </View>
-  );
-
-  const renderFooter = () => {
-    if (!isLoadingMoreSearch) return null;
-    return (
-      <View style={styles.loadMoreContainer}>
-        <ActivityIndicator size="small" color="#B8A05C" />
-        <Text style={styles.loadMoreText}>Loading more...</Text>
-      </View>
-    );
-  };
-
-  // Prepare section data for SectionList
-  const sections = useMemo(() => {
-    const result = [];
-    if (activeFilter === 'all') {
-      if (searchMovies.length > 0) {
-        result.push({ title: 'Movies', data: searchMovies });
-      }
-      if (searchSeries.length > 0) {
-        result.push({ title: 'Series', data: searchSeries });
-      }
-    } else if (activeFilter === 'movie' && searchMovies.length > 0) {
-      result.push({ title: 'Movies', data: searchMovies });
-    } else if (activeFilter === 'series' && searchSeries.length > 0) {
-      result.push({ title: 'Series', data: searchSeries });
-    }
-    return result;
-  }, [searchMovies, searchSeries, activeFilter]);
+  // Focusable clear button
+  const [clearFocused, setClearFocused] = useState(false);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -164,55 +89,20 @@ export default function SearchScreen() {
 
       <SearchBar onSearch={handleSearch} initialValue={currentQuery} />
 
-      {/* Show current search query tag when searching from details page */}
+      {/* Show current search query tag */}
       {currentQuery && hasSearched && (
         <View style={styles.searchTagContainer}>
           <View style={styles.searchTag}>
             <Text style={styles.searchTagText}>Results for "{currentQuery}"</Text>
-            <TouchableOpacity onPress={handleClearSearch} style={styles.clearButton}>
-              <Ionicons name="close-circle" size={18} color="#888" />
-            </TouchableOpacity>
+            <Pressable 
+              onPress={handleClearSearch} 
+              style={[styles.clearButton, clearFocused && styles.clearButtonFocused]}
+              onFocus={() => setClearFocused(true)}
+              onBlur={() => setClearFocused(false)}
+            >
+              <Ionicons name="close-circle" size={18} color={clearFocused ? "#B8A05C" : "#888"} />
+            </Pressable>
           </View>
-        </View>
-      )}
-
-      {/* Filter Tabs */}
-      {hasSearched && searchResults.length > 0 && (
-        <View style={styles.filterContainer}>
-          <TouchableOpacity 
-            style={[styles.filterTab, activeFilter === 'all' && styles.filterTabActive]}
-            onPress={() => setActiveFilter('all')}
-          >
-            <Text style={[styles.filterText, activeFilter === 'all' && styles.filterTextActive]}>
-              All ({searchResults.length})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.filterTab, activeFilter === 'movie' && styles.filterTabActive]}
-            onPress={() => setActiveFilter('movie')}
-          >
-            <Ionicons 
-              name="film-outline" 
-              size={16} 
-              color={activeFilter === 'movie' ? '#B8A05C' : '#888'} 
-            />
-            <Text style={[styles.filterText, activeFilter === 'movie' && styles.filterTextActive]}>
-              Movies ({searchMovies.length})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.filterTab, activeFilter === 'series' && styles.filterTabActive]}
-            onPress={() => setActiveFilter('series')}
-          >
-            <Ionicons 
-              name="tv-outline" 
-              size={16} 
-              color={activeFilter === 'series' ? '#B8A05C' : '#888'} 
-            />
-            <Text style={[styles.filterText, activeFilter === 'series' && styles.filterTextActive]}>
-              Series ({searchSeries.length})
-            </Text>
-          </TouchableOpacity>
         </View>
       )}
 
@@ -233,64 +123,32 @@ export default function SearchScreen() {
           <Text style={styles.emptyText}>Search for movies & TV shows</Text>
           <Text style={styles.emptySubtext}>Find your favorite content</Text>
         </View>
-      ) : activeFilter === 'all' ? (
-        /* Sectioned List for All view */
-        <SectionList
-          sections={sections}
-          renderItem={({ item, index, section }) => {
-            // Render items in rows of 3
-            if (index % 3 !== 0) return null;
-            const items = section.data.slice(index, index + 3);
-            return (
-              <View style={styles.row}>
-                {items.map((rowItem) => (
-                  <View key={rowItem.id} style={styles.cardWrapper}>
-                    <ContentCard
-                      item={rowItem}
-                      onPress={() => handleItemPress(rowItem)}
-                      size="medium"
-                    />
-                  </View>
-                ))}
-              </View>
-            );
-          }}
-          renderSectionHeader={renderSectionHeader}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          stickySectionHeadersEnabled={false}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={renderFooter}
-        />
       ) : (
-        /* Flat List for filtered view with infinite scroll */
-        <FlatList
-          data={filteredResults}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          numColumns={3}
-          contentContainerStyle={styles.listContent}
-          columnWrapperStyle={styles.row}
+        <ScrollView 
+          style={styles.scrollView}
           showsVerticalScrollIndicator={false}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={renderFooter}
-          ListHeaderComponent={
-            <View style={styles.sectionHeader}>
-              <Ionicons 
-                name={activeFilter === 'movie' ? 'film-outline' : 'tv-outline'} 
-                size={20} 
-                color="#B8A05C" 
-              />
-              <Text style={styles.sectionTitle}>
-                {activeFilter === 'movie' ? 'Movies' : 'Series'}
-              </Text>
-              <Text style={styles.sectionCount}>({filteredResults.length})</Text>
-            </View>
-          }
-        />
+          contentContainerStyle={styles.scrollContent}
+        >
+          {/* Movies Row */}
+          {searchMovies.length > 0 && (
+            <ServiceRow
+              title={`Movies (${searchMovies.length})`}
+              items={searchMovies}
+              onItemPress={handleItemPress}
+            />
+          )}
+
+          {/* Series Row */}
+          {searchSeries.length > 0 && (
+            <ServiceRow
+              title={`Series (${searchSeries.length})`}
+              items={searchSeries}
+              onItemPress={handleItemPress}
+            />
+          )}
+          
+          <View style={styles.bottomPadding} />
+        </ScrollView>
       )}
     </SafeAreaView>
   );
@@ -314,7 +172,7 @@ const styles = StyleSheet.create({
   },
   searchTagContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingVertical: 12,
   },
   searchTag: {
     flexDirection: 'row',
@@ -334,53 +192,11 @@ const styles = StyleSheet.create({
   },
   clearButton: {
     marginLeft: 8,
-    padding: 2,
+    padding: 4,
+    borderRadius: 12,
   },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#1a1a1a',
-    gap: 6,
-  },
-  filterTabActive: {
-    backgroundColor: 'rgba(184, 160, 92, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(184, 160, 92, 0.4)',
-  },
-  filterText: {
-    color: '#888',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  filterTextActive: {
-    color: '#B8A05C',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    gap: 8,
-  },
-  sectionTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  sectionCount: {
-    color: '#888',
-    fontSize: 14,
-    fontWeight: '500',
+  clearButtonFocused: {
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
   },
   centerContainer: {
     flex: 1,
@@ -406,28 +222,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
-  listContent: {
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    paddingBottom: 24,
+  scrollView: {
+    flex: 1,
   },
-  row: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    justifyContent: 'flex-start',
+  scrollContent: {
+    paddingTop: 16,
   },
-  cardWrapper: {
-    width: CARD_WIDTH,
-  },
-  loadMoreContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 20,
-    gap: 8,
-  },
-  loadMoreText: {
-    color: '#888',
-    fontSize: 14,
+  bottomPadding: {
+    height: 40,
   },
 });
