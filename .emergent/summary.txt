@@ -1,5 +1,5 @@
 <analysis>
-**original_problem_statement:**
+<original_problem_statement>
 Build a native Android streaming app called PrivastreamCinema (a Stremio clone).
 
 PRODUCT REQUIREMENTS:
@@ -10,210 +10,237 @@ PRODUCT REQUIREMENTS:
 - A fully dynamic addon management system.
 - Admin section for user 'choyt'.
 
-Recent User Requests:
-- **(PENDING)** Implement Closed Captions (CC) using the OpenSubtitles addon. The feature is completely broken.
-- **(PENDING)** The video player's controls (Back button, CC button) must be custom, embedded within the player view, and fade in/out.
-- Add support for several adult content addons and ensure their content and streams are playable.
-- For content that cannot be played directly (e.g., links to external websites), provide a way for the user to access it.
-- Implement a See All button for discover page categories that leads to a new page with infinite scrolling for all content in that category.
-- Filter out content that does not have available streams from the discover page. (This was attempted and reverted due to performance issues, but the user still desires this).
-- Fix the details page showing Unknown Title for some content by passing the title and poster from the discover page.
-- Remove the scrollbar from the See All grid view.
-- Make Genre, Cast, and Director tags on the details page clickable to trigger a search.
+Recent User Requests from this session:
+- Fix numerous UI/UX issues on Fire Stick, including:
+    - No visible focus selector on many elements (details page, search page, profile).
+    - Horizontal scrolling on Discover/Search pages skipping multiple items instead of moving one-by-one.
+    - Search results showing as a grid with very large posters. The user wants it changed to horizontal scrolling rows like the Discover page.
+    - Duplicate items appearing in search results.
+    - The focus selector on posters being clipped/cut off.
+- Fix a critical and recurring app crash on launch, specific to the Fire Stick device (the app worked on a phone).
+- Fix native UI issues:
+    - A purple loading spinner appears when the app first opens.
+    - The splash screen artwork and app icon are cropped in a circle.
+- Fix a regression where focused posters turn black.
+</original_problem_statement>
 
 **User's preferred language**: English
 
 **what currently exists?**
-A full-stack Expo (React Native) and FastAPI application with a dynamic addon system. The app now successfully integrates several adult content addons, displays their catalogs as distinct rows on the discover page, and can play their streams (Torrents, HLS, and scraped MP4s).
+The application has undergone significant UI and UX improvements for TV navigation. The focus system has been completely overhauled on the Details, Profile, and Search pages to use a robust  + / pattern, which provides a reliable tan focus border on interactive elements.
 
-A major feature, See All, has been implemented. Each content row on the discover page has a See All button that navigates to a dedicated category page (). This page features a robust infinite scroll implementation that continuously loads content as the user scrolls, working for both regular and adult content addons.
+The Search page layout has been redesigned from a grid to horizontal scrolling rows (using the  component), matching the user's request. The horizontal scrolling logic in  has also been improved to scroll one item at a time using , creating a smoother, Stremio-like experience.
 
-The UI/UX has been improved by passing content metadata (title, poster) to the details page to prevent Unknown Title issues. The details page also features new clickable pill buttons for genres and cast, intended to trigger a search.
-
-However, two critical original requirements remain unaddressed and broken: the Closed Captions (CC)/Subtitle system and the custom video player UI.
+A major, recurring crash-on-launch issue specific to the Fire Stick was resolved by guiding the user to delete and regenerate the native  project folder, which had become corrupted after numerous manual edits.
 
 **Last working item**:
-    - Last item agent was working: The agent was implementing clickable search tags on the details page. It successfully removed the scrollbar from the category page grid and updated the  file to wrap genre, cast, and a new director pill in  components that navigate to a search page. A placeholder search page was created.
-    - Status: IN PROGRESS
+    - Last item agent was working: The agent was debugging a complex native build and crash issue on the user's Fire Stick. After many failed attempts to fix individual XML files, the agent correctly identified the native project was in a corrupted state and guided the user to delete and regenerate the  folder. This resolved the crash.
+    - Status: USER VERIFICATION PENDING
     - Agent Testing Done: N
-    - Which testing method agent to use? Frontend testing agent
-    - User Testing Done: N
+    - Which testing method agent to use? The user is performing all builds and testing on their local machine and Fire Stick. The next agent must provide complete, correct files and instructions for the user.
+    - User Testing Done: Y (User confirmed the app no longer crashes but other issues remain)
 
 **All Pending/In progress Issue list**:
-  - Issue 1: Subtitle (CC) functionality is not working (P0)
-  - Issue 2: Video Player UI does not meet requirements (P1)
+  - Issue 1: Native Splash Screen and Icon issues (P0)
+  - Issue 2: Focused posters are clipped/disappear on Discover page (P1)
+  - Issue 3: Posters turn black when focused (P2)
+  - Issue 4: Login screen D-pad navigation is not intuitive (P3)
+  - Issue 5: Navigation is choppy and hesitant (P3)
   
   Issues Detail:
   - Issue 1: 
-     - **Description**: The subtitle selection modal only shows Off. The agent pivoted away from this issue at the user's request, but it remains the most critical unresolved bug. The last attempt involved switching from  to passing  and  via URL parameters from the details page to the player. This approach is more robust but was never fully tested or verified by the user before the context switch.
-     - **Attempted fixes**: 1.  (Failed). 2.  global store (Failed). 3.  (Failed). 4. Switched to passing data via URL parameters (Unverified).
+     - **Description**: After resetting the  folder to fix the crash, the original native UI bugs have returned. The initial loading spinner is the system default purple, and the splash/app icon is cropped.
+     - **Attempted fixes**: Numerous manual edits to , , and  led to a corrupted build state and a persistent crash. The final fix was to reset the  folder, which wiped out all attempted fixes.
      - **Next debug checklist**:
-        1. Verify in  that the  call to  correctly includes  and  in the URL's query parameters.
-        2. Verify in  that  is being used to correctly read  and .
-        3. Add console logs inside the  function in  to confirm it's being called with the correct IDs.
-        4. Check backend logs for API calls to .
-     - **Why fix this issue and what will be achieved with the fix?**: Fulfills a critical, long-standing user requirement for accessibility and a complete viewing experience.
+        1. Acknowledge that the user's  folder is now clean.
+        2. Re-attempt the native fixes, but this time provide a complete, verified set of instructions and files to avoid corrupting the user's local project again.
+        3. Create  to define a layer-list for the splash.
+        4. Create/modify  to define  (#0F0F0F) and  (#B8A05C).
+        5. Modify  to correctly apply these colors and drawables to the splash theme without using attributes that are incompatible with the Fire Stick's Android version.
+        6. Guide the user to place the splash image asset () in the correct  folders.
+     - **Why fix this issue and what will be achieved with the fix?**: Provides a polished, branded launch experience and resolves a major source of user frustration.
      - **Status**:  NOT STARTED
      - **Is recurring issue?** Y
-     - **Should Test frontend/backend/both after fix?**: both
-     - **Blocked on other issue**: None
+     - **Should Test frontend/backend/both after fix?**: frontend (User build)
+     - **Blocked on other issue**: None.
   - Issue 2: 
-     - **Description**: The user wants custom, embedded video player controls (Back, CC) that fade in and out, not the current persistent header. This task has not been started.
-     - **Attempted fixes**: None in this session. Previous attempts in other sessions failed.
+     - **Description**: On the Discover page, when a poster is focused, it scales up, but the top of the focus border and the poster itself get clipped by the container.
+     - **Attempted fixes**: The agent added  to the 's  and  to the 's  in . The user confirmed the app still crashed after this, but it was later determined the crash was due to the corrupted  folder. The  fix was reverted during the crash debugging.
      - **Next debug checklist**:
-        1. In , set  on the   component.
-        2. Create a new component for the control overlay.
-        3. Use  and  to implement the fade-in/fade-out logic based on user interaction and a timeout.
-        4. Position the overlay absolutely on top of the  component.
-     - **Why fix this issue and what will be achieved with the fix?**: To provide the polished, immersive viewing experience the user has explicitly requested, matching Stremio's functionality.
+        1. Re-apply the  style to the  in .
+        2. Ensure  is also present in the .
+        3. Explain to the user that this was the correct fix, but the previous crash was an unrelated native issue.
+     - **Why fix this issue and what will be achieved with the fix?**: Restores correct visual feedback for focused items.
      - **Status**:  NOT STARTED
+     - **Is recurring issue?** Y
+     - **Should Test frontend/backend/both after fix?**: frontend
+     - **Blocked on other issue**: None.
+  - Issue 3: 
+     - **Description**: A new regression reported by the user: posters go black when focused.
+     - **Attempted fixes**: None. This issue was mentioned in the user's last feedback but not yet addressed.
+     - **Next debug checklist**:
+        1. Examine .
+        2. Check the  style. It applies a  and a . This background color might be obscuring the image.
+        3. The style should primarily be  and . The  should be very subtle or removed if it's causing the image to be hidden.
+     - **Why fix this issue and what will be achieved with the fix?**: Fixes a significant visual bug in the core UI.
+     - **Status**:  NOT STARTED
+     - **Is recurring issue?** N
+     - **Should Test frontend/backend/both after fix?**: frontend
+     - **Blocked on other issue**: None.
+  - Issue 4: 
+     - **Description**: Navigating from the username to the password field on the login screen requires two D-pad down presses.
+     - **Attempted fixes**: This is a long-standing issue that has not been specifically addressed.
+     - **Next debug checklist**:
+        1. In , investigate the interaction between the  wrappers and the  components.
+        2. Use  props to explicitly link the username field to the password field for TV navigation.
+     - **Why fix this issue and what will be achieved with the fix?**: Improves login screen usability on TV devices.
+     - **Status**:  NOT STARTED
+     - **Is recurring issue?** Y
+     - **Should Test frontend/backend/both after fix?**: frontend
+     - **Blocked on other issue**: None.
+  - Issue 5: 
+     - **Description**: The user feels the app navigation is choppy and hesitant compared to Stremio.
+     - **Attempted fixes**: The agent implemented  which improved horizontal scrolling smoothness, but overall app navigation might still be slow.
+     - **Next debug checklist**:
+        1. Review  implementations to ensure they are fully optimized (e.g., using , correct ).
+        2. Check for heavy computations or state updates during screen transitions.
+     - **Why fix this issue and what will be achieved with the fix?**: A smoother, more professional user experience.
+     - **Status**:  IN PROGRESS
      - **Is recurring issue?** Y
      - **Should Test frontend/backend/both after fix?**: frontend
      - **Blocked on other issue**: None.
 
 **In progress Task List**:
-  - Task 1:  Complete Search from Tags Feature (P0)
-     - **Where to resume**: The  file is currently a placeholder. It needs to be implemented to:
-        1. Receive the  parameter from the navigation.
-        2. Use the  to call the existing backend search endpoint ().
-        3. Display the search results in a grid, similar to the category page.
-     - **What will be achieved with this?**: Users will be able to click on a genre, actor, or director on the details page and see a list of related content.
-     - **Status**:  IN PROGRESS
-     - **Should Test frontend/backend/both after fix?**: frontend
-     - **Blocked on something**: None
+- None.
 
 **Upcoming and Future Tasks**
 - **Upcoming Tasks:**
-    - **Task 1: Guide user to build a standalone APK (P1)**
-        - **Description:** The user has reported issues with Expo Go. Building an APK via EAS (An Expo user account is required to proceed.
-
-Log in to EAS with email or username (exit and run eas login --help to see other login options)
-Input is required, but stdin is not readable. Failed to display prompt: Email or username) will provide a reliable testing method, especially for the Fire Stick. The  file is already configured.
-    - **Task 2: Implement Continue Watching Section (P2)**
-        - **Description:** Add a Continue Watching row to the Discover page, which requires tracking user watch progress.
-    - **Task 3: Implement Add/Remove User in Admin Panel (P2)**
-        - **Description:** Make the user management screen functional for the 'choyt' admin user.
+    - P0: Fix native splash screen and icon issues.
+    - P1: Fix poster clipping on Discover page.
+    - P2: Fix posters turning black on focus.
 - **Future Tasks:**
-    - **Task 4: Re-evaluate stream pre-filtering on Discover page (P2)**
-        - **Description:** The user wants content without streams to be hidden. This was reverted due to performance. Once the app is stable on an APK, this could be revisited, perhaps with a more optimized background process on the backend.
+    - P3: Fix login screen D-pad navigation.
+    - P3: Further investigate and improve navigation choppiness.
+    - Investigate and fix slow stream loading times.
 
 **Completed work in this session**
-- **Adult Addon Integration**:
-  - Successfully installed and configured four adult content addons (OnlyPorn, Porn Tube, Porn+, Porn).
-  - Backend  was heavily modified to handle various addon quirks:
-    - Added fallback manifests for addons without a standard .
-    - Implemented logic to handle URL-based content IDs from the OnlyPorn addon.
-    - Implemented a web scraper in Python () to extract direct MP4 and HLS stream links from RedTube pages, making them playable in-app.
-    - Filtered out empty/invalid catalog items from the Porn+ addon.
-    - Updated discover logic to show each catalog from an addon as a separate row (e.g., OnlyPorn: Eporner, OnlyPorn: xhamster).
-- **See All & Infinite Scroll**:
-  - Created a new page  to display all content for a category.
-  - Implemented a robust infinite scroll on this page using  that loads content continuously as the user scrolls.
-  - Created a dedicated backend endpoint  that supports pagination ( parameter) to feed the infinite scroll.
-  - Fixed numerous bugs to make infinite scroll work for *all* categories (both porn and regular addons) by correcting naming mismatches and state management issues.
-- **UI/UX Enhancements**:
-  - Fixed the Unknown Title and missing artwork issue on the details page by passing  and  as navigation parameters from the discover/category pages.
-  - Removed the scrollbar indicator from the category page's grid view as requested.
-- **Bug Fixes**:
-  - Fixed a critical frontend routing bug caused by addons using full URLs as content IDs by implementing .
-  - Removed broken/unreliable addons (Porn) from the user's installed list.
+- **Fixed Fire Stick Crash**: Resolved a critical, recurring crash-on-launch by guiding the user to regenerate their local  folder, which had become corrupted.
+- **TV Focus Overhaul**: Replaced unreliable focus styling with a robust  + / pattern across , , and .
+- **Search Page Redesign**: Completely changed the  layout from a grid to horizontal scrolling  components for Movies and Series, as requested by the user.
+- **Improved Scrolling**: Implemented programmatic  in  to ensure smooth, one-item-at-a-time horizontal scrolling with D-pad navigation.
+- **Deduplication**: Added logic to the search page to filter out duplicate results.
 
 **Earlier issues found/mentioned but not fixed**
-   - Issue 1: Subtitle (CC) functionality remains broken.
-   - Issue 2: The video player UI has not been updated with custom, fading controls.
+- Slow stream loading times. This has been mentioned by the user but consistently deferred in favor of UI fixes.
 
 **Known issue recurrence from previous fork**
-  - Not applicable for this summary.
+  - **Native Build/Theme Issues**: Manual edits to the user's local  XML files are extremely risky and led to a corrupted state that was hard to debug. The problem was a theme incompatibility with the Fire Stick's older Android version. The final resolution was to reset the  folder.
+  - **Recurrence count**: Multiple build failures and one persistent crash over ~50 messages.
+  - **Status**: RESOLVED (by resetting), but the original goal (custom splash) is now pending again.
+  Note: The next agent must be extremely careful when guiding the user through native file modifications. A clean reset (env: load .env
+env: export EXPO_TUNNEL_SUBDOMAIN EXPO_PACKAGER_HOSTNAME EXPO_PUBLIC_BACKEND_URL
+› It's recommended to commit all changes before proceeding in case you want to revert generated changes.
+- Clearing android, ios
+✔ Cleared android, ios code
+- Creating native directories (./ios and ./android)
+✔ Created native directories
+- Updating package.json
+✔ Updated package.json
+- Running prebuild
+- Running prebuild
+✔ Finished prebuild
+- Installing CocoaPods...
+✔ Skipped installing CocoaPods because operating system is not on macOS.) is the best escape hatch if things go wrong.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Frontend:** React Native, Expo, Expo Router, TypeScript, Zustand.  for infinite scroll.
-- **Backend:** FastAPI, Python,  for web scraping stream links.
-- **Streaming:** Now supports Torrents, direct HLS, direct MP4, and scraped HLS/MP4 links.
-- **State Management:** Zustand for global state. Navigation params () are used heavily for passing data between screens.
-- **API Design:** New paginated endpoint  for infinite scroll. Routes updated to handle URL-based IDs ().
+- **TV Focus Management**: The key takeaway is that  is unreliable on Fire Stick. The correct and robust pattern is to use component-level state with  and  handlers: . This was implemented in reusable  components.
+- **Programmatic Scrolling for TV**: For smooth D-pad navigation in a , it's necessary to get a  to the list and use  inside the  callback of the list items.
+- **Native Android Debugging (Remote)**: The agent successfully guided the user to connect to their Fire Stick via  over the network, retrieve  crash logs, and analyze them to find a  ().
+- **Native Project Corruption**: The main lesson from the long crash-debugging session is that repeated, incorrect manual edits to native XML files (, etc.) can corrupt the build state. The ultimate fix was to delete the  folder and regenerate it with env: load .env
+env: export EXPO_TUNNEL_SUBDOMAIN EXPO_PACKAGER_HOSTNAME EXPO_PUBLIC_BACKEND_URL
+› It's recommended to commit all changes before proceeding in case you want to revert generated changes.
+- Clearing android, ios
+✔ Cleared android, ios code
+- Creating native directories (./ios and ./android)
+✔ Created native directories
+- Updating package.json
+✔ Updated package.json | no changes
+- Running prebuild
+- Running prebuild
+✔ Finished prebuild
+- Installing CocoaPods...
+✔ Skipped installing CocoaPods because operating system is not on macOS..
 
 **key DB schema**
-  - **users:** 
-  - **addons:**  (manifestUrl for configured addons is now important).
-  - **library:** 
+- No changes.
 
 **changes in tech stack**
-- **** and **** were added to the backend () to support web scraping for stream extraction.
+- No changes.
 
 **All files of reference**
-- ** (Critical, Modified)**: Now receives  and  via params. Has new clickable  pills for Genre/Cast/Director that navigate to the search page.
-- ** (New, Core Feature)**: The See All page. Contains the  and logic for infinite scrolling.
-- ** (New, Incomplete)**: A placeholder file that needs to be implemented to show search results.
-- ** (Critical, Heavily Modified)**: Contains the new  endpoint, logic for scraping RedTube streams, handling for URL-based content IDs, and fixes for addon catalog naming.
-- ** (Modified)**: Updated to use the  prop and pass data to the details page.
-- ** (Unstable)**: Contains the unverified fix for the subtitle issue using URL params. The custom UI has not been implemented.
+- : **JUST REGENERATED**. The source of the Fire Stick crash. The original goal of customizing the splash screen in here is now pending again.
+- : **NEEDS FIX**. The fix for poster clipping () was reverted during crash debugging and needs to be re-applied.
+- : **NEEDS FIX**. Likely has a styling issue causing focused posters to turn black.
+- : **MODIFIED**. Was completely rewritten to use a row-based layout.
+- : **MODIFIED**. Was completely rewritten to use reliable focus handling.
 
 **Areas that need refactoring**:
-- ****: Remains the highest priority for refactoring/rewriting to fix subtitles and implement the custom UI. The current code is a patchwork of failed attempts.
+- The native Android configuration ( folder) needs to be properly set up for the splash screen and icons in a way that is compatible with the Fire Stick and doesn't corrupt the build.
 
 **key api endpoints**
-- : Fetches a limited set of content for the main screen.
-- : Heavily modified to handle torrents, direct URLs, and scraped URLs.
-- : **(New)** Fetches paginated content for the See All infinite scroll page.
-- : Uninstalls an addon.
-- : Installs an addon.
+- No changes.
 
 **Critical Info for New Agent**
-1.  **Finish the Search from Tags feature first.** The user's last request was to make genre/cast/director tags clickable. The UI is done on the details page, but you need to implement the logic in  to fetch and display the search results.
-2.  **IMMEDIATELY pivot to the original critical tasks after.** The CC/Subtitle feature and the Custom Player UI are long-overdue, high-priority user requests. They are completely broken/unimplemented.
-3.  **The CC/Subtitle fix is half-done.** The previous agent correctly switched from  to URL parameters. Your first step should be to verify this implementation works. Check that the details page sends the params and the player page receives them. This might be a quick fix.
-4.  **Infinite Scroll is working.** The complex logic for the See All page and its backend is complete and functional for all addon types. Do not change it unless necessary. The user is happy with it.
-5.  **The backend is now a complex but capable addon-aggregator.** It scrapes websites, handles multiple catalog types, and deciphers different ID formats. Be mindful of this when debugging stream-related issues.
+1.  **The Fire Stick Crash is Fixed (For Now):** The app was crashing on launch on Fire Stick due to a corrupted native  folder. The user has **deleted and regenerated this folder**, which fixed the crash.
+2.  **Native Splash/Icon Fixes are GONE:** Because the  folder was reset, all previous attempts to fix the purple spinner and cropped icon are gone. This is now a top-priority pending issue. Be very careful when instructing the user to edit these local files again.
+3.  **Focus System is Solid:** The agent successfully refactored the Details, Profile, and Search pages to use a reliable TV focus pattern ( + /). This pattern should be replicated for any new interactive components.
+4.  **Scrolling is Better but Not Perfect:** The horizontal scrolling now moves one item at a time, but the user's last feedback indicated there are still visual glitches (clipping, posters turning black on focus).
+5.  **User is Building Locally:** The agent does not have access to the user's build environment. You must provide clear, complete, and correct code/instructions for the user to implement and build on their machine.
 
 **documents created in this job**
-- 
-- 
+- None.
 
-**Last 10 User Messages and any pending user messages**
-- **User (Msg 579):** awesome. lets get rid of the scroll bar...make it so the genre and cast buttons are clickable and work with the search. have a director one as well... - **IN PROGRESS**. This is the last active task. Scrollbar was removed, clickable tags were added, but search page is not implemented.
-- **User (Msg 576-578):** Confirmed See All was working for all categories.
-- **User (Msg 562):** i guess the addons are working but when i click see all for any other then the porn ones it says no content found. - **RESOLVED**. Agent fixed the naming mismatch in the backend API.
-- **User (Msg 557):** working very well. now lets get this working for all catagories. my other addons are not populating anything. - **PARTIALLY RESOLVED**. Infinite scroll was fixed, but the other addons were not populating.
-- **User (Msg 544):** looks like its working for some stuff. for some reason only the porn addons are scrolling, not loading the artwork quick enough, and when it loads it kicks me back to the beginning... - **RESOLVED**. Agent fixed the scroll reset issue.
-- **User (Msg 521):** how else can we do this? my expo go isint working for me. - **PENDING**. User has testing issues. Agent should guide to build an APK.
-- **User (Msg 510):** i dont see a load more we shouldnt need one. the user should juet be able to keep scrolling. - **RESOLVED**. Agent implemented automatic infinite scroll.
-- **User (Msg 491):** why is my popular movies catalog only showing 47 items. i dont see anything for load more... - **RESOLVED**. Agent fixed backend logic to enable pagination for Cinemeta.
-- **User (Msg 476):** i only see 30 and cannot keep scrolling. i have this issue with multiple categories as well. - **IN PROGRESS**. User reports infinite scroll is broken.
-- **User (Msg 465):** User provides a new configured URL for the PornTube addon. - **RESOLVED**. Agent successfully installed it.
+**Last 10 User Messages and any pending HUMAN messages**
+- **User (LATEST):** still not opening on the firestick. quit fucking around and lets get this working please. - Expressing frustration after a build with modified native files still crashed. (Status: This was later resolved by regenerating the  folder).
+- **Agent:** Provided instructions to edit  as a potential fix.
+- **User:** where do i find thst file? - Asking for the path to .
+- **User:** i did option 2 as i believe it would be eaiser. running the build now. - Confirmed they edited an XML file to fix a resource mismatch.
+- **Agent:** Provided two options to fix a build error related to a missing drawable resource.
+- **User:** need to get this working..... - Reporting another build failure ().
+- **Agent:** Provided a corrected  file to fix a syntax error.
+- **User:** it failed immediatly now. what the fuck - Reporting that the build failed even faster after the  fix.
+- **Agent:** Asked for logs to diagnose the new failure.
+- **User:** still building but i see this so far. :app:processReleaseResources FAILED - Reporting a build failure in progress.
 
 **Project Health Check:**
-- Broken:
-    - Subtitle (CC) fetching and display system.
-    - Video player custom controls UI.
-- Mocked:
-    - None.
+- **Broken**:
+    - Native Splash Screen: Still shows a purple spinner.
+    - Native App Icon: Still cropped on the Fire Stick home screen.
+    - Discover Page Posters: Get clipped or turn black when focused.
+
+- **Mocked**: None.
 
 **3rd Party Integrations**
 - **webtorrent-http-server (Node.js library):** For torrent streaming.
-- **Stremio Addons:** The app now integrates with a wide variety of Stremio addons.
-    - **Metadata:** Cinemeta
-    - **Torrent Sources:** Torrentio, ThePirateBay+, Porn Tube
-    - **Subtitle Source:** OpenSubtitles v3
-    - **Catalog Sources:** Streaming Catalogs (Netflix, HBO, etc.), USA TV
-    - **Adult Content Sources:** OnlyPorn (Jaxxx), Porn Tube, Porn+ (partially working).
-- **Python Libraries:** BeautifulSoup4, lxml for web scraping.
+- **yt-dlp (Python library):** For extracting stream URLs.
+- **Stremio Addons:** Torrentio, ThePirateBay+.
+- **react-native-google-cast:** Installed.
 
 **Testing status**
-  - Testing agent used after significant changes: YES (for backend and web preview).
-  - Troubleshoot agent used after agent stuck in loop: YES.
-  - Test files created: []
-  - Known regressions: None.
+  - Testing agent used after significant changes: NO
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: None.
+  - Known regressions: Posters turning black when focused.
 
 **Credentials to test flow:**
 - **Username:** 
-- **Password:** 
+- **Password:**  (case-sensitive)
 
 **What agent forgot to execute**
-- The agent never circled back to the critical, user-requested **Closed Captions (CC) feature** after being diverted to implement adult addons. It remains completely broken.
-- The agent did not implement the **custom player UI** with fading controls, another long-standing core requirement.
-- The implementation of **Search from Tags** is incomplete. The UI is present, but the search page itself is a non-functional placeholder.
+- The agent was in a deep debugging loop on native Android files and did not get to address the new regressions the user pointed out from screenshots (e.g., posters turning black when focused). The focus was entirely on getting the app to launch without crashing.
+- The long-standing issues of choppy navigation and slow stream loading have been consistently de-prioritized.
 
 </analysis>
