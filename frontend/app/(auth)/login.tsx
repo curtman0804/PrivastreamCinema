@@ -32,8 +32,25 @@ export default function LoginScreen() {
   
   const usernameRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
+  const signInRef = useRef<View>(null);
   
   const isTV = width > height || width > 800;
+  
+  // State for TV focus handling
+  const [usernameFocused, setUsernameFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [signInFocused, setSignInFocused] = useState(false);
+
+  // Auto-focus username field on mount for TV navigation
+  useEffect(() => {
+    if (isTV) {
+      // Small delay to ensure component is mounted
+      const timer = setTimeout(() => {
+        usernameRef.current?.focus();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isTV]);
 
   useEffect(() => {
     if (isAuthenticated) {
