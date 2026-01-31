@@ -11,7 +11,7 @@ const getBaseUrl = () => {
   }
   // Production backend URL - hardcoded for standalone APK builds
   // This ensures the app always connects to the correct backend
-  return 'https://firetv-cinema.preview.emergentagent.com';
+  return 'https://agent-env-93b19ec4-6c31-499e-b77b-7138450eb3f4.preview.emergentagent.com';
 };
 
 const BASE_URL = getBaseUrl();
