@@ -186,14 +186,12 @@ const styles = StyleSheet.create({
   },
   posterFocused: {
     transform: [{ scale: 1.05 }],
-    // Consistent 2px border like tab bar
+    // Focus border - don't use borderWidth as it can clip content
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 12,
+    shadowOpacity: 0.9,
+    shadowRadius: 16,
     elevation: 12,
-    borderWidth: 2,
-    borderColor: colors.primary,
   },
   posterImage: {
     width: '100%',
