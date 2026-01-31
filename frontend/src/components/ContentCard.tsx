@@ -15,6 +15,7 @@ import { colors, posterShapes } from '../styles/colors';
 interface ContentCardProps {
   item: ContentItem | SearchResult;
   onPress: () => void;
+  onCardFocus?: () => void; // New prop for scroll handling
   size?: 'small' | 'medium' | 'large';
   posterShape?: 'poster' | 'landscape' | 'square';
   showTitle?: boolean;
@@ -27,7 +28,7 @@ export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 
   if (isTV) {
     // TV: Show 6-7 cards per row
     const numCards = 6;
-    const horizontalPadding = 80;
+    const horizontalPadding = 80; // Sidebar + padding
     const gapsBetweenCards = (numCards - 1) * 16;
     let cardWidth = (screenWidth - horizontalPadding - gapsBetweenCards) / numCards;
     return Math.min(cardWidth, 180);
@@ -42,6 +43,7 @@ export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 
 const ContentCardComponent: React.FC<ContentCardProps> = ({
   item,
   onPress,
+  onCardFocus,
   size = 'medium',
   posterShape = 'poster',
   showTitle = true,
@@ -57,6 +59,11 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const cardWidth = getCardWidth(width, isTV, size);
   const aspectRatio = posterShapes[posterShape];
   const cardHeight = cardWidth * aspectRatio;
+
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+    onCardFocus?.(); // Notify parent about focus for scrolling
+  }, [onCardFocus]);
 
   const handleLongPress = useCallback(async () => {
     const contentId = item.imdb_id || item.id;
@@ -104,7 +111,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       onPress={onPress}
       onLongPress={handleLongPress}
       delayLongPress={500}
-      onFocus={() => setIsFocused(true)}
+      onFocus={handleFocus}
       onBlur={() => setIsFocused(false)}
       style={[styles.container, { width: cardWidth }]}
       accessible={true}
@@ -144,7 +151,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           </View>
         )}
         
-        {/* Progress bar */}
+        {/* Progress bar (Stremio style) */}
         {showProgress !== undefined && showProgress > 0 && (
           <View style={styles.progressContainer}>
             <View style={[styles.progressBar, { width: `${Math.min(showProgress, 100)}%` }]} />
@@ -152,7 +159,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         )}
       </View>
       
-      {/* Title bar below poster */}
+      {/* Title bar (Stremio shows title below poster) */}
       {showTitle && (item.name || item.title) && (
         <View style={styles.titleContainer}>
           <Text style={[styles.title, isTV && styles.titleTV]} numberOfLines={2}>
@@ -176,18 +183,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: colors.backgroundLight,
     position: 'relative',
-    borderWidth: 2,
-    borderColor: 'transparent',
   },
   posterFocused: {
     transform: [{ scale: 1.05 }],
-    borderColor: colors.primary,
-    // Subtle glow effect
+    // Consistent 2px border like tab bar
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
+    elevation: 12,
+    borderWidth: 2,
+    borderColor: colors.primary,
   },
   posterImage: {
     width: '100%',
