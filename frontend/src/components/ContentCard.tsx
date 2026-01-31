@@ -113,7 +113,11 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       delayLongPress={500}
       onFocus={handleFocus}
       onBlur={() => setIsFocused(false)}
-      style={[styles.container, { width: cardWidth }]}
+      style={[
+        styles.container, 
+        { width: cardWidth },
+        isFocused && styles.containerFocused,
+      ]}
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={item.name || item.title || 'Content'}
@@ -122,7 +126,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       <View style={[
         styles.posterContainer,
         { height: cardHeight },
-        isFocused && styles.posterFocused,
       ]}>
         <Image
           source={{ uri: item.poster }}
