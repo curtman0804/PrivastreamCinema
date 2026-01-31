@@ -181,6 +181,19 @@ const styles = StyleSheet.create({
     marginRight: 16,
     marginBottom: 8,
   },
+  containerFocused: {
+    transform: [{ scale: 1.08 }],
+    // Visible focus border around entire card
+    borderWidth: 3,
+    borderColor: colors.primary,
+    borderRadius: 6,
+    // Glow effect
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 16,
+    elevation: 12,
+  },
   posterContainer: {
     borderRadius: 4,
     overflow: 'hidden',
