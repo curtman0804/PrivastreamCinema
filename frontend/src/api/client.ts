@@ -809,7 +809,7 @@ export const api = {
     getVideoUrl: (infoHash: string, fileIdx?: number): string => {
       // Return the full URL for the video stream with optional fileIdx
       // Use the hardcoded backend URL for mobile builds
-      const baseUrl = Platform.OS === 'web' ? '' : 'https://vidflow-95.preview.emergentagent.com';
+      const baseUrl = Platform.OS === 'web' ? '' : 'https://firetv-cinema.preview.emergentagent.com';
       const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
       return `${baseUrl}/api/stream/video/${infoHash}${params}`;
     },
