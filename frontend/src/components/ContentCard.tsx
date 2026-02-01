@@ -183,39 +183,32 @@ const styles = StyleSheet.create({
   container: {
     marginRight: 16,
     marginBottom: 8,
-    // No focus styling on container - only on poster
   },
   posterContainer: {
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: 'visible', // Allow border/shadow to show
     backgroundColor: colors.backgroundLight,
     position: 'relative',
   },
   posterFocused: {
-    // Stremio style: box-shadow around poster only
-    // Using border + shadow for the glow effect
-    borderWidth: 2,
+    // Stremio style: border around poster
+    borderWidth: 3,
     borderColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
-    elevation: 8,
+    borderRadius: 6,
   },
   imageWrapper: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    width: '100%',
+    height: '100%',
+    borderRadius: 4,
+    overflow: 'hidden',
   },
   imageWrapperFocused: {
-    // Stremio style: scale the image on focus
-    transform: [{ scale: 1.05 }],
+    // No transform - it causes rendering issues on Fire Stick
   },
   posterImage: {
     width: '100%',
     height: '100%',
+    backgroundColor: colors.backgroundLight,
   },
   placeholder: {
     ...StyleSheet.absoluteFillObject,
