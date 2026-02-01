@@ -347,10 +347,28 @@ export default function DetailsScreen() {
       console.log('[DETAILS] Error saving to AsyncStorage:', e);
     }
     
+    // REMOVED: External player launch for streams with externalUrl/requiresWebView
+    // All streams now play in the internal player, like Stremio does
+    // The user can still manually open in external player via the player controls button
+    
+    // Handle external URLs - route them to the internal player instead of external browser
     if (stream.externalUrl || stream.requiresWebView) {
-      const externalUrl = stream.externalUrl || stream.url;
-      Linking.openURL(externalUrl).catch(err => {
-        console.error('Error opening URL:', err);
+      const streamUrl = stream.externalUrl || stream.url;
+      console.log('[DETAILS] Playing external URL in internal player:', streamUrl);
+      router.push({
+        pathname: '/player',
+        params: { 
+          directUrl: streamUrl,
+          title: contentTitle,
+          isLive: 'false',
+          contentType: cType,
+          contentId: subtitleContentId,
+          backdrop: content?.background || '',
+          poster: content?.poster || '',
+          logo: content?.logo || '',
+          ...nextEpisodeData,
+          ...resumeData,
+        },
       });
       return;
     }
