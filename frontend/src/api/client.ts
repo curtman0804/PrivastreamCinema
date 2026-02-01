@@ -209,45 +209,63 @@ export const api = {
     },
     getAllStreams: async (type: string, id: string): Promise<{ streams: Stream[] }> => {
       console.log(`[STREAMS] ========== Fetching streams for ${type}/${id} ==========`);
+      const startTime = Date.now();
       
-      // Fetch from backend first - encode ID to handle URLs and special characters
+      // Encode ID to handle URLs and special characters
       const encodedId = encodeURIComponent(id);
+      
+      // PARALLEL FETCHING: Fetch from all sources simultaneously for speed
+      // Using Promise.allSettled so one failure doesn't block others
+      const [backendResult, torrentioResult, tpbResult] = await Promise.allSettled([
+        // Backend fetch
+        apiClient.get(`/api/streams/${type}/${encodedId}`).then(r => r.data.streams || []),
+        // Torrentio client-side fetch
+        api.addons.fetchTorrentioStreams(type, id),
+        // TPB+ client-side fetch
+        api.addons.fetchTPBStreams(type, id),
+      ]);
+      
+      console.log(`[STREAMS] Parallel fetch completed in ${Date.now() - startTime}ms`);
+      
+      // Collect all streams from successful fetches
       let allStreams: Stream[] = [];
+      const existingHashes = new Set<string>();
       
-      try {
-        const response = await apiClient.get(`/api/streams/${type}/${encodedId}`);
-        allStreams = response.data.streams || [];
-        console.log(`[STREAMS] Backend returned ${allStreams.length} streams`);
-      } catch (e) {
-        console.log(`[STREAMS] Backend fetch failed:`, e);
+      // Add backend streams
+      if (backendResult.status === 'fulfilled' && backendResult.value.length > 0) {
+        console.log(`[STREAMS] Backend: ${backendResult.value.length} streams`);
+        allStreams = backendResult.value;
+        backendResult.value.forEach((s: Stream) => {
+          if (s.infoHash) existingHashes.add(s.infoHash.toLowerCase());
+        });
+      } else {
+        console.log(`[STREAMS] Backend: failed or empty`);
       }
       
-      // CLIENT-SIDE FETCHING: Bypass Cloudflare by fetching directly from the app
-      // This works because mobile apps and browsers appear as regular users, not servers
-      
-      // Fetch from Torrentio (supports movie, series, anime with tt/kitsu prefixes)
-      try {
-        const torrentioStreams = await api.addons.fetchTorrentioStreams(type, id);
-        console.log(`[STREAMS] Torrentio client-side: ${torrentioStreams.length} streams`);
-        if (torrentioStreams.length > 0) {
-          const existingHashes = new Set(allStreams.map((s: Stream) => s.infoHash?.toLowerCase()).filter(Boolean));
-          const newStreams = torrentioStreams.filter((s: Stream) => 
-            s.infoHash && !existingHashes.has(s.infoHash.toLowerCase())
-          );
-          console.log(`[STREAMS] Adding ${newStreams.length} new Torrentio streams`);
-          allStreams = [...allStreams, ...newStreams];
-        }
-      } catch (e: any) {
-        console.log(`[STREAMS] Torrentio client-side error: ${e.message || e}`);
+      // Add Torrentio streams (deduplicated)
+      if (torrentioResult.status === 'fulfilled' && torrentioResult.value.length > 0) {
+        const newStreams = torrentioResult.value.filter((s: Stream) => 
+          s.infoHash && !existingHashes.has(s.infoHash.toLowerCase())
+        );
+        console.log(`[STREAMS] Torrentio: ${torrentioResult.value.length} total, ${newStreams.length} new`);
+        newStreams.forEach((s: Stream) => {
+          if (s.infoHash) existingHashes.add(s.infoHash.toLowerCase());
+        });
+        allStreams = [...allStreams, ...newStreams];
+      } else {
+        console.log(`[STREAMS] Torrentio: failed or empty`);
       }
       
-      // Fetch from ThePirateBay+ (supports movie, series with tt prefix)
-      try {
-        const tpbStreams = await api.addons.fetchTPBStreams(type, id);
-        console.log(`[STREAMS] TPB+ client-side: ${tpbStreams.length} streams`);
-        if (tpbStreams.length > 0) {
-          const existingHashes = new Set(allStreams.map((s: Stream) => s.infoHash?.toLowerCase()).filter(Boolean));
-          const newStreams = tpbStreams.filter((s: Stream) => 
+      // Add TPB+ streams (deduplicated)
+      if (tpbResult.status === 'fulfilled' && tpbResult.value.length > 0) {
+        const newStreams = tpbResult.value.filter((s: Stream) => 
+          s.infoHash && !existingHashes.has(s.infoHash.toLowerCase())
+        );
+        console.log(`[STREAMS] TPB+: ${tpbResult.value.length} total, ${newStreams.length} new`);
+        allStreams = [...allStreams, ...newStreams];
+      } else {
+        console.log(`[STREAMS] TPB+: failed or empty`);
+      } 
             s.infoHash && !existingHashes.has(s.infoHash.toLowerCase())
           );
           console.log(`[STREAMS] Adding ${newStreams.length} new TPB+ streams`);
