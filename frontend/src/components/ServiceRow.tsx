@@ -156,6 +156,7 @@ export const MetaRow = ServiceRow;
 const styles = StyleSheet.create({
   container: {
     marginBottom: 32,
+    overflow: 'visible',
   },
   header: {
     flexDirection: 'row',
