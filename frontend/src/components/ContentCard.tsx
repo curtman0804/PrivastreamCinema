@@ -15,7 +15,7 @@ import { colors, posterShapes } from '../styles/colors';
 interface ContentCardProps {
   item: ContentItem | SearchResult;
   onPress: () => void;
-  onCardFocus?: () => void; // New prop for scroll handling
+  onCardFocus?: () => void;
   size?: 'small' | 'medium' | 'large';
   posterShape?: 'poster' | 'landscape' | 'square';
   showTitle?: boolean;
@@ -26,14 +26,12 @@ interface ContentCardProps {
 
 export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 'medium') => {
   if (isTV) {
-    // TV: Show 6-7 cards per row
     const numCards = 6;
-    const horizontalPadding = 80; // Sidebar + padding
+    const horizontalPadding = 80;
     const gapsBetweenCards = (numCards - 1) * 16;
     let cardWidth = (screenWidth - horizontalPadding - gapsBetweenCards) / numCards;
     return Math.min(cardWidth, 180);
   } else {
-    // Mobile: 3 cards per row
     const baseWidth = Math.min(screenWidth, 500);
     const CARD_WIDTH = (baseWidth - 48) / 3;
     return size === 'small' ? CARD_WIDTH * 0.85 : size === 'large' ? CARD_WIDTH * 1.15 : CARD_WIDTH;
@@ -62,7 +60,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
-    onCardFocus?.(); // Notify parent about focus for scrolling
+    onCardFocus?.();
   }, [onCardFocus]);
 
   const handleLongPress = useCallback(async () => {
@@ -113,28 +111,32 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       delayLongPress={500}
       onFocus={handleFocus}
       onBlur={() => setIsFocused(false)}
-      style={[
-        styles.container, 
-        { width: cardWidth },
-        isFocused && styles.containerFocused,
-      ]}
+      style={[styles.container, { width: cardWidth }]}
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={item.name || item.title || 'Content'}
       accessibilityHint="Long press to add or remove from library"
     >
+      {/* Poster Container - Focus border only around this */}
       <View style={[
         styles.posterContainer,
         { height: cardHeight },
+        isFocused && styles.posterFocused,
       ]}>
-        <Image
-          source={{ uri: item.poster }}
-          style={styles.posterImage}
-          contentFit="cover"
-          transition={150}
-          recyclingKey={item.id || item.imdb_id}
-          cachePolicy="memory-disk"
-        />
+        {/* Image with scale transform on focus - Stremio style */}
+        <View style={[
+          styles.imageWrapper,
+          isFocused && styles.imageWrapperFocused,
+        ]}>
+          <Image
+            source={{ uri: item.poster }}
+            style={styles.posterImage}
+            contentFit="cover"
+            transition={150}
+            recyclingKey={item.id || item.imdb_id}
+            cachePolicy="memory-disk"
+          />
+        </View>
         
         {/* Placeholder when no poster */}
         {!item.poster && (
@@ -154,15 +156,16 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           </View>
         )}
         
-        {/* Progress bar (Stremio style) */}
+        {/* Progress bar (Stremio style - inside poster at bottom) */}
         {showProgress !== undefined && showProgress > 0 && (
           <View style={styles.progressContainer}>
+            <View style={styles.progressBackground} />
             <View style={[styles.progressBar, { width: `${Math.min(showProgress, 100)}%` }]} />
           </View>
         )}
       </View>
       
-      {/* Title bar (Stremio shows title below poster) */}
+      {/* Title bar - OUTSIDE poster, no focus styling */}
       {showTitle && (item.name || item.title) && (
         <View style={styles.titleContainer}>
           <Text style={[styles.title, isTV && styles.titleTV]} numberOfLines={2}>
@@ -180,19 +183,7 @@ const styles = StyleSheet.create({
   container: {
     marginRight: 16,
     marginBottom: 8,
-  },
-  containerFocused: {
-    transform: [{ scale: 1.08 }],
-    // Visible focus border around entire card
-    borderWidth: 3,
-    borderColor: colors.primary,
-    borderRadius: 6,
-    // Glow effect
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 16,
-    elevation: 12,
+    // No focus styling on container - only on poster
   },
   posterContainer: {
     borderRadius: 4,
@@ -201,13 +192,26 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   posterFocused: {
-    transform: [{ scale: 1.05 }],
-    // Focus border - don't use borderWidth as it can clip content
+    // Stremio style: box-shadow around poster only
+    // Using border + shadow for the glow effect
+    borderWidth: 2,
+    borderColor: colors.primary,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  imageWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  imageWrapperFocused: {
+    // Stremio style: scale the image on focus
+    transform: [{ scale: 1.05 }],
   },
   posterImage: {
     width: '100%',
@@ -229,16 +233,26 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     position: 'absolute',
-    bottom: 0,
+    bottom: 12,
+    left: 12,
+    right: 12,
+    height: 4,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBackground: {
+    position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
-    height: 4,
-    backgroundColor: colors.progressBackground,
+    bottom: 0,
+    backgroundColor: colors.textPrimary,
+    opacity: 0.3,
   },
   progressBar: {
     height: '100%',
-    backgroundColor: colors.progressFill,
-    borderRadius: 2,
+    backgroundColor: colors.textPrimary,
+    borderRadius: 4,
   },
   titleContainer: {
     paddingTop: 8,
