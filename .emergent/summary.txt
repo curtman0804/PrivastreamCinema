@@ -1,4 +1,5 @@
 <analysis>
+
 <original_problem_statement>
 Build a native Android streaming app called PrivastreamCinema (a Stremio clone).
 
@@ -11,168 +12,120 @@ PRODUCT REQUIREMENTS:
 - Admin section for user 'choyt'.
 
 Recent User Requests from this session:
-- Fix numerous UI/UX issues on Fire Stick, including:
-    - No visible focus selector on many elements (details page, search page, profile).
-    - Horizontal scrolling on Discover/Search pages skipping multiple items instead of moving one-by-one.
-    - Search results showing as a grid with very large posters. The user wants it changed to horizontal scrolling rows like the Discover page.
-    - Duplicate items appearing in search results.
-    - The focus selector on posters being clipped/cut off.
-- Fix a critical and recurring app crash on launch, specific to the Fire Stick device (the app worked on a phone).
-- Fix native UI issues:
-    - A purple loading spinner appears when the app first opens.
-    - The splash screen artwork and app icon are cropped in a circle.
+- Fix login page focus; it should be visible on load and allow D-pad navigation.
+- Fix backend URL issues in the forked environment causing 404 errors.
+- Fix focus selector on posters to only highlight the poster image, not the title (like Stremio).
+- Investigate and fix why posters for the USAATV addon are not showing.
 - Fix a regression where focused posters turn black.
+- Implement a custom, full-screen splash screen to bypass the default circular crop on Android TV (like Stremio).
+- Fix multiple app crashes on launch related to the new splash screen implementation.
+- Fix a build error in .
+- Improve choppy navigation and slow stream finding.
+- Investigate and fix a critical bug where searching for a movie (Mercy) returned pornographic streams.
+- Ensure all video streams play inside the app's player, not an external one.
 </original_problem_statement>
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application has undergone significant UI and UX improvements for TV navigation. The focus system has been completely overhauled on the Details, Profile, and Search pages to use a robust  + / pattern, which provides a reliable tan focus border on interactive elements.
+The application now has a completely custom native Android splash screen that successfully bypasses the default circular crop on Fire Stick, displaying a full-screen logo on a black background. This was a complex task involving the creation of a custom , corresponding layout and style XML files, and debugging several native crashes.
 
-The Search page layout has been redesigned from a grid to horizontal scrolling rows (using the  component), matching the user's request. The horizontal scrolling logic in  has also been improved to scroll one item at a time using , creating a smoother, Stremio-like experience.
+Significant performance optimizations have been implemented. Scrolling on the Discover page is smoother due to heavy  optimizations in . Stream loading is now much faster as  was refactored to fetch from all addon sources in parallel using  instead of sequentially.
 
-A major, recurring crash-on-launch issue specific to the Fire Stick was resolved by guiding the user to delete and regenerate the native  project folder, which had become corrupted after numerous manual edits.
+Critical bugs have been fixed, including a keyword filter in  to block adult content from appearing in stream results and a fix in  to prevent posters from turning black on focus. The login page now correctly auto-focuses the username field and supports D-pad navigation on TV.
 
 **Last working item**:
-    - Last item agent was working: The agent was debugging a complex native build and crash issue on the user's Fire Stick. After many failed attempts to fix individual XML files, the agent correctly identified the native project was in a corrupted state and guided the user to delete and regenerate the  folder. This resolved the crash.
-    - Status: USER VERIFICATION PENDING
+    - Last item agent was working: The user reported that some streams attempt to open in an external player. The agent began investigating this by locating the in-app player file at  and identifying a function named . The agent has not yet determined what triggers this function or implemented a fix.
+    - Status: IN PROGRESS
     - Agent Testing Done: N
-    - Which testing method agent to use? The user is performing all builds and testing on their local machine and Fire Stick. The next agent must provide complete, correct files and instructions for the user.
-    - User Testing Done: Y (User confirmed the app no longer crashes but other issues remain)
+    - Which testing method agent to use? The next agent must provide complete file changes for the user to test locally on their Fire Stick. No automated testing is possible for this flow.
+    - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  - Issue 1: Native Splash Screen and Icon issues (P0)
-  - Issue 2: Focused posters are clipped/disappear on Discover page (P1)
-  - Issue 3: Posters turn black when focused (P2)
-  - Issue 4: Login screen D-pad navigation is not intuitive (P3)
-  - Issue 5: Navigation is choppy and hesitant (P3)
+  - Issue 1: Force all streams to use the in-app player (P0)
+  - Issue 2: USAATV addon posters are not displaying (P1)
+  - Issue 3: Cropped artwork on the movie/series detail page (P2)
   
   Issues Detail:
   - Issue 1: 
-     - **Description**: After resetting the  folder to fix the crash, the original native UI bugs have returned. The initial loading spinner is the system default purple, and the splash/app icon is cropped.
-     - **Attempted fixes**: Numerous manual edits to , , and  led to a corrupted build state and a persistent crash. The final fix was to reset the  folder, which wiped out all attempted fixes.
+     - **Description**: The user wants all streams to play within the application. Some streams are currently trying to launch an external player.
+     - **Attempted fixes**: The agent has identified the  function within  as a likely culprit but has not yet taken action.
      - **Next debug checklist**:
-        1. Acknowledge that the user's  folder is now clean.
-        2. Re-attempt the native fixes, but this time provide a complete, verified set of instructions and files to avoid corrupting the user's local project again.
-        3. Create  to define a layer-list for the splash.
-        4. Create/modify  to define  (#0F0F0F) and  (#B8A05C).
-        5. Modify  to correctly apply these colors and drawables to the splash theme without using attributes that are incompatible with the Fire Stick's Android version.
-        6. Guide the user to place the splash image asset () in the correct  folders.
-     - **Why fix this issue and what will be achieved with the fix?**: Provides a polished, branded launch experience and resolves a major source of user frustration.
+        1. In , analyze the logic that calls .
+        2. Identify the stream properties (,  format, etc.) that trigger this external playback.
+        3. Modify the logic to always route streams to the internal player component ( or similar) within , even if they have hints suggesting external playback.
+     - **Why fix this issue and what will be achieved with the fix?**: This is a core user experience requirement to keep the user within a seamless, branded environment, matching the behavior of Stremio.
+     - **Status**:  IN PROGRESS
+     - **Is recurring issue?** N
+     - **Should Test frontend/backend/both after fix?**: frontend (User build)
+     - **Blocked on other issue**: None
+  - Issue 2: 
+     - **Description**: In the Discover page, the row for the USAATV addon does not show any posters for the channels, even though the titles appear.
+     - **Attempted fixes**: The agent verified that the backend is successfully fetching catalog data for this addon and that the poster URLs are valid and accessible via . The issue is likely on the frontend.
+     - **Next debug checklist**:
+        1. Add  statements within  to inspect the  prop specifically for USAATV channels.
+        2. Verify that  contains the correct URL when the component renders.
+        3. Check the  component for any errors during loading of these specific URLs in the device logs (). The issue could be related to caching, image format, or a subtle bug in how the  handles items of type tv or channel.
+     - **Why fix this issue and what will be achieved with the fix?**: This will make the USAATV addon usable and provide a complete UI.
      - **Status**:  NOT STARTED
      - **Is recurring issue?** Y
      - **Should Test frontend/backend/both after fix?**: frontend (User build)
-     - **Blocked on other issue**: None.
-  - Issue 2: 
-     - **Description**: On the Discover page, when a poster is focused, it scales up, but the top of the focus border and the poster itself get clipped by the container.
-     - **Attempted fixes**: The agent added  to the 's  and  to the 's  in . The user confirmed the app still crashed after this, but it was later determined the crash was due to the corrupted  folder. The  fix was reverted during the crash debugging.
-     - **Next debug checklist**:
-        1. Re-apply the  style to the  in .
-        2. Ensure  is also present in the .
-        3. Explain to the user that this was the correct fix, but the previous crash was an unrelated native issue.
-     - **Why fix this issue and what will be achieved with the fix?**: Restores correct visual feedback for focused items.
-     - **Status**:  NOT STARTED
-     - **Is recurring issue?** Y
-     - **Should Test frontend/backend/both after fix?**: frontend
-     - **Blocked on other issue**: None.
+     - **Blocked on other issue**: None
   - Issue 3: 
-     - **Description**: A new regression reported by the user: posters go black when focused.
-     - **Attempted fixes**: None. This issue was mentioned in the user's last feedback but not yet addressed.
+     - **Description**: The user noted that the artwork on the media detail page is cropped.
+     - **Attempted fixes**: None. This issue was mentioned but not investigated.
      - **Next debug checklist**:
-        1. Examine .
-        2. Check the  style. It applies a  and a . This background color might be obscuring the image.
-        3. The style should primarily be  and . The  should be very subtle or removed if it's causing the image to be hidden.
-     - **Why fix this issue and what will be achieved with the fix?**: Fixes a significant visual bug in the core UI.
+        1. View the file .
+        2. Examine the styling of the main background/backdrop  component.
+        3. Check the  (or ) property. It might be set to , which can cause cropping. Changing it to  might fix it, or the layout may need adjustment.
+     - **Why fix this issue and what will be achieved with the fix?**: Improves the visual presentation and polish of a key screen.
      - **Status**:  NOT STARTED
      - **Is recurring issue?** N
-     - **Should Test frontend/backend/both after fix?**: frontend
-     - **Blocked on other issue**: None.
-  - Issue 4: 
-     - **Description**: Navigating from the username to the password field on the login screen requires two D-pad down presses.
-     - **Attempted fixes**: This is a long-standing issue that has not been specifically addressed.
-     - **Next debug checklist**:
-        1. In , investigate the interaction between the  wrappers and the  components.
-        2. Use  props to explicitly link the username field to the password field for TV navigation.
-     - **Why fix this issue and what will be achieved with the fix?**: Improves login screen usability on TV devices.
-     - **Status**:  NOT STARTED
-     - **Is recurring issue?** Y
-     - **Should Test frontend/backend/both after fix?**: frontend
-     - **Blocked on other issue**: None.
-  - Issue 5: 
-     - **Description**: The user feels the app navigation is choppy and hesitant compared to Stremio.
-     - **Attempted fixes**: The agent implemented  which improved horizontal scrolling smoothness, but overall app navigation might still be slow.
-     - **Next debug checklist**:
-        1. Review  implementations to ensure they are fully optimized (e.g., using , correct ).
-        2. Check for heavy computations or state updates during screen transitions.
-     - **Why fix this issue and what will be achieved with the fix?**: A smoother, more professional user experience.
-     - **Status**:  IN PROGRESS
-     - **Is recurring issue?** Y
-     - **Should Test frontend/backend/both after fix?**: frontend
-     - **Blocked on other issue**: None.
+     - **Should Test frontend/backend/both after fix?**: frontend (User build)
+     - **Blocked on other issue**: None
 
 **In progress Task List**:
 - None.
 
 **Upcoming and Future Tasks**
 - **Upcoming Tasks:**
-    - P0: Fix native splash screen and icon issues.
-    - P1: Fix poster clipping on Discover page.
-    - P2: Fix posters turning black on focus.
+    - P0: Force In-App Player: Modify  to prevent launching external players.
+    - P1: Debug USAATV Posters: Investigate  rendering for channel items.
+    - P2: Fix Detail Page Artwork: Investigate  image styling.
 - **Future Tasks:**
-    - P3: Fix login screen D-pad navigation.
     - P3: Further investigate and improve navigation choppiness.
-    - Investigate and fix slow stream loading times.
+    - P3: Further investigate and improve stream finding latency.
 
 **Completed work in this session**
-- **Fixed Fire Stick Crash**: Resolved a critical, recurring crash-on-launch by guiding the user to regenerate their local  folder, which had become corrupted.
-- **TV Focus Overhaul**: Replaced unreliable focus styling with a robust  + / pattern across , , and .
-- **Search Page Redesign**: Completely changed the  layout from a grid to horizontal scrolling  components for Movies and Series, as requested by the user.
-- **Improved Scrolling**: Implemented programmatic  in  to ensure smooth, one-item-at-a-time horizontal scrolling with D-pad navigation.
-- **Deduplication**: Added logic to the search page to filter out duplicate results.
+- **Custom Native Splash Screen**: Implemented a legacy  to show a full-screen, non-cropped splash image on a black background, bypassing Android 12+ limitations. Fixed multiple subsequent native crashes and build errors related to this change.
+- **Critical Adult Content Filter**: Added a keyword-based filter in  to block inappropriate adult streams from appearing in search results.
+- **Performance Optimization (Scrolling & Streams)**:
+    - Heavily optimized  performance in  for smoother scrolling.
+    - Refactored stream fetching in  to use , making stream discovery significantly faster by fetching from all sources in parallel.
+- **UI/UX Bug Fixes**:
+    - **Login Page Focus:** Fixed D-pad navigation and implemented auto-focus on the username field in .
+    - **Black Poster Bug:** Fixed an issue where focused posters turned black by adjusting focus styles in .
+    - **Stremio-style Focus:** Refactored  so the focus indicator only appears around the poster image, not the entire card with the title.
+- **Environment/Build Fixes**:
+    - Resolved a critical 404 error by identifying and reverting an incorrect backend URL change.
+    - Fixed an Android build failure caused by a syntax error in .
 
 **Earlier issues found/mentioned but not fixed**
-- Slow stream loading times. This has been mentioned by the user but consistently deferred in favor of UI fixes.
+- None that are not already listed in the pending issues.
 
 **Known issue recurrence from previous fork**
-  - **Native Build/Theme Issues**: Manual edits to the user's local  XML files are extremely risky and led to a corrupted state that was hard to debug. The problem was a theme incompatibility with the Fire Stick's older Android version. The final resolution was to reset the  folder.
-  - **Recurrence count**: Multiple build failures and one persistent crash over ~50 messages.
-  - **Status**: RESOLVED (by resetting), but the original goal (custom splash) is now pending again.
-  Note: The next agent must be extremely careful when guiding the user through native file modifications. A clean reset (env: load .env
-env: export EXPO_TUNNEL_SUBDOMAIN EXPO_PACKAGER_HOSTNAME EXPO_PUBLIC_BACKEND_URL
-› It's recommended to commit all changes before proceeding in case you want to revert generated changes.
-- Clearing android, ios
-✔ Cleared android, ios code
-- Creating native directories (./ios and ./android)
-✔ Created native directories
-- Updating package.json
-✔ Updated package.json
-- Running prebuild
-- Running prebuild
-✔ Finished prebuild
-- Installing CocoaPods...
-✔ Skipped installing CocoaPods because operating system is not on macOS.) is the best escape hatch if things go wrong.
+- **Native Build/Theme Issues**: The previous fork's summary noted the risk of corrupting the  folder. This session saw multiple build failures and crashes after implementing a custom splash screen. The final resolution involved switching from  to , using a simpler theme, and disabling the conflicting  manager in . This pattern is now stable.
+- **Recurrence count**: At least 3 separate crash/build-failure cycles during this session.
+- **Status**: RESOLVED
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **TV Focus Management**: The key takeaway is that  is unreliable on Fire Stick. The correct and robust pattern is to use component-level state with  and  handlers: . This was implemented in reusable  components.
-- **Programmatic Scrolling for TV**: For smooth D-pad navigation in a , it's necessary to get a  to the list and use  inside the  callback of the list items.
-- **Native Android Debugging (Remote)**: The agent successfully guided the user to connect to their Fire Stick via  over the network, retrieve  crash logs, and analyze them to find a  ().
-- **Native Project Corruption**: The main lesson from the long crash-debugging session is that repeated, incorrect manual edits to native XML files (, etc.) can corrupt the build state. The ultimate fix was to delete the  folder and regenerate it with env: load .env
-env: export EXPO_TUNNEL_SUBDOMAIN EXPO_PACKAGER_HOSTNAME EXPO_PUBLIC_BACKEND_URL
-› It's recommended to commit all changes before proceeding in case you want to revert generated changes.
-- Clearing android, ios
-✔ Cleared android, ios code
-- Creating native directories (./ios and ./android)
-✔ Created native directories
-- Updating package.json
-✔ Updated package.json | no changes
-- Running prebuild
-- Running prebuild
-✔ Finished prebuild
-- Installing CocoaPods...
-✔ Skipped installing CocoaPods because operating system is not on macOS..
+- **Legacy Android Splash Activity**: To bypass the default circular splash screen on Android TV, a custom  (extending ) was created. It's set as the main launcher in  and uses a custom theme in  to display a full-screen image from a layout file () before launching the .
+- **Native Crash Debugging**: The key to fixing the post-splash crash was identifying the conflict between the new custom  and the  library's , which had to be disabled in .
+- **Parallel API Fetching**: Stream loading speed was drastically improved by switching from sequential  calls to  in , allowing all addon sources to be queried simultaneously.
+- ** Performance**: Scrolling smoothness was improved in  by implementing ,  with a custom comparator, , , and other standard  optimization techniques.
 
 **key DB schema**
 - No changes.
@@ -181,46 +134,50 @@ env: export EXPO_TUNNEL_SUBDOMAIN EXPO_PACKAGER_HOSTNAME EXPO_PUBLIC_BACKEND_URL
 - No changes.
 
 **All files of reference**
-- : **JUST REGENERATED**. The source of the Fire Stick crash. The original goal of customizing the splash screen in here is now pending again.
-- : **NEEDS FIX**. The fix for poster clipping () was reverted during crash debugging and needs to be re-applied.
-- : **NEEDS FIX**. Likely has a styling issue causing focused posters to turn black.
-- : **MODIFIED**. Was completely rewritten to use a row-based layout.
-- : **MODIFIED**. Was completely rewritten to use reliable focus handling.
+- : **NEEDS FIX**. Contains the logic for launching the external player which needs to be disabled.
+- : **NEEDS FIX**. The source of the cropped artwork on detail pages.
+- : **MODIFIED**. Contains the parallel stream fetching logic and the critical adult content filter.
+- : **MODIFIED**. Contains the Stremio-style focus logic and fix for the black poster bug.
+- : **MODIFIED**. Contains all the  performance optimizations.
+- : **MODIFIED**. Contains the critical fix to disable the conflicting  manager.
+- : **CREATED**. The core of the custom splash screen solution.
+- : **MODIFIED**. The entry point configuration for the custom splash screen.
+- : **MODIFIED**. Contains the custom theme for the fullscreen splash.
+- : **CREATED**. The layout for the custom splash screen.
 
 **Areas that need refactoring**:
-- The native Android configuration ( folder) needs to be properly set up for the splash screen and icons in a way that is compatible with the Fire Stick and doesn't corrupt the build.
+- None currently. The recent refactors for performance and splash screen were significant.
 
 **key api endpoints**
 - No changes.
 
 **Critical Info for New Agent**
-1.  **The Fire Stick Crash is Fixed (For Now):** The app was crashing on launch on Fire Stick due to a corrupted native  folder. The user has **deleted and regenerated this folder**, which fixed the crash.
-2.  **Native Splash/Icon Fixes are GONE:** Because the  folder was reset, all previous attempts to fix the purple spinner and cropped icon are gone. This is now a top-priority pending issue. Be very careful when instructing the user to edit these local files again.
-3.  **Focus System is Solid:** The agent successfully refactored the Details, Profile, and Search pages to use a reliable TV focus pattern ( + /). This pattern should be replicated for any new interactive components.
-4.  **Scrolling is Better but Not Perfect:** The horizontal scrolling now moves one item at a time, but the user's last feedback indicated there are still visual glitches (clipping, posters turning black on focus).
-5.  **User is Building Locally:** The agent does not have access to the user's build environment. You must provide clear, complete, and correct code/instructions for the user to implement and build on their machine.
+1.  **Custom Splash is Implemented but Fragile**: A complete custom native splash screen is now working. Be extremely cautious when editing any files in the  directory. The key files are , , and . The crash was fixed by commenting out  in .
+2.  **Performance is Now a Focus**: Significant work was done to improve scrolling and stream loading speed. Build on these patterns ( optimizations, ).
+3.  **Adult Content Filter is CRITICAL**: A keyword filter was added to  in . Do not remove this. It's a critical guard against inappropriate content.
+4.  **Backend URL is Stable**: The backend URL confusion is resolved. The correct, hardcoded URL is . Do not change this.
+5.  **User Builds Locally**: You must provide complete, copy-paste-ready files for the user to update their local project and build the APK themselves.
 
 **documents created in this job**
 - None.
 
 **Last 10 User Messages and any pending HUMAN messages**
-- **User (LATEST):** still not opening on the firestick. quit fucking around and lets get this working please. - Expressing frustration after a build with modified native files still crashed. (Status: This was later resolved by regenerating the  folder).
-- **Agent:** Provided instructions to edit  as a potential fix.
-- **User:** where do i find thst file? - Asking for the path to .
-- **User:** i did option 2 as i believe it would be eaiser. running the build now. - Confirmed they edited an XML file to fix a resource mismatch.
-- **Agent:** Provided two options to fix a build error related to a missing drawable resource.
-- **User:** need to get this working..... - Reporting another build failure ().
-- **Agent:** Provided a corrected  file to fix a syntax error.
-- **User:** it failed immediatly now. what the fuck - Reporting that the build failed even faster after the  fix.
-- **Agent:** Asked for logs to diagnose the new failure.
-- **User:** still building but i see this so far. :app:processReleaseResources FAILED - Reporting a build failure in progress.
+- **User (LATEST):** okay i have done those. i just want you to know i need this to function like stremio does. there are some things that want to take me to an external player. i need everything to play in the apps player. (Status: IN PROGRESS, agent was just starting to investigate).
+- **User:** provide the files here for me please. (Status: COMPLETED, agent provided files).
+- **User (image):** Shows a search for Mercy returning porn streams and a black poster. (Status: COMPLETED, agent fixed both issues).
+- **User:** done. i need you to go in and see what stremio does for smooth app navigation please... (Status: COMPLETED, agent implemented performance optimizations).
+- **User (image):** Shows the app working again but with choppy navigation and cropped posters. (Status: PARTIALLY COMPLETED, agent fixed cropping but choppiness is ongoing).
+- **User:** Reports a Gradle build error in . (Status: COMPLETED, agent fixed the syntax error).
+- **User (image):** Shows the splash screen working but the app crashing afterward. (Status: COMPLETED, agent fixed the crash in ).
+- **User:** splash looks better... but i cant open the app on the firestick again. (Status: COMPLETED, agent fixed the crash).
+- **User:** just want it to look like this... (provides an image for the splash screen). (Status: COMPLETED, agent used the image).
+- **User:** Asks how to download the images the agent created. (Status: COMPLETED, agent provided a Python script).
 
 **Project Health Check:**
 - **Broken**:
-    - Native Splash Screen: Still shows a purple spinner.
-    - Native App Icon: Still cropped on the Fire Stick home screen.
-    - Discover Page Posters: Get clipped or turn black when focused.
-
+    - **Player Logic**: Some streams incorrectly launch an external player.
+    - **Detail Page UI**: Artwork is cropped.
+    - **USAATV Addon**: Posters do not render.
 - **Mocked**: None.
 
 **3rd Party Integrations**
@@ -232,15 +189,14 @@ env: export EXPO_TUNNEL_SUBDOMAIN EXPO_PACKAGER_HOSTNAME EXPO_PUBLIC_BACKEND_URL
 **Testing status**
   - Testing agent used after significant changes: NO
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: None.
-  - Known regressions: Posters turning black when focused.
+  - Test files created: None. The user is performing all testing.
+  - Known regressions: None currently. Recent regressions (crash, black posters) have been fixed.
 
 **Credentials to test flow:**
 - **Username:** 
 - **Password:**  (case-sensitive)
 
 **What agent forgot to execute**
-- The agent was in a deep debugging loop on native Android files and did not get to address the new regressions the user pointed out from screenshots (e.g., posters turning black when focused). The focus was entirely on getting the app to launch without crashing.
-- The long-standing issues of choppy navigation and slow stream loading have been consistently de-prioritized.
+- The agent has not yet investigated the cropped artwork on detail page issue mentioned by the user.
 
 </analysis>
