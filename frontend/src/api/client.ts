@@ -691,9 +691,31 @@ export const api = {
             filename: filename,  // Specific episode file
             fileIdx: fileIdx,    // Index of the file in the torrent
           };
-        }).filter((s: any) => s.infoHash);
+        }).filter((s: any) => {
+          if (!s.infoHash) return false;
+          
+          // CRITICAL: Filter out adult/porn content that doesn't match the actual movie
+          const combined = `${s.name || ''} ${s.title || ''}`.toLowerCase();
+          const adultKeywords = [
+            'xxx', 'porn', 'adult', 'herlimit', 'blacked', 'vixen', 'tushy',
+            'brazzers', 'bangbros', 'naughty', 'milf', 'stepmom', 'stepsister',
+            'onlyfans', 'leaked', 'nude', 'naked', 'sex tape', 'hardcore',
+            'deepthroat', 'blowjob', 'handjob', 'anal', 'creampie', 'gangbang',
+            'threesome', 'orgy', 'escort', 'hooker', 'slut', 'whore',
+            'hentai', 'rule34', 'sfm', 'overwatch', 'animated cartoon'
+          ];
+          
+          for (const keyword of adultKeywords) {
+            if (combined.includes(keyword)) {
+              console.log(`[TPB+] Filtered adult content: ${s.title?.substring(0, 50)}`);
+              return false;
+            }
+          }
+          
+          return true;
+        });
         
-        console.log(`[TPB+] Parsed streams with infoHash: ${parsedStreams.length}`);
+        console.log(`[TPB+] Parsed streams with infoHash (after adult filter): ${parsedStreams.length}`);
         return parsedStreams;
       } catch (e: any) {
         console.log(`[TPB+] Fetch error: ${e.message || e}`);
