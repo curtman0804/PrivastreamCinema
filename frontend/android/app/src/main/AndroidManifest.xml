@@ -27,7 +27,8 @@
       android:name=".SplashActivity" 
       android:exported="true"
       android:theme="@style/Theme.Splash.Fullscreen"
-      android:screenOrientation="landscape">
+      android:screenOrientation="landscape"
+      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
         <category android:name="android.intent.category.LAUNCHER"/>
@@ -35,7 +36,7 @@
       </intent-filter>
     </activity>
     
-    <!-- Main Activity - NOT a launcher anymore -->
+    <!-- Main Activity -->
     <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/AppTheme" android:exported="true" android:screenOrientation="unspecified">
       <intent-filter>
         <action android:name="android.intent.action.VIEW"/>
