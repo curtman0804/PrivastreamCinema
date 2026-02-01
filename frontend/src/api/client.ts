@@ -265,14 +265,6 @@ export const api = {
         allStreams = [...allStreams, ...newStreams];
       } else {
         console.log(`[STREAMS] TPB+: failed or empty`);
-      } 
-            s.infoHash && !existingHashes.has(s.infoHash.toLowerCase())
-          );
-          console.log(`[STREAMS] Adding ${newStreams.length} new TPB+ streams`);
-          allStreams = [...allStreams, ...newStreams];
-        }
-      } catch (e: any) {
-        console.log(`[STREAMS] TPB+ client-side error: ${e.message || e}`);
       }
       
       // Filter for correct episode if this is a series episode (id format: tt1234567:1:5)
