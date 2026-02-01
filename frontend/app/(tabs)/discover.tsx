@@ -462,6 +462,7 @@ const styles = StyleSheet.create({
   // Section styles
   section: {
     marginBottom: 32,
+    overflow: 'visible',
   },
   sectionHeader: {
     paddingHorizontal: 16,
