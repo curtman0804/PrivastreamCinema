@@ -577,7 +577,21 @@ export const api = {
             filename: filename,  // Specific episode file
             fileIdx: fileIdx,    // Index of the file in the torrent
           };
-        }).filter((s: any) => s.infoHash);
+        }).filter((s: any) => {
+          if (!s.infoHash) return false;
+          
+          // If searching for a MOVIE, reject series episodes (S01E01, S02E05, etc.)
+          if (type === 'movie') {
+            const combined = `${s.name || ''} ${s.title || ''}`.toLowerCase();
+            const episodePattern = /S\d{1,2}E\d{1,2}/i;
+            if (episodePattern.test(combined)) {
+              console.log(`[TORRENTIO] Filtered series episode from movie search: ${s.title?.substring(0, 50)}`);
+              return false;
+            }
+          }
+          
+          return true;
+        });
         
         console.log(`[TORRENTIO] Parsed streams with infoHash: ${parsedStreams.length}`);
         return parsedStreams;
