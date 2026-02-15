@@ -712,6 +712,15 @@ export const api = {
             }
           }
           
+          // CRITICAL: If searching for a MOVIE, reject series episodes (S01E01, S02E05, etc.)
+          if (type === 'movie') {
+            const episodePattern = /S\d{1,2}E\d{1,2}/i;
+            if (episodePattern.test(combined)) {
+              console.log(`[TPB+] Filtered series episode from movie search: ${s.title?.substring(0, 50)}`);
+              return false;
+            }
+          }
+          
           return true;
         });
         
