@@ -792,7 +792,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f0f11',
   },
   heroContainer: {
-    height: height * 0.40,
+    height: height * 0.50,
     position: 'relative',
   },
   heroImage: {
@@ -804,7 +804,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: '70%',
+    height: '80%',
   },
   backButton: {
     position: 'absolute',
