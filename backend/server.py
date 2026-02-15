@@ -1433,8 +1433,27 @@ async def get_all_streams(
                         torrents = response.json()
                         if isinstance(torrents, list) and len(torrents) > 0 and torrents[0].get('id') != '0':
                             streams = []
+                            
+                            # Adult content keywords to filter out
+                            adult_keywords = [
+                                'xxx', 'porn', 'adult', 'herlimit', 'blacked', 'vixen', 'tushy',
+                                'brazzers', 'bangbros', 'naughty', 'milf', 'stepmom', 'stepsister',
+                                'onlyfans', 'leaked', 'nude', 'naked', 'sex tape', 'hardcore',
+                                'deepthroat', 'blowjob', 'handjob', 'anal', 'creampie', 'gangbang',
+                                'threesome', 'orgy', 'escort', 'hooker', 'slut', 'whore',
+                                'hentai', 'rule34', 'sfm', 'pornfidelity', 'realitykings',
+                                'wwe', 'wrestling', 'aew', 'raw', 'smackdown'
+                            ]
+                            
                             for torrent in torrents[:20]:
                                 name = torrent.get('name', '')
+                                name_lower = name.lower()
+                                
+                                # Skip adult content
+                                if any(kw in name_lower for kw in adult_keywords):
+                                    logger.debug(f"Filtered adult/unrelated content: {name[:50]}")
+                                    continue
+                                
                                 size_bytes = int(torrent.get('size', 0))
                                 size_str = f"{size_bytes / (1024*1024*1024):.2f} GB" if size_bytes > 1024*1024*1024 else f"{size_bytes / (1024*1024):.0f} MB"
                                 seeds = int(torrent.get('seeders', 0))
