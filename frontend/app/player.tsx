@@ -316,6 +316,16 @@ export default function PlayerScreen() {
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   
+  // Refs to track latest state values for TV event handler (avoids stale closures)
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const positionRef = useRef(position);
+  positionRef.current = position;
+  const durationRef = useRef(duration);
+  durationRef.current = duration;
+  const progressBarFocusedRef = useRef(false);
+  const showControlsWithTimeoutRef = useRef<(() => void) | null>(null);
+  
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
   
