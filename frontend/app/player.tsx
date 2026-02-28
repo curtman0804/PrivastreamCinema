@@ -1635,16 +1635,34 @@ export default function PlayerScreen() {
                   </View>
                 </View>
                 
-                {/* Center Play/Pause */}
+                {/* Center Controls: Rewind, Play/Pause, Fast Forward */}
                 <View style={styles.centerControls} pointerEvents="box-none">
-                  <TVFocusButton 
-                    style={styles.playPauseButton}
-                    focusedStyle={styles.playPauseFocused}
-                    onPress={togglePlayPause}
-                    hasTVPreferredFocus={true}
-                  >
-                    <Ionicons name={isPlaying ? "pause" : "play"} size={50} color="#FFFFFF" />
-                  </TVFocusButton>
+                  <View style={styles.centerButtonsRow}>
+                    <TVFocusButton 
+                      style={styles.seekButton}
+                      focusedStyle={styles.seekButtonFocused}
+                      onPress={() => seekToMs(position - 10000)}
+                    >
+                      <Ionicons name="play-back" size={36} color="#FFFFFF" />
+                    </TVFocusButton>
+                    
+                    <TVFocusButton 
+                      style={styles.playPauseButton}
+                      focusedStyle={styles.playPauseFocused}
+                      onPress={togglePlayPause}
+                      hasTVPreferredFocus={true}
+                    >
+                      <Ionicons name={isPlaying ? "pause" : "play"} size={50} color="#FFFFFF" />
+                    </TVFocusButton>
+                    
+                    <TVFocusButton 
+                      style={styles.seekButton}
+                      focusedStyle={styles.seekButtonFocused}
+                      onPress={() => seekToMs(position + 10000)}
+                    >
+                      <Ionicons name="play-forward" size={36} color="#FFFFFF" />
+                    </TVFocusButton>
+                  </View>
                 </View>
                 
                 {/* Bottom Bar - Progress */}
@@ -1653,7 +1671,7 @@ export default function PlayerScreen() {
                   <SeekableProgressBar
                     position={position}
                     duration={duration}
-                    onSeek={seekToMs}
+                    onFocusChange={(focused: boolean) => { progressBarFocusedRef.current = focused; }}
                   />
                   <Text style={styles.timeText}>{formatRemainingTime(position, duration)}</Text>
                 </View>
