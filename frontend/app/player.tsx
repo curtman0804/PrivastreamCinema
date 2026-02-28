@@ -768,6 +768,15 @@ export default function PlayerScreen() {
     }
   };
 
+  // Seek to absolute position in milliseconds
+  const seekToMs = async (newPositionMs: number) => {
+    if (videoRef.current) {
+      const clampedPosition = Math.max(0, Math.min(duration, newPositionMs));
+      await videoRef.current.setPositionAsync(clampedPosition);
+      showControlsWithTimeout();
+    }
+  };
+
   // Handle progress bar press/tap
   const handleProgressBarPress = (event: any) => {
     const { locationX } = event.nativeEvent;
@@ -782,6 +791,37 @@ export default function PlayerScreen() {
     const remaining = Math.max(0, dur - pos);
     return '-' + formatTime(remaining);
   };
+
+  // Use the TV event handler hook for better Fire Stick support
+  useTVEventHandler((evt) => {
+    if (!evt) return;
+    console.log('[TV Hook] Event:', evt.eventType);
+    
+    switch (evt.eventType) {
+      case 'playPause':
+        togglePlayPause();
+        showControlsWithTimeout();
+        break;
+      case 'play':
+        if (videoRef.current && !isPlaying) {
+          videoRef.current.playAsync();
+        }
+        showControlsWithTimeout();
+        break;
+      case 'pause':
+        if (videoRef.current && isPlaying) {
+          videoRef.current.pauseAsync();
+        }
+        showControlsWithTimeout();
+        break;
+      case 'rewind':
+        seekToMs(position - 10000);
+        break;
+      case 'fastForward':
+        seekToMs(position + 10000);
+        break;
+    }
+  });
 
   // Handle TV remote / hardware button events
   useEffect(() => {
