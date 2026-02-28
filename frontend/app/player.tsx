@@ -795,38 +795,7 @@ export default function PlayerScreen() {
     return '-' + formatTime(remaining);
   };
 
-  // Use the TV event handler hook for Fire Stick support (safe - may not exist)
-  if (useTVEventHandler) {
-    useTVEventHandler((evt: any) => {
-      if (!evt) return;
-      console.log('[TV Hook] Event:', evt.eventType);
-      
-      switch (evt.eventType) {
-        case 'playPause':
-          togglePlayPause();
-          showControlsWithTimeout();
-          break;
-        case 'play':
-          if (videoRef.current && !isPlaying) {
-            videoRef.current.playAsync();
-          }
-          showControlsWithTimeout();
-          break;
-        case 'pause':
-          if (videoRef.current && isPlaying) {
-            videoRef.current.pauseAsync();
-          }
-          showControlsWithTimeout();
-          break;
-        case 'rewind':
-          seekToMs(position - 10000);
-          break;
-        case 'fastForward':
-          seekToMs(position + 10000);
-          break;
-      }
-    });
-  }
+  // TV remote events are handled by the useEffect below with try-catch safety
 
   // Handle TV remote / hardware button events (fallback with try-catch)
   useEffect(() => {
