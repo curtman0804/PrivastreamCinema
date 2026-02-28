@@ -93,46 +93,64 @@ function TVFocusButton({
   );
 }
 
-// Seekable Progress Bar Component for TV - handles left/right D-pad for seeking
+// Seekable Progress Bar Component for TV
+// D-pad left/right seeking is handled by the parent via useTVEventHandler
+// Focus is trapped using nextFocusLeft/nextFocusRight pointing to self
 function SeekableProgressBar({
   position,
   duration,
-  onSeek,
+  onFocusChange,
   style,
   focusedStyle,
 }: {
   position: number;
   duration: number;
-  onSeek: (newPosition: number) => void;
+  onFocusChange: (focused: boolean) => void;
   style?: any;
   focusedStyle?: any;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-  const seekAmount = 10000; // 10 seconds in ms
+  const barRef = useRef<any>(null);
+  const [selfNodeHandle, setSelfNodeHandle] = useState<number | null>(null);
   
-  const handleKeyDown = (event: any) => {
-    if (!isFocused) return;
-    
-    const { key, eventType } = event.nativeEvent || {};
-    
-    // Handle left/right when focused
-    if (eventType === 'left' || key === 'ArrowLeft') {
-      const newPos = Math.max(0, position - seekAmount);
-      onSeek(newPos);
-    } else if (eventType === 'right' || key === 'ArrowRight') {
-      const newPos = Math.min(duration, position + seekAmount);
-      onSeek(newPos);
-    }
-  };
+  // Get native node handle after mount for focus trapping
+  useEffect(() => {
+    // Small delay to ensure the ref is attached
+    const timer = setTimeout(() => {
+      if (barRef.current) {
+        const handle = findNodeHandle(barRef.current);
+        if (handle) {
+          setSelfNodeHandle(handle);
+          console.log('[SeekBar] Got node handle:', handle);
+        }
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+  
+  const handleFocus = useCallback(() => {
+    console.log('[SeekBar] Focused');
+    setIsFocused(true);
+    onFocusChange(true);
+  }, [onFocusChange]);
+  
+  const handleBlur = useCallback(() => {
+    console.log('[SeekBar] Blurred');
+    setIsFocused(false);
+    onFocusChange(false);
+  }, [onFocusChange]);
   
   const percentage = duration > 0 ? (position / duration) * 100 : 0;
   
   return (
     <Pressable
+      ref={barRef}
       style={[styles.progressBarContainer, style, isFocused && (focusedStyle || styles.progressBarFocused)]}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
-      onKeyDown={handleKeyDown}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      // @ts-ignore - Android TV specific props to trap left/right D-pad focus on this component
+      nextFocusLeft={selfNodeHandle || undefined}
+      nextFocusRight={selfNodeHandle || undefined}
     >
       <View style={[styles.progressBarFill, { width: `${percentage}%` }]} />
       <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
