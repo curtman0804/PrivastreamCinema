@@ -1,9 +1,13 @@
 package com.privastream.cinema
-// import expo.modules.splashscreen.SplashScreenManager // Disabled - using custom SplashActivity
+import expo.modules.splashscreen.SplashScreenManager
 import com.reactnative.googlecast.api.RNGCCastContext
 
 import android.os.Build
 import android.os.Bundle
+import com.facebook.react.bridge.ReactContext
+import com.facebook.react.bridge.WritableNativeMap
+import com.facebook.react.modules.core.DeviceEventManagerModule
+import android.view.KeyEvent
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -16,9 +20,11 @@ class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
-    setTheme(R.style.AppTheme)
-    // Custom SplashActivity handles splash screen now, so we skip the expo-splashscreen
-    // SplashScreenManager.registerOnActivity(this)
+    // This is required for expo-splash-screen.
+    // setTheme(R.style.AppTheme);
+    // @generated begin expo-splashscreen - expo prebuild (DO NOT MODIFY) sync-f3ff59a738c56c9a6119210cb55f0b613eb8b6af
+    SplashScreenManager.registerOnActivity(this)
+    // @generated end expo-splashscreen
     super.onCreate(null)
 // @generated begin react-native-google-cast-onCreate - expo prebuild (DO NOT MODIFY) sync-489050f2bf9933a98bbd9d93137016ae14c22faa
     RNGCCastContext.getSharedInstance(this)
@@ -64,4 +70,42 @@ class MainActivity : ReactActivity() {
       // because it's doing more than [Activity.moveTaskToBack] in fact.
       super.invokeDefaultOnBackPressed()
   }
+
+  override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
+    if (event != null && event.action == KeyEvent.ACTION_DOWN) {
+      val keyCode = event.keyCode
+      val eventName = when (keyCode) {
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "playPause"
+        KeyEvent.KEYCODE_MEDIA_PLAY -> "play"
+        KeyEvent.KEYCODE_MEDIA_PAUSE -> "pause"
+        KeyEvent.KEYCODE_MEDIA_REWIND -> "rewind"
+        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "fastForward"
+        KeyEvent.KEYCODE_DPAD_LEFT -> "left"
+        KeyEvent.KEYCODE_DPAD_RIGHT -> "right"
+        KeyEvent.KEYCODE_DPAD_UP -> "up"
+        KeyEvent.KEYCODE_DPAD_DOWN -> "down"
+        KeyEvent.KEYCODE_DPAD_CENTER -> "select"
+        KeyEvent.KEYCODE_ENTER -> "select"
+        else -> null
+      }
+      
+      if (eventName != null) {
+        try {
+          val reactContext = reactInstanceManager?.currentReactContext
+          if (reactContext != null) {
+            val params = WritableNativeMap()
+            params.putString("eventType", eventName)
+            params.putInt("keyCode", keyCode)
+            reactContext
+              .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+              .emit("onTVKeyEvent", params)
+          }
+        } catch (e: Exception) {
+          // Silently ignore if React context is not ready
+        }
+      }
+    }
+    return super.dispatchKeyEvent(event)
+  }
+
 }
