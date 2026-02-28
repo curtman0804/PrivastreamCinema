@@ -1464,51 +1464,35 @@ export default function PlayerScreen() {
             {/* Custom Controls Overlay - fades in/out */}
             {showControls && (
               <Animated.View style={[styles.controlsOverlay, { opacity: controlsOpacity }]}>
-                {/* Top Bar - Back, Title, CC, Next */}
+                {/* Top Bar - Back, Title, CC */}
                 <View style={styles.topControls}>
-                  <TouchableOpacity style={styles.controlButton} onPress={handleBack}>
+                  <Pressable 
+                    style={({ focused }) => [styles.controlButton, focused && styles.controlButtonFocused]} 
+                    onPress={handleBack}
+                  >
                     <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
-                  </TouchableOpacity>
+                  </Pressable>
                   
                   <Text style={styles.titleText} numberOfLines={1}>{title || 'Playing'}</Text>
                   
                   <View style={styles.topRightControls}>
-                    {/* Cast Button */}
-                    <TouchableOpacity 
-                      style={[styles.controlButton, isCasting && styles.castActive]}
-                      onPress={handleCastToDevice}
-                    >
-                      <Ionicons 
-                        name={isCasting ? "tv" : "tv-outline"} 
-                        size={24} 
-                        color={isCasting ? '#B8A05C' : '#FFFFFF'} 
-                      />
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
+                    <Pressable 
+                      style={({ focused }) => [styles.controlButton, selectedSubtitle && styles.ccActive, focused && styles.controlButtonFocused]}
                       onPress={() => setShowSubtitlePicker(true)}
                     >
                       <Ionicons name="chatbubble-ellipses-outline" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
-                    </TouchableOpacity>
-                    
-                    {nextEpisodeId && (
-                      <TouchableOpacity style={styles.controlButton} onPress={playNextEpisode}>
-                        <Ionicons name="play-skip-forward" size={24} color="#FFFFFF" />
-                      </TouchableOpacity>
-                    )}
-                    
-                    <TouchableOpacity style={styles.controlButton} onPress={openInExternalPlayer}>
-                      <Ionicons name="open-outline" size={24} color="#FFFFFF" />
-                    </TouchableOpacity>
+                    </Pressable>
                   </View>
                 </View>
                 
                 {/* Center Play/Pause */}
                 <View style={styles.centerControls}>
-                  <TouchableOpacity style={styles.playPauseButton} onPress={togglePlayPause}>
+                  <Pressable 
+                    style={({ focused }) => [styles.playPauseButton, focused && styles.playPauseFocused]} 
+                    onPress={togglePlayPause}
+                  >
                     <Ionicons name={isPlaying ? "pause" : "play"} size={50} color="#FFFFFF" />
-                  </TouchableOpacity>
+                  </Pressable>
                 </View>
                 
                 {/* Bottom Bar - Progress */}
