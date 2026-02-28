@@ -305,7 +305,7 @@ export default function DetailsScreen() {
     
     const buildFallbackUrls = async (): Promise<string[]> => {
       const authToken = await AsyncStorage.getItem('auth_token');
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://vidflow-95.preview.emergentagent.com';
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
       
       return streams
         .filter(s => s !== stream)
@@ -354,7 +354,7 @@ export default function DetailsScreen() {
       const authToken = await AsyncStorage.getItem('auth_token');
       const separator = stream.url.includes('?') ? '&' : '?';
       const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://vidflow-95.preview.emergentagent.com';
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
       
       const fallbacks = await buildFallbackUrls();

@@ -12,120 +12,118 @@ PRODUCT REQUIREMENTS:
 - Admin section for user 'choyt'.
 
 Recent User Requests from this session:
-- Fix login page focus; it should be visible on load and allow D-pad navigation.
-- Fix backend URL issues in the forked environment causing 404 errors.
-- Fix focus selector on posters to only highlight the poster image, not the title (like Stremio).
-- Investigate and fix why posters for the USAATV addon are not showing.
-- Fix a regression where focused posters turn black.
-- Implement a custom, full-screen splash screen to bypass the default circular crop on Android TV (like Stremio).
-- Fix multiple app crashes on launch related to the new splash screen implementation.
-- Fix a build error in .
-- Improve choppy navigation and slow stream finding.
-- Investigate and fix a critical bug where searching for a movie (Mercy) returned pornographic streams.
-- Ensure all video streams play inside the app's player, not an external one.
+- Force all streams to play in the app's player, not an external one.
+- Fix a Gradle build error after receiving a new file.
+- Fix a  in  causing the build to fail.
+- Fix a  error on login.
+- Provide step-by-step instructions for setting up the build environment on a new PC.
+- Troubleshoot multiple environment and build issues on the new PC (ANDROID_HOME, JAVA_HOME, Gradle version conflicts).
+- Fix duplicate labels on the Discover page (e.g., Movies Movies).
+- Fix a critical bug where searching for Mercy returned pornographic/unrelated streams.
+- Redesign the details page to match a Stremio screenshot, with a full-screen, non-cropped background image.
+- Fix video player controls on Fire Stick: make them selectable, visible, and functional.
+- Improve subtitle appearance (remove black background) and make the CC selection buttons rounded with a proper focus indicator.
+- Implement hardware remote button functionality (Play/Pause, FF, RW).
+- Make the player's progress bar interactive, allowing users to seek by sliding left/right with the D-pad.
+- Display remaining time instead of total time in the player.
 </original_problem_statement>
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application now has a completely custom native Android splash screen that successfully bypasses the default circular crop on Fire Stick, displaying a full-screen logo on a black background. This was a complex task involving the creation of a custom , corresponding layout and style XML files, and debugging several native crashes.
+The application has undergone significant UI and functionality improvements. The details page has been completely redesigned to mimic the Stremio UI, featuring a full-screen background image, overlaid content, and a horizontal list of stream cards. A critical backend filter was added to  to prevent adult content from appearing in stream results. The discover page UI was fixed to remove duplicate category labels (e.g., Popular Movies Movies).
 
-Significant performance optimizations have been implemented. Scrolling on the Discover page is smoother due to heavy  optimizations in . Stream loading is now much faster as  was refactored to fetch from all addon sources in parallel using  instead of sequentially.
+A large portion of the session was dedicated to helping the user set up a new development PC, troubleshooting numerous Android Studio, Gradle, and Java environment variable issues.
 
-Critical bugs have been fixed, including a keyword filter in  to block adult content from appearing in stream results and a fix in  to prevent posters from turning black on focus. The login page now correctly auto-focuses the username field and supports D-pad navigation on TV.
+The video player () has been heavily modified to improve TV remote compatibility. Controls now use  for better focus handling, and the subtitle picker UI has been restyled as requested. The agent was in the process of implementing full hardware remote support (Play/Pause, FF/RW) and an interactive seek bar.
 
 **Last working item**:
-    - Last item agent was working: The user reported that some streams attempt to open in an external player. The agent began investigating this by locating the in-app player file at  and identifying a function named . The agent has not yet determined what triggers this function or implemented a fix.
+    - Last item agent was working: The user reported that after the latest player changes, they still could not interact with the progress bar by sliding left/right with the D-pad, and the hardware play/pause/ffwd/rewind buttons were still non-functional. The agent had started implementing a custom  component and a more robust  hook to address this.
     - Status: IN PROGRESS
     - Agent Testing Done: N
-    - Which testing method agent to use? The next agent must provide complete file changes for the user to test locally on their Fire Stick. No automated testing is possible for this flow.
+    - Which testing method agent to use? The next agent must provide the complete modified  file for the user to test locally on their Fire Stick. No automated testing is possible for this flow.
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  - Issue 1: Force all streams to use the in-app player (P0)
+  - Issue 1: Implement full TV remote functionality in the player (P0)
   - Issue 2: USAATV addon posters are not displaying (P1)
-  - Issue 3: Cropped artwork on the movie/series detail page (P2)
   
   Issues Detail:
   - Issue 1: 
-     - **Description**: The user wants all streams to play within the application. Some streams are currently trying to launch an external player.
-     - **Attempted fixes**: The agent has identified the  function within  as a likely culprit but has not yet taken action.
+     - **Description**: The hardware media buttons (play/pause, fast forward, rewind) on the Fire Stick remote do not work. The player's progress/seek bar is selectable but not interactive; the user wants to slide left/right with the D-pad to scrub through the video.
+     - **Attempted fixes**: The agent added basic  logic for  and  events and started creating a custom  component with  props. However, the implementation was incomplete and did not result in the desired functionality.
      - **Next debug checklist**:
-        1. In , analyze the logic that calls .
-        2. Identify the stream properties (,  format, etc.) that trigger this external playback.
-        3. Modify the logic to always route streams to the internal player component ( or similar) within , even if they have hints suggesting external playback.
-     - **Why fix this issue and what will be achieved with the fix?**: This is a core user experience requirement to keep the user within a seamless, branded environment, matching the behavior of Stremio.
+        1. Review  and the custom  hook. Ensure it correctly maps , , and  s to the appropriate actions (, ).
+        2. In the custom  component (or equivalent), implement logic within the  and  handlers to listen for  and  D-pad events.
+        3. When the progress bar is focused, pressing left/right should update a temporary seek position state variable and display a visual indicator (seek hint).
+        4. When the user presses 'select' on the remote while the progress bar is focused, call the  function with the new position.
+        5. Ensure the time display correctly shows the remaining time ().
+     - **Why fix this issue and what will be achieved with the fix?**: This is a critical usability feature for a TV-based media player, making it feel native and intuitive.
      - **Status**:  IN PROGRESS
-     - **Is recurring issue?** N
+     - **Is recurring issue?** Y
      - **Should Test frontend/backend/both after fix?**: frontend (User build)
      - **Blocked on other issue**: None
   - Issue 2: 
-     - **Description**: In the Discover page, the row for the USAATV addon does not show any posters for the channels, even though the titles appear.
-     - **Attempted fixes**: The agent verified that the backend is successfully fetching catalog data for this addon and that the poster URLs are valid and accessible via . The issue is likely on the frontend.
+     - **Description**: In the Discover page, the row for the USAATV addon does not show any posters for the channels, even though the titles appear. This is a long-standing issue from a previous session.
+     - **Attempted fixes**: None in this session. The previous agent verified the backend was sending valid poster URLs.
      - **Next debug checklist**:
         1. Add  statements within  to inspect the  prop specifically for USAATV channels.
         2. Verify that  contains the correct URL when the component renders.
-        3. Check the  component for any errors during loading of these specific URLs in the device logs (). The issue could be related to caching, image format, or a subtle bug in how the  handles items of type tv or channel.
-     - **Why fix this issue and what will be achieved with the fix?**: This will make the USAATV addon usable and provide a complete UI.
+        3. Check the device logs () for any errors from the  component when trying to load these specific URLs. The issue could be related to image format, caching, or a subtle bug in how the  handles items of type tv or channel.
+     - **Why fix this issue and what will be achieved with the fix?**: This will make the USAATV addon usable and provide a complete UI, fixing a long-pending bug.
      - **Status**:  NOT STARTED
      - **Is recurring issue?** Y
      - **Should Test frontend/backend/both after fix?**: frontend (User build)
      - **Blocked on other issue**: None
-  - Issue 3: 
-     - **Description**: The user noted that the artwork on the media detail page is cropped.
-     - **Attempted fixes**: None. This issue was mentioned but not investigated.
-     - **Next debug checklist**:
-        1. View the file .
-        2. Examine the styling of the main background/backdrop  component.
-        3. Check the  (or ) property. It might be set to , which can cause cropping. Changing it to  might fix it, or the layout may need adjustment.
-     - **Why fix this issue and what will be achieved with the fix?**: Improves the visual presentation and polish of a key screen.
-     - **Status**:  NOT STARTED
-     - **Is recurring issue?** N
-     - **Should Test frontend/backend/both after fix?**: frontend (User build)
-     - **Blocked on other issue**: None
 
 **In progress Task List**:
-- None.
+  - Task 1: Refactor video player controls
+     - **Where to resume**: The agent was modifying  to add a custom  component and a  hook for hardware media buttons. The work is partially done but not functional.
+     - **What will be achieved with this?**: A fully functional and intuitive video player experience on TV devices.
+     - **Status**:  IN PROGRESS
+     - **Should Test frontend/backend/both after fix?**: frontend (User build)
+     - **Blocked on something**: None
 
 **Upcoming and Future Tasks**
-- **Upcoming Tasks:**
-    - P0: Force In-App Player: Modify  to prevent launching external players.
-    - P1: Debug USAATV Posters: Investigate  rendering for channel items.
-    - P2: Fix Detail Page Artwork: Investigate  image styling.
 - **Future Tasks:**
-    - P3: Further investigate and improve navigation choppiness.
-    - P3: Further investigate and improve stream finding latency.
+    - P2: Further investigate and improve navigation choppiness.
+    - P2: Further investigate and improve stream finding latency.
 
 **Completed work in this session**
-- **Custom Native Splash Screen**: Implemented a legacy  to show a full-screen, non-cropped splash image on a black background, bypassing Android 12+ limitations. Fixed multiple subsequent native crashes and build errors related to this change.
-- **Critical Adult Content Filter**: Added a keyword-based filter in  to block inappropriate adult streams from appearing in search results.
-- **Performance Optimization (Scrolling & Streams)**:
-    - Heavily optimized  performance in  for smoother scrolling.
-    - Refactored stream fetching in  to use , making stream discovery significantly faster by fetching from all sources in parallel.
-- **UI/UX Bug Fixes**:
-    - **Login Page Focus:** Fixed D-pad navigation and implemented auto-focus on the username field in .
-    - **Black Poster Bug:** Fixed an issue where focused posters turned black by adjusting focus styles in .
-    - **Stremio-style Focus:** Refactored  so the focus indicator only appears around the poster image, not the entire card with the title.
-- **Environment/Build Fixes**:
-    - Resolved a critical 404 error by identifying and reverting an incorrect backend URL change.
-    - Fixed an Android build failure caused by a syntax error in .
+- **User Environment Setup**: Guided the user through a complete build environment setup on a new Windows PC, troubleshooting issues with Android Studio, , , and Gradle.
+- **Details Page Redesign**: Completely overhauled  to match the Stremio UI, featuring a full-screen non-cropped background image and horizontal stream cards.
+- **Critical Stream Filtering**:
+  - **Backend**: Added an adult content keyword filter to the  function in  to remove inappropriate results.
+  - **Frontend**: Added a filter in  to prevent series episodes (e.g., ) from appearing in movie stream results.
+- **Player Controls for TV**:
+  - Replaced  with  and custom focus-handling components () for D-pad navigation.
+  - Simplified the player UI to show only the Back and CC buttons as requested.
+  - Implemented visible focus indicators (golden border) on all player controls.
+  - Fixed subtitle visibility by removing the black background and restyled the CC picker buttons to be rounded with focus indicators.
+- **UI Bug Fixes**:
+  - **Duplicate Labels**: Fixed an issue on the Discover page where category titles were duplicated (e.g., Popular Movies Movies) in .
+- **Build & URL Bug Fixes**:
+  - **Force In-App Player**: Modified  to route all streams to the internal player.
+  - **Build Errors**: Resolved multiple user-side build failures caused by syntax errors and incorrect file modifications.
+  - **404 Login Error**: Identified and corrected a hardcoded backend URL mismatch across several files (, , ).
 
 **Earlier issues found/mentioned but not fixed**
-- None that are not already listed in the pending issues.
+- The USAATV addon posters are not displaying issue is the only one not yet addressed in this session.
 
 **Known issue recurrence from previous fork**
-- **Native Build/Theme Issues**: The previous fork's summary noted the risk of corrupting the  folder. This session saw multiple build failures and crashes after implementing a custom splash screen. The final resolution involved switching from  to , using a simpler theme, and disabling the conflicting  manager in . This pattern is now stable.
-- **Recurrence count**: At least 3 separate crash/build-failure cycles during this session.
-- **Status**: RESOLVED
+- **User's Local Build Environment**: The user consistently runs into build failures due to environment issues (Java/Gradle versions), file sync problems (OneDrive), or incorrect manual file edits. The next agent must be prepared to provide clear, step-by-step instructions and debugging help.
+- **Recurrence count**: High (occurred multiple times this session).
+- **Status**: RESOLVED for now, but likely to recur.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Legacy Android Splash Activity**: To bypass the default circular splash screen on Android TV, a custom  (extending ) was created. It's set as the main launcher in  and uses a custom theme in  to display a full-screen image from a layout file () before launching the .
-- **Native Crash Debugging**: The key to fixing the post-splash crash was identifying the conflict between the new custom  and the  library's , which had to be disabled in .
-- **Parallel API Fetching**: Stream loading speed was drastically improved by switching from sequential  calls to  in , allowing all addon sources to be queried simultaneously.
-- ** Performance**: Scrolling smoothness was improved in  by implementing ,  with a custom comparator, , , and other standard  optimization techniques.
+- **TV UI Development (React Native)**: Extensive use of  with focus-tracking ( and / props) to create D-pad navigable components. Using  to apply TV-specific logic.
+- **TV Event Handling**: Using  to capture hardware remote button presses like 'playPause', 'fastForward', and 'rewind'.
+- **Complex Component Redesign**: The complete rewrite of the Details page to match the Stremio UI is a key pattern.
+- **User Environment Debugging**: The agent spent significant time acting as tech support for the user's local Windows environment, debugging , , Gradle versions, and file path issues.
+- **Backend Stream Filtering**: Added a keyword-based filter in Python () to sanitize API results before sending them to the frontend.
 
 **key DB schema**
 - No changes.
@@ -134,49 +132,43 @@ Critical bugs have been fixed, including a keyword filter in  to block adult con
 - No changes.
 
 **All files of reference**
-- : **NEEDS FIX**. Contains the logic for launching the external player which needs to be disabled.
-- : **NEEDS FIX**. The source of the cropped artwork on detail pages.
-- : **MODIFIED**. Contains the parallel stream fetching logic and the critical adult content filter.
-- : **MODIFIED**. Contains the Stremio-style focus logic and fix for the black poster bug.
-- : **MODIFIED**. Contains all the  performance optimizations.
-- : **MODIFIED**. Contains the critical fix to disable the conflicting  manager.
-- : **CREATED**. The core of the custom splash screen solution.
-- : **MODIFIED**. The entry point configuration for the custom splash screen.
-- : **MODIFIED**. Contains the custom theme for the fullscreen splash.
-- : **CREATED**. The layout for the custom splash screen.
+- : **NEEDS FIX**. This is the current focus. It needs a working interactive seek bar and functional hardware remote buttons. It's over 2300 lines long.
+- : **REWRITTEN**. This file was completely replaced with a new Stremio-style layout. The background image behavior () was the last change made to prevent cropping.
+- : **MODIFIED**. Logic was added to prevent duplicating words in category titles (e.g., Popular Movies Movies).
+- : **MODIFIED**. A filter was added to  and  to reject series episodes when the search type is 'movie'.
+- : **MODIFIED**. A keyword filter for adult content was added to the  function.
 
 **Areas that need refactoring**:
-- None currently. The recent refactors for performance and splash screen were significant.
+- : This file is extremely large (2300+ lines) and complex. It should be broken down into smaller, reusable components like , , , and a  hook to manage the event handling logic.
 
 **key api endpoints**
 - No changes.
 
 **Critical Info for New Agent**
-1.  **Custom Splash is Implemented but Fragile**: A complete custom native splash screen is now working. Be extremely cautious when editing any files in the  directory. The key files are , , and . The crash was fixed by commenting out  in .
-2.  **Performance is Now a Focus**: Significant work was done to improve scrolling and stream loading speed. Build on these patterns ( optimizations, ).
-3.  **Adult Content Filter is CRITICAL**: A keyword filter was added to  in . Do not remove this. It's a critical guard against inappropriate content.
-4.  **Backend URL is Stable**: The backend URL confusion is resolved. The correct, hardcoded URL is . Do not change this.
-5.  **User Builds Locally**: You must provide complete, copy-paste-ready files for the user to update their local project and build the APK themselves.
+1.  **User Builds and Tests Locally**: You MUST provide complete, copy-paste-ready files or clear, atomic edits. The user builds the APK themselves. Be prepared for them to report build errors, which are often due to incorrect manual edits or environment issues.
+2.  **Local Environment is Fragile**: The user is on a new Windows PC and has faced many issues with , , Gradle, and file paths (especially with OneDrive). Be patient and provide clear, step-by-step terminal commands.
+3.  **The Correct Backend URL is Stable**: The backend URL for this environment is . A previous agent caused significant confusion by providing a different URL. **DO NOT CHANGE THIS**.
+4.  ** is the Hotspot**: This file is the center of the current task. It's very large and has been modified many times. The goal is to make it fully navigable and functional with a Fire Stick remote. The user last reported the progress bar is not interactive and media buttons don't work.
+5.  **Provide Full Files on Error**: If the user reports a syntax or build error after you've provided edits, it's often faster and safer to provide the entire, corrected file rather than trying to debug their local copy. Use the  folder to host large files for download.
 
 **documents created in this job**
-- None.
+- : A temporary file created to allow the user to download the large  file.
 
 **Last 10 User Messages and any pending HUMAN messages**
-- **User (LATEST):** okay i have done those. i just want you to know i need this to function like stremio does. there are some things that want to take me to an external player. i need everything to play in the apps player. (Status: IN PROGRESS, agent was just starting to investigate).
-- **User:** provide the files here for me please. (Status: COMPLETED, agent provided files).
-- **User (image):** Shows a search for Mercy returning porn streams and a black poster. (Status: COMPLETED, agent fixed both issues).
-- **User:** done. i need you to go in and see what stremio does for smooth app navigation please... (Status: COMPLETED, agent implemented performance optimizations).
-- **User (image):** Shows the app working again but with choppy navigation and cropped posters. (Status: PARTIALLY COMPLETED, agent fixed cropping but choppiness is ongoing).
-- **User:** Reports a Gradle build error in . (Status: COMPLETED, agent fixed the syntax error).
-- **User (image):** Shows the splash screen working but the app crashing afterward. (Status: COMPLETED, agent fixed the crash in ).
-- **User:** splash looks better... but i cant open the app on the firestick again. (Status: COMPLETED, agent fixed the crash).
-- **User:** just want it to look like this... (provides an image for the splash screen). (Status: COMPLETED, agent used the image).
-- **User:** Asks how to download the images the agent created. (Status: COMPLETED, agent provided a Python script).
+- **User (LATEST):** okay, so i can now select the status bar but i cant interact with it. when i go down to the status bar i should be able to slide to the left or right to be able to choose a location for playback. the play pause, fast forward, and rewind buttons do nothing still. i want those to function as well. (Status: IN PROGRESS, agent was starting to fix this).
+- **User:** provide a link for the file. (Status: COMPLETED, agent provided link).
+- **User:** okay. cc is better. lets make it so the play/pause fast forward and rewind buttons on the remote actually function... (Status: IN PROGRESS, agent started working on this).
+- **User:** thats my bad. i was in the wrong file location. i have the current file now and i tested. looks good. functions properly... (Status: COMPLETED, user confirms previous player fixes work).
+- **User:** Reports build is not updating. (Status: COMPLETED, agent identified user was building from the wrong folder).
+- **User:** okay. i can pause now. but i cant see what im selecting. cant see what im selecting for the subtitles either... (Status: COMPLETED, agent fixed focus visibility).
+- **User:** still unable to pause or select the cloce caption or back button. (Status: COMPLETED, agent fixed this by changing container and adding focusable props).
+- **User:** can you provide the full file perhaps? i got build failed again. (Status: COMPLETED, agent provided a downloadable file).
+- **User:** wtf... (reports another build failure). (Status: COMPLETED, agent identified and fixed mismatched JSX tags).
+- **User:** god damnit. i closed the file so i cant undo it. (Status: COMPLETED, agent provided a fresh copy of the file).
 
 **Project Health Check:**
 - **Broken**:
-    - **Player Logic**: Some streams incorrectly launch an external player.
-    - **Detail Page UI**: Artwork is cropped.
+    - **Player Controls**: Hardware remote buttons (play/pause, ffwd, rw) are not functional. The progress bar is not interactive with the D-pad.
     - **USAATV Addon**: Posters do not render.
 - **Mocked**: None.
 
@@ -190,13 +182,13 @@ Critical bugs have been fixed, including a keyword filter in  to block adult con
   - Testing agent used after significant changes: NO
   - Troubleshoot agent used after agent stuck in loop: NO
   - Test files created: None. The user is performing all testing.
-  - Known regressions: None currently. Recent regressions (crash, black posters) have been fixed.
+  - Known regressions: None currently.
 
 **Credentials to test flow:**
 - **Username:** 
 - **Password:**  (case-sensitive)
 
 **What agent forgot to execute**
-- The agent has not yet investigated the cropped artwork on detail page issue mentioned by the user.
+- The agent has consistently deferred the USAATV addon posters are not displaying issue, which was mentioned in the initial summary and remains unresolved.
 
 </analysis>
