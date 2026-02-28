@@ -877,12 +877,8 @@ export default function PlayerScreen() {
     }
   }, []);
 
-  // Wrap useTVEventHandler in try-catch - may not be available on all builds
-  try {
-    useTVEventHandler(handleTVEvent);
-  } catch (e) {
-    console.log('[TV] useTVEventHandler not available:', e);
-  }
+  // Register TV event handler for Fire Stick remote
+  useTVEventHandler(handleTVEvent);
   
   // Fade controls in/out
   const fadeControls = (show: boolean) => {
