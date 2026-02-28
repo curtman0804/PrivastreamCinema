@@ -1469,37 +1469,37 @@ export default function PlayerScreen() {
               <Animated.View style={[styles.controlsOverlay, { opacity: controlsOpacity }]} pointerEvents="box-none">
                 {/* Top Bar - Back, Title, CC */}
                 <View style={styles.topControls} pointerEvents="box-none">
-                  <Pressable 
-                    style={({ focused }) => [styles.controlButton, focused && styles.controlButtonFocused]} 
+                  <TVFocusButton 
+                    style={styles.controlButton}
+                    focusedStyle={styles.controlButtonFocused}
                     onPress={handleBack}
-                    focusable={true}
                   >
                     <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
-                  </Pressable>
+                  </TVFocusButton>
                   
                   <Text style={styles.titleText} numberOfLines={1}>{title || 'Playing'}</Text>
                   
                   <View style={styles.topRightControls}>
-                    <Pressable 
-                      style={({ focused }) => [styles.controlButton, selectedSubtitle && styles.ccActive, focused && styles.controlButtonFocused]}
+                    <TVFocusButton 
+                      style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
+                      focusedStyle={styles.controlButtonFocused}
                       onPress={() => setShowSubtitlePicker(true)}
-                      focusable={true}
                     >
                       <Ionicons name="chatbubble-ellipses-outline" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
-                    </Pressable>
+                    </TVFocusButton>
                   </View>
                 </View>
                 
                 {/* Center Play/Pause */}
                 <View style={styles.centerControls} pointerEvents="box-none">
-                  <Pressable 
-                    style={({ focused }) => [styles.playPauseButton, focused && styles.playPauseFocused]} 
+                  <TVFocusButton 
+                    style={styles.playPauseButton}
+                    focusedStyle={styles.playPauseFocused}
                     onPress={togglePlayPause}
-                    focusable={true}
                     hasTVPreferredFocus={true}
                   >
                     <Ionicons name={isPlaying ? "pause" : "play"} size={50} color="#FFFFFF" />
-                  </Pressable>
+                  </TVFocusButton>
                 </View>
                 
                 {/* Bottom Bar - Progress */}
