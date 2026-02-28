@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef } from 'react';
+import React, { memo, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   FlatList,
   Pressable,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentCard, getCardWidth } from './ContentCard';
@@ -21,7 +22,11 @@ interface ServiceRowProps {
 }
 
 // Memoized content card to prevent re-renders
-const MemoizedContentCard = memo(ContentCard);
+const MemoizedContentCard = memo(ContentCard, (prev, next) => {
+  // Only re-render if item id changes
+  return prev.item?.id === next.item?.id && 
+         prev.item?.imdb_id === next.item?.imdb_id;
+});
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   title,
@@ -36,34 +41,32 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const flatListRef = useRef<FlatList>(null);
   const [currentFocusIndex, setCurrentFocusIndex] = useState(0);
   
-  // Filter out undefined/null items
-  const validItems = (items || []).filter(Boolean);
+  // Memoize valid items to prevent recalculation
+  const validItems = useMemo(() => 
+    (items || []).filter(Boolean), [items]);
+  
   if (validItems.length === 0) return null;
 
-  // Use shared card width calculation
-  const cardWidth = getCardWidth(width, isTV, 'medium');
+  // Use shared card width calculation - memoized
+  const cardWidth = useMemo(() => 
+    getCardWidth(width, isTV, 'medium'), [width, isTV]);
   const itemWidth = cardWidth + 16; // card width + marginRight
 
   // Handle card focus - scroll to keep focused item visible
   const handleCardFocus = useCallback((index: number) => {
     setCurrentFocusIndex(index);
     
-    // Calculate how many items fit on screen
-    const horizontalPadding = isTV ? 48 : 32; // paddingHorizontal * 2
-    const visibleWidth = width - horizontalPadding;
-    const itemsPerScreen = Math.floor(visibleWidth / itemWidth);
-    
     // Scroll so focused item is visible (not at the edge)
-    // Keep focused item at position 1 or 2 from left when possible
     const targetPosition = Math.max(0, index - 1);
     
     flatListRef.current?.scrollToIndex({
       index: targetPosition,
       animated: true,
-      viewPosition: 0, // Align to start
+      viewPosition: 0,
     });
-  }, [isTV, width, itemWidth]);
+  }, []);
 
+  // Memoized render item function
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <MemoizedContentCard
       item={item}
@@ -73,11 +76,19 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     />
   ), [onItemPress, handleCardFocus]);
 
+  // Stable key extractor
   const keyExtractor = useCallback((item: ContentItem, index: number) => 
     item.id || item.imdb_id || `item-${index}`, []);
 
   // Display title - use serviceName or title
   const displayTitle = title || serviceName || 'Content';
+
+  // Memoized getItemLayout for performance
+  const getItemLayout = useCallback((data: any, index: number) => ({
+    length: itemWidth,
+    offset: itemWidth * index,
+    index,
+  }), [itemWidth]);
 
   // Handle scroll failure gracefully
   const onScrollToIndexFailed = useCallback((info: {
@@ -85,14 +96,12 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     highestMeasuredFrameIndex: number;
     averageItemLength: number;
   }) => {
-    // Scroll to the closest available item
-    const wait = new Promise(resolve => setTimeout(resolve, 100));
-    wait.then(() => {
+    setTimeout(() => {
       flatListRef.current?.scrollToIndex({ 
         index: Math.min(info.index, info.highestMeasuredFrameIndex),
         animated: true 
       });
-    });
+    }, 50);
   }, []);
 
   return (
@@ -123,7 +132,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         )}
       </View>
       
-      {/* Content Row */}
+      {/* Content Row - Optimized FlatList */}
       <FlatList
         ref={flatListRef}
         horizontal
@@ -132,18 +141,19 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         keyExtractor={keyExtractor}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
-        initialNumToRender={isTV ? 8 : 5}
-        maxToRenderPerBatch={5}
-        windowSize={7}
-        removeClippedSubviews={false}
+        style={styles.flatListStyle}
+        // Performance optimizations
+        initialNumToRender={isTV ? 7 : 4}
+        maxToRenderPerBatch={3}
+        updateCellsBatchingPeriod={30}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
         decelerationRate="fast"
         scrollEventThrottle={16}
         onScrollToIndexFailed={onScrollToIndexFailed}
-        getItemLayout={(data, index) => ({
-          length: itemWidth,
-          offset: itemWidth * index,
-          index,
-        })}
+        getItemLayout={getItemLayout}
+        // Disable automatic scroll adjustments
+        maintainVisibleContentPosition={null}
       />
     </View>
   );
@@ -155,6 +165,7 @@ export const MetaRow = ServiceRow;
 const styles = StyleSheet.create({
   container: {
     marginBottom: 32,
+    overflow: 'visible',
   },
   header: {
     flexDirection: 'row',
@@ -203,5 +214,8 @@ const styles = StyleSheet.create({
   scrollContentTV: {
     paddingHorizontal: 24,
     paddingVertical: 16,
+  },
+  flatListStyle: {
+    overflow: 'visible',
   },
 });

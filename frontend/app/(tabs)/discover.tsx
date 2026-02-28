@@ -262,11 +262,17 @@ export default function DiscoverScreen() {
           )}
           
           {/* Content Rows from Addons */}
-          {Object.entries(discoverData?.services || {}).map(([serviceName, content]) => (
+          {Object.entries(discoverData?.services || {}).map(([serviceName, content]) => {
+            // Avoid duplicate labels - service names like "Popular Movies" already contain the type
+            const hasMoviesInName = serviceName.toLowerCase().includes('movie');
+            const hasSeriesInName = serviceName.toLowerCase().includes('series');
+            const hasChannelsInName = serviceName.toLowerCase().includes('channel');
+            
+            return (
             <View key={serviceName}>
               {content?.movies && content.movies.length > 0 && (
                 <ServiceRow
-                  title={`${serviceName} Movies`}
+                  title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
                   items={content.movies.slice(0, 30)}
                   onItemPress={handleItemPress}
                   onSeeAll={content.movies.length > 10 ? () => {
@@ -276,7 +282,7 @@ export default function DiscoverScreen() {
               )}
               {content?.series && content.series.length > 0 && (
                 <ServiceRow
-                  title={`${serviceName} Series`}
+                  title={hasSeriesInName ? serviceName : `${serviceName} Series`}
                   items={content.series.slice(0, 30)}
                   onItemPress={handleItemPress}
                   onSeeAll={content.series.length > 10 ? () => {
@@ -286,7 +292,7 @@ export default function DiscoverScreen() {
               )}
               {content?.channels && content.channels.length > 0 && (
                 <ServiceRow
-                  title={`${serviceName} Channels`}
+                  title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
                   items={content.channels.slice(0, 30).map((ch: any) => ({
                     ...ch,
                     type: 'tv' as const,
@@ -298,7 +304,8 @@ export default function DiscoverScreen() {
                 />
               )}
             </View>
-          ))}
+          );
+          })}
           <View style={styles.bottomPadding} />
         </ScrollView>
       )}
@@ -420,6 +427,7 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    overflow: 'visible',
   },
   bottomPadding: {
     height: 100,
@@ -483,7 +491,8 @@ const styles = StyleSheet.create({
   },
   // Section styles
   section: {
-    marginBottom: 24,
+    marginBottom: 32,
+    overflow: 'visible',
   },
   sectionHeader: {
     paddingHorizontal: 16,

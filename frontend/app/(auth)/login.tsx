@@ -11,6 +11,7 @@ import {
   Alert,
   ActivityIndicator,
   useWindowDimensions,
+  findNodeHandle,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -31,8 +32,25 @@ export default function LoginScreen() {
   
   const usernameRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
+  const signInRef = useRef<View>(null);
   
   const isTV = width > height || width > 800;
+  
+  // State for TV focus handling
+  const [usernameFocused, setUsernameFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [signInFocused, setSignInFocused] = useState(false);
+
+  // Auto-focus username field on mount for TV navigation
+  useEffect(() => {
+    if (isTV) {
+      // Small delay to ensure component is mounted
+      const timer = setTimeout(() => {
+        usernameRef.current?.focus();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isTV]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -89,9 +107,20 @@ export default function LoginScreen() {
 
             {/* Form */}
             <View style={styles.form}>
+              {/* Username Field - TV Optimized */}
               <Pressable
-                style={[styles.inputContainer, focusedField === 'username' && styles.inputFocused]}
+                style={[
+                  styles.inputContainer, 
+                  (focusedField === 'username' || usernameFocused) && styles.inputFocused
+                ]}
                 onPress={() => usernameRef.current?.focus()}
+                onFocus={() => {
+                  setUsernameFocused(true);
+                  usernameRef.current?.focus();
+                }}
+                onBlur={() => setUsernameFocused(false)}
+                accessible={true}
+                accessibilityLabel="Username input"
               >
                 <Ionicons name="person-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
                 <TextInput
@@ -103,8 +132,14 @@ export default function LoginScreen() {
                   onChangeText={setUsername}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  onFocus={() => setFocusedField('username')}
-                  onBlur={() => setFocusedField(null)}
+                  onFocus={() => {
+                    setFocusedField('username');
+                    setUsernameFocused(true);
+                  }}
+                  onBlur={() => {
+                    setFocusedField(null);
+                    setUsernameFocused(false);
+                  }}
                   editable={!isLoading}
                   returnKeyType="next"
                   onSubmitEditing={() => passwordRef.current?.focus()}
@@ -112,9 +147,20 @@ export default function LoginScreen() {
                 />
               </Pressable>
 
+              {/* Password Field - TV Optimized */}
               <Pressable
-                style={[styles.inputContainer, focusedField === 'password' && styles.inputFocused]}
+                style={[
+                  styles.inputContainer, 
+                  (focusedField === 'password' || passwordFocused) && styles.inputFocused
+                ]}
                 onPress={() => passwordRef.current?.focus()}
+                onFocus={() => {
+                  setPasswordFocused(true);
+                  passwordRef.current?.focus();
+                }}
+                onBlur={() => setPasswordFocused(false)}
+                accessible={true}
+                accessibilityLabel="Password input"
               >
                 <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
                 <TextInput
@@ -126,8 +172,14 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  onFocus={() => setFocusedField('password')}
-                  onBlur={() => setFocusedField(null)}
+                  onFocus={() => {
+                    setFocusedField('password');
+                    setPasswordFocused(true);
+                  }}
+                  onBlur={() => {
+                    setFocusedField(null);
+                    setPasswordFocused(false);
+                  }}
                   editable={!isLoading}
                   returnKeyType="done"
                   onSubmitEditing={handleLogin}
@@ -141,14 +193,21 @@ export default function LoginScreen() {
                 </Pressable>
               </Pressable>
 
+              {/* Sign In Button - TV Optimized */}
               <Pressable
+                ref={signInRef}
                 onPress={handleLogin}
                 disabled={isLoading}
-                style={({ focused }) => [
+                onFocus={() => setSignInFocused(true)}
+                onBlur={() => setSignInFocused(false)}
+                style={[
                   styles.loginButton,
                   isLoading && styles.loginButtonDisabled,
-                  focused && styles.loginButtonFocused,
+                  signInFocused && styles.loginButtonFocused,
                 ]}
+                accessible={true}
+                accessibilityLabel="Sign in button"
+                accessibilityRole="button"
               >
                 {isLoading ? (
                   <ActivityIndicator color={colors.textPrimary} />

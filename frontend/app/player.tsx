@@ -12,9 +12,20 @@ import {
   Alert,
   Animated,
   Image,
-  TVEventHandler,
   Pressable,
+  DeviceEventEmitter,
 } from 'react-native';
+
+// Safe TV event handler imports - these may not exist in all RN versions
+let useTVEventHandler: any = null;
+let TVEventHandler: any = null;
+try {
+  const RN = require('react-native');
+  useTVEventHandler = RN.useTVEventHandler || null;
+  TVEventHandler = RN.TVEventHandler || null;
+} catch (e) {
+  console.log('[TV] TV event handlers not available');
+}
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,7 +36,10 @@ import { Modal, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as NavigationBar from 'expo-navigation-bar';
+
+// Check if running on TV
 const isTV = Platform.isTV || Platform.OS === 'android';
+
 // Conditionally import WebView only on native (fallback for HLS)
 let WebView: any = null;
 if (Platform.OS !== 'web') {
@@ -59,6 +73,71 @@ if (Platform.OS !== 'web') {
 
 const { width, height } = Dimensions.get('window');
 
+// TV Focus Button Component - handles focus state for D-pad navigation
+function TVFocusButton({ 
+  onPress, 
+  style, 
+  focusedStyle,
+  children,
+  hasTVPreferredFocus = false,
+}: {
+  onPress?: () => void;
+  style: any;
+  focusedStyle?: any;
+  children: React.ReactNode;
+  hasTVPreferredFocus?: boolean;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    <Pressable
+      style={[style, isFocused && focusedStyle]}
+      onPress={onPress}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      hasTVPreferredFocus={hasTVPreferredFocus}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+// Seekable Progress Bar Component for TV - handles left/right D-pad for seeking
+function SeekableProgressBar({
+  position,
+  duration,
+  onSeek,
+  style,
+  focusedStyle,
+}: {
+  position: number;
+  duration: number;
+  onSeek: (newPosition: number) => void;
+  style?: any;
+  focusedStyle?: any;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const seekAmount = 10000; // 10 seconds in ms
+  
+  const percentage = duration > 0 ? (position / duration) * 100 : 0;
+  
+  return (
+    <Pressable
+      style={[styles.progressBarContainer, style, isFocused && (focusedStyle || styles.progressBarFocused)]}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+    >
+      <View style={[styles.progressBarFill, { width: `${percentage}%` }]} />
+      <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
+      {isFocused && (
+        <View style={styles.seekHint}>
+          <Text style={styles.seekHintText}>Use ⏪ ⏩ buttons to seek</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
 // Check if title suggests HEVC/x265 codec (not supported on most web browsers)
 const isHEVCContent = (titleStr: string | undefined): boolean => {
   if (!titleStr) return false;
@@ -85,28 +164,6 @@ export default function PlayerScreen() {
   // Keep screen awake during playback
   useKeepAwake();
   
-  // Hide navigation bar on Android for immersive video experience
-  useEffect(() => {
-    const setupImmersiveMode = async () => {
-      if (Platform.OS === 'android') {
-        try {
-          await NavigationBar.setVisibilityAsync('hidden');
-          await NavigationBar.setBehaviorAsync('overlay-swipe');
-        } catch (e) {
-          console.log('Could not hide navigation bar:', e);
-        }
-      }
-    };
-    
-    setupImmersiveMode();
-    
-    return () => {
-      if (Platform.OS === 'android') {
-        NavigationBar.setVisibilityAsync('visible').catch(() => {});
-      }
-    };
-  }, []);
-
   const { 
     url, 
     title, 
@@ -116,16 +173,20 @@ export default function PlayerScreen() {
     contentType, 
     contentId,
     fallbackStreams,
+    // File selection for torrents
     fileIdx,
     filename,
+    // Next episode data
     nextEpisodeId,
     nextEpisodeTitle,
     seriesId,
     season,
     episode,
+    // Visual assets
     backdrop,
     poster,
     logo,
+    // Resume position (from continue watching)
     resumePosition,
   } = useLocalSearchParams<{
     url?: string;
@@ -149,6 +210,29 @@ export default function PlayerScreen() {
     resumePosition?: string;
   }>();
   const router = useRouter();
+  
+  // Hide navigation bar on Android for immersive video experience
+  useEffect(() => {
+    const setupImmersiveMode = async () => {
+      if (Platform.OS === 'android') {
+        try {
+          await NavigationBar.setVisibilityAsync('hidden');
+          await NavigationBar.setBehaviorAsync('overlay-swipe');
+        } catch (e) {
+          console.log('Could not hide navigation bar:', e);
+        }
+      }
+    };
+    
+    setupImmersiveMode();
+    
+    return () => {
+      // Restore navigation bar when leaving player
+      if (Platform.OS === 'android') {
+        NavigationBar.setVisibilityAsync('visible').catch(() => {});
+      }
+    };
+  }, []);
   
   // Resume position in seconds (from continue watching)
   const parsedResumePosition = resumePosition ? parseFloat(resumePosition) : null;
@@ -206,6 +290,16 @@ export default function PlayerScreen() {
   const videoRef = useRef<Video>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
+  
+  // Refs to track latest state values for TV event handler (avoids stale closures)
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const positionRef = useRef(position);
+  positionRef.current = position;
+  const durationRef = useRef(duration);
+  durationRef.current = duration;
+  const progressBarFocusedRef = useRef(false);
+  const showControlsWithTimeoutRef = useRef<(() => void) | null>(null);
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
@@ -668,82 +762,129 @@ export default function PlayerScreen() {
       }
     }
   };
-  
-  // Handle TV remote / hardware button events
+
+  // Seek to position (for progress bar interaction)
+  const seekToPosition = async (percentage: number) => {
+    if (videoRef.current && duration > 0) {
+      const newPosition = Math.floor(duration * percentage);
+      await videoRef.current.setPositionAsync(newPosition);
+      showControlsWithTimeout();
+    }
+  };
+
+  // Seek to absolute position in milliseconds
+  const seekToMs = async (newPositionMs: number) => {
+    if (videoRef.current) {
+      const clampedPosition = Math.max(0, Math.min(duration, newPositionMs));
+      await videoRef.current.setPositionAsync(clampedPosition);
+      showControlsWithTimeout();
+    }
+  };
+
+  // Handle progress bar press/tap
+  const handleProgressBarPress = (event: any) => {
+    const { locationX } = event.nativeEvent;
+    const progressBarWidth = width - 160; // Account for time text padding
+    const percentage = Math.max(0, Math.min(1, locationX / progressBarWidth));
+    seekToPosition(percentage);
+  };
+
+  // Format remaining time
+  const formatRemainingTime = (pos: number, dur: number) => {
+    if (dur <= 0) return '-:--';
+    const remaining = Math.max(0, dur - pos);
+    return '-' + formatTime(remaining);
+  };
+
+  // TV remote events are handled by the useEffect below with try-catch safety
+
+  // Handle TV remote / hardware button events via native dispatchKeyEvent
+  // This uses our custom config plugin (withTVKeyEvents) that intercepts
+  // ALL key events at the Activity level and emits them via DeviceEventEmitter
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     
-    let tvEventHandler: any;
+    console.log('[TV] Setting up native key event listener');
     
+    const subscription = DeviceEventEmitter.addListener('onTVKeyEvent', (evt: any) => {
+      if (!evt || !evt.eventType) return;
+      
+      console.log('[TV] Key event:', evt.eventType, 'keyCode:', evt.keyCode);
+      
+      // Show controls on any button press
+      showControlsWithTimeout();
+      
+      switch (evt.eventType) {
+        case 'playPause':
+          // Hardware play/pause button on Fire Stick remote
+          console.log('[TV] Play/Pause - isPlaying:', isPlaying);
+          togglePlayPause();
+          break;
+        case 'play':
+          if (videoRef.current && !isPlaying) {
+            videoRef.current.playAsync();
+          }
+          break;
+        case 'pause':
+          if (videoRef.current && isPlaying) {
+            videoRef.current.pauseAsync();
+          }
+          break;
+        case 'rewind':
+          // Hardware rewind button on Fire Stick remote
+          console.log('[TV] Rewind -10s');
+          seekToMs(position - 10000);
+          break;
+        case 'fastForward':
+          // Hardware fast-forward button on Fire Stick remote
+          console.log('[TV] FastForward +10s');
+          seekToMs(position + 10000);
+          break;
+        case 'left':
+        case 'right':
+        case 'up':
+        case 'down':
+        case 'select':
+          // D-pad events - just show controls (focus navigation handled natively)
+          break;
+      }
+    });
+    
+    // Also try legacy TVEventHandler as fallback
+    let tvEventHandler: any;
     try {
-      tvEventHandler = new TVEventHandler();
-      tvEventHandler.enable(null, (cmp: any, evt: any) => {
-        if (!evt || !evt.eventType) return;
-        
-        console.log('[TV] Remote event:', evt.eventType);
-        
-        switch (evt.eventType) {
-          case 'playPause':
-          case 'select':
-            if (showControls) {
+      if (TVEventHandler) {
+        tvEventHandler = new TVEventHandler();
+        tvEventHandler.enable(null, (cmp: any, evt: any) => {
+          if (!evt || !evt.eventType) return;
+          console.log('[TV Legacy] Event:', evt.eventType);
+          // Same handling as above
+          showControlsWithTimeout();
+          switch (evt.eventType) {
+            case 'playPause':
               togglePlayPause();
-            } else {
-              showControlsWithTimeout();
-            }
-            break;
-          case 'play':
-            if (videoRef.current && !isPlaying) {
-              videoRef.current.playAsync();
-            }
-            break;
-          case 'pause':
-            if (videoRef.current && isPlaying) {
-              videoRef.current.pauseAsync();
-            }
-            break;
-          case 'left':
-            if (videoRef.current && showControls) {
-              videoRef.current.getStatusAsync().then((status: any) => {
-                if (status.isLoaded) {
-                  const newPos = Math.max(0, status.positionMillis - 10000);
-                  videoRef.current?.setPositionAsync(newPos);
-                }
-              });
-            } else {
-              showControlsWithTimeout();
-            }
-            break;
-          case 'right':
-            if (videoRef.current && showControls) {
-              videoRef.current.getStatusAsync().then((status: any) => {
-                if (status.isLoaded && status.durationMillis) {
-                  const newPos = Math.min(status.durationMillis, status.positionMillis + 10000);
-                  videoRef.current?.setPositionAsync(newPos);
-                }
-              });
-            } else {
-              showControlsWithTimeout();
-            }
-            break;
-          case 'up':
-          case 'down':
-            showControlsWithTimeout();
-            break;
-        }
-      });
+              break;
+            case 'rewind':
+              seekToMs(position - 10000);
+              break;
+            case 'fastForward':
+              seekToMs(position + 10000);
+              break;
+          }
+        });
+      }
     } catch (e) {
-      console.log('[TV] TVEventHandler not available:', e);
+      console.log('[TV] Legacy TVEventHandler not available:', e);
     }
     
     return () => {
+      subscription.remove();
       if (tvEventHandler) {
-        try {
-          tvEventHandler.disable();
-        } catch (e) {}
+        try { tvEventHandler.disable(); } catch (e) {}
       }
     };
-  }, [isPlaying, showControls]);
-
+  }, [isPlaying, showControls, position]);
+  
   // Fade controls in/out
   const fadeControls = (show: boolean) => {
     // Clear any existing timeout
@@ -761,10 +902,11 @@ export default function PlayerScreen() {
     });
     if (show) {
       setShowControls(true);
-      // Auto-hide controls after 3 seconds
+      // Auto-hide controls after 8 seconds on TV (longer for D-pad navigation), 3 seconds on mobile
+      const hideTimeout = isTV ? 8000 : 3000;
       controlsTimeoutRef.current = setTimeout(() => {
         fadeControls(false);
-      }, 3000);
+      }, hideTimeout);
     }
   };
   
@@ -786,10 +928,11 @@ export default function PlayerScreen() {
       }).start();
     }
     
-    // Set new auto-hide timeout
+    // Set new auto-hide timeout (longer on TV)
+    const hideTimeout = isTV ? 8000 : 3000;
     controlsTimeoutRef.current = setTimeout(() => {
       fadeControls(false);
-    }, 3000);
+    }, hideTimeout);
   };
   
   // Initial show controls with auto-hide
@@ -1415,100 +1558,109 @@ export default function PlayerScreen() {
             )}
           </View>
         ) : (
-          <TouchableOpacity 
-            activeOpacity={1} 
-            style={styles.videoContainer}
-            onPress={handleVideoTap}
-          >
-            <Video
-              ref={videoRef}
-              source={{ uri: streamUrl }}
-              style={styles.videoPlayer}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay
-              isLooping={false}
-              volume={1.0}
-              isMuted={false}
-              onPlaybackStatusUpdate={handlePlaybackStatus}
-              onError={(error) => {
-                console.log('[PLAYER] Video error:', error);
-                if (fallbackUrls.length > currentStreamIndex + 1) {
-                  tryNextStream();
-                } else {
-                  setError('Failed to play video. All streams failed.');
-                  setHasAudioError(true);
-                }
-              }}
-            />
+          <View style={styles.videoContainer}>
+            <Pressable 
+              style={StyleSheet.absoluteFill}
+              onPress={handleVideoTap}
+            >
+              <Video
+                ref={videoRef}
+                source={{ uri: streamUrl }}
+                style={styles.videoPlayer}
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay
+                isLooping={false}
+                volume={1.0}
+                isMuted={false}
+                onPlaybackStatusUpdate={handlePlaybackStatus}
+                onError={(error) => {
+                  console.log('[PLAYER] Video error:', error);
+                  if (fallbackUrls.length > currentStreamIndex + 1) {
+                    tryNextStream();
+                  } else {
+                    setError('Failed to play video. All streams failed.');
+                    setHasAudioError(true);
+                  }
+                }}
+              />
+            </Pressable>
             
             {/* Subtitle Overlay */}
             {currentSubtitleText && (
-              <View style={styles.subtitleContainer}>
+              <View style={styles.subtitleContainer} pointerEvents="none">
                 <Text style={styles.subtitleText}>{currentSubtitleText}</Text>
               </View>
             )}
             
             {/* Custom Controls Overlay - fades in/out */}
             {showControls && (
-              <Animated.View style={[styles.controlsOverlay, { opacity: controlsOpacity }]}>
-                {/* Top Bar - Back, Title, CC, Next */}
-                <View style={styles.topControls}>
-                  <TouchableOpacity style={styles.controlButton} onPress={handleBack}>
+              <Animated.View style={[styles.controlsOverlay, { opacity: controlsOpacity }]} pointerEvents="box-none">
+                {/* Top Bar - Back, Title, CC */}
+                <View style={styles.topControls} pointerEvents="box-none">
+                  <TVFocusButton 
+                    style={styles.controlButton}
+                    focusedStyle={styles.controlButtonFocused}
+                    onPress={handleBack}
+                  >
                     <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
-                  </TouchableOpacity>
+                  </TVFocusButton>
                   
                   <Text style={styles.titleText} numberOfLines={1}>{title || 'Playing'}</Text>
                   
                   <View style={styles.topRightControls}>
-                    {/* Cast Button */}
-                    <TouchableOpacity 
-                      style={[styles.controlButton, isCasting && styles.castActive]}
-                      onPress={handleCastToDevice}
-                    >
-                      <Ionicons 
-                        name={isCasting ? "tv" : "tv-outline"} 
-                        size={24} 
-                        color={isCasting ? '#B8A05C' : '#FFFFFF'} 
-                      />
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
+                    <TVFocusButton 
                       style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
+                      focusedStyle={styles.controlButtonFocused}
                       onPress={() => setShowSubtitlePicker(true)}
                     >
                       <Ionicons name="chatbubble-ellipses-outline" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
-                    </TouchableOpacity>
-                    
-                    {nextEpisodeId && (
-                      <TouchableOpacity style={styles.controlButton} onPress={playNextEpisode}>
-                        <Ionicons name="play-skip-forward" size={24} color="#FFFFFF" />
-                      </TouchableOpacity>
-                    )}
-                    
-                    <TouchableOpacity style={styles.controlButton} onPress={openInExternalPlayer}>
-                      <Ionicons name="open-outline" size={24} color="#FFFFFF" />
-                    </TouchableOpacity>
+                    </TVFocusButton>
                   </View>
                 </View>
                 
-                {/* Center Play/Pause */}
-                <View style={styles.centerControls}>
-                  <TouchableOpacity style={styles.playPauseButton} onPress={togglePlayPause}>
-                    <Ionicons name={isPlaying ? "pause" : "play"} size={50} color="#FFFFFF" />
-                  </TouchableOpacity>
+                {/* Center Controls: Rewind, Play/Pause, Fast Forward */}
+                <View style={styles.centerControls} pointerEvents="box-none">
+                  <View style={styles.centerButtonsRow}>
+                    <TVFocusButton 
+                      style={styles.seekButton}
+                      focusedStyle={styles.seekButtonFocused}
+                      onPress={() => seekToMs(position - 10000)}
+                    >
+                      <Ionicons name="play-back" size={36} color="#FFFFFF" />
+                    </TVFocusButton>
+                    
+                    <TVFocusButton 
+                      style={styles.playPauseButton}
+                      focusedStyle={styles.playPauseFocused}
+                      onPress={togglePlayPause}
+                      hasTVPreferredFocus={true}
+                    >
+                      <Ionicons name={isPlaying ? "pause" : "play"} size={50} color="#FFFFFF" />
+                    </TVFocusButton>
+                    
+                    <TVFocusButton 
+                      style={styles.seekButton}
+                      focusedStyle={styles.seekButtonFocused}
+                      onPress={() => seekToMs(position + 10000)}
+                    >
+                      <Ionicons name="play-forward" size={36} color="#FFFFFF" />
+                    </TVFocusButton>
+                  </View>
                 </View>
                 
                 {/* Bottom Bar - Progress */}
-                <View style={styles.bottomControls}>
+                <View style={styles.bottomControls} pointerEvents="box-none">
                   <Text style={styles.timeText}>{formatTime(position)}</Text>
-                  <View style={styles.progressBarContainer}>
-                    <View style={[styles.progressBarFill, { width: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
-                  </View>
-                  <Text style={styles.timeText}>{formatTime(duration)}</Text>
+                  <SeekableProgressBar
+                    position={position}
+                    duration={duration}
+                    onSeek={seekToMs}
+                  />
+                  <Text style={styles.timeText}>{formatRemainingTime(position, duration)}</Text>
                 </View>
               </Animated.View>
             )}
-          </TouchableOpacity>
+          </View>
         )
       )}
 
@@ -1586,11 +1738,12 @@ export default function PlayerScreen() {
                 data={[{ id: 'off', url: '', lang: 'off', langName: 'Off' }, ...subtitles]}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                  <TouchableOpacity
+                  <TVFocusButton
                     style={[
                       styles.subtitleItem,
                       (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemActive
                     ]}
+                    focusedStyle={styles.subtitleItemFocused}
                     onPress={() => {
                       setSelectedSubtitle(item.lang === 'off' ? null : item.url);
                       setShowSubtitlePicker(false);
@@ -1605,7 +1758,7 @@ export default function PlayerScreen() {
                     {(item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && (
                       <Ionicons name="checkmark" size={20} color="#B8A05C" />
                     )}
-                  </TouchableOpacity>
+                  </TVFocusButton>
                 )}
                 style={styles.subtitleList}
               />
@@ -1913,17 +2066,14 @@ const styles = StyleSheet.create({
   },
   subtitleText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     textAlign: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
     textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
   },
   // Controls overlay
   webControlsOverlay: {
@@ -1967,6 +2117,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  controlButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
+    transform: [{ scale: 1.1 }],
   },
   ccActive: {
     backgroundColor: 'rgba(184, 160, 92, 0.5)',
@@ -1986,6 +2143,34 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  playPauseFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
+    transform: [{ scale: 1.15 }],
+  },
+  centerButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 40,
+  },
+  seekButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  seekButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
+    transform: [{ scale: 1.15 }],
   },
   bottomControls: {
     flexDirection: 'row',
@@ -2002,16 +2187,55 @@ const styles = StyleSheet.create({
   },
   progressBarContainer: {
     flex: 1,
-    height: 4,
+    height: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 2,
+    borderRadius: 4,
     marginHorizontal: 12,
-    overflow: 'hidden',
+    overflow: 'visible',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  progressBarFocused: {
+    borderColor: '#B8A05C',
+    height: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: '#B8A05C',
-    borderRadius: 2,
+    borderRadius: 4,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+  },
+  progressBarThumb: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#B8A05C',
+    marginLeft: -8,
+    top: -4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  seekHint: {
+    position: 'absolute',
+    top: -30,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  seekHintText: {
+    color: '#B8A05C',
+    fontSize: 12,
+    fontWeight: '600',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
   // Subtitle modal
   subtitleModalOverlay: {
@@ -2046,13 +2270,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginHorizontal: 16,
+    marginVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   subtitleItemActive: {
     backgroundColor: 'rgba(184, 160, 92, 0.2)',
+    borderColor: 'rgba(184, 160, 92, 0.5)',
+  },
+  subtitleItemFocused: {
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
+    borderColor: '#B8A05C',
+    transform: [{ scale: 1.02 }],
   },
   subtitleItemText: {
     color: '#FFFFFF',

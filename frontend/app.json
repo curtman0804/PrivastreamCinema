@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Privastream Cinema",
+    "name": "PrivastreamCinema",
     "slug": "privastreamcinema",
     "version": "1.0.0",
     "orientation": "default",
@@ -49,7 +49,9 @@
         {
           "receiverAppId": "CC1AD845"
         }
-      ]
+      ],
+      "expo-font",
+      "./plugins/withTVKeyEvents"
     ],
     "experiments": {
       "typedRoutes": true
@@ -59,7 +61,7 @@
       "eas": {
         "projectId": "734879b5-3cae-4195-b064-cc0c7617b7ae"
       },
-      "backendUrl": "https://cinema-app-24.preview.emergentagent.com"
+      "backendUrl": "https://fire-stick-remote.preview.emergentagent.com"
     },
     "owner": "choyt"
   }
