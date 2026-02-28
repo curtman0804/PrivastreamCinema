@@ -3131,6 +3131,15 @@ async def proxy_xhamster_stream(
 async def root():
     return {"message": "PrivastreamCinema API", "version": "1.0.0"}
 
+@api_router.get("/download/{filename}")
+async def download_file(filename: str):
+    """Serve files from the static directory for download"""
+    import os
+    file_path = os.path.join(os.path.dirname(__file__), "static", filename)
+    if os.path.exists(file_path):
+        return FileResponse(file_path, media_type="text/plain", filename=filename)
+    raise HTTPException(status_code=404, detail="File not found")
+
 
 # Include the router in the main app
 app.include_router(api_router)
