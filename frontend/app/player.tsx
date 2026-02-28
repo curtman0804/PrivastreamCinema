@@ -13,6 +13,7 @@ import {
   Animated,
   Image,
   Pressable,
+  DeviceEventEmitter,
 } from 'react-native';
 
 // Safe TV event handler imports - these may not exist in all RN versions
