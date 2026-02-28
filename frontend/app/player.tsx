@@ -949,7 +949,8 @@ export default function PlayerScreen() {
     }, hideTimeout);
   };
   
-  // Initial show controls with auto-hide
+  // Keep ref updated for the TV event handler
+  showControlsWithTimeoutRef.current = showControlsWithTimeout;
   useEffect(() => {
     if (streamUrl && !error && !isLoading) {
       showControlsWithTimeout();
