@@ -12,9 +12,9 @@ import {
   Alert,
   Animated,
   Image,
-  TVEventHandler,
   useTVEventHandler,
   Pressable,
+  findNodeHandle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -92,46 +92,64 @@ function TVFocusButton({
   );
 }
 
-// Seekable Progress Bar Component for TV - handles left/right D-pad for seeking
+// Seekable Progress Bar Component for TV
+// D-pad left/right seeking is handled by the parent via useTVEventHandler
+// Focus is trapped using nextFocusLeft/nextFocusRight pointing to self
 function SeekableProgressBar({
   position,
   duration,
-  onSeek,
+  onFocusChange,
   style,
   focusedStyle,
 }: {
   position: number;
   duration: number;
-  onSeek: (newPosition: number) => void;
+  onFocusChange: (focused: boolean) => void;
   style?: any;
   focusedStyle?: any;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-  const seekAmount = 10000; // 10 seconds in ms
+  const barRef = useRef<any>(null);
+  const [selfNodeHandle, setSelfNodeHandle] = useState<number | null>(null);
   
-  const handleKeyDown = (event: any) => {
-    if (!isFocused) return;
-    
-    const { key, eventType } = event.nativeEvent || {};
-    
-    // Handle left/right when focused
-    if (eventType === 'left' || key === 'ArrowLeft') {
-      const newPos = Math.max(0, position - seekAmount);
-      onSeek(newPos);
-    } else if (eventType === 'right' || key === 'ArrowRight') {
-      const newPos = Math.min(duration, position + seekAmount);
-      onSeek(newPos);
-    }
-  };
+  // Get native node handle after mount for focus trapping
+  useEffect(() => {
+    // Small delay to ensure the ref is attached
+    const timer = setTimeout(() => {
+      if (barRef.current) {
+        const handle = findNodeHandle(barRef.current);
+        if (handle) {
+          setSelfNodeHandle(handle);
+          console.log('[SeekBar] Got node handle:', handle);
+        }
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+  
+  const handleFocus = useCallback(() => {
+    console.log('[SeekBar] Focused');
+    setIsFocused(true);
+    onFocusChange(true);
+  }, [onFocusChange]);
+  
+  const handleBlur = useCallback(() => {
+    console.log('[SeekBar] Blurred');
+    setIsFocused(false);
+    onFocusChange(false);
+  }, [onFocusChange]);
   
   const percentage = duration > 0 ? (position / duration) * 100 : 0;
   
   return (
     <Pressable
+      ref={barRef}
       style={[styles.progressBarContainer, style, isFocused && (focusedStyle || styles.progressBarFocused)]}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
-      onKeyDown={handleKeyDown}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      // @ts-ignore - Android TV specific props to trap left/right D-pad focus on this component
+      nextFocusLeft={selfNodeHandle || undefined}
+      nextFocusRight={selfNodeHandle || undefined}
     >
       <View style={[styles.progressBarFill, { width: `${percentage}%` }]} />
       <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
@@ -296,6 +314,16 @@ export default function PlayerScreen() {
   const videoRef = useRef<Video>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
+  
+  // Refs to track latest state values for TV event handler (avoids stale closures)
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const positionRef = useRef(position);
+  positionRef.current = position;
+  const durationRef = useRef(duration);
+  durationRef.current = duration;
+  const progressBarFocusedRef = useRef(false);
+  const showControlsWithTimeoutRef = useRef<(() => void) | null>(null);
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
@@ -792,117 +820,83 @@ export default function PlayerScreen() {
     return '-' + formatTime(remaining);
   };
 
-  // Use the TV event handler hook for better Fire Stick support
-  useTVEventHandler((evt) => {
+  // === SINGLE TV REMOTE EVENT HANDLER ===
+  // Handles Fire Stick remote: play/pause, FF, RW, D-pad
+  // Uses refs for all state values to avoid stale closures
+  const handleTVEvent = useCallback((evt: any) => {
     if (!evt) return;
-    console.log('[TV Hook] Event:', evt.eventType);
+    console.log('[TV] Remote event:', evt.eventType);
+    
+    // Show controls on any remote button press
+    if (showControlsWithTimeoutRef.current) {
+      showControlsWithTimeoutRef.current();
+    }
     
     switch (evt.eventType) {
       case 'playPause':
-        togglePlayPause();
-        showControlsWithTimeout();
+        // Hardware play/pause button on Fire Stick remote
+        console.log('[TV] Play/Pause pressed, isPlaying:', isPlayingRef.current);
+        if (isPlayingRef.current) {
+          videoRef.current?.pauseAsync();
+        } else {
+          videoRef.current?.playAsync();
+        }
         break;
       case 'play':
-        if (videoRef.current && !isPlaying) {
-          videoRef.current.playAsync();
+        console.log('[TV] Play pressed');
+        if (!isPlayingRef.current) {
+          videoRef.current?.playAsync();
         }
-        showControlsWithTimeout();
         break;
       case 'pause':
-        if (videoRef.current && isPlaying) {
-          videoRef.current.pauseAsync();
+        console.log('[TV] Pause pressed');
+        if (isPlayingRef.current) {
+          videoRef.current?.pauseAsync();
         }
-        showControlsWithTimeout();
         break;
       case 'rewind':
-        seekToMs(position - 10000);
+        // Hardware rewind button on Fire Stick remote
+        {
+          console.log('[TV] Rewind pressed, seeking -10s from', positionRef.current);
+          const newPos = Math.max(0, positionRef.current - 10000);
+          videoRef.current?.setPositionAsync(newPos);
+        }
         break;
       case 'fastForward':
-        seekToMs(position + 10000);
+        // Hardware fast-forward button on Fire Stick remote
+        {
+          console.log('[TV] FastForward pressed, seeking +10s from', positionRef.current);
+          const newPos = Math.min(durationRef.current, positionRef.current + 10000);
+          videoRef.current?.setPositionAsync(newPos);
+        }
+        break;
+      case 'left':
+        // D-pad left: seek backward ONLY when progress bar is focused
+        if (progressBarFocusedRef.current) {
+          console.log('[TV] Left on seekbar, seeking -10s');
+          const newPos = Math.max(0, positionRef.current - 10000);
+          videoRef.current?.setPositionAsync(newPos);
+        }
+        break;
+      case 'right':
+        // D-pad right: seek forward ONLY when progress bar is focused
+        if (progressBarFocusedRef.current) {
+          console.log('[TV] Right on seekbar, seeking +10s');
+          const newPos = Math.min(durationRef.current, positionRef.current + 10000);
+          videoRef.current?.setPositionAsync(newPos);
+        }
+        break;
+      case 'select':
+        // Center button: controls are shown above, button onPress handles actions
+        break;
+      case 'up':
+      case 'down':
+        // Just show controls (done above)
         break;
     }
-  });
+  }, []);
 
-  // Handle TV remote / hardware button events
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    
-    let tvEventHandler: any;
-    
-    try {
-      // Try to use TVEventHandler for Fire Stick / Android TV
-      tvEventHandler = new TVEventHandler();
-      tvEventHandler.enable(null, (cmp: any, evt: any) => {
-        if (!evt || !evt.eventType) return;
-        
-        console.log('[TV] Remote event:', evt.eventType);
-        
-        switch (evt.eventType) {
-          case 'playPause':
-          case 'select':
-            // Center button or play/pause button
-            if (showControls) {
-              togglePlayPause();
-            } else {
-              showControlsWithTimeout();
-            }
-            break;
-          case 'play':
-            if (videoRef.current && !isPlaying) {
-              videoRef.current.playAsync();
-            }
-            showControlsWithTimeout();
-            break;
-          case 'pause':
-            if (videoRef.current && isPlaying) {
-              videoRef.current.pauseAsync();
-            }
-            showControlsWithTimeout();
-            break;
-          case 'rewind':
-          case 'left':
-            // Seek back 10 seconds
-            if (videoRef.current) {
-              videoRef.current.getStatusAsync().then((status: any) => {
-                if (status.isLoaded) {
-                  const newPos = Math.max(0, status.positionMillis - 10000);
-                  videoRef.current?.setPositionAsync(newPos);
-                }
-              });
-            }
-            showControlsWithTimeout();
-            break;
-          case 'fastForward':
-          case 'right':
-            // Seek forward 10 seconds
-            if (videoRef.current) {
-              videoRef.current.getStatusAsync().then((status: any) => {
-                if (status.isLoaded && status.durationMillis) {
-                  const newPos = Math.min(status.durationMillis, status.positionMillis + 10000);
-                  videoRef.current?.setPositionAsync(newPos);
-                }
-              });
-            }
-            showControlsWithTimeout();
-            break;
-          case 'up':
-          case 'down':
-            showControlsWithTimeout();
-            break;
-        }
-      });
-    } catch (e) {
-      console.log('[TV] TVEventHandler not available:', e);
-    }
-    
-    return () => {
-      if (tvEventHandler) {
-        try {
-          tvEventHandler.disable();
-        } catch (e) {}
-      }
-    };
-  }, [isPlaying, showControls]);
+  useTVEventHandler(handleTVEvent);
   
   // Fade controls in/out
   const fadeControls = (show: boolean) => {
@@ -953,6 +947,9 @@ export default function PlayerScreen() {
       fadeControls(false);
     }, hideTimeout);
   };
+  
+  // Keep ref updated for the TV event handler
+  showControlsWithTimeoutRef.current = showControlsWithTimeout;
   
   // Initial show controls with auto-hide
   useEffect(() => {
@@ -1637,16 +1634,34 @@ export default function PlayerScreen() {
                   </View>
                 </View>
                 
-                {/* Center Play/Pause */}
+                {/* Center Controls: Rewind, Play/Pause, Fast Forward */}
                 <View style={styles.centerControls} pointerEvents="box-none">
-                  <TVFocusButton 
-                    style={styles.playPauseButton}
-                    focusedStyle={styles.playPauseFocused}
-                    onPress={togglePlayPause}
-                    hasTVPreferredFocus={true}
-                  >
-                    <Ionicons name={isPlaying ? "pause" : "play"} size={50} color="#FFFFFF" />
-                  </TVFocusButton>
+                  <View style={styles.centerButtonsRow}>
+                    <TVFocusButton 
+                      style={styles.seekButton}
+                      focusedStyle={styles.seekButtonFocused}
+                      onPress={() => seekToMs(position - 10000)}
+                    >
+                      <Ionicons name="play-back" size={36} color="#FFFFFF" />
+                    </TVFocusButton>
+                    
+                    <TVFocusButton 
+                      style={styles.playPauseButton}
+                      focusedStyle={styles.playPauseFocused}
+                      onPress={togglePlayPause}
+                      hasTVPreferredFocus={true}
+                    >
+                      <Ionicons name={isPlaying ? "pause" : "play"} size={50} color="#FFFFFF" />
+                    </TVFocusButton>
+                    
+                    <TVFocusButton 
+                      style={styles.seekButton}
+                      focusedStyle={styles.seekButtonFocused}
+                      onPress={() => seekToMs(position + 10000)}
+                    >
+                      <Ionicons name="play-forward" size={36} color="#FFFFFF" />
+                    </TVFocusButton>
+                  </View>
                 </View>
                 
                 {/* Bottom Bar - Progress */}
@@ -1655,7 +1670,7 @@ export default function PlayerScreen() {
                   <SeekableProgressBar
                     position={position}
                     duration={duration}
-                    onSeek={seekToMs}
+                    onFocusChange={(focused: boolean) => { progressBarFocusedRef.current = focused; }}
                   />
                   <Text style={styles.timeText}>{formatRemainingTime(position, duration)}</Text>
                 </View>
@@ -2148,6 +2163,27 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   playPauseFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
+    transform: [{ scale: 1.15 }],
+  },
+  centerButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 40,
+  },
+  seekButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  seekButtonFocused: {
     borderColor: '#B8A05C',
     backgroundColor: 'rgba(184, 160, 92, 0.4)',
     transform: [{ scale: 1.15 }],
