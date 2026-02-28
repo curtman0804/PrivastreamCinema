@@ -4,7 +4,8 @@ import com.reactnative.googlecast.api.RNGCCastContext
 
 import android.os.Build
 import android.os.Bundle
-import com.facebook.react.bridge.WritableNativeMap
+import com.facebook.react.ReactApplication
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import android.view.KeyEvent
 
@@ -72,8 +73,7 @@ class MainActivity : ReactActivity() {
 
   override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
     if (event != null && event.action == KeyEvent.ACTION_DOWN) {
-      val keyCode = event.keyCode
-      val eventName = when (keyCode) {
+      val eventName = when (event.keyCode) {
         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "playPause"
         KeyEvent.KEYCODE_MEDIA_PLAY -> "play"
         KeyEvent.KEYCODE_MEDIA_PAUSE -> "pause"
@@ -90,27 +90,17 @@ class MainActivity : ReactActivity() {
       
       if (eventName != null) {
         try {
-          // Try new architecture (ReactHost) first, then fall back to legacy
-          val reactContext = try {
-            reactHost?.currentReactContext
-          } catch (e: Exception) {
-            try {
-              reactInstanceManager?.currentReactContext
-            } catch (e2: Exception) {
-              null
-            }
-          }
-          
-          if (reactContext != null) {
-            val params = WritableNativeMap()
+          val reactApp = application as? ReactApplication
+          val ctx = reactApp?.reactNativeHost?.reactInstanceManager?.currentReactContext
+          if (ctx != null) {
+            val params = Arguments.createMap()
             params.putString("eventType", eventName)
-            params.putInt("keyCode", keyCode)
-            reactContext
-              .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            params.putInt("keyCode", event.keyCode)
+            ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
               .emit("onTVKeyEvent", params)
           }
         } catch (e: Exception) {
-          // Silently ignore if React context is not ready
+          // Ignore - React context not ready
         }
       }
     }
