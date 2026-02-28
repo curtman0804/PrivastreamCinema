@@ -25,14 +25,6 @@ const withTVKeyEvents = (config) => {
         "import android.os.Bundle\nimport com.facebook.react.bridge.Arguments\nimport com.facebook.react.modules.core.DeviceEventManagerModule"
       );
     }
-
-    // Add ReactApplication import
-    if (!modified.includes("import com.facebook.react.ReactApplication")) {
-      modified = modified.replace(
-        "import android.os.Bundle",
-        "import android.os.Bundle\nimport com.facebook.react.ReactApplication"
-      );
-    }
     
     // Add dispatchKeyEvent override before the closing brace of the class
     if (!modified.includes("dispatchKeyEvent")) {
@@ -56,8 +48,8 @@ const withTVKeyEvents = (config) => {
       
       if (eventName != null) {
         try {
-          val reactApp = application as? ReactApplication
-          val ctx = reactApp?.reactNativeHost?.reactInstanceManager?.currentReactContext
+          val reactApp = application as? com.facebook.react.ReactApplication
+          val ctx = reactApp?.reactHost?.currentReactContext
           if (ctx != null) {
             val params = Arguments.createMap()
             params.putString("eventType", eventName)
