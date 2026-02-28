@@ -92,42 +92,30 @@ function TVFocusButton({
   );
 }
 
-// Seekable Progress Bar Component for TV
-// D-pad left/right seeking is handled by the parent via useTVEventHandler
+// Seekable Progress Bar Component for TV - handles left/right D-pad for seeking
 function SeekableProgressBar({
   position,
   duration,
-  onFocusChange,
+  onSeek,
   style,
   focusedStyle,
 }: {
   position: number;
   duration: number;
-  onFocusChange: (focused: boolean) => void;
+  onSeek: (newPosition: number) => void;
   style?: any;
   focusedStyle?: any;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-  
-  const handleFocus = useCallback(() => {
-    console.log('[SeekBar] Focused');
-    setIsFocused(true);
-    onFocusChange(true);
-  }, [onFocusChange]);
-  
-  const handleBlur = useCallback(() => {
-    console.log('[SeekBar] Blurred');
-    setIsFocused(false);
-    onFocusChange(false);
-  }, [onFocusChange]);
+  const seekAmount = 10000; // 10 seconds in ms
   
   const percentage = duration > 0 ? (position / duration) * 100 : 0;
   
   return (
     <Pressable
       style={[styles.progressBarContainer, style, isFocused && (focusedStyle || styles.progressBarFocused)]}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
     >
       <View style={[styles.progressBarFill, { width: `${percentage}%` }]} />
       <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
