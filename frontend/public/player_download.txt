@@ -63,6 +63,35 @@ if (Platform.OS !== 'web') {
 
 const { width, height } = Dimensions.get('window');
 
+// TV Focus Button Component - handles focus state for D-pad navigation
+function TVFocusButton({ 
+  onPress, 
+  style, 
+  focusedStyle,
+  children,
+  hasTVPreferredFocus = false,
+}: {
+  onPress?: () => void;
+  style: any;
+  focusedStyle?: any;
+  children: React.ReactNode;
+  hasTVPreferredFocus?: boolean;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    <Pressable
+      style={[style, isFocused && focusedStyle]}
+      onPress={onPress}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      hasTVPreferredFocus={hasTVPreferredFocus}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
 // Check if title suggests HEVC/x265 codec (not supported on most web browsers)
 const isHEVCContent = (titleStr: string | undefined): boolean => {
   if (!titleStr) return false;
@@ -1469,37 +1498,37 @@ export default function PlayerScreen() {
               <Animated.View style={[styles.controlsOverlay, { opacity: controlsOpacity }]} pointerEvents="box-none">
                 {/* Top Bar - Back, Title, CC */}
                 <View style={styles.topControls} pointerEvents="box-none">
-                  <Pressable 
-                    style={({ focused }) => [styles.controlButton, focused && styles.controlButtonFocused]} 
+                  <TVFocusButton 
+                    style={styles.controlButton}
+                    focusedStyle={styles.controlButtonFocused}
                     onPress={handleBack}
-                    focusable={true}
                   >
                     <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
-                  </Pressable>
+                  </TVFocusButton>
                   
                   <Text style={styles.titleText} numberOfLines={1}>{title || 'Playing'}</Text>
                   
                   <View style={styles.topRightControls}>
-                    <Pressable 
-                      style={({ focused }) => [styles.controlButton, selectedSubtitle && styles.ccActive, focused && styles.controlButtonFocused]}
+                    <TVFocusButton 
+                      style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
+                      focusedStyle={styles.controlButtonFocused}
                       onPress={() => setShowSubtitlePicker(true)}
-                      focusable={true}
                     >
                       <Ionicons name="chatbubble-ellipses-outline" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
-                    </Pressable>
+                    </TVFocusButton>
                   </View>
                 </View>
                 
                 {/* Center Play/Pause */}
                 <View style={styles.centerControls} pointerEvents="box-none">
-                  <Pressable 
-                    style={({ focused }) => [styles.playPauseButton, focused && styles.playPauseFocused]} 
+                  <TVFocusButton 
+                    style={styles.playPauseButton}
+                    focusedStyle={styles.playPauseFocused}
                     onPress={togglePlayPause}
-                    focusable={true}
                     hasTVPreferredFocus={true}
                   >
                     <Ionicons name={isPlaying ? "pause" : "play"} size={50} color="#FFFFFF" />
-                  </Pressable>
+                  </TVFocusButton>
                 </View>
                 
                 {/* Bottom Bar - Progress */}
@@ -1590,11 +1619,12 @@ export default function PlayerScreen() {
                 data={[{ id: 'off', url: '', lang: 'off', langName: 'Off' }, ...subtitles]}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                  <TouchableOpacity
+                  <TVFocusButton
                     style={[
                       styles.subtitleItem,
                       (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemActive
                     ]}
+                    focusedStyle={styles.subtitleItemFocused}
                     onPress={() => {
                       setSelectedSubtitle(item.lang === 'off' ? null : item.url);
                       setShowSubtitlePicker(false);
@@ -1609,7 +1639,7 @@ export default function PlayerScreen() {
                     {(item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && (
                       <Ionicons name="checkmark" size={20} color="#B8A05C" />
                     )}
-                  </TouchableOpacity>
+                  </TVFocusButton>
                 )}
                 style={styles.subtitleList}
               />
@@ -2071,6 +2101,11 @@ const styles = StyleSheet.create({
   },
   subtitleItemActive: {
     backgroundColor: 'rgba(184, 160, 92, 0.2)',
+  },
+  subtitleItemFocused: {
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
+    borderColor: '#B8A05C',
+    borderWidth: 2,
   },
   subtitleItemText: {
     color: '#FFFFFF',
