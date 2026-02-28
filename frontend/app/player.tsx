@@ -1964,6 +1964,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  controlButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
+    transform: [{ scale: 1.1 }],
   },
   ccActive: {
     backgroundColor: 'rgba(184, 160, 92, 0.5)',
@@ -1983,6 +1990,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  playPauseFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
+    transform: [{ scale: 1.15 }],
   },
   bottomControls: {
     flexDirection: 'row',
