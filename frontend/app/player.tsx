@@ -12,10 +12,19 @@ import {
   Alert,
   Animated,
   Image,
-  useTVEventHandler,
-  TVEventHandler,
   Pressable,
 } from 'react-native';
+
+// Safe TV event handler imports - these may not exist in all RN versions
+let useTVEventHandler: any = null;
+let TVEventHandler: any = null;
+try {
+  const RN = require('react-native');
+  useTVEventHandler = RN.useTVEventHandler || null;
+  TVEventHandler = RN.TVEventHandler || null;
+} catch (e) {
+  console.log('[TV] TV event handlers not available');
+}
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
