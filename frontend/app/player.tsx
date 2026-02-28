@@ -798,82 +798,92 @@ export default function PlayerScreen() {
 
   // TV remote events are handled by the useEffect below with try-catch safety
 
-  // Handle TV remote / hardware button events (fallback with try-catch)
+  // Handle TV remote / hardware button events via native dispatchKeyEvent
+  // This uses our custom config plugin (withTVKeyEvents) that intercepts
+  // ALL key events at the Activity level and emits them via DeviceEventEmitter
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     
-    let tvEventHandler: any;
+    console.log('[TV] Setting up native key event listener');
     
+    const subscription = DeviceEventEmitter.addListener('onTVKeyEvent', (evt: any) => {
+      if (!evt || !evt.eventType) return;
+      
+      console.log('[TV] Key event:', evt.eventType, 'keyCode:', evt.keyCode);
+      
+      // Show controls on any button press
+      showControlsWithTimeout();
+      
+      switch (evt.eventType) {
+        case 'playPause':
+          // Hardware play/pause button on Fire Stick remote
+          console.log('[TV] Play/Pause - isPlaying:', isPlaying);
+          togglePlayPause();
+          break;
+        case 'play':
+          if (videoRef.current && !isPlaying) {
+            videoRef.current.playAsync();
+          }
+          break;
+        case 'pause':
+          if (videoRef.current && isPlaying) {
+            videoRef.current.pauseAsync();
+          }
+          break;
+        case 'rewind':
+          // Hardware rewind button on Fire Stick remote
+          console.log('[TV] Rewind -10s');
+          seekToMs(position - 10000);
+          break;
+        case 'fastForward':
+          // Hardware fast-forward button on Fire Stick remote
+          console.log('[TV] FastForward +10s');
+          seekToMs(position + 10000);
+          break;
+        case 'left':
+        case 'right':
+        case 'up':
+        case 'down':
+        case 'select':
+          // D-pad events - just show controls (focus navigation handled natively)
+          break;
+      }
+    });
+    
+    // Also try legacy TVEventHandler as fallback
+    let tvEventHandler: any;
     try {
-      tvEventHandler = new TVEventHandler();
-      tvEventHandler.enable(null, (cmp: any, evt: any) => {
-        if (!evt || !evt.eventType) return;
-        
-        console.log('[TV] Remote event:', evt.eventType);
-        
-        switch (evt.eventType) {
-          case 'playPause':
-          case 'select':
-            if (showControls) {
+      if (TVEventHandler) {
+        tvEventHandler = new TVEventHandler();
+        tvEventHandler.enable(null, (cmp: any, evt: any) => {
+          if (!evt || !evt.eventType) return;
+          console.log('[TV Legacy] Event:', evt.eventType);
+          // Same handling as above
+          showControlsWithTimeout();
+          switch (evt.eventType) {
+            case 'playPause':
               togglePlayPause();
-            } else {
-              showControlsWithTimeout();
-            }
-            break;
-          case 'play':
-            if (videoRef.current && !isPlaying) {
-              videoRef.current.playAsync();
-            }
-            showControlsWithTimeout();
-            break;
-          case 'pause':
-            if (videoRef.current && isPlaying) {
-              videoRef.current.pauseAsync();
-            }
-            showControlsWithTimeout();
-            break;
-          case 'rewind':
-          case 'left':
-            if (videoRef.current) {
-              videoRef.current.getStatusAsync().then((status: any) => {
-                if (status.isLoaded) {
-                  const newPos = Math.max(0, status.positionMillis - 10000);
-                  videoRef.current?.setPositionAsync(newPos);
-                }
-              });
-            }
-            showControlsWithTimeout();
-            break;
-          case 'fastForward':
-          case 'right':
-            if (videoRef.current) {
-              videoRef.current.getStatusAsync().then((status: any) => {
-                if (status.isLoaded && status.durationMillis) {
-                  const newPos = Math.min(status.durationMillis, status.positionMillis + 10000);
-                  videoRef.current?.setPositionAsync(newPos);
-                }
-              });
-            }
-            showControlsWithTimeout();
-            break;
-          case 'up':
-          case 'down':
-            showControlsWithTimeout();
-            break;
-        }
-      });
+              break;
+            case 'rewind':
+              seekToMs(position - 10000);
+              break;
+            case 'fastForward':
+              seekToMs(position + 10000);
+              break;
+          }
+        });
+      }
     } catch (e) {
-      console.log('[TV] TVEventHandler not available:', e);
+      console.log('[TV] Legacy TVEventHandler not available:', e);
     }
     
     return () => {
+      subscription.remove();
       if (tvEventHandler) {
-        try {
-          tvEventHandler.disable();
-        } catch (e) {}
+        try { tvEventHandler.disable(); } catch (e) {}
       }
     };
-  }, [isPlaying, showControls]);
+  }, [isPlaying, showControls, position]);
   
   // Fade controls in/out
   const fadeControls = (show: boolean) => {
