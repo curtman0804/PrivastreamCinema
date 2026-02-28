@@ -14,7 +14,6 @@ import {
   Image,
   useTVEventHandler,
   Pressable,
-  findNodeHandle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -94,7 +93,6 @@ function TVFocusButton({
 
 // Seekable Progress Bar Component for TV
 // D-pad left/right seeking is handled by the parent via useTVEventHandler
-// Focus is trapped using nextFocusLeft/nextFocusRight pointing to self
 function SeekableProgressBar({
   position,
   duration,
@@ -109,23 +107,6 @@ function SeekableProgressBar({
   focusedStyle?: any;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-  const barRef = useRef<any>(null);
-  const [selfNodeHandle, setSelfNodeHandle] = useState<number | null>(null);
-  
-  // Get native node handle after mount for focus trapping
-  useEffect(() => {
-    // Small delay to ensure the ref is attached
-    const timer = setTimeout(() => {
-      if (barRef.current) {
-        const handle = findNodeHandle(barRef.current);
-        if (handle) {
-          setSelfNodeHandle(handle);
-          console.log('[SeekBar] Got node handle:', handle);
-        }
-      }
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
   
   const handleFocus = useCallback(() => {
     console.log('[SeekBar] Focused');
@@ -143,19 +124,15 @@ function SeekableProgressBar({
   
   return (
     <Pressable
-      ref={barRef}
       style={[styles.progressBarContainer, style, isFocused && (focusedStyle || styles.progressBarFocused)]}
       onFocus={handleFocus}
       onBlur={handleBlur}
-      // @ts-ignore - Android TV specific props to trap left/right D-pad focus on this component
-      nextFocusLeft={selfNodeHandle || undefined}
-      nextFocusRight={selfNodeHandle || undefined}
     >
       <View style={[styles.progressBarFill, { width: `${percentage}%` }]} />
       <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
       {isFocused && (
         <View style={styles.seekHint}>
-          <Text style={styles.seekHintText}>◀ -10s | +10s ▶</Text>
+          <Text style={styles.seekHintText}>Use ⏪ ⏩ buttons to seek</Text>
         </View>
       )}
     </Pressable>
@@ -824,78 +801,83 @@ export default function PlayerScreen() {
   // Handles Fire Stick remote: play/pause, FF, RW, D-pad
   // Uses refs for all state values to avoid stale closures
   const handleTVEvent = useCallback((evt: any) => {
-    if (!evt) return;
-    console.log('[TV] Remote event:', evt.eventType);
-    
-    // Show controls on any remote button press
-    if (showControlsWithTimeoutRef.current) {
-      showControlsWithTimeoutRef.current();
-    }
-    
-    switch (evt.eventType) {
-      case 'playPause':
-        // Hardware play/pause button on Fire Stick remote
-        console.log('[TV] Play/Pause pressed, isPlaying:', isPlayingRef.current);
-        if (isPlayingRef.current) {
-          videoRef.current?.pauseAsync();
-        } else {
-          videoRef.current?.playAsync();
-        }
-        break;
-      case 'play':
-        console.log('[TV] Play pressed');
-        if (!isPlayingRef.current) {
-          videoRef.current?.playAsync();
-        }
-        break;
-      case 'pause':
-        console.log('[TV] Pause pressed');
-        if (isPlayingRef.current) {
-          videoRef.current?.pauseAsync();
-        }
-        break;
-      case 'rewind':
-        // Hardware rewind button on Fire Stick remote
-        {
-          console.log('[TV] Rewind pressed, seeking -10s from', positionRef.current);
-          const newPos = Math.max(0, positionRef.current - 10000);
-          videoRef.current?.setPositionAsync(newPos);
-        }
-        break;
-      case 'fastForward':
-        // Hardware fast-forward button on Fire Stick remote
-        {
-          console.log('[TV] FastForward pressed, seeking +10s from', positionRef.current);
-          const newPos = Math.min(durationRef.current, positionRef.current + 10000);
-          videoRef.current?.setPositionAsync(newPos);
-        }
-        break;
-      case 'left':
-        // D-pad left: seek backward ONLY when progress bar is focused
-        if (progressBarFocusedRef.current) {
-          console.log('[TV] Left on seekbar, seeking -10s');
-          const newPos = Math.max(0, positionRef.current - 10000);
-          videoRef.current?.setPositionAsync(newPos);
-        }
-        break;
-      case 'right':
-        // D-pad right: seek forward ONLY when progress bar is focused
-        if (progressBarFocusedRef.current) {
-          console.log('[TV] Right on seekbar, seeking +10s');
-          const newPos = Math.min(durationRef.current, positionRef.current + 10000);
-          videoRef.current?.setPositionAsync(newPos);
-        }
-        break;
-      case 'select':
-        // Center button: controls are shown above, button onPress handles actions
-        break;
-      case 'up':
-      case 'down':
-        // Just show controls (done above)
-        break;
+    try {
+      if (!evt) return;
+      console.log('[TV] Remote event:', evt.eventType);
+      
+      // Show controls on any remote button press
+      if (showControlsWithTimeoutRef.current) {
+        showControlsWithTimeoutRef.current();
+      }
+      
+      switch (evt.eventType) {
+        case 'playPause':
+          // Hardware play/pause button on Fire Stick remote
+          console.log('[TV] Play/Pause pressed, isPlaying:', isPlayingRef.current);
+          if (isPlayingRef.current) {
+            videoRef.current?.pauseAsync();
+          } else {
+            videoRef.current?.playAsync();
+          }
+          break;
+        case 'play':
+          console.log('[TV] Play pressed');
+          if (!isPlayingRef.current) {
+            videoRef.current?.playAsync();
+          }
+          break;
+        case 'pause':
+          console.log('[TV] Pause pressed');
+          if (isPlayingRef.current) {
+            videoRef.current?.pauseAsync();
+          }
+          break;
+        case 'rewind':
+          // Hardware rewind button on Fire Stick remote
+          {
+            console.log('[TV] Rewind pressed, seeking -10s from', positionRef.current);
+            const newPos = Math.max(0, positionRef.current - 10000);
+            videoRef.current?.setPositionAsync(newPos);
+          }
+          break;
+        case 'fastForward':
+          // Hardware fast-forward button on Fire Stick remote
+          {
+            console.log('[TV] FastForward pressed, seeking +10s from', positionRef.current);
+            const newPos = Math.min(durationRef.current, positionRef.current + 10000);
+            videoRef.current?.setPositionAsync(newPos);
+          }
+          break;
+        case 'left':
+          // D-pad left: seek backward ONLY when progress bar is focused
+          if (progressBarFocusedRef.current) {
+            console.log('[TV] Left on seekbar, seeking -10s');
+            const newPos = Math.max(0, positionRef.current - 10000);
+            videoRef.current?.setPositionAsync(newPos);
+          }
+          break;
+        case 'right':
+          // D-pad right: seek forward ONLY when progress bar is focused
+          if (progressBarFocusedRef.current) {
+            console.log('[TV] Right on seekbar, seeking +10s');
+            const newPos = Math.min(durationRef.current, positionRef.current + 10000);
+            videoRef.current?.setPositionAsync(newPos);
+          }
+          break;
+        case 'select':
+          // Center button: controls are shown above, button onPress handles actions
+          break;
+        case 'up':
+        case 'down':
+          // Just show controls (done above)
+          break;
+      }
+    } catch (e) {
+      console.log('[TV] Error handling event:', e);
     }
   }, []);
 
+  // Register TV event handler for Fire Stick remote
   useTVEventHandler(handleTVEvent);
   
   // Fade controls in/out
