@@ -821,117 +821,83 @@ export default function PlayerScreen() {
     return '-' + formatTime(remaining);
   };
 
-  // Use the TV event handler hook for better Fire Stick support
-  useTVEventHandler((evt) => {
+  // === SINGLE TV REMOTE EVENT HANDLER ===
+  // Handles Fire Stick remote: play/pause, FF, RW, D-pad
+  // Uses refs for all state values to avoid stale closures
+  const handleTVEvent = useCallback((evt: any) => {
     if (!evt) return;
-    console.log('[TV Hook] Event:', evt.eventType);
+    console.log('[TV] Remote event:', evt.eventType);
+    
+    // Show controls on any remote button press
+    if (showControlsWithTimeoutRef.current) {
+      showControlsWithTimeoutRef.current();
+    }
     
     switch (evt.eventType) {
       case 'playPause':
-        togglePlayPause();
-        showControlsWithTimeout();
+        // Hardware play/pause button on Fire Stick remote
+        console.log('[TV] Play/Pause pressed, isPlaying:', isPlayingRef.current);
+        if (isPlayingRef.current) {
+          videoRef.current?.pauseAsync();
+        } else {
+          videoRef.current?.playAsync();
+        }
         break;
       case 'play':
-        if (videoRef.current && !isPlaying) {
-          videoRef.current.playAsync();
+        console.log('[TV] Play pressed');
+        if (!isPlayingRef.current) {
+          videoRef.current?.playAsync();
         }
-        showControlsWithTimeout();
         break;
       case 'pause':
-        if (videoRef.current && isPlaying) {
-          videoRef.current.pauseAsync();
+        console.log('[TV] Pause pressed');
+        if (isPlayingRef.current) {
+          videoRef.current?.pauseAsync();
         }
-        showControlsWithTimeout();
         break;
       case 'rewind':
-        seekToMs(position - 10000);
+        // Hardware rewind button on Fire Stick remote
+        {
+          console.log('[TV] Rewind pressed, seeking -10s from', positionRef.current);
+          const newPos = Math.max(0, positionRef.current - 10000);
+          videoRef.current?.setPositionAsync(newPos);
+        }
         break;
       case 'fastForward':
-        seekToMs(position + 10000);
+        // Hardware fast-forward button on Fire Stick remote
+        {
+          console.log('[TV] FastForward pressed, seeking +10s from', positionRef.current);
+          const newPos = Math.min(durationRef.current, positionRef.current + 10000);
+          videoRef.current?.setPositionAsync(newPos);
+        }
+        break;
+      case 'left':
+        // D-pad left: seek backward ONLY when progress bar is focused
+        if (progressBarFocusedRef.current) {
+          console.log('[TV] Left on seekbar, seeking -10s');
+          const newPos = Math.max(0, positionRef.current - 10000);
+          videoRef.current?.setPositionAsync(newPos);
+        }
+        break;
+      case 'right':
+        // D-pad right: seek forward ONLY when progress bar is focused
+        if (progressBarFocusedRef.current) {
+          console.log('[TV] Right on seekbar, seeking +10s');
+          const newPos = Math.min(durationRef.current, positionRef.current + 10000);
+          videoRef.current?.setPositionAsync(newPos);
+        }
+        break;
+      case 'select':
+        // Center button: controls are shown above, button onPress handles actions
+        break;
+      case 'up':
+      case 'down':
+        // Just show controls (done above)
         break;
     }
-  });
+  }, []);
 
-  // Handle TV remote / hardware button events
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    
-    let tvEventHandler: any;
-    
-    try {
-      // Try to use TVEventHandler for Fire Stick / Android TV
-      tvEventHandler = new TVEventHandler();
-      tvEventHandler.enable(null, (cmp: any, evt: any) => {
-        if (!evt || !evt.eventType) return;
-        
-        console.log('[TV] Remote event:', evt.eventType);
-        
-        switch (evt.eventType) {
-          case 'playPause':
-          case 'select':
-            // Center button or play/pause button
-            if (showControls) {
-              togglePlayPause();
-            } else {
-              showControlsWithTimeout();
-            }
-            break;
-          case 'play':
-            if (videoRef.current && !isPlaying) {
-              videoRef.current.playAsync();
-            }
-            showControlsWithTimeout();
-            break;
-          case 'pause':
-            if (videoRef.current && isPlaying) {
-              videoRef.current.pauseAsync();
-            }
-            showControlsWithTimeout();
-            break;
-          case 'rewind':
-          case 'left':
-            // Seek back 10 seconds
-            if (videoRef.current) {
-              videoRef.current.getStatusAsync().then((status: any) => {
-                if (status.isLoaded) {
-                  const newPos = Math.max(0, status.positionMillis - 10000);
-                  videoRef.current?.setPositionAsync(newPos);
-                }
-              });
-            }
-            showControlsWithTimeout();
-            break;
-          case 'fastForward':
-          case 'right':
-            // Seek forward 10 seconds
-            if (videoRef.current) {
-              videoRef.current.getStatusAsync().then((status: any) => {
-                if (status.isLoaded && status.durationMillis) {
-                  const newPos = Math.min(status.durationMillis, status.positionMillis + 10000);
-                  videoRef.current?.setPositionAsync(newPos);
-                }
-              });
-            }
-            showControlsWithTimeout();
-            break;
-          case 'up':
-          case 'down':
-            showControlsWithTimeout();
-            break;
-        }
-      });
-    } catch (e) {
-      console.log('[TV] TVEventHandler not available:', e);
-    }
-    
-    return () => {
-      if (tvEventHandler) {
-        try {
-          tvEventHandler.disable();
-        } catch (e) {}
-      }
-    };
-  }, [isPlaying, showControls]);
+  useTVEventHandler(handleTVEvent);
   
   // Fade controls in/out
   const fadeControls = (show: boolean) => {
