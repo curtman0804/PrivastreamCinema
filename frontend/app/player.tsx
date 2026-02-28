@@ -1558,12 +1558,17 @@ export default function PlayerScreen() {
                 </View>
                 
                 {/* Bottom Bar - Progress */}
-                <View style={styles.bottomControls} pointerEvents="none">
+                <View style={styles.bottomControls} pointerEvents="box-none">
                   <Text style={styles.timeText}>{formatTime(position)}</Text>
-                  <View style={styles.progressBarContainer}>
+                  <TVFocusButton
+                    style={styles.progressBarContainer}
+                    focusedStyle={styles.progressBarFocused}
+                    onPress={handleProgressBarPress}
+                  >
                     <View style={[styles.progressBarFill, { width: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
-                  </View>
-                  <Text style={styles.timeText}>{formatTime(duration)}</Text>
+                    <View style={[styles.progressBarThumb, { left: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
+                  </TVFocusButton>
+                  <Text style={styles.timeText}>{formatRemainingTime(position, duration)}</Text>
                 </View>
               </Animated.View>
             )}
