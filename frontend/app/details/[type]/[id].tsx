@@ -476,8 +476,7 @@ export default function DetailsScreen() {
       <Image
         source={{ uri: content?.background || content?.poster }}
         style={styles.backgroundImage}
-        contentFit="cover"
-        contentPosition="center"
+        contentFit="contain"
       />
       
       {/* Gradient Overlay */}
