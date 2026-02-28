@@ -12,7 +12,6 @@ import {
   Alert,
   Animated,
   Image,
-  TVEventHandler,
   useTVEventHandler,
   Pressable,
   findNodeHandle,
