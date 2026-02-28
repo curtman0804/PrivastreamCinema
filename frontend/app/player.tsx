@@ -1666,7 +1666,7 @@ export default function PlayerScreen() {
                   <SeekableProgressBar
                     position={position}
                     duration={duration}
-                    onFocusChange={(focused: boolean) => { progressBarFocusedRef.current = focused; }}
+                    onSeek={seekToMs}
                   />
                   <Text style={styles.timeText}>{formatRemainingTime(position, duration)}</Text>
                 </View>
