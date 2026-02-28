@@ -1430,47 +1430,49 @@ export default function PlayerScreen() {
             )}
           </View>
         ) : (
-          <TouchableOpacity 
-            activeOpacity={1} 
-            style={styles.videoContainer}
-            onPress={handleVideoTap}
-          >
-            <Video
-              ref={videoRef}
-              source={{ uri: streamUrl }}
-              style={styles.videoPlayer}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay
-              isLooping={false}
-              volume={1.0}
-              isMuted={false}
-              onPlaybackStatusUpdate={handlePlaybackStatus}
-              onError={(error) => {
-                console.log('[PLAYER] Video error:', error);
-                if (fallbackUrls.length > currentStreamIndex + 1) {
-                  tryNextStream();
-                } else {
-                  setError('Failed to play video. All streams failed.');
-                  setHasAudioError(true);
-                }
-              }}
-            />
+          <View style={styles.videoContainer}>
+            <Pressable 
+              style={StyleSheet.absoluteFill}
+              onPress={handleVideoTap}
+            >
+              <Video
+                ref={videoRef}
+                source={{ uri: streamUrl }}
+                style={styles.videoPlayer}
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay
+                isLooping={false}
+                volume={1.0}
+                isMuted={false}
+                onPlaybackStatusUpdate={handlePlaybackStatus}
+                onError={(error) => {
+                  console.log('[PLAYER] Video error:', error);
+                  if (fallbackUrls.length > currentStreamIndex + 1) {
+                    tryNextStream();
+                  } else {
+                    setError('Failed to play video. All streams failed.');
+                    setHasAudioError(true);
+                  }
+                }}
+              />
+            </Pressable>
             
             {/* Subtitle Overlay */}
             {currentSubtitleText && (
-              <View style={styles.subtitleContainer}>
+              <View style={styles.subtitleContainer} pointerEvents="none">
                 <Text style={styles.subtitleText}>{currentSubtitleText}</Text>
               </View>
             )}
             
             {/* Custom Controls Overlay - fades in/out */}
             {showControls && (
-              <Animated.View style={[styles.controlsOverlay, { opacity: controlsOpacity }]}>
+              <Animated.View style={[styles.controlsOverlay, { opacity: controlsOpacity }]} pointerEvents="box-none">
                 {/* Top Bar - Back, Title, CC */}
-                <View style={styles.topControls}>
+                <View style={styles.topControls} pointerEvents="box-none">
                   <Pressable 
                     style={({ focused }) => [styles.controlButton, focused && styles.controlButtonFocused]} 
                     onPress={handleBack}
+                    focusable={true}
                   >
                     <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
                   </Pressable>
@@ -1481,6 +1483,7 @@ export default function PlayerScreen() {
                     <Pressable 
                       style={({ focused }) => [styles.controlButton, selectedSubtitle && styles.ccActive, focused && styles.controlButtonFocused]}
                       onPress={() => setShowSubtitlePicker(true)}
+                      focusable={true}
                     >
                       <Ionicons name="chatbubble-ellipses-outline" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
                     </Pressable>
@@ -1488,17 +1491,19 @@ export default function PlayerScreen() {
                 </View>
                 
                 {/* Center Play/Pause */}
-                <View style={styles.centerControls}>
+                <View style={styles.centerControls} pointerEvents="box-none">
                   <Pressable 
                     style={({ focused }) => [styles.playPauseButton, focused && styles.playPauseFocused]} 
                     onPress={togglePlayPause}
+                    focusable={true}
+                    hasTVPreferredFocus={true}
                   >
                     <Ionicons name={isPlaying ? "pause" : "play"} size={50} color="#FFFFFF" />
                   </Pressable>
                 </View>
                 
                 {/* Bottom Bar - Progress */}
-                <View style={styles.bottomControls}>
+                <View style={styles.bottomControls} pointerEvents="none">
                   <Text style={styles.timeText}>{formatTime(position)}</Text>
                   <View style={styles.progressBarContainer}>
                     <View style={[styles.progressBarFill, { width: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
@@ -1507,7 +1512,7 @@ export default function PlayerScreen() {
                 </View>
               </Animated.View>
             )}
-          </TouchableOpacity>
+          </View>
         )
       )}
 
