@@ -4,7 +4,6 @@ import com.reactnative.googlecast.api.RNGCCastContext
 
 import android.os.Build
 import android.os.Bundle
-import com.facebook.react.bridge.ReactContext
 import com.facebook.react.bridge.WritableNativeMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import android.view.KeyEvent
@@ -91,7 +90,17 @@ class MainActivity : ReactActivity() {
       
       if (eventName != null) {
         try {
-          val reactContext = reactInstanceManager?.currentReactContext
+          // Try new architecture (ReactHost) first, then fall back to legacy
+          val reactContext = try {
+            reactHost?.currentReactContext
+          } catch (e: Exception) {
+            try {
+              reactInstanceManager?.currentReactContext
+            } catch (e2: Exception) {
+              null
+            }
+          }
+          
           if (reactContext != null) {
             val params = WritableNativeMap()
             params.putString("eventType", eventName)
