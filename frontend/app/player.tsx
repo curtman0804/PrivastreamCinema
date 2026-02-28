@@ -1619,11 +1619,12 @@ export default function PlayerScreen() {
                 data={[{ id: 'off', url: '', lang: 'off', langName: 'Off' }, ...subtitles]}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                  <TouchableOpacity
+                  <TVFocusButton
                     style={[
                       styles.subtitleItem,
                       (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemActive
                     ]}
+                    focusedStyle={styles.subtitleItemFocused}
                     onPress={() => {
                       setSelectedSubtitle(item.lang === 'off' ? null : item.url);
                       setShowSubtitlePicker(false);
@@ -1638,7 +1639,7 @@ export default function PlayerScreen() {
                     {(item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && (
                       <Ionicons name="checkmark" size={20} color="#B8A05C" />
                     )}
-                  </TouchableOpacity>
+                  </TVFocusButton>
                 )}
                 style={styles.subtitleList}
               />
