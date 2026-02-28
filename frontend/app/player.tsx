@@ -2201,6 +2201,22 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
+  seekHint: {
+    position: 'absolute',
+    top: -30,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  seekHintText: {
+    color: '#B8A05C',
+    fontSize: 12,
+    fontWeight: '600',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
   // Subtitle modal
   subtitleModalOverlay: {
     flex: 1,
