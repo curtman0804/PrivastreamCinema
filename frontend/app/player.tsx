@@ -774,10 +774,11 @@ export default function PlayerScreen() {
     });
     if (show) {
       setShowControls(true);
-      // Auto-hide controls after 3 seconds
+      // Auto-hide controls after 8 seconds on TV (longer for D-pad navigation), 3 seconds on mobile
+      const hideTimeout = isTV ? 8000 : 3000;
       controlsTimeoutRef.current = setTimeout(() => {
         fadeControls(false);
-      }, 3000);
+      }, hideTimeout);
     }
   };
   
@@ -799,10 +800,11 @@ export default function PlayerScreen() {
       }).start();
     }
     
-    // Set new auto-hide timeout
+    // Set new auto-hide timeout (longer on TV)
+    const hideTimeout = isTV ? 8000 : 3000;
     controlsTimeoutRef.current = setTimeout(() => {
       fadeControls(false);
-    }, 3000);
+    }, hideTimeout);
   };
   
   // Initial show controls with auto-hide
