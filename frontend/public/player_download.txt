@@ -92,6 +92,58 @@ function TVFocusButton({
   );
 }
 
+// Seekable Progress Bar Component for TV - handles left/right D-pad for seeking
+function SeekableProgressBar({
+  position,
+  duration,
+  onSeek,
+  style,
+  focusedStyle,
+}: {
+  position: number;
+  duration: number;
+  onSeek: (newPosition: number) => void;
+  style?: any;
+  focusedStyle?: any;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const seekAmount = 10000; // 10 seconds in ms
+  
+  const handleKeyDown = (event: any) => {
+    if (!isFocused) return;
+    
+    const { key, eventType } = event.nativeEvent || {};
+    
+    // Handle left/right when focused
+    if (eventType === 'left' || key === 'ArrowLeft') {
+      const newPos = Math.max(0, position - seekAmount);
+      onSeek(newPos);
+    } else if (eventType === 'right' || key === 'ArrowRight') {
+      const newPos = Math.min(duration, position + seekAmount);
+      onSeek(newPos);
+    }
+  };
+  
+  const percentage = duration > 0 ? (position / duration) * 100 : 0;
+  
+  return (
+    <Pressable
+      style={[styles.progressBarContainer, style, isFocused && (focusedStyle || styles.progressBarFocused)]}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      onKeyDown={handleKeyDown}
+    >
+      <View style={[styles.progressBarFill, { width: `${percentage}%` }]} />
+      <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
+      {isFocused && (
+        <View style={styles.seekHint}>
+          <Text style={styles.seekHintText}>◀ -10s | +10s ▶</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
 // Check if title suggests HEVC/x265 codec (not supported on most web browsers)
 const isHEVCContent = (titleStr: string | undefined): boolean => {
   if (!titleStr) return false;
@@ -716,6 +768,15 @@ export default function PlayerScreen() {
     }
   };
 
+  // Seek to absolute position in milliseconds
+  const seekToMs = async (newPositionMs: number) => {
+    if (videoRef.current) {
+      const clampedPosition = Math.max(0, Math.min(duration, newPositionMs));
+      await videoRef.current.setPositionAsync(clampedPosition);
+      showControlsWithTimeout();
+    }
+  };
+
   // Handle progress bar press/tap
   const handleProgressBarPress = (event: any) => {
     const { locationX } = event.nativeEvent;
@@ -730,6 +791,37 @@ export default function PlayerScreen() {
     const remaining = Math.max(0, dur - pos);
     return '-' + formatTime(remaining);
   };
+
+  // Use the TV event handler hook for better Fire Stick support
+  useTVEventHandler((evt) => {
+    if (!evt) return;
+    console.log('[TV Hook] Event:', evt.eventType);
+    
+    switch (evt.eventType) {
+      case 'playPause':
+        togglePlayPause();
+        showControlsWithTimeout();
+        break;
+      case 'play':
+        if (videoRef.current && !isPlaying) {
+          videoRef.current.playAsync();
+        }
+        showControlsWithTimeout();
+        break;
+      case 'pause':
+        if (videoRef.current && isPlaying) {
+          videoRef.current.pauseAsync();
+        }
+        showControlsWithTimeout();
+        break;
+      case 'rewind':
+        seekToMs(position - 10000);
+        break;
+      case 'fastForward':
+        seekToMs(position + 10000);
+        break;
+    }
+  });
 
   // Handle TV remote / hardware button events
   useEffect(() => {
@@ -1560,14 +1652,11 @@ export default function PlayerScreen() {
                 {/* Bottom Bar - Progress */}
                 <View style={styles.bottomControls} pointerEvents="box-none">
                   <Text style={styles.timeText}>{formatTime(position)}</Text>
-                  <TVFocusButton
-                    style={styles.progressBarContainer}
-                    focusedStyle={styles.progressBarFocused}
-                    onPress={handleProgressBarPress}
-                  >
-                    <View style={[styles.progressBarFill, { width: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
-                    <View style={[styles.progressBarThumb, { left: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
-                  </TVFocusButton>
+                  <SeekableProgressBar
+                    position={position}
+                    duration={duration}
+                    onSeek={seekToMs}
+                  />
                   <Text style={styles.timeText}>{formatRemainingTime(position, duration)}</Text>
                 </View>
               </Animated.View>
@@ -2111,6 +2200,22 @@ const styles = StyleSheet.create({
     top: -4,
     borderWidth: 2,
     borderColor: '#FFFFFF',
+  },
+  seekHint: {
+    position: 'absolute',
+    top: -30,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  seekHintText: {
+    color: '#B8A05C',
+    fontSize: 12,
+    fontWeight: '600',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
   // Subtitle modal
   subtitleModalOverlay: {
