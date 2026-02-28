@@ -50,7 +50,8 @@
           "receiverAppId": "CC1AD845"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "./plugins/withTVKeyEvents"
     ],
     "experiments": {
       "typedRoutes": true
