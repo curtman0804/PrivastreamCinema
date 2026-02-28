@@ -14,7 +14,6 @@ import {
   Image,
   useTVEventHandler,
   Pressable,
-  findNodeHandle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
