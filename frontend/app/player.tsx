@@ -1947,17 +1947,14 @@ const styles = StyleSheet.create({
   },
   subtitleText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     textAlign: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
     textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
   },
   // Controls overlay
   webControlsOverlay: {
