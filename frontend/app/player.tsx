@@ -2102,6 +2102,11 @@ const styles = StyleSheet.create({
   subtitleItemActive: {
     backgroundColor: 'rgba(184, 160, 92, 0.2)',
   },
+  subtitleItemFocused: {
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
+    borderColor: '#B8A05C',
+    borderWidth: 2,
+  },
   subtitleItemText: {
     color: '#FFFFFF',
     fontSize: 16,
