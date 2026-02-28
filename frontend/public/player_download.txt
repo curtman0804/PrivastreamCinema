@@ -707,6 +707,30 @@ export default function PlayerScreen() {
     }
   };
 
+  // Seek to position (for progress bar interaction)
+  const seekToPosition = async (percentage: number) => {
+    if (videoRef.current && duration > 0) {
+      const newPosition = Math.floor(duration * percentage);
+      await videoRef.current.setPositionAsync(newPosition);
+      showControlsWithTimeout();
+    }
+  };
+
+  // Handle progress bar press/tap
+  const handleProgressBarPress = (event: any) => {
+    const { locationX } = event.nativeEvent;
+    const progressBarWidth = width - 160; // Account for time text padding
+    const percentage = Math.max(0, Math.min(1, locationX / progressBarWidth));
+    seekToPosition(percentage);
+  };
+
+  // Format remaining time
+  const formatRemainingTime = (pos: number, dur: number) => {
+    if (dur <= 0) return '-:--';
+    const remaining = Math.max(0, dur - pos);
+    return '-' + formatTime(remaining);
+  };
+
   // Handle TV remote / hardware button events
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -735,37 +759,39 @@ export default function PlayerScreen() {
             if (videoRef.current && !isPlaying) {
               videoRef.current.playAsync();
             }
+            showControlsWithTimeout();
             break;
           case 'pause':
             if (videoRef.current && isPlaying) {
               videoRef.current.pauseAsync();
             }
+            showControlsWithTimeout();
             break;
+          case 'rewind':
           case 'left':
             // Seek back 10 seconds
-            if (videoRef.current && showControls) {
+            if (videoRef.current) {
               videoRef.current.getStatusAsync().then((status: any) => {
                 if (status.isLoaded) {
                   const newPos = Math.max(0, status.positionMillis - 10000);
                   videoRef.current?.setPositionAsync(newPos);
                 }
               });
-            } else {
-              showControlsWithTimeout();
             }
+            showControlsWithTimeout();
             break;
+          case 'fastForward':
           case 'right':
             // Seek forward 10 seconds
-            if (videoRef.current && showControls) {
+            if (videoRef.current) {
               videoRef.current.getStatusAsync().then((status: any) => {
                 if (status.isLoaded && status.durationMillis) {
                   const newPos = Math.min(status.durationMillis, status.positionMillis + 10000);
                   videoRef.current?.setPositionAsync(newPos);
                 }
               });
-            } else {
-              showControlsWithTimeout();
             }
+            showControlsWithTimeout();
             break;
           case 'up':
           case 'down':
@@ -1532,12 +1558,17 @@ export default function PlayerScreen() {
                 </View>
                 
                 {/* Bottom Bar - Progress */}
-                <View style={styles.bottomControls} pointerEvents="none">
+                <View style={styles.bottomControls} pointerEvents="box-none">
                   <Text style={styles.timeText}>{formatTime(position)}</Text>
-                  <View style={styles.progressBarContainer}>
+                  <TVFocusButton
+                    style={styles.progressBarContainer}
+                    focusedStyle={styles.progressBarFocused}
+                    onPress={handleProgressBarPress}
+                  >
                     <View style={[styles.progressBarFill, { width: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
-                  </View>
-                  <Text style={styles.timeText}>{formatTime(duration)}</Text>
+                    <View style={[styles.progressBarThumb, { left: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
+                  </TVFocusButton>
+                  <Text style={styles.timeText}>{formatRemainingTime(position, duration)}</Text>
                 </View>
               </Animated.View>
             )}
@@ -2047,16 +2078,39 @@ const styles = StyleSheet.create({
   },
   progressBarContainer: {
     flex: 1,
-    height: 4,
+    height: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 2,
+    borderRadius: 4,
     marginHorizontal: 12,
-    overflow: 'hidden',
+    overflow: 'visible',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  progressBarFocused: {
+    borderColor: '#B8A05C',
+    height: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: '#B8A05C',
-    borderRadius: 2,
+    borderRadius: 4,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+  },
+  progressBarThumb: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#B8A05C',
+    marginLeft: -8,
+    top: -4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   // Subtitle modal
   subtitleModalOverlay: {
