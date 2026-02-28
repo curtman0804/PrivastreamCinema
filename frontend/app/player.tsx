@@ -2168,6 +2168,27 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(184, 160, 92, 0.4)',
     transform: [{ scale: 1.15 }],
   },
+  centerButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 40,
+  },
+  seekButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  seekButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.4)',
+    transform: [{ scale: 1.15 }],
+  },
   bottomControls: {
     flexDirection: 'row',
     alignItems: 'center',
