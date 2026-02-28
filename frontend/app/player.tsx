@@ -63,6 +63,35 @@ if (Platform.OS !== 'web') {
 
 const { width, height } = Dimensions.get('window');
 
+// TV Focus Button Component - handles focus state for D-pad navigation
+function TVFocusButton({ 
+  onPress, 
+  style, 
+  focusedStyle,
+  children,
+  hasTVPreferredFocus = false,
+}: {
+  onPress?: () => void;
+  style: any;
+  focusedStyle?: any;
+  children: React.ReactNode;
+  hasTVPreferredFocus?: boolean;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    <Pressable
+      style={[style, isFocused && focusedStyle]}
+      onPress={onPress}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      hasTVPreferredFocus={hasTVPreferredFocus}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
 // Check if title suggests HEVC/x265 codec (not supported on most web browsers)
 const isHEVCContent = (titleStr: string | undefined): boolean => {
   if (!titleStr) return false;
