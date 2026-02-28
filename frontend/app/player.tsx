@@ -735,37 +735,39 @@ export default function PlayerScreen() {
             if (videoRef.current && !isPlaying) {
               videoRef.current.playAsync();
             }
+            showControlsWithTimeout();
             break;
           case 'pause':
             if (videoRef.current && isPlaying) {
               videoRef.current.pauseAsync();
             }
+            showControlsWithTimeout();
             break;
+          case 'rewind':
           case 'left':
             // Seek back 10 seconds
-            if (videoRef.current && showControls) {
+            if (videoRef.current) {
               videoRef.current.getStatusAsync().then((status: any) => {
                 if (status.isLoaded) {
                   const newPos = Math.max(0, status.positionMillis - 10000);
                   videoRef.current?.setPositionAsync(newPos);
                 }
               });
-            } else {
-              showControlsWithTimeout();
             }
+            showControlsWithTimeout();
             break;
+          case 'fastForward':
           case 'right':
             // Seek forward 10 seconds
-            if (videoRef.current && showControls) {
+            if (videoRef.current) {
               videoRef.current.getStatusAsync().then((status: any) => {
                 if (status.isLoaded && status.durationMillis) {
                   const newPos = Math.min(status.durationMillis, status.positionMillis + 10000);
                   videoRef.current?.setPositionAsync(newPos);
                 }
               });
-            } else {
-              showControlsWithTimeout();
             }
+            showControlsWithTimeout();
             break;
           case 'up':
           case 'down':
