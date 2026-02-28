@@ -4,7 +4,6 @@ import com.reactnative.googlecast.api.RNGCCastContext
 
 import android.os.Build
 import android.os.Bundle
-import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import android.view.KeyEvent
@@ -90,8 +89,8 @@ class MainActivity : ReactActivity() {
       
       if (eventName != null) {
         try {
-          val reactApp = application as? ReactApplication
-          val ctx = reactApp?.reactNativeHost?.reactInstanceManager?.currentReactContext
+          val reactApp = application as? com.facebook.react.ReactApplication
+          val ctx = reactApp?.reactHost?.currentReactContext
           if (ctx != null) {
             val params = Arguments.createMap()
             params.putString("eventType", eventName)
