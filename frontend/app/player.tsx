@@ -92,6 +92,58 @@ function TVFocusButton({
   );
 }
 
+// Seekable Progress Bar Component for TV - handles left/right D-pad for seeking
+function SeekableProgressBar({
+  position,
+  duration,
+  onSeek,
+  style,
+  focusedStyle,
+}: {
+  position: number;
+  duration: number;
+  onSeek: (newPosition: number) => void;
+  style?: any;
+  focusedStyle?: any;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const seekAmount = 10000; // 10 seconds in ms
+  
+  const handleKeyDown = (event: any) => {
+    if (!isFocused) return;
+    
+    const { key, eventType } = event.nativeEvent || {};
+    
+    // Handle left/right when focused
+    if (eventType === 'left' || key === 'ArrowLeft') {
+      const newPos = Math.max(0, position - seekAmount);
+      onSeek(newPos);
+    } else if (eventType === 'right' || key === 'ArrowRight') {
+      const newPos = Math.min(duration, position + seekAmount);
+      onSeek(newPos);
+    }
+  };
+  
+  const percentage = duration > 0 ? (position / duration) * 100 : 0;
+  
+  return (
+    <Pressable
+      style={[styles.progressBarContainer, style, isFocused && (focusedStyle || styles.progressBarFocused)]}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      onKeyDown={handleKeyDown}
+    >
+      <View style={[styles.progressBarFill, { width: `${percentage}%` }]} />
+      <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
+      {isFocused && (
+        <View style={styles.seekHint}>
+          <Text style={styles.seekHintText}>◀ -10s | +10s ▶</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
 // Check if title suggests HEVC/x265 codec (not supported on most web browsers)
 const isHEVCContent = (titleStr: string | undefined): boolean => {
   if (!titleStr) return false;
