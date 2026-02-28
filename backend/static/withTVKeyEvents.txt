@@ -9,7 +9,6 @@ const withTVKeyEvents = (config) => {
   return withMainActivity(config, (config) => {
     const contents = config.modResults.contents;
     
-    // Add required imports if not already present
     let modified = contents;
     
     // Add KeyEvent import
@@ -20,11 +19,11 @@ const withTVKeyEvents = (config) => {
       );
     }
     
-    // Add ReactContext imports for emitting events
-    if (!modified.includes("import com.facebook.react.bridge.ReactContext")) {
+    // Add ReactContext and event emitter imports
+    if (!modified.includes("import com.facebook.react.bridge.WritableNativeMap")) {
       modified = modified.replace(
         "import android.os.Bundle",
-        "import android.os.Bundle\nimport com.facebook.react.bridge.ReactContext\nimport com.facebook.react.bridge.WritableNativeMap\nimport com.facebook.react.modules.core.DeviceEventManagerModule"
+        "import android.os.Bundle\nimport com.facebook.react.bridge.WritableNativeMap\nimport com.facebook.react.modules.core.DeviceEventManagerModule"
       );
     }
     
@@ -51,7 +50,17 @@ const withTVKeyEvents = (config) => {
       
       if (eventName != null) {
         try {
-          val reactContext = reactInstanceManager?.currentReactContext
+          // Try new architecture (ReactHost) first, then fall back to legacy
+          val reactContext = try {
+            reactHost?.currentReactContext
+          } catch (e: Exception) {
+            try {
+              reactInstanceManager?.currentReactContext
+            } catch (e2: Exception) {
+              null
+            }
+          }
+          
           if (reactContext != null) {
             val params = WritableNativeMap()
             params.putString("eventType", eventName)
