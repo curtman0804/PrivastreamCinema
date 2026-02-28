@@ -707,6 +707,30 @@ export default function PlayerScreen() {
     }
   };
 
+  // Seek to position (for progress bar interaction)
+  const seekToPosition = async (percentage: number) => {
+    if (videoRef.current && duration > 0) {
+      const newPosition = Math.floor(duration * percentage);
+      await videoRef.current.setPositionAsync(newPosition);
+      showControlsWithTimeout();
+    }
+  };
+
+  // Handle progress bar press/tap
+  const handleProgressBarPress = (event: any) => {
+    const { locationX } = event.nativeEvent;
+    const progressBarWidth = width - 160; // Account for time text padding
+    const percentage = Math.max(0, Math.min(1, locationX / progressBarWidth));
+    seekToPosition(percentage);
+  };
+
+  // Format remaining time
+  const formatRemainingTime = (pos: number, dur: number) => {
+    if (dur <= 0) return '-:--';
+    const remaining = Math.max(0, dur - pos);
+    return '-' + formatTime(remaining);
+  };
+
   // Handle TV remote / hardware button events
   useEffect(() => {
     if (Platform.OS !== 'android') return;
