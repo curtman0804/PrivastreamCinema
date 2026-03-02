@@ -330,7 +330,8 @@ function ContinueWatchingItem({
   posterHeight, 
   isTV, 
   onPress, 
-  onRemove 
+  onRemove,
+  onSectionFocus,
 }: { 
   item: WatchProgress; 
   posterWidth: number; 
@@ -338,6 +339,7 @@ function ContinueWatchingItem({
   isTV: boolean;
   onPress: () => void;
   onRemove: () => void;
+  onSectionFocus?: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const percentWatched = item.percent_watched || 0;
@@ -352,13 +354,18 @@ function ContinueWatchingItem({
       ]
     );
   };
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    onSectionFocus?.();
+  };
   
   return (
     <Pressable
       onPress={onPress}
       onLongPress={handleLongPress}
       delayLongPress={500}
-      onFocus={() => setIsFocused(true)}
+      onFocus={handleFocus}
       onBlur={() => setIsFocused(false)}
       style={[styles.continueItem, { width: posterWidth }]}
     >
