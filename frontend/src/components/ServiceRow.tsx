@@ -214,25 +214,28 @@ const styles = StyleSheet.create({
   titleTV: {
     fontSize: 22,
   },
-  seeAllButton: {
-    flexDirection: 'row',
+  seeAllCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
-  seeAllButtonFocused: {
-    backgroundColor: colors.primary,
+  seeAllCircleTV: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
   },
-  seeAllText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1,
-    marginRight: 4,
+  seeAllCircleFocused: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.25)',
   },
-  seeAllTextFocused: {
-    color: colors.textPrimary,
+  seeAllFooter: {
+    justifyContent: 'center',
+    paddingLeft: 8,
   },
   scrollContent: {
     paddingHorizontal: 16,
