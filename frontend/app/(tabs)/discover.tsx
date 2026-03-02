@@ -366,43 +366,13 @@ function ContinueWatchingItem({
     setXFocused(true);
     onSectionFocus?.();
   };
+
+  const xButtonSize = isTV ? 30 : 24;
   
   return (
     <View style={[styles.continueItem, { width: posterWidth }]}>
-      {/* Poster area container - holds both the poster and the X button */}
-      <View style={styles.continueCardContainer}>
-        {/* Main poster - pressable */}
-        <Pressable
-          onPress={onPress}
-          onFocus={handleFocus}
-          onBlur={() => setIsFocused(false)}
-          style={[
-            styles.continueImageWrapper,
-            isFocused && styles.continueImageWrapperFocused,
-          ]}
-        >
-          <View style={[styles.continueImageContainer, { height: posterHeight }]}>
-            <Image
-              source={{ uri: item.poster || item.backdrop || '' }}
-              style={styles.continueImage}
-              contentFit="cover"
-            />
-            
-            {/* Play overlay */}
-            <View style={styles.playOverlay}>
-              <View style={styles.playButton}>
-                <Ionicons name="play" size={isTV ? 32 : 24} color={colors.textPrimary} />
-              </View>
-            </View>
-            
-            {/* Progress bar */}
-            <View style={styles.progressContainer}>
-              <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
-            </View>
-          </View>
-        </Pressable>
-
-        {/* X remove button - positioned at top-right of poster */}
+      {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
+      <View style={styles.xButtonRow}>
         <Pressable
           onPress={onRemove}
           onFocus={handleXFocus}
@@ -410,18 +380,53 @@ function ContinueWatchingItem({
           accessible={true}
           accessibilityRole="button"
           accessibilityLabel={`Remove ${item.title} from Continue Watching`}
+          android_ripple={null}
           style={[
             styles.removeButtonOverlay,
+            { width: xButtonSize, height: xButtonSize, borderRadius: xButtonSize / 2 },
             xFocused && styles.removeButtonOverlayFocused,
           ]}
         >
           <Ionicons
             name="close"
-            size={isTV ? 18 : 14}
+            size={isTV ? 16 : 12}
             color={xFocused ? '#fff' : 'rgba(255,255,255,0.9)'}
           />
         </Pressable>
       </View>
+
+      {/* Main poster - pressable, pulled up to overlap with X button row */}
+      <Pressable
+        onPress={onPress}
+        onFocus={handleFocus}
+        onBlur={() => setIsFocused(false)}
+        android_ripple={null}
+        style={[
+          styles.continueImageWrapper,
+          { marginTop: -(xButtonSize / 2) },
+          isFocused && styles.continueImageWrapperFocused,
+        ]}
+      >
+        <View style={[styles.continueImageContainer, { height: posterHeight }]}>
+          <Image
+            source={{ uri: item.poster || item.backdrop || '' }}
+            style={styles.continueImage}
+            contentFit="cover"
+          />
+          
+          {/* Play overlay */}
+          <View style={styles.playOverlay}>
+            <View style={styles.playButton}>
+              <Ionicons name="play" size={isTV ? 32 : 24} color={colors.textPrimary} />
+            </View>
+          </View>
+          
+          {/* Progress bar */}
+          <View style={styles.progressContainer}>
+            <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
+          </View>
+        </View>
+      </Pressable>
 
       {/* Title below poster */}
       <View style={styles.continueTitleContent}>
@@ -540,8 +545,11 @@ const styles = StyleSheet.create({
   continueItem: {
     marginRight: 16,
   },
-  continueCardContainer: {
-    position: 'relative',
+  // X button row - sits above poster, right-aligned
+  xButtonRow: {
+    alignItems: 'flex-end',
+    zIndex: 10,
+    paddingRight: 2,
   },
   continueImageWrapper: {
     borderRadius: 6,
@@ -605,22 +613,15 @@ const styles = StyleSheet.create({
   },
   // X button overlaid on top-right of poster
   removeButtonOverlay: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'transparent',
-    zIndex: 10,
   },
   removeButtonOverlayFocused: {
     borderColor: colors.primary,
     backgroundColor: 'rgba(184, 160, 92, 0.5)',
-    transform: [{ scale: 1.15 }],
+    transform: [{ scale: 1.2 }],
   },
 });
