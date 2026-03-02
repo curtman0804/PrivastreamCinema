@@ -158,18 +158,18 @@ export default function CategoryScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{decodedService} {typeLabel}</Text>
+      <View style={[styles.header, isTV && styles.headerTV]}>
+        <Pressable onPress={() => router.back()} style={({ focused }) => [styles.backButton, focused && styles.backButtonFocused]}>
+          <Ionicons name="arrow-back" size={isTV ? 28 : 24} color="#FFFFFF" />
+        </Pressable>
+        <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>{displayTitle}</Text>
         <View style={styles.placeholder} />
       </View>
 
       {/* Content Grid */}
       {isLoading ? (
         <View style={styles.emptyContainer}>
-          <ActivityIndicator size="large" color="#B8A05C" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading {decodedService}...</Text>
         </View>
       ) : items.length === 0 ? (
@@ -179,22 +179,18 @@ export default function CategoryScreen() {
       ) : (
         <FlatList
           data={items}
-          renderItem={renderItem}
+          renderItem={({ item }) => <CategoryItem item={item} />}
           keyExtractor={(item) => item.id || item.imdb_id || Math.random().toString()}
-          numColumns={3}
-          contentContainerStyle={styles.gridContent}
+          numColumns={numColumns}
+          key={numColumns}
+          contentContainerStyle={[styles.gridContent, { paddingHorizontal: horizontalPadding }]}
           showsVerticalScrollIndicator={false}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
           initialNumToRender={30}
           maxToRenderPerBatch={20}
-          updateCellsBatchingPeriod={100}
+          removeClippedSubviews={false}
           windowSize={21}
-          getItemLayout={(data, index) => ({
-            length: ITEM_HEIGHT + 16 + 30, // poster height + margin + title
-            offset: (ITEM_HEIGHT + 16 + 30) * Math.floor(index / 3),
-            index,
-          })}
           ListFooterComponent={
             isLoadingMore ? (
               <View style={styles.loadMoreContainer}>
