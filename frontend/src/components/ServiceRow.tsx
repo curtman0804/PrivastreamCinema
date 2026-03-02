@@ -158,12 +158,15 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         // Circular See All button at the end of the row
         ListFooterComponent={onSeeAll ? (
           <Pressable
+            ref={seeAllRef}
             onPress={onSeeAll}
             onFocus={() => {
               setSeeAllFocused(true);
               if (onSectionFocus) onSectionFocus();
             }}
             onBlur={() => setSeeAllFocused(false)}
+            // @ts-ignore - nextFocusRight is a valid Android TV prop
+            nextFocusRight={seeAllNodeId}
             style={[
               styles.seeAllCircle,
               isTV && styles.seeAllCircleTV,
@@ -177,6 +180,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
             />
           </Pressable>
         ) : null}
+        ListFooterComponentStyle={onSeeAll ? styles.seeAllFooter : undefined}
       />
     </View>
   );
