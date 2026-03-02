@@ -51,7 +51,8 @@
         }
       ],
       "expo-font",
-      "./plugins/withTVKeyEvents"
+      "./plugins/withTVKeyEvents",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

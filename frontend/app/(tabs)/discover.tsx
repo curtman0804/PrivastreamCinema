@@ -420,7 +420,7 @@ function ContinueWatchingItem({
           accessibilityLabel="Remove from Continue Watching"
           style={[styles.removeButtonOverlay, isTV && styles.removeButtonOverlayTV, xFocused && styles.removeButtonFocused]}
         >
-          <Ionicons name="close" size={isTV ? 20 : 14} color={xFocused ? colors.primary : "rgba(255,255,255,0.8)"} />
+          <Ionicons name="close" size={isTV ? 16 : 14} color={xFocused ? colors.primary : "rgba(255,255,255,0.8)"} />
         </Pressable>
       </View>
 
@@ -616,12 +616,12 @@ const styles = StyleSheet.create({
   removeButtonOverlayTV: {
     top: 4,
     right: 4,
-    padding: 10,
-    minWidth: 44,
-    minHeight: 44,
+    padding: 6,
+    minWidth: 32,
+    minHeight: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 22,
+    borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.7)',
   },
   removeButtonFocused: {

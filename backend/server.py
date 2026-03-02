@@ -1196,52 +1196,25 @@ async def get_all_streams(
                     }
                     
                     # Format streams for display with location extraction
-                    # CRITICAL: Resolve redirects for Android/Fire Stick compatibility
-                    # ExoPlayer on Android doesn't follow HTTP redirects for HLS streams
-                    # (see: github.com/Stremio/stremio-addon-sdk/issues/261)
+                    # NOTE: We do NOT resolve redirects server-side because many streams
+                    # (like TVPass/thetvapp.to) return IP-bound tokens. The redirect must
+                    # be resolved on the client device itself. The expo-video library
+                    # (which uses ExoPlayer) handles HLS redirects natively.
                     formatted_streams = []
-                    
-                    # Resolve all redirects in parallel for speed
                     import re
-                    import base64
                     
-                    async def resolve_stream_url(original_url: str) -> str:
-                        """Follow redirects to get the final direct URL"""
-                        try:
-                            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as resolve_client:
-                                resp = await resolve_client.head(
-                                    original_url,
-                                    headers={
-                                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                                    }
-                                )
-                                final_url = str(resp.url)
-                                if final_url != original_url:
-                                    logger.info(f"Resolved redirect: {original_url[:50]} -> {final_url[:80]}")
-                                return final_url
-                        except Exception as resolve_err:
-                            logger.warning(f"Could not resolve redirect for {original_url[:50]}: {resolve_err}")
-                            return original_url  # Return original URL as fallback
-                    
-                    # Resolve all URLs in parallel
-                    import asyncio
-                    original_urls = [s.get('url', '') for s in streams]
-                    resolved_urls = await asyncio.gather(*[resolve_stream_url(u) for u in original_urls])
-                    
-                    for i, stream in enumerate(streams):
-                        url = resolved_urls[i]  # Use resolved URL
-                        original_url = original_urls[i]
+                    for stream in streams:
+                        url = stream.get('url', '')
                         desc = stream.get('description', '')
                         quality = stream.get('name', 'HD')
                         
-                        # Skip streams that couldn't be resolved (empty URL)
                         if not url:
                             continue
                         
-                        # Try to extract location from original URL
+                        # Try to extract location from URL
                         location = ''
                         # Patterns like "FL_West_Palm_Beach_CBS" or "Los_Angeles"
-                        loc_match = re.search(r'(?:FL_|CA_|TX_|NY_)?([A-Z][a-z]+(?:_[A-Z][a-z]+)*)', original_url)
+                        loc_match = re.search(r'(?:FL_|CA_|TX_|NY_)?([A-Z][a-z]+(?:_[A-Z][a-z]+)*)', url)
                         if loc_match:
                             loc = loc_match.group(1).replace('_', ' ')
                             # Filter out generic words
@@ -1249,7 +1222,7 @@ async def get_all_streams(
                                 location = loc
                         
                         # Also check for call sign patterns like KSMO, KRCG (FCC call signs indicate region)
-                        call_match = re.search(r'/([KW][A-Z]{2,4})(?:CBS|NBC|ABC|FOX|IND)?/', original_url)
+                        call_match = re.search(r'/([KW][A-Z]{2,4})(?:CBS|NBC|ABC|FOX|IND)?/', url)
                         call_sign = call_match.group(1) if call_match else ''
                         
                         # Get provider full name
@@ -1275,7 +1248,7 @@ async def get_all_streams(
                         formatted_streams.append({
                             "name": display_name,
                             "title": ' • '.join(title_parts),
-                            "url": url,  # Resolved direct URL (redirects followed)
+                            "url": url,
                             "addon": "USA TV",
                             "quality": quality,
                             "isLive": True,
