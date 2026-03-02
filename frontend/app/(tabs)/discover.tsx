@@ -561,17 +561,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.textPrimary,
   },
-  dismissButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   progressContainer: {
     position: 'absolute',
     bottom: 0,
