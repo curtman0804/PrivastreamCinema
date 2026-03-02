@@ -368,49 +368,59 @@ function ContinueWatchingItem({
   return (
     <View style={[styles.continueItem, { width: posterWidth }]}>
       {/* Main poster - pressable */}
-      <View style={{ position: 'relative' }}>
-        <Pressable
-          onPress={onPress}
-          onLongPress={() => {
-            Alert.alert(
-              'Clear Progress',
-              `Remove "${item.title}" from Continue Watching?`,
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Clear', style: 'destructive', onPress: onRemove },
-              ]
-            );
-          }}
-          delayLongPress={800}
-          onFocus={handleFocus}
-          onBlur={() => setIsFocused(false)}
-          style={[
-            styles.continueImageWrapper,
-            isFocused && styles.continueImageWrapperFocused,
-          ]}
-        >
-          <View style={[styles.continueImageContainer, { height: posterHeight }]}>
-            <Image
-              source={{ uri: item.poster || item.backdrop || '' }}
-              style={styles.continueImage}
-              contentFit="cover"
-            />
-            
-            {/* Play overlay */}
-            <View style={styles.playOverlay}>
-              <View style={styles.playButton}>
-                <Ionicons name="play" size={isTV ? 32 : 24} color={colors.textPrimary} />
-              </View>
-            </View>
-            
-            {/* Progress bar */}
-            <View style={styles.progressContainer}>
-              <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
+      <Pressable
+        onPress={onPress}
+        onLongPress={() => {
+          Alert.alert(
+            'Clear Progress',
+            `Remove "${item.title}" from Continue Watching?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Clear', style: 'destructive', onPress: onRemove },
+            ]
+          );
+        }}
+        delayLongPress={800}
+        onFocus={handleFocus}
+        onBlur={() => setIsFocused(false)}
+        style={[
+          styles.continueImageWrapper,
+          isFocused && styles.continueImageWrapperFocused,
+        ]}
+      >
+        <View style={[styles.continueImageContainer, { height: posterHeight }]}>
+          <Image
+            source={{ uri: item.poster || item.backdrop || '' }}
+            style={styles.continueImage}
+            contentFit="cover"
+          />
+          
+          {/* Play overlay */}
+          <View style={styles.playOverlay}>
+            <View style={styles.playButton}>
+              <Ionicons name="play" size={isTV ? 32 : 24} color={colors.textPrimary} />
             </View>
           </View>
-        </Pressable>
+          
+          {/* Progress bar */}
+          <View style={styles.progressContainer}>
+            <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
+          </View>
+        </View>
+      </Pressable>
 
-        {/* X button - overlaid on top-right of poster */}
+      {/* Title row with X button - both are focusable siblings for D-pad navigation */}
+      <View style={styles.continueTitleRow}>
+        <View style={styles.continueTitleContent}>
+          <Text style={styles.continueTitleText} numberOfLines={2}>
+            {item.title}
+          </Text>
+          {item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
+            <Text style={styles.continueEpisode}>
+              S{item.season} E{item.episode}
+            </Text>
+          )}
+        </View>
         <Pressable
           onPress={onRemove}
           onFocus={() => setXFocused(true)}
@@ -418,22 +428,11 @@ function ContinueWatchingItem({
           accessible={true}
           accessibilityRole="button"
           accessibilityLabel="Remove from Continue Watching"
-          style={[styles.removeButtonOverlay, isTV && styles.removeButtonOverlayTV, xFocused && styles.removeButtonFocused]}
+          hasTVPreferredFocus={false}
+          style={[styles.removeButton, xFocused && styles.removeButtonFocused]}
         >
-          <Ionicons name="close" size={isTV ? 16 : 14} color={xFocused ? colors.primary : "rgba(255,255,255,0.8)"} />
+          <Ionicons name="close-circle" size={isTV ? 22 : 18} color={xFocused ? colors.primary : "rgba(255,255,255,0.5)"} />
         </Pressable>
-      </View>
-
-      {/* Title below poster */}
-      <View style={styles.continueTitle}>
-        <Text style={styles.continueTitleText} numberOfLines={2}>
-          {item.title}
-        </Text>
-        {item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
-          <Text style={styles.continueEpisode}>
-            S{item.season} E{item.episode}
-          </Text>
-        )}
       </View>
     </View>
   );
@@ -602,35 +601,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
   },
-  removeButtonOverlay: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    padding: 4,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+  removeButton: {
+    padding: 8,
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: 'transparent',
-    zIndex: 10,
-  },
-  removeButtonOverlayTV: {
-    top: 4,
-    right: 4,
-    padding: 6,
-    minWidth: 32,
-    minHeight: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    marginLeft: 4,
   },
   removeButtonFocused: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(184, 160, 92, 0.4)',
+    backgroundColor: 'rgba(184, 160, 92, 0.25)',
   },
   continueTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     paddingTop: 6,
-    paddingHorizontal: 4,
+    paddingRight: 2,
   },
   continueTitleContent: {
     flex: 1,

@@ -37,22 +37,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as NavigationBar from 'expo-navigation-bar';
 
-// expo-video for native playback (uses ExoPlayer on Android - proper HLS support)
-let VideoView: any = null;
-let useVideoPlayer: any = null;
-let VideoContentFit: any = null;
-if (Platform.OS !== 'web') {
-  try {
-    const expoVideo = require('expo-video');
-    VideoView = expoVideo.VideoView;
-    useVideoPlayer = expoVideo.useVideoPlayer;
-    VideoContentFit = expoVideo.VideoContentFit;
-    console.log('[PLAYER] expo-video loaded (ExoPlayer on Android)');
-  } catch (e) {
-    console.log('[PLAYER] expo-video not available, falling back to expo-av');
-  }
-}
-
 // Check if running on TV
 const isTV = Platform.isTV || Platform.OS === 'android';
 
@@ -306,16 +290,6 @@ export default function PlayerScreen() {
   const videoRef = useRef<Video>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
-  
-  // expo-video player instance (uses ExoPlayer on Android for proper HLS support)
-  const expoVideoPlayer = useVideoPlayer ? useVideoPlayer(null, (p: any) => {
-    p.loop = false;
-    p.staysActiveInBackground = false;
-  }) : null;
-  const useExpoVideo = Platform.OS !== 'web' && VideoView && expoVideoPlayer;
-  
-  // Track whether we've already set up the expo-video player for the current stream
-  const expoVideoStreamRef = useRef<string | null>(null);
   
   // Refs to track latest state values for TV event handler (avoids stale closures)
   const isPlayingRef = useRef(isPlaying);
@@ -778,16 +752,9 @@ export default function PlayerScreen() {
     };
   }, []);
   
-  // Toggle play/pause - works with both expo-av (web) and expo-video (native)
+  // Toggle play/pause
   const togglePlayPause = async () => {
-    if (useExpoVideo && expoVideoPlayer) {
-      if (isPlaying) {
-        expoVideoPlayer.pause();
-      } else {
-        expoVideoPlayer.play();
-      }
-      setIsPlaying(!isPlaying);
-    } else if (videoRef.current) {
+    if (videoRef.current) {
       if (isPlaying) {
         await videoRef.current.pauseAsync();
       } else {
@@ -798,26 +765,20 @@ export default function PlayerScreen() {
 
   // Seek to position (for progress bar interaction)
   const seekToPosition = async (percentage: number) => {
-    if (duration > 0) {
+    if (videoRef.current && duration > 0) {
       const newPosition = Math.floor(duration * percentage);
-      if (useExpoVideo && expoVideoPlayer) {
-        expoVideoPlayer.currentTime = newPosition / 1000; // expo-video uses seconds
-      } else if (videoRef.current) {
-        await videoRef.current.setPositionAsync(newPosition);
-      }
+      await videoRef.current.setPositionAsync(newPosition);
       showControlsWithTimeout();
     }
   };
 
   // Seek to absolute position in milliseconds
   const seekToMs = async (newPositionMs: number) => {
-    const clampedPosition = Math.max(0, Math.min(duration || Infinity, newPositionMs));
-    if (useExpoVideo && expoVideoPlayer) {
-      expoVideoPlayer.currentTime = clampedPosition / 1000; // expo-video uses seconds
-    } else if (videoRef.current) {
+    if (videoRef.current) {
+      const clampedPosition = Math.max(0, Math.min(duration, newPositionMs));
       await videoRef.current.setPositionAsync(clampedPosition);
+      showControlsWithTimeout();
     }
-    showControlsWithTimeout();
   };
 
   // Handle progress bar press/tap
@@ -860,18 +821,12 @@ export default function PlayerScreen() {
           togglePlayPause();
           break;
         case 'play':
-          if (useExpoVideo && expoVideoPlayer) {
-            expoVideoPlayer.play();
-            setIsPlaying(true);
-          } else if (videoRef.current && !isPlaying) {
+          if (videoRef.current && !isPlaying) {
             videoRef.current.playAsync();
           }
           break;
         case 'pause':
-          if (useExpoVideo && expoVideoPlayer) {
-            expoVideoPlayer.pause();
-            setIsPlaying(false);
-          } else if (videoRef.current && isPlaying) {
+          if (videoRef.current && isPlaying) {
             videoRef.current.pauseAsync();
           }
           break;
@@ -991,129 +946,6 @@ export default function PlayerScreen() {
       }
     };
   }, [streamUrl, error, isLoading]);
-  
-  // expo-video: Load stream and track playback status
-  // This replaces expo-av's onPlaybackStatusUpdate for native platforms
-  useEffect(() => {
-    if (!useExpoVideo || !expoVideoPlayer || !streamUrl) return;
-    
-    // Only load if the stream URL has changed
-    if (expoVideoStreamRef.current === streamUrl) return;
-    expoVideoStreamRef.current = streamUrl;
-    
-    console.log('[PLAYER] expo-video: Loading stream:', streamUrl.substring(0, 80));
-    
-    // Determine if this is an HLS stream (live TV or .m3u8 URL)
-    const isHLS = isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true';
-    
-    try {
-      // Replace the video source with HLS content type hint for ExoPlayer
-      expoVideoPlayer.replace({
-        uri: streamUrl,
-        ...(isHLS ? { contentType: 'hls' } : {}),
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-      });
-      expoVideoPlayer.play();
-      console.log('[PLAYER] expo-video: Source set, playing...', isHLS ? '(HLS mode)' : '');
-    } catch (e) {
-      console.log('[PLAYER] expo-video: Error loading source:', e);
-    }
-    
-    return () => {
-      // Cleanup on unmount
-    };
-  }, [streamUrl, useExpoVideo, expoVideoPlayer, isLiveTV, isLive]);
-  
-  // expo-video: Poll player status for position/duration/playing state
-  useEffect(() => {
-    if (!useExpoVideo || !expoVideoPlayer) return;
-    
-    const statusInterval = setInterval(() => {
-      try {
-        const currentTime = expoVideoPlayer.currentTime || 0;
-        const totalDuration = expoVideoPlayer.duration || 0;
-        const playing = expoVideoPlayer.playing || false;
-        
-        // Convert seconds to milliseconds (to match existing state format)
-        const posMs = Math.floor(currentTime * 1000);
-        const durMs = Math.floor(totalDuration * 1000);
-        
-        setPosition(posMs);
-        if (durMs > 0) setDuration(durMs);
-        setIsPlaying(playing);
-        
-        // Mark playback as started when video actually plays
-        if (playing && !playbackStarted) {
-          console.log('[PLAYER] expo-video: Playback started!');
-          setPlaybackStarted(true);
-          setIsLoading(false);
-          if (playbackTimeoutRef.current) {
-            clearTimeout(playbackTimeoutRef.current);
-            playbackTimeoutRef.current = null;
-          }
-          
-          // Force save progress
-          if (durMs > 0) {
-            saveWatchProgress(posMs, durMs, true);
-          }
-        }
-        
-        // Save watch progress periodically
-        if (playing && durMs > 0) {
-          saveWatchProgress(posMs, durMs);
-        }
-        
-        // Handle resume from saved position
-        if (pendingResumePosition && pendingResumePosition > 0 && !hasResumedRef.current && durMs > 0) {
-          const resumeMs = pendingResumePosition * 1000;
-          if (resumeMs >= durMs * 0.95) {
-            console.log('[PLAYER] expo-video: Resume position past 95%, not resuming');
-            hasResumedRef.current = true;
-            setPendingResumePosition(null);
-          } else {
-            console.log(`[PLAYER] expo-video: Resuming to ${pendingResumePosition}s`);
-            hasResumedRef.current = true;
-            expoVideoPlayer.currentTime = pendingResumePosition;
-            setPendingResumePosition(null);
-          }
-        }
-      } catch (e) {
-        // Player might not be ready yet
-      }
-    }, 500); // Poll every 500ms
-    
-    return () => clearInterval(statusInterval);
-  }, [useExpoVideo, expoVideoPlayer, playbackStarted, pendingResumePosition, saveWatchProgress]);
-  
-  // expo-video: Handle errors via event listener
-  useEffect(() => {
-    if (!useExpoVideo || !expoVideoPlayer) return;
-    
-    let errorListener: any = null;
-    try {
-      errorListener = expoVideoPlayer.addListener('statusChange', (status: any) => {
-        if (status?.error) {
-          console.log('[PLAYER] expo-video error:', status.error);
-          if (fallbackUrls.length > currentStreamIndex + 1) {
-            tryNextStream();
-          } else {
-            setError('Failed to play video. Stream unavailable.');
-            setIsLoading(false);
-          }
-        }
-      });
-    } catch (e) {
-      console.log('[PLAYER] Could not add statusChange listener:', e);
-    }
-    
-    return () => {
-      if (errorListener && typeof errorListener.remove === 'function') {
-        errorListener.remove();
-      }
-    };
-  }, [useExpoVideo, expoVideoPlayer, fallbackUrls, currentStreamIndex]);
   
   // Try next fallback stream
   const tryNextStream = () => {
@@ -1737,44 +1569,34 @@ export default function PlayerScreen() {
               style={StyleSheet.absoluteFill}
               onPress={handleVideoTap}
             >
-              {useExpoVideo && expoVideoPlayer ? (
-                // expo-video: Uses ExoPlayer on Android - proper HLS/redirect support
-                <VideoView
-                  player={expoVideoPlayer}
-                  style={styles.videoPlayer}
-                  contentFit="contain"
-                  nativeControls={false}
-                  allowsFullscreen={false}
-                  allowsPictureInPicture={false}
-                />
-              ) : (
-                // Fallback: expo-av Video component
-                <Video
-                  ref={videoRef}
-                  source={{ 
-                    uri: streamUrl,
-                    headers: {
-                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    },
-                  }}
-                  style={styles.videoPlayer}
-                  resizeMode={ResizeMode.CONTAIN}
-                  shouldPlay
-                  isLooping={false}
-                  volume={1.0}
-                  isMuted={false}
-                  onPlaybackStatusUpdate={handlePlaybackStatus}
-                  onError={(error) => {
-                    console.log('[PLAYER] Video error:', error);
-                    if (fallbackUrls.length > currentStreamIndex + 1) {
-                      tryNextStream();
-                    } else {
-                      setError('Failed to play video. All streams failed.');
-                      setHasAudioError(true);
-                    }
-                  }}
-                />
-              )}
+              <Video
+                ref={videoRef}
+                source={{ 
+                  uri: streamUrl,
+                  // CRITICAL: Forces ExoPlayer to use HLS media source for redirect URLs
+                  // Without this, URLs without .m3u8 extension (like redirects) fail
+                  overrideFileExtensionAndroid: (isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true') ? 'm3u8' : undefined,
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  },
+                }}
+                style={styles.videoPlayer}
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay
+                isLooping={false}
+                volume={1.0}
+                isMuted={false}
+                onPlaybackStatusUpdate={handlePlaybackStatus}
+                onError={(error) => {
+                  console.log('[PLAYER] Video error:', error);
+                  if (fallbackUrls.length > currentStreamIndex + 1) {
+                    tryNextStream();
+                  } else {
+                    setError('Failed to play video. All streams failed.');
+                    setHasAudioError(true);
+                  }
+                }}
+              />
             </Pressable>
             
             {/* Subtitle Overlay */}
