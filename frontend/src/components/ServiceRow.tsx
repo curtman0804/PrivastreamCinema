@@ -48,15 +48,17 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   // Get native node handle for See All button to trap focus (prevent right-arrow from escaping)
   // Only needed on Android TV - findNodeHandle is not supported on web
   useEffect(() => {
-    if (!onSeeAll || Platform.OS === 'web') return;
+    if (!onSeeAll || Platform.OS !== 'android') return;
     const timer = setTimeout(() => {
-      if (seeAllRef.current) {
-        try {
-          const handle = findNodeHandle(seeAllRef.current);
+      try {
+        // Dynamic require to avoid web bundling issues
+        const RN = require('react-native');
+        if (seeAllRef.current && RN.findNodeHandle) {
+          const handle = RN.findNodeHandle(seeAllRef.current);
           if (handle) setSeeAllNodeId(handle);
-        } catch (e) {
-          // findNodeHandle not available on this platform
         }
+      } catch (e) {
+        // findNodeHandle not available on this platform
       }
     }, 300);
     return () => clearTimeout(timer);
