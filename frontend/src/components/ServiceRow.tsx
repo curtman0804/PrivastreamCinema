@@ -113,33 +113,12 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 
   return (
     <View style={styles.container}>
-      {/* Row Header - Stremio style */}
+      {/* Row Header - Title only */}
       <View style={[styles.header, isTV && styles.headerTV]}>
         <Text style={[styles.title, isTV && styles.titleTV]}>{displayTitle}</Text>
-        {onSeeAll && (
-          <Pressable 
-            onPress={onSeeAll} 
-            onFocus={() => setSeeAllFocused(true)}
-            onBlur={() => setSeeAllFocused(false)}
-            style={({ focused }) => [
-              styles.seeAllButton,
-              (focused || seeAllFocused) && styles.seeAllButtonFocused,
-            ]}
-          >
-            <Text style={[
-              styles.seeAllText,
-              (seeAllFocused) && styles.seeAllTextFocused,
-            ]}>SEE ALL</Text>
-            <Ionicons 
-              name="chevron-forward" 
-              size={16} 
-              color={seeAllFocused ? colors.textPrimary : colors.textSecondary} 
-            />
-          </Pressable>
-        )}
       </View>
       
-      {/* Content Row - Optimized FlatList */}
+      {/* Content Row - Optimized FlatList with See All button at end */}
       <FlatList
         ref={flatListRef}
         horizontal
@@ -161,6 +140,28 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         getItemLayout={getItemLayout}
         // Disable automatic scroll adjustments
         maintainVisibleContentPosition={null}
+        // Circular See All button at the end of the row
+        ListFooterComponent={onSeeAll ? (
+          <Pressable
+            onPress={onSeeAll}
+            onFocus={() => {
+              setSeeAllFocused(true);
+              if (onSectionFocus) onSectionFocus();
+            }}
+            onBlur={() => setSeeAllFocused(false)}
+            style={[
+              styles.seeAllCircle,
+              isTV && styles.seeAllCircleTV,
+              seeAllFocused && styles.seeAllCircleFocused,
+            ]}
+          >
+            <Ionicons 
+              name="arrow-forward" 
+              size={isTV ? 28 : 22} 
+              color={seeAllFocused ? colors.textPrimary : colors.textSecondary} 
+            />
+          </Pressable>
+        ) : null}
       />
     </View>
   );
