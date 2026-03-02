@@ -104,7 +104,16 @@ export default function CategoryScreen() {
   useEffect(() => {
     if (!initialLoadDone.current && decodedService && type) {
       initialLoadDone.current = true;
-      fetchCategoryContent(0, false);
+      // Load first page, then auto-fetch remaining pages
+      fetchCategoryContent(0, false).then(() => {
+        // Auto-fetch all remaining pages in background
+        const fetchRemaining = async () => {
+          while (hasMoreRef.current && !isLoadingRef.current) {
+            await fetchCategoryContent(skipRef.current, true);
+          }
+        };
+        fetchRemaining();
+      });
     }
   }, [decodedService, type]);
 
