@@ -68,10 +68,14 @@ function StreamCard({
     if (name.includes('4K') || name.includes('2160')) quality = '4K';
     else if (name.includes('1080')) quality = '1080p';
     else if (name.includes('720')) quality = '720p';
+    else if (name.toUpperCase().includes('HD') && !name.toUpperCase().includes('SD')) quality = 'HD';
     
-    // Extract source
+    // Extract source - use provider code for USAATV, otherwise addon name
     let source = stream.addon || 'Unknown';
-    if (name.includes('TPB') || name.includes('🏴‍☠️')) source = 'TPB';
+    if (stream.provider) {
+      // USAATV streams have provider abbreviation (AX, CV, MJ, TP, etc.)
+      source = stream.provider;
+    } else if (name.includes('TPB') || name.includes('🏴‍☠️')) source = 'TPB';
     else if (name.includes('⚡') || name.includes('Torrentio')) source = 'Torrentio';
     else if (name.includes('EZTV')) source = 'EZTV';
     
