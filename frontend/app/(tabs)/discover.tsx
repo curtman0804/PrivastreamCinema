@@ -167,6 +167,7 @@ export default function DiscoverScreen() {
       isTV={isTV}
       onPress={() => handleContinueWatchingPress(item)}
       onRemove={() => handleRemoveFromContinueWatching(item)}
+      onSectionFocus={() => handleSectionFocus('continue-watching')}
     />
   );
 
