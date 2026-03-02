@@ -1184,73 +1184,28 @@ async def get_all_streams(
                     data = response.json()
                     streams = data.get('streams', [])
                     
-                    # Provider name mapping
-                    provider_names = {
-                        'AX': 'A1XS Network',
-                        'CV': 'CValley TV',
-                        'MJ': 'MoveOnJoy',
-                        'MJI': 'MoveOnJoy Intl',
-                        'TP': 'TVPass',
-                        'PL': 'Pluto',
-                        'ST': 'Stirr',
-                    }
-                    
-                    # Format streams for display with location extraction
-                    # NOTE: We do NOT resolve redirects server-side because many streams
-                    # (like TVPass/thetvapp.to) return IP-bound tokens. The redirect must
-                    # be resolved on the client device itself. The expo-video library
-                    # (which uses ExoPlayer) handles HLS redirects natively.
+                    # Format streams to match Stremio's display style
+                    # Stremio shows: quality (HD/SD) + provider abbreviation (AX, CV, MJ, TP, etc.)
+                    # We pass through the raw format so the frontend can display it like Stremio
                     formatted_streams = []
-                    import re
                     
                     for stream in streams:
                         url = stream.get('url', '')
-                        desc = stream.get('description', '')
-                        quality = stream.get('name', 'HD')
+                        desc = stream.get('description', '')  # Provider abbreviation: AX, CV, MJ, TP, etc.
+                        quality = stream.get('name', 'HD')    # HD or SD
                         
                         if not url:
                             continue
                         
-                        # Try to extract location from URL
-                        location = ''
-                        # Patterns like "FL_West_Palm_Beach_CBS" or "Los_Angeles"
-                        loc_match = re.search(r'(?:FL_|CA_|TX_|NY_)?([A-Z][a-z]+(?:_[A-Z][a-z]+)*)', url)
-                        if loc_match:
-                            loc = loc_match.group(1).replace('_', ' ')
-                            # Filter out generic words
-                            if loc not in ['East', 'West', 'North', 'South', 'Index', 'Live', 'Hls']:
-                                location = loc
-                        
-                        # Also check for call sign patterns like KSMO, KRCG (FCC call signs indicate region)
-                        call_match = re.search(r'/([KW][A-Z]{2,4})(?:CBS|NBC|ABC|FOX|IND)?/', url)
-                        call_sign = call_match.group(1) if call_match else ''
-                        
-                        # Get provider full name
-                        provider = provider_names.get(desc, desc)
-                        
-                        # Build display name
-                        if location:
-                            display_name = f"📺 {quality} • {location}"
-                        elif call_sign:
-                            display_name = f"📺 {quality} • {call_sign}"
-                        else:
-                            display_name = f"📺 {quality}"
-                        
-                        # Build title with provider info
-                        title_parts = [provider]
-                        if location:
-                            title_parts.append(location)
-                        if call_sign and location:
-                            title_parts.append(f"({call_sign})")
-                        elif call_sign:
-                            title_parts.append(call_sign)
-                        
+                        # Use Stremio-style display: "HD" or "SD" as name, provider code as title
+                        # The frontend will render these as stream cards matching Stremio's format
                         formatted_streams.append({
-                            "name": display_name,
-                            "title": ' • '.join(title_parts),
+                            "name": f"{quality}\n{desc}",    # "HD\nAX" - quality + provider on two lines
+                            "title": desc,                    # Provider abbreviation for display
                             "url": url,
                             "addon": "USA TV",
                             "quality": quality,
+                            "provider": desc,                 # Raw provider code
                             "isLive": True,
                         })
                     
