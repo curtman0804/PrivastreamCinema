@@ -125,24 +125,35 @@ export default function CategoryScreen() {
     });
   };
 
-  const renderItem = ({ item }: { item: ContentItem }) => (
-    <TouchableOpacity 
-      style={styles.itemContainer}
-      onPress={() => handleItemPress(item)}
-      activeOpacity={0.7}
-    >
-      <Image
-        source={{ uri: item.poster }}
-        style={styles.poster}
-        contentFit="cover"
-        placeholder={require('../../../assets/images/icon.png')}
-        placeholderContentFit="contain"
-      />
-      <Text style={styles.itemTitle} numberOfLines={2}>{item.name}</Text>
-    </TouchableOpacity>
-  );
+  const CategoryItem = ({ item }: { item: ContentItem }) => {
+    const [focused, setFocused] = useState(false);
+    return (
+      <Pressable 
+        style={[
+          { width: ITEM_WIDTH, marginBottom: 16, marginHorizontal: gap / 2, borderRadius: 8, borderWidth: 2, borderColor: 'transparent' },
+          focused && { borderColor: colors.primary },
+        ]}
+        onPress={() => handleItemPress(item)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+      >
+        <Image
+          source={{ uri: item.poster }}
+          style={{ width: '100%', height: ITEM_HEIGHT, borderRadius: 6, backgroundColor: colors.backgroundLight }}
+          contentFit="cover"
+          placeholder={require('../../../assets/images/icon.png')}
+          placeholderContentFit="contain"
+        />
+        <Text style={styles.itemTitle} numberOfLines={2}>{item.name}</Text>
+      </Pressable>
+    );
+  };
 
+  // Fix duplicate title: if service name already includes the type word, don't append it
   const typeLabel = type === 'movies' ? 'Movies' : type === 'series' ? 'Series' : 'Channels';
+  const lowerService = decodedService.toLowerCase();
+  const lowerType = typeLabel.toLowerCase();
+  const displayTitle = lowerService.includes(lowerType) ? decodedService : `${decodedService} ${typeLabel}`;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
