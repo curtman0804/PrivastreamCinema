@@ -244,6 +244,18 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: 'rgba(184, 160, 92, 0.25)',
   },
+  seeAllLabel: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  seeAllLabelTV: {
+    fontSize: 12,
+  },
+  seeAllLabelFocused: {
+    color: colors.textPrimary,
+  },
   seeAllFooter: {
     justifyContent: 'center',
     paddingLeft: 8,
