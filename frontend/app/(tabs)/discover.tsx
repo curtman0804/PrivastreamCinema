@@ -376,15 +376,18 @@ function ContinueWatchingItem({
     <Pressable
       onPress={onPress}
       onLongPress={handleLongPress}
-      delayLongPress={500}
+      delayLongPress={600}
       onFocus={handleFocus}
       onBlur={() => setIsFocused(false)}
-      style={[styles.continueItem, { width: posterWidth }]}
+      style={[
+        styles.continueItem, 
+        { width: posterWidth },
+        isFocused && styles.continueItemFocused,
+      ]}
     >
       <View style={[
         styles.continueImageContainer,
         { height: posterHeight },
-        isFocused && styles.continueImageFocused,
       ]}>
         <Image
           source={{ uri: item.poster || item.backdrop || '' }}
