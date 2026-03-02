@@ -532,17 +532,18 @@ const styles = StyleSheet.create({
   // Continue watching item - Stremio style
   continueItem: {
     marginRight: 16,
+    position: 'relative',
+  },
+  continueImageWrapper: {
     borderRadius: 6,
     borderWidth: 3,
     borderColor: 'transparent',
-    padding: 0,
+    overflow: 'hidden',
   },
-  continueItemFocused: {
+  continueImageWrapperFocused: {
     borderColor: colors.primary,
   },
   continueImageContainer: {
-    borderRadius: 4,
-    overflow: 'hidden',
     backgroundColor: colors.backgroundLight,
     position: 'relative',
   },
