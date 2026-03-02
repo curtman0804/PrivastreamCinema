@@ -354,18 +354,8 @@ function ContinueWatchingItem({
   onSectionFocus?: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
+  const [xFocused, setXFocused] = useState(false);
   const percentWatched = item.percent_watched || 0;
-
-  const handleLongPress = () => {
-    Alert.alert(
-      'Remove from Continue Watching?',
-      `Remove "${item.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: onRemove },
-      ]
-    );
-  };
 
   const handleFocus = () => {
     setIsFocused(true);
@@ -373,53 +363,71 @@ function ContinueWatchingItem({
   };
   
   return (
-    <Pressable
-      onPress={onPress}
-      onLongPress={handleLongPress}
-      delayLongPress={600}
-      onFocus={handleFocus}
-      onBlur={() => setIsFocused(false)}
-      style={[
-        styles.continueItem, 
-        { width: posterWidth },
-        isFocused && styles.continueItemFocused,
-      ]}
-    >
-      <View style={[
-        styles.continueImageContainer,
-        { height: posterHeight },
-      ]}>
-        <Image
-          source={{ uri: item.poster || item.backdrop || '' }}
-          style={styles.continueImage}
-          contentFit="cover"
-        />
-        
-        {/* Play overlay - Stremio style */}
-        <View style={styles.playOverlay}>
-          <View style={styles.playButton}>
-            <Ionicons name="play" size={isTV ? 32 : 24} color={colors.textPrimary} />
+    <View style={[styles.continueItem, { width: posterWidth }]}>
+      {/* Main poster - pressable */}
+      <Pressable
+        onPress={onPress}
+        onLongPress={() => {
+          Alert.alert(
+            'Clear Progress',
+            `Remove "${item.title}" from Continue Watching?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Clear', style: 'destructive', onPress: onRemove },
+            ]
+          );
+        }}
+        delayLongPress={800}
+        onFocus={handleFocus}
+        onBlur={() => setIsFocused(false)}
+        style={[
+          styles.continueImageWrapper,
+          isFocused && styles.continueImageWrapperFocused,
+        ]}
+      >
+        <View style={[styles.continueImageContainer, { height: posterHeight }]}>
+          <Image
+            source={{ uri: item.poster || item.backdrop || '' }}
+            style={styles.continueImage}
+            contentFit="cover"
+          />
+          
+          {/* Play overlay */}
+          <View style={styles.playOverlay}>
+            <View style={styles.playButton}>
+              <Ionicons name="play" size={isTV ? 32 : 24} color={colors.textPrimary} />
+            </View>
+          </View>
+          
+          {/* Progress bar */}
+          <View style={styles.progressContainer}>
+            <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
           </View>
         </View>
-        
-        {/* Progress bar - Stremio style */}
-        <View style={styles.progressContainer}>
-          <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
-        </View>
-      </View>
+      </Pressable>
+
+      {/* X button to remove - separate focusable element */}
+      <Pressable
+        onPress={onRemove}
+        onFocus={() => setXFocused(true)}
+        onBlur={() => setXFocused(false)}
+        style={[styles.removeButton, xFocused && styles.removeButtonFocused]}
+      >
+        <Ionicons name="close" size={isTV ? 16 : 14} color="#FFFFFF" />
+      </Pressable>
       
-      {/* Title */}
+      {/* Title - outside focus border */}
       <View style={styles.continueTitle}>
         <Text style={styles.continueTitleText} numberOfLines={2}>
           {item.title}
         </Text>
-        {item.season !== undefined && item.episode !== undefined && (
+        {item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
           <Text style={styles.continueEpisode}>
             S{item.season} E{item.episode}
           </Text>
         )}
       </View>
-    </Pressable>
+    </View>
   );
 }
 
