@@ -156,6 +156,8 @@ export default function CategoryScreen() {
   const lowerType = typeLabel.toLowerCase();
   const displayTitle = lowerService.includes(lowerType) ? decodedService : `${decodedService} ${typeLabel}`;
 
+  const [backFocused, setBackFocused] = useState(false);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
