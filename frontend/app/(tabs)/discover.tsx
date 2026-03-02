@@ -227,7 +227,10 @@ export default function DiscoverScreen() {
         >
           {/* Continue Watching Section - Stremio style */}
           {continueWatching.length > 0 && (
-            <View style={styles.section}>
+            <View 
+              style={styles.section}
+              onLayout={(e) => { sectionPositions.current['continue-watching'] = e.nativeEvent.layout.y; }}
+            >
               <View style={[styles.sectionHeader, isTV && styles.sectionHeaderTV]}>
                 <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>
                   Continue Watching
