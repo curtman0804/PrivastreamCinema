@@ -85,11 +85,11 @@ export default function DiscoverScreen() {
   }, [fetchContinueWatching]);
 
   // Handle section focus - scroll section title to top of screen
-  // Immediate scroll for smooth navigation between rows
+  // Use animated:false for instant response (no competing animations)
   const handleSectionFocus = useCallback((sectionKey: string) => {
     const y = sectionPositions.current[sectionKey];
     if (y !== undefined && scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({ y: Math.max(0, y - 16), animated: true });
+      scrollViewRef.current.scrollTo({ y: Math.max(0, y - 16), animated: false });
     }
   }, []);
 
