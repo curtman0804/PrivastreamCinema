@@ -717,11 +717,12 @@ const styles = StyleSheet.create({
   titleSection: {
     marginBottom: 16,
     marginTop: height * 0.25,
+    alignItems: 'center',
   },
   logoImage: {
     width: width * 0.6,
     height: 80,
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
   },
   title: {
     fontSize: 32,
@@ -730,15 +731,18 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
+    textAlign: 'center',
   },
   episodeSubtitle: {
     fontSize: 16,
     color: '#B8A05C',
     marginTop: 8,
+    textAlign: 'center',
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     flexWrap: 'wrap',
     gap: 12,
     marginBottom: 16,
@@ -800,11 +804,13 @@ const styles = StyleSheet.create({
     color: '#CCCCCC',
     lineHeight: 22,
     marginBottom: 16,
+    textAlign: 'center',
   },
   castText: {
     fontSize: 13,
     color: '#888888',
     marginBottom: 24,
+    textAlign: 'center',
   },
   sectionTitle: {
     fontSize: 18,
