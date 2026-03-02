@@ -162,8 +162,13 @@ export default function CategoryScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={[styles.header, isTV && styles.headerTV]}>
-        <Pressable onPress={() => router.back()} style={({ focused }) => [styles.backButton, focused && styles.backButtonFocused]}>
-          <Ionicons name="arrow-back" size={isTV ? 28 : 24} color="#FFFFFF" />
+        <Pressable 
+          onPress={() => router.back()} 
+          onFocus={() => setBackFocused(true)}
+          onBlur={() => setBackFocused(false)}
+          style={[styles.backButton, backFocused && styles.backButtonFocused]}
+        >
+          <Ionicons name="arrow-back" size={isTV ? 28 : 24} color={backFocused ? colors.primary : "#FFFFFF"} />
         </Pressable>
         <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>{displayTitle}</Text>
         <View style={styles.placeholder} />
