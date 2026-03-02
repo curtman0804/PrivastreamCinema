@@ -47,12 +47,17 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const [currentFocusIndex, setCurrentFocusIndex] = useState(0);
 
   // Get native node handle for See All button to trap focus (prevent right-arrow from escaping)
+  // Only needed on Android TV - findNodeHandle is not supported on web
   useEffect(() => {
-    if (!onSeeAll) return;
+    if (!onSeeAll || Platform.OS === 'web') return;
     const timer = setTimeout(() => {
       if (seeAllRef.current) {
-        const handle = findNodeHandle(seeAllRef.current);
-        if (handle) setSeeAllNodeId(handle);
+        try {
+          const handle = findNodeHandle(seeAllRef.current);
+          if (handle) setSeeAllNodeId(handle);
+        } catch (e) {
+          // findNodeHandle not available on this platform
+        }
       }
     }, 300);
     return () => clearTimeout(timer);
