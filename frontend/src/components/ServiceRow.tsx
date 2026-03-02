@@ -42,7 +42,21 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const isTV = width > height || width > 800;
   const [seeAllFocused, setSeeAllFocused] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const seeAllRef = useRef<View>(null);
+  const [seeAllNodeId, setSeeAllNodeId] = useState<number | undefined>(undefined);
   const [currentFocusIndex, setCurrentFocusIndex] = useState(0);
+
+  // Get native node handle for See All button to trap focus (prevent right-arrow from escaping)
+  useEffect(() => {
+    if (!onSeeAll) return;
+    const timer = setTimeout(() => {
+      if (seeAllRef.current) {
+        const handle = findNodeHandle(seeAllRef.current);
+        if (handle) setSeeAllNodeId(handle);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [onSeeAll]);
   
   // Memoize valid items to prevent recalculation
   const validItems = useMemo(() => 
