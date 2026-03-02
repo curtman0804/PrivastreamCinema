@@ -533,14 +533,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   continueImageFocused: {
-    transform: [{ scale: 1.05 }],
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 12,
-    elevation: 8,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: colors.primary,
+    borderRadius: 6,
   },
   continueImage: {
     width: '100%',
