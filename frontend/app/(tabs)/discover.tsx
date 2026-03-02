@@ -193,17 +193,6 @@ export default function DiscoverScreen() {
     );
   }
 
-  // Handle section focus - scroll section title to top of screen
-  const handleSectionFocus = useCallback((sectionKey: string) => {
-    const y = sectionPositions.current[sectionKey];
-    if (y !== undefined && scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({ y: y, animated: true });
-    }
-  }, []);
-
-  // Item width for snap scrolling
-  const itemWidth = POSTER_WIDTH + 16;
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Welcome Screen - No Addons and No Continue Watching */}
