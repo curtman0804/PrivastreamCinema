@@ -31,9 +31,10 @@ export default function CategoryScreen() {
   const isTV = width > height || width > 800;
 
   // Calculate grid dimensions to match discover page poster sizes
-  const numColumns = isTV ? Math.max(4, Math.floor(width / 220)) : 3;
+  // Fire Stick reports ~960dp width, so use smaller divisor for more columns
+  const numColumns = isTV ? Math.max(6, Math.floor(width / 140)) : 3;
   const horizontalPadding = isTV ? 24 : 16;
-  const gap = isTV ? 16 : 8;
+  const gap = isTV ? 12 : 8;
   const ITEM_WIDTH = (width - horizontalPadding * 2 - (numColumns - 1) * gap) / numColumns;
   const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
 
@@ -58,7 +59,7 @@ export default function CategoryScreen() {
       }
       
       console.log(`Fetching category: ${decodedService}, skip=${skipValue}`);
-      const response = await apiClient.get(`/api/content/category/${encodeURIComponent(decodedService)}/${type}?skip=${skipValue}&limit=100`);
+      const response = await apiClient.get(`/api/content/category/${encodeURIComponent(decodedService)}/${type}?skip=${skipValue}&limit=500`);
       const data = response.data;
       
       const newItems = data.items || [];
@@ -103,7 +104,16 @@ export default function CategoryScreen() {
   useEffect(() => {
     if (!initialLoadDone.current && decodedService && type) {
       initialLoadDone.current = true;
-      fetchCategoryContent(0, false);
+      // Load first page, then auto-fetch remaining pages
+      fetchCategoryContent(0, false).then(() => {
+        // Auto-fetch all remaining pages in background
+        const fetchRemaining = async () => {
+          while (hasMoreRef.current && !isLoadingRef.current) {
+            await fetchCategoryContent(skipRef.current, true);
+          }
+        };
+        fetchRemaining();
+      });
     }
   }, [decodedService, type]);
 
@@ -155,12 +165,19 @@ export default function CategoryScreen() {
   const lowerType = typeLabel.toLowerCase();
   const displayTitle = lowerService.includes(lowerType) ? decodedService : `${decodedService} ${typeLabel}`;
 
+  const [backFocused, setBackFocused] = useState(false);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={[styles.header, isTV && styles.headerTV]}>
-        <Pressable onPress={() => router.back()} style={({ focused }) => [styles.backButton, focused && styles.backButtonFocused]}>
-          <Ionicons name="arrow-back" size={isTV ? 28 : 24} color="#FFFFFF" />
+        <Pressable 
+          onPress={() => router.back()} 
+          onFocus={() => setBackFocused(true)}
+          onBlur={() => setBackFocused(false)}
+          style={[styles.backButton, backFocused && styles.backButtonFocused]}
+        >
+          <Ionicons name="arrow-back" size={isTV ? 28 : 24} color={backFocused ? colors.primary : "#FFFFFF"} />
         </Pressable>
         <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>{displayTitle}</Text>
         <View style={styles.placeholder} />

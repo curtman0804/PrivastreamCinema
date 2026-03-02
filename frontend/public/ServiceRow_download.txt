@@ -183,12 +183,12 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
               styles.seeAllLabel,
               isTV && styles.seeAllLabelTV,
               seeAllFocused && styles.seeAllLabelFocused,
-            ]}>SEE</Text>
-            <Text style={[
-              styles.seeAllLabel,
-              isTV && styles.seeAllLabelTV,
-              seeAllFocused && styles.seeAllLabelFocused,
-            ]}>ALL</Text>
+            ]}>SEE ALL</Text>
+            <Ionicons 
+              name="arrow-forward" 
+              size={isTV ? 20 : 16} 
+              color={seeAllFocused ? colors.textPrimary : colors.textSecondary} 
+            />
           </Pressable>
         ) : null}
         ListFooterComponentStyle={onSeeAll ? styles.seeAllFooter : undefined}
