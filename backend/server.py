@@ -2063,10 +2063,19 @@ async def get_category_content(
                         # Filter out items with empty names or IDs
                         metas = [m for m in metas if m.get('name') and m.get('id')]
                         
+                        # If we requested with skip>0 but got same items from start,
+                        # the addon doesn't support pagination - do it manually
+                        total_available = len(metas)
+                        if skip > 0 and total_available > 0:
+                            # Manual pagination: slice the full list
+                            page_items = metas[skip:skip+limit]
+                        else:
+                            page_items = metas[:limit]
+                        
                         return {
-                            "items": metas[:limit], 
-                            "total": len(metas), 
-                            "hasMore": len(metas) >= 20,  # If we got 20+ items, there's likely more
+                            "items": page_items, 
+                            "total": total_available, 
+                            "hasMore": (skip + len(page_items)) < total_available,
                             "catalogId": catalog_id,
                             "baseUrl": base_url
                         }
@@ -2112,7 +2121,11 @@ async def get_category_content(
             except Exception as e:
                 logger.warning(f"Error fetching category {catalog_id}: {e}")
                 
-        return {"items": items[:limit], "total": len(items), "hasMore": len(items) >= limit}
+        return {
+            "items": items[skip:skip+limit], 
+            "total": len(items), 
+            "hasMore": (skip + limit) < len(items)
+        }
     
     return {"items": [], "total": 0, "hasMore": False}
 

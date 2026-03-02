@@ -396,6 +396,12 @@ export default function DetailsScreen() {
         },
       });
     } else if (stream.url) {
+      // Build fallback URLs from all available streams with direct URLs
+      const allStreamUrls = streams
+        .filter(s => s.url && !s.infoHash && s.url !== stream.url)
+        .map(s => s.url)
+        .filter(Boolean);
+      
       router.push({
         pathname: '/player',
         params: { 
@@ -404,6 +410,7 @@ export default function DetailsScreen() {
           isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
           contentId: subtitleContentId,
+          fallbackStreams: allStreamUrls.length > 0 ? JSON.stringify(allStreamUrls) : '',
           backdrop: content?.background || '',
           poster: content?.poster || '',
           logo: content?.logo || '',

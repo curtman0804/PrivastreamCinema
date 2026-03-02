@@ -598,8 +598,8 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     position: 'absolute',
-    top: 2,
-    right: 2,
+    top: 4,
+    right: 4,
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -611,11 +611,11 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   removeButtonTV: {
-    top: -4,
-    right: -4,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    top: 0,
+    right: 0,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   removeButtonFocused: {
     borderColor: colors.primary,
