@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef, useMemo } from 'react';
+import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Pressable,
   useWindowDimensions,
   Platform,
+  findNodeHandle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentCard, getCardWidth } from './ContentCard';
