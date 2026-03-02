@@ -213,6 +213,7 @@ export default function DiscoverScreen() {
       ) : (
         /* Content ScrollView - Stremio Board style */
         <ScrollView
+          ref={scrollViewRef}
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           refreshControl={
