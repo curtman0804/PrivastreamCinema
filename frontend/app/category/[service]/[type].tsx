@@ -212,7 +212,7 @@ export default function CategoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f0f11',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -221,15 +221,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1d',
+    borderBottomColor: colors.backgroundLight,
+  },
+  headerTV: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
   },
   backButton: {
     padding: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  backButtonFocused: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
   },
   headerTitle: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '600',
+  },
+  headerTitleTV: {
+    fontSize: 24,
   },
   placeholder: {
     width: 40,
@@ -240,32 +254,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   gridContent: {
-    padding: 16,
-  },
-  itemContainer: {
-    width: ITEM_WIDTH,
-    marginBottom: 16,
-    marginHorizontal: 4,
-  },
-  poster: {
-    width: '100%',
-    height: ITEM_HEIGHT,
-    borderRadius: 8,
-    backgroundColor: '#1a1a1d',
+    paddingVertical: 16,
   },
   itemTitle: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 12,
     marginTop: 6,
     textAlign: 'center',
   },
   loadingText: {
-    color: '#999',
+    color: colors.textSecondary,
     marginTop: 12,
     fontSize: 14,
   },
   emptyText: {
-    color: '#666',
+    color: colors.textSecondary,
     fontSize: 16,
   },
   loadMoreContainer: {
@@ -275,7 +278,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   loadMoreText: {
-    color: '#999',
+    color: colors.textSecondary,
     marginLeft: 10,
     fontSize: 14,
   },
@@ -283,19 +286,8 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     alignItems: 'center',
   },
-  loadMoreButton: {
-    backgroundColor: '#B8A05C',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-  },
-  loadMoreButtonText: {
-    color: '#000',
-    fontWeight: '600',
-    fontSize: 14,
-  },
   endText: {
-    color: '#666',
+    color: colors.textSecondary,
     fontSize: 14,
   },
 });
