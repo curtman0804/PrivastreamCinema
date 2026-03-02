@@ -368,11 +368,13 @@ function ContinueWatchingItem({
   };
 
   const xButtonSize = isTV ? 30 : 24;
+  // Total height of the X row = button size + top padding (8px)
+  const xRowHeight = xButtonSize + 8;
   
   return (
     <View style={[styles.continueItem, { width: posterWidth }]}>
       {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
-      <View style={styles.xButtonRow}>
+      <View style={[styles.xButtonRow, { paddingTop: 8 }]}>
         <Pressable
           onPress={onRemove}
           onFocus={handleXFocus}
@@ -395,7 +397,7 @@ function ContinueWatchingItem({
         </Pressable>
       </View>
 
-      {/* Main poster - pressable, pulled up to overlap with X button row */}
+      {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
         onPress={onPress}
         onFocus={handleFocus}
@@ -403,7 +405,7 @@ function ContinueWatchingItem({
         android_ripple={null}
         style={[
           styles.continueImageWrapper,
-          { marginTop: -(xButtonSize / 2) },
+          { marginTop: -xRowHeight },
           isFocused && styles.continueImageWrapperFocused,
         ]}
       >
@@ -549,7 +551,7 @@ const styles = StyleSheet.create({
   xButtonRow: {
     alignItems: 'flex-end',
     zIndex: 10,
-    paddingRight: 2,
+    paddingRight: 8,
   },
   continueImageWrapper: {
     borderRadius: 6,
