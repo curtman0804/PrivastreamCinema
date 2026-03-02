@@ -193,7 +193,9 @@ export default function CategoryScreen() {
 
   const keyExtractor = useCallback((item: ContentItem) => item.id || item.imdb_id || '', []);
 
-  const ListFooter = useCallback(() => {
+  const LoadMoreFooter = () => {
+    const [loadMoreFocused, setLoadMoreFocused] = useState(false);
+    
     if (isLoadingMore) {
       return (
         <View style={styles.footerContainer}>
@@ -202,15 +204,32 @@ export default function CategoryScreen() {
         </View>
       );
     }
+    if (hasMore && items.length > 0) {
+      return (
+        <View style={styles.footerContainer}>
+          <Pressable
+            onPress={handleLoadMore}
+            onFocus={() => setLoadMoreFocused(true)}
+            onBlur={() => setLoadMoreFocused(false)}
+            style={[styles.loadMoreButton, loadMoreFocused && styles.loadMoreButtonFocused]}
+          >
+            <Ionicons name="chevron-down" size={20} color={loadMoreFocused ? colors.textPrimary : colors.textSecondary} />
+            <Text style={[styles.loadMoreText, loadMoreFocused && styles.loadMoreTextFocused]}>
+              Load More ({items.length} loaded)
+            </Text>
+          </Pressable>
+        </View>
+      );
+    }
     if (!hasMore && items.length > 0) {
       return (
         <View style={styles.footerContainer}>
-          <Text style={styles.footerText}>End of catalog ({items.length} items)</Text>
+          <Text style={styles.footerText}>All {items.length} items loaded</Text>
         </View>
       );
     }
     return null;
-  }, [isLoadingMore, hasMore, items.length]);
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -253,7 +272,7 @@ export default function CategoryScreen() {
           maxToRenderPerBatch={numColumns * 3}
           removeClippedSubviews={false}
           windowSize={11}
-          ListFooterComponent={ListFooter}
+          ListFooterComponent={LoadMoreFooter}
         />
       )}
     </SafeAreaView>
@@ -346,5 +365,28 @@ const styles = StyleSheet.create({
   footerText: {
     color: colors.textSecondary,
     fontSize: 14,
+  },
+  loadMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  loadMoreButtonFocused: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+  },
+  loadMoreText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  loadMoreTextFocused: {
+    color: colors.textPrimary,
   },
 });

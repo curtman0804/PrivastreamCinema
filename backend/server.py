@@ -1202,11 +1202,6 @@ async def get_all_streams(
                         desc = stream.get('description', '')
                         quality = stream.get('name', 'HD')
                         
-                        # Proxy the stream URL through our backend to prevent external player opening
-                        import base64
-                        encoded_url = base64.b64encode(url.encode()).decode()
-                        proxy_url = f"/api/proxy/video?url={encoded_url}"
-                        
                         # Try to extract location from URL
                         location = ''
                         import re
@@ -1245,9 +1240,10 @@ async def get_all_streams(
                         formatted_streams.append({
                             "name": display_name,
                             "title": ' • '.join(title_parts),
-                            "url": proxy_url,
+                            "url": url,
                             "addon": "USA TV",
                             "quality": quality,
+                            "isLive": True,
                         })
                     
                     logger.info(f"Found {len(formatted_streams)} USA TV streams for {content_id}")

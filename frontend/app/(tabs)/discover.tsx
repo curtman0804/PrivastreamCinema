@@ -406,14 +406,16 @@ function ContinueWatchingItem({
         </View>
       </Pressable>
 
-      {/* X button to remove - separate focusable element */}
+      {/* X button to remove - separate focusable element, positioned above poster */}
       <Pressable
         onPress={onRemove}
         onFocus={() => setXFocused(true)}
         onBlur={() => setXFocused(false)}
-        style={[styles.removeButton, xFocused && styles.removeButtonFocused]}
+        accessible={true}
+        accessibilityLabel="Remove from Continue Watching"
+        style={[styles.removeButton, isTV && styles.removeButtonTV, xFocused && styles.removeButtonFocused]}
       >
-        <Ionicons name="close" size={isTV ? 16 : 14} color="#FFFFFF" />
+        <Ionicons name="close-circle" size={isTV ? 24 : 18} color={xFocused ? colors.primary : "rgba(255,255,255,0.8)"} />
       </Pressable>
       
       {/* Title - outside focus border */}
@@ -596,20 +598,27 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    top: 2,
+    right: 2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'transparent',
     zIndex: 10,
   },
+  removeButtonTV: {
+    top: -4,
+    right: -4,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
   removeButtonFocused: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(184, 160, 92, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
   },
 });
