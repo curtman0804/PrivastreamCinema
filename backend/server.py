@@ -1209,8 +1209,42 @@ async def get_all_streams(
                             "isLive": True,
                         })
                     
-                    logger.info(f"Found {len(formatted_streams)} USA TV streams for {content_id}")
-                    return {"streams": formatted_streams}
+                    # Health check: Test each stream URL in parallel
+                    # Only return streams that respond (filters out dead/broken providers)
+                    import asyncio as _asyncio
+                    
+                    async def check_stream_health(stream_data: dict) -> bool:
+                        """Quick HEAD request to verify stream is accessible"""
+                        url = stream_data.get('url', '')
+                        try:
+                            async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as check_client:
+                                resp = await check_client.head(url, headers={
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                })
+                                is_ok = resp.status_code < 400
+                                if not is_ok:
+                                    logger.info(f"Stream health check FAILED ({resp.status_code}): {stream_data.get('provider','')} {url[:50]}")
+                                return is_ok
+                        except Exception as check_err:
+                            logger.info(f"Stream health check FAILED (timeout/error): {stream_data.get('provider','')} {url[:50]}")
+                            return False
+                    
+                    # Check all streams in parallel (fast - all at once)
+                    health_results = await _asyncio.gather(
+                        *[check_stream_health(s) for s in formatted_streams]
+                    )
+                    
+                    # Filter to only working streams
+                    working_streams = [s for s, ok in zip(formatted_streams, health_results) if ok]
+                    
+                    logger.info(f"USA TV streams for {content_id}: {len(working_streams)}/{len(formatted_streams)} passed health check")
+                    
+                    # If no streams passed health check, return all (let client try)
+                    if not working_streams:
+                        logger.warning(f"No USA TV streams passed health check for {content_id}, returning all")
+                        return {"streams": formatted_streams}
+                    
+                    return {"streams": working_streams}
         except Exception as e:
             logger.error(f"USA TV streams error: {e}")
         return {"streams": []}
