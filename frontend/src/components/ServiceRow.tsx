@@ -19,6 +19,7 @@ interface ServiceRowProps {
   items: ContentItem[];
   onItemPress: (item: ContentItem) => void;
   onSeeAll?: () => void;
+  onSectionFocus?: () => void;
 }
 
 // Memoized content card to prevent re-renders
