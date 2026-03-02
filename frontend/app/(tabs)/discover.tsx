@@ -366,13 +366,6 @@ function ContinueWatchingItem({
           </View>
         </View>
         
-        {/* Dismiss button - Stremio style */}
-        {isFocused && (
-          <Pressable style={styles.dismissButton} onPress={onRemove}>
-            <Ionicons name="close" size={16} color={colors.textPrimary} />
-          </Pressable>
-        )}
-        
         {/* Progress bar - Stremio style */}
         <View style={styles.progressContainer}>
           <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
