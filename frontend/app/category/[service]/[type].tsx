@@ -4,9 +4,10 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   ActivityIndicator,
-  Dimensions,
+  useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,10 +16,7 @@ import { Image } from 'expo-image';
 import { useContentStore } from '../../../src/store/contentStore';
 import { ContentItem } from '../../../src/api/client';
 import apiClient from '../../../src/api/client';
-
-const { width } = Dimensions.get('window');
-const ITEM_WIDTH = (width - 48) / 3; // 3 columns with padding
-const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
+import colors from '../../../src/styles/colors';
 
 export default function CategoryScreen() {
   const { service, type } = useLocalSearchParams<{ service: string; type: string }>();
@@ -29,6 +27,15 @@ export default function CategoryScreen() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [skip, setSkip] = useState(0);
+  const { width, height } = useWindowDimensions();
+  const isTV = width > height || width > 800;
+
+  // Calculate grid dimensions to match discover page poster sizes
+  const numColumns = isTV ? Math.max(4, Math.floor(width / 220)) : 3;
+  const horizontalPadding = isTV ? 24 : 16;
+  const gap = isTV ? 16 : 8;
+  const ITEM_WIDTH = (width - horizontalPadding * 2 - (numColumns - 1) * gap) / numColumns;
+  const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
 
   const decodedService = service ? decodeURIComponent(service) : '';
 
