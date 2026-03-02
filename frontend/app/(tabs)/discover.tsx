@@ -244,13 +244,9 @@ export default function DiscoverScreen() {
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={[styles.rowContent, isTV && styles.rowContentTV]}
-                snapToInterval={itemWidth}
-                decelerationRate="fast"
-                getItemLayout={(data, index) => ({
-                  length: itemWidth,
-                  offset: itemWidth * index,
-                  index,
-                })}
+                removeClippedSubviews={false}
+                windowSize={21}
+                initialNumToRender={10}
               />
             </View>
           )}
