@@ -9,6 +9,7 @@ import {
   Pressable,
   FlatList,
   useWindowDimensions,
+  findNodeHandle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -357,6 +358,20 @@ function ContinueWatchingItem({
   const [xFocused, setXFocused] = useState(false);
   const percentWatched = item.percent_watched || 0;
 
+  // Refs for explicit focus navigation between poster and X button
+  const posterRef = useRef<View>(null);
+  const xButtonRef = useRef<View>(null);
+  const [posterTag, setPosterTag] = useState<number | undefined>(undefined);
+  const [xButtonTag, setXButtonTag] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    // Get native node handles after mount for nextFocusUp/Down wiring
+    const pTag = posterRef.current ? findNodeHandle(posterRef.current) : null;
+    const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
+    if (pTag) setPosterTag(pTag);
+    if (xTag) setXButtonTag(xTag);
+  }, []);
+
   const handleFocus = () => {
     setIsFocused(true);
     onSectionFocus?.();
@@ -376,6 +391,7 @@ function ContinueWatchingItem({
       {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
       <View style={[styles.xButtonRow, { paddingTop: 8 }]}>
         <Pressable
+          ref={xButtonRef}
           onPress={onRemove}
           onFocus={handleXFocus}
           onBlur={() => setXFocused(false)}
@@ -383,6 +399,7 @@ function ContinueWatchingItem({
           accessibilityRole="button"
           accessibilityLabel={`Remove ${item.title} from Continue Watching`}
           android_ripple={null}
+          nextFocusDown={posterTag}
           style={[
             styles.removeButtonOverlay,
             { width: xButtonSize, height: xButtonSize, borderRadius: xButtonSize / 2 },
@@ -399,10 +416,12 @@ function ContinueWatchingItem({
 
       {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
+        ref={posterRef}
         onPress={onPress}
         onFocus={handleFocus}
         onBlur={() => setIsFocused(false)}
         android_ripple={null}
+        nextFocusUp={xButtonTag}
         style={[
           styles.continueImageWrapper,
           { marginTop: -xRowHeight },
