@@ -35,6 +35,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   items,
   onItemPress,
   onSeeAll,
+  onSectionFocus,
 }) => {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
@@ -53,9 +54,14 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     getCardWidth(width, isTV, 'medium'), [width, isTV]);
   const itemWidth = cardWidth + 16; // card width + marginRight
 
-  // Handle card focus - scroll to keep focused item visible
+  // Handle card focus - scroll to keep focused item visible + notify parent
   const handleCardFocus = useCallback((index: number) => {
     setCurrentFocusIndex(index);
+    
+    // Notify parent to scroll section title to top
+    if (onSectionFocus) {
+      onSectionFocus();
+    }
     
     // Scroll so focused item is visible (not at the edge)
     const targetPosition = Math.max(0, index - 1);
@@ -65,7 +71,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       animated: true,
       viewPosition: 0,
     });
-  }, []);
+  }, [onSectionFocus]);
 
   // Memoized render item function
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
