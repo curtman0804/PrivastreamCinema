@@ -263,41 +263,56 @@ export default function DiscoverScreen() {
             const hasChannelsInName = serviceName.toLowerCase().includes('channel');
             
             return (
-            <View key={serviceName}>
+            <React.Fragment key={serviceName}>
               {content?.movies && content.movies.length > 0 && (
-                <ServiceRow
-                  title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
-                  items={content.movies.slice(0, 30)}
-                  onItemPress={handleItemPress}
-                  onSeeAll={content.movies.length > 10 ? () => {
-                    router.push(`/category/${encodeURIComponent(serviceName)}/movies`);
-                  } : undefined}
-                />
+                <View
+                  onLayout={(e) => { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}
+                >
+                  <ServiceRow
+                    title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
+                    items={content.movies.slice(0, 30)}
+                    onItemPress={handleItemPress}
+                    onSeeAll={content.movies.length > 10 ? () => {
+                      router.push(`/category/${encodeURIComponent(serviceName)}/movies`);
+                    } : undefined}
+                    onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
+                  />
+                </View>
               )}
               {content?.series && content.series.length > 0 && (
-                <ServiceRow
-                  title={hasSeriesInName ? serviceName : `${serviceName} Series`}
-                  items={content.series.slice(0, 30)}
-                  onItemPress={handleItemPress}
-                  onSeeAll={content.series.length > 10 ? () => {
-                    router.push(`/category/${encodeURIComponent(serviceName)}/series`);
-                  } : undefined}
-                />
+                <View
+                  onLayout={(e) => { sectionPositions.current[`${serviceName}-series`] = e.nativeEvent.layout.y; }}
+                >
+                  <ServiceRow
+                    title={hasSeriesInName ? serviceName : `${serviceName} Series`}
+                    items={content.series.slice(0, 30)}
+                    onItemPress={handleItemPress}
+                    onSeeAll={content.series.length > 10 ? () => {
+                      router.push(`/category/${encodeURIComponent(serviceName)}/series`);
+                    } : undefined}
+                    onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
+                  />
+                </View>
               )}
               {content?.channels && content.channels.length > 0 && (
-                <ServiceRow
-                  title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
-                  items={content.channels.slice(0, 30).map((ch: any) => ({
-                    ...ch,
-                    type: 'tv' as const,
-                  }))}
-                  onItemPress={handleItemPress}
-                  onSeeAll={content.channels.length > 10 ? () => {
-                    router.push(`/category/${encodeURIComponent(serviceName)}/channels`);
-                  } : undefined}
-                />
+                <View
+                  onLayout={(e) => { sectionPositions.current[`${serviceName}-channels`] = e.nativeEvent.layout.y; }}
+                >
+                  <ServiceRow
+                    title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
+                    items={content.channels.slice(0, 30).map((ch: any) => ({
+                      ...ch,
+                      type: 'tv' as const,
+                    }))}
+                    onItemPress={handleItemPress}
+                    onSeeAll={content.channels.length > 10 ? () => {
+                      router.push(`/category/${encodeURIComponent(serviceName)}/channels`);
+                    } : undefined}
+                    onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
+                  />
+                </View>
               )}
-            </View>
+            </React.Fragment>
           );
           })}
           <View style={styles.bottomPadding} />
