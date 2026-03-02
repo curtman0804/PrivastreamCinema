@@ -30,6 +30,8 @@ export default function DiscoverScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const sectionPositions = useRef<Record<string, number>>({});
 
   // Use same card width calculation as ContentCard for consistency
   const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
