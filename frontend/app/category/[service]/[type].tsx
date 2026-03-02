@@ -31,9 +31,10 @@ export default function CategoryScreen() {
   const isTV = width > height || width > 800;
 
   // Calculate grid dimensions to match discover page poster sizes
-  const numColumns = isTV ? Math.max(4, Math.floor(width / 220)) : 3;
+  // Fire Stick reports ~960dp width, so use smaller divisor for more columns
+  const numColumns = isTV ? Math.max(6, Math.floor(width / 140)) : 3;
   const horizontalPadding = isTV ? 24 : 16;
-  const gap = isTV ? 16 : 8;
+  const gap = isTV ? 12 : 8;
   const ITEM_WIDTH = (width - horizontalPadding * 2 - (numColumns - 1) * gap) / numColumns;
   const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
 
