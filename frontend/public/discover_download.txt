@@ -244,13 +244,9 @@ export default function DiscoverScreen() {
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={[styles.rowContent, isTV && styles.rowContentTV]}
-                snapToInterval={itemWidth}
-                decelerationRate="fast"
-                getItemLayout={(data, index) => ({
-                  length: itemWidth,
-                  offset: itemWidth * index,
-                  index,
-                })}
+                removeClippedSubviews={false}
+                windowSize={21}
+                initialNumToRender={10}
               />
             </View>
           )}
@@ -380,15 +376,18 @@ function ContinueWatchingItem({
     <Pressable
       onPress={onPress}
       onLongPress={handleLongPress}
-      delayLongPress={500}
+      delayLongPress={600}
       onFocus={handleFocus}
       onBlur={() => setIsFocused(false)}
-      style={[styles.continueItem, { width: posterWidth }]}
+      style={[
+        styles.continueItem, 
+        { width: posterWidth },
+        isFocused && styles.continueItemFocused,
+      ]}
     >
       <View style={[
         styles.continueImageContainer,
         { height: posterHeight },
-        isFocused && styles.continueImageFocused,
       ]}>
         <Image
           source={{ uri: item.poster || item.backdrop || '' }}
@@ -525,22 +524,19 @@ const styles = StyleSheet.create({
   // Continue watching item - Stremio style
   continueItem: {
     marginRight: 16,
+    borderRadius: 6,
+    borderWidth: 3,
+    borderColor: 'transparent',
+    padding: 0,
+  },
+  continueItemFocused: {
+    borderColor: colors.primary,
   },
   continueImageContainer: {
     borderRadius: 4,
     overflow: 'hidden',
     backgroundColor: colors.backgroundLight,
     position: 'relative',
-  },
-  continueImageFocused: {
-    transform: [{ scale: 1.05 }],
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 12,
-    elevation: 8,
-    borderWidth: 2,
-    borderColor: colors.primary,
   },
   continueImage: {
     width: '100%',

@@ -179,11 +179,16 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
               seeAllFocused && styles.seeAllCircleFocused,
             ]}
           >
-            <Ionicons 
-              name="arrow-forward" 
-              size={isTV ? 28 : 22} 
-              color={seeAllFocused ? colors.textPrimary : colors.textSecondary} 
-            />
+            <Text style={[
+              styles.seeAllLabel,
+              isTV && styles.seeAllLabelTV,
+              seeAllFocused && styles.seeAllLabelFocused,
+            ]}>SEE</Text>
+            <Text style={[
+              styles.seeAllLabel,
+              isTV && styles.seeAllLabelTV,
+              seeAllFocused && styles.seeAllLabelFocused,
+            ]}>ALL</Text>
           </Pressable>
         ) : null}
         ListFooterComponentStyle={onSeeAll ? styles.seeAllFooter : undefined}
@@ -238,6 +243,18 @@ const styles = StyleSheet.create({
   seeAllCircleFocused: {
     borderColor: colors.primary,
     backgroundColor: 'rgba(184, 160, 92, 0.25)',
+  },
+  seeAllLabel: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  seeAllLabelTV: {
+    fontSize: 12,
+  },
+  seeAllLabelFocused: {
+    color: colors.textPrimary,
   },
   seeAllFooter: {
     justifyContent: 'center',
