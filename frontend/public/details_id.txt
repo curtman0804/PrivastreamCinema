@@ -660,13 +660,15 @@ export default function DetailsScreen() {
           {(type === 'movie' || type === 'tv' || isEpisodePage) && (
             <View style={styles.streamsSection}>
               <Text style={styles.sectionTitle}>
-                {isLoadingStreams ? 'Finding Streams...' : `${streams.length} Streams Available`}
+                {isLoadingStreams ? (type === 'tv' ? 'Verifying Live Streams...' : 'Finding Streams...') : `${streams.length} Stream${streams.length !== 1 ? 's' : ''} Available`}
               </Text>
               
               {isLoadingStreams ? (
                 <View style={styles.streamLoading}>
                   <ActivityIndicator size="small" color="#B8A05C" />
-                  <Text style={styles.streamLoadingText}>Searching sources...</Text>
+                  <Text style={styles.streamLoadingText}>
+                    {type === 'tv' ? 'Checking available channels...' : 'Searching sources...'}
+                  </Text>
                 </View>
               ) : streams.length === 0 ? (
                 <View style={styles.noStreams}>

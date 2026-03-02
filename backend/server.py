@@ -1211,22 +1211,40 @@ async def get_all_streams(
                     
                     # Health check: Test each stream URL in parallel
                     # Only return streams that respond (filters out dead/broken providers)
+                    # Uses module-level cache to speed up repeated loads
                     import asyncio as _asyncio
+                    import time as _time
+                    
+                    # Module-level cache (survives across requests)
+                    global _stream_health_cache
+                    if '_stream_health_cache' not in globals():
+                        _stream_health_cache = {}
                     
                     async def check_stream_health(stream_data: dict) -> bool:
                         """Quick HEAD request to verify stream is accessible"""
                         url = stream_data.get('url', '')
+                        provider = stream_data.get('provider', '')
+                        cache_key = f"{provider}:{url[:50]}"
+                        
+                        # Check cache (5 minute TTL)
+                        if cache_key in _stream_health_cache:
+                            cached_ok, cached_time = _stream_health_cache[cache_key]
+                            if _time.time() - cached_time < 300:  # 5 min cache
+                                return cached_ok
+                        
                         try:
-                            async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as check_client:
+                            async with httpx.AsyncClient(follow_redirects=True, timeout=3.0) as check_client:
                                 resp = await check_client.head(url, headers={
                                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                                 })
                                 is_ok = resp.status_code < 400
+                                _stream_health_cache[cache_key] = (is_ok, _time.time())
                                 if not is_ok:
-                                    logger.info(f"Stream health check FAILED ({resp.status_code}): {stream_data.get('provider','')} {url[:50]}")
+                                    logger.info(f"Stream health FAIL ({resp.status_code}): {provider} {url[:50]}")
                                 return is_ok
                         except Exception as check_err:
-                            logger.info(f"Stream health check FAILED (timeout/error): {stream_data.get('provider','')} {url[:50]}")
+                            _stream_health_cache[cache_key] = (False, _time.time())
+                            logger.info(f"Stream health FAIL (timeout): {provider} {url[:50]}")
                             return False
                     
                     # Check all streams in parallel (fast - all at once)

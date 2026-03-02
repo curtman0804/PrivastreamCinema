@@ -39,11 +39,12 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 }) => {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
-  const [seeAllFocused, setSeeAllFocused] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const seeAllRef = useRef<View>(null);
+  const [seeAllFocused, setSeeAllFocused] = useState(false);
   const [seeAllNodeId, setSeeAllNodeId] = useState<number | undefined>(undefined);
-  const [currentFocusIndex, setCurrentFocusIndex] = useState(0);
+  // Use ref instead of state to avoid re-renders when focus changes between cards
+  const currentFocusIndexRef = useRef(0);
 
   // Get native node handle for See All button to trap focus (prevent right-arrow from escaping)
   // Only needed on Android TV - findNodeHandle is not supported on web
@@ -76,8 +77,9 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const itemWidth = cardWidth + 16; // card width + marginRight
 
   // Handle card focus - scroll to keep focused item visible + notify parent
+  // Uses ref instead of state to avoid triggering re-renders during navigation
   const handleCardFocus = useCallback((index: number) => {
-    setCurrentFocusIndex(index);
+    currentFocusIndexRef.current = index;
     
     // Notify parent to scroll section title to top
     if (onSectionFocus) {
@@ -85,7 +87,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
     
     // Scroll so the focused item is visible at the left edge
-    // Using viewPosition: 0.05 gives a tiny left margin instead of flush-left
     flatListRef.current?.scrollToIndex({
       index: index,
       animated: true,

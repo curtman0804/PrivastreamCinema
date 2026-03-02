@@ -85,13 +85,11 @@ export default function DiscoverScreen() {
   }, [fetchContinueWatching]);
 
   // Handle section focus - scroll section title to top of screen
-  // Use setTimeout so the focus engine picks the right element first
+  // Immediate scroll for smooth navigation between rows
   const handleSectionFocus = useCallback((sectionKey: string) => {
     const y = sectionPositions.current[sectionKey];
     if (y !== undefined && scrollViewRef.current) {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
-      }, 150);
+      scrollViewRef.current.scrollTo({ y: Math.max(0, y - 16), animated: true });
     }
   }, []);
 
