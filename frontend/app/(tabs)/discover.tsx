@@ -9,7 +9,6 @@ import {
   Pressable,
   FlatList,
   useWindowDimensions,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -336,7 +335,7 @@ function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
   );
 }
 
-// Continue Watching Item (Stremio style with play overlay)
+// Continue Watching Item (Stremio style with play overlay and X on poster)
 function ContinueWatchingItem({ 
   item, 
   posterWidth, 
@@ -362,75 +361,78 @@ function ContinueWatchingItem({
     setIsFocused(true);
     onSectionFocus?.();
   };
+
+  const handleXFocus = () => {
+    setXFocused(true);
+    onSectionFocus?.();
+  };
   
   return (
     <View style={[styles.continueItem, { width: posterWidth }]}>
-      {/* Main poster - pressable */}
-      <Pressable
-        onPress={onPress}
-        onLongPress={() => {
-          Alert.alert(
-            'Clear Progress',
-            `Remove "${item.title}" from Continue Watching?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Clear', style: 'destructive', onPress: onRemove },
-            ]
-          );
-        }}
-        delayLongPress={800}
-        onFocus={handleFocus}
-        onBlur={() => setIsFocused(false)}
-        style={[
-          styles.continueImageWrapper,
-          isFocused && styles.continueImageWrapperFocused,
-        ]}
-      >
-        <View style={[styles.continueImageContainer, { height: posterHeight }]}>
-          <Image
-            source={{ uri: item.poster || item.backdrop || '' }}
-            style={styles.continueImage}
-            contentFit="cover"
-          />
-          
-          {/* Play overlay */}
-          <View style={styles.playOverlay}>
-            <View style={styles.playButton}>
-              <Ionicons name="play" size={isTV ? 32 : 24} color={colors.textPrimary} />
+      {/* Poster area container - holds both the poster and the X button */}
+      <View style={styles.continueCardContainer}>
+        {/* Main poster - pressable */}
+        <Pressable
+          onPress={onPress}
+          onFocus={handleFocus}
+          onBlur={() => setIsFocused(false)}
+          style={[
+            styles.continueImageWrapper,
+            isFocused && styles.continueImageWrapperFocused,
+          ]}
+        >
+          <View style={[styles.continueImageContainer, { height: posterHeight }]}>
+            <Image
+              source={{ uri: item.poster || item.backdrop || '' }}
+              style={styles.continueImage}
+              contentFit="cover"
+            />
+            
+            {/* Play overlay */}
+            <View style={styles.playOverlay}>
+              <View style={styles.playButton}>
+                <Ionicons name="play" size={isTV ? 32 : 24} color={colors.textPrimary} />
+              </View>
+            </View>
+            
+            {/* Progress bar */}
+            <View style={styles.progressContainer}>
+              <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
             </View>
           </View>
-          
-          {/* Progress bar */}
-          <View style={styles.progressContainer}>
-            <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
-          </View>
-        </View>
-      </Pressable>
+        </Pressable>
 
-      {/* Title row with X button - both are focusable siblings for D-pad navigation */}
-      <View style={styles.continueTitleRow}>
-        <View style={styles.continueTitleContent}>
-          <Text style={styles.continueTitleText} numberOfLines={2}>
-            {item.title}
-          </Text>
-          {item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
-            <Text style={styles.continueEpisode}>
-              S{item.season} E{item.episode}
-            </Text>
-          )}
-        </View>
+        {/* X remove button - positioned at top-right of poster */}
         <Pressable
           onPress={onRemove}
-          onFocus={() => setXFocused(true)}
+          onFocus={handleXFocus}
           onBlur={() => setXFocused(false)}
           accessible={true}
           accessibilityRole="button"
-          accessibilityLabel="Remove from Continue Watching"
-          hasTVPreferredFocus={false}
-          style={[styles.removeButton, xFocused && styles.removeButtonFocused]}
+          accessibilityLabel={`Remove ${item.title} from Continue Watching`}
+          style={[
+            styles.removeButtonOverlay,
+            xFocused && styles.removeButtonOverlayFocused,
+          ]}
         >
-          <Ionicons name="close-circle" size={isTV ? 22 : 18} color={xFocused ? colors.primary : "rgba(255,255,255,0.5)"} />
+          <Ionicons
+            name="close"
+            size={isTV ? 18 : 14}
+            color={xFocused ? '#fff' : 'rgba(255,255,255,0.9)'}
+          />
         </Pressable>
+      </View>
+
+      {/* Title below poster */}
+      <View style={styles.continueTitleContent}>
+        <Text style={styles.continueTitleText} numberOfLines={2}>
+          {item.title}
+        </Text>
+        {item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
+          <Text style={styles.continueEpisode}>
+            S{item.season} E{item.episode}
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -537,6 +539,8 @@ const styles = StyleSheet.create({
   // Continue watching item - Stremio style
   continueItem: {
     marginRight: 16,
+  },
+  continueCardContainer: {
     position: 'relative',
   },
   continueImageWrapper: {
@@ -583,15 +587,12 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.textPrimary,
   },
-  continueTitle: {
-    paddingTop: 8,
-    paddingHorizontal: 4,
-  },
   continueTitleText: {
     color: colors.textPrimary,
     fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
+    paddingHorizontal: 4,
   },
   continueEpisode: {
     color: colors.textSecondary,
@@ -599,27 +600,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
   },
-  removeButton: {
-    padding: 8,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: 'transparent',
+  continueTitleContent: {
+    paddingTop: 6,
+  },
+  // X button overlaid on top-right of poster
+  removeButtonOverlay: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 4,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    zIndex: 10,
   },
-  removeButtonFocused: {
+  removeButtonOverlayFocused: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(184, 160, 92, 0.25)',
-  },
-  continueTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingTop: 6,
-    paddingRight: 2,
-  },
-  continueTitleContent: {
-    flex: 1,
+    backgroundColor: 'rgba(184, 160, 92, 0.5)',
+    transform: [{ scale: 1.15 }],
   },
 });
