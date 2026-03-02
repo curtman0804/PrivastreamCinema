@@ -594,4 +594,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
   },
+  removeButton: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    zIndex: 10,
+  },
+  removeButtonFocused: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.6)',
+  },
 });
