@@ -265,7 +265,7 @@ export default function PlayerScreen() {
   
   // Fallback streams for auto-retry
   const [fallbackUrls, setFallbackUrls] = useState<string[]>([]);
-  const [currentStreamIndex, setCurrentStreamIndex] = useState(0);
+  const [currentStreamIndex, setCurrentStreamIndex] = useState(-1);
   const [playbackStarted, setPlaybackStarted] = useState(false);
   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -1166,8 +1166,14 @@ export default function PlayerScreen() {
     
     if (directUrl) {
       setStreamUrl(directUrl);
-      setIsLoading(false);
-      setLoadingStatus('');
+      if (isLive === 'true') {
+        // For live TV, keep loading state until video actually starts playing
+        setIsLoading(true);
+        setLoadingStatus('Loading live stream...');
+      } else {
+        setIsLoading(false);
+        setLoadingStatus('');
+      }
     } else if (url) {
       setStreamUrl(url);
       setIsLoading(false);
@@ -1565,7 +1571,12 @@ export default function PlayerScreen() {
             >
               <Video
                 ref={videoRef}
-                source={{ uri: streamUrl }}
+                source={{ 
+                  uri: streamUrl,
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  },
+                }}
                 style={styles.videoPlayer}
                 resizeMode={ResizeMode.CONTAIN}
                 shouldPlay

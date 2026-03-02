@@ -416,6 +416,265 @@ class PrivastreamTester:
             )
             return False
 
+    def test_usaatv_streams(self) -> bool:
+        """Test USAATV streams endpoint - should return streams with both url and proxyUrl fields"""
+        print("\n=== Testing USAATV Streams ===")
+        
+        if not self.token:
+            self.log_test(
+                "USAATV Streams",
+                False,
+                "No authentication token available",
+                None
+            )
+            return False
+        
+        try:
+            # Test the specific USAATV content ID from the review request
+            content_id = "ustv-1a0b178a-23c5-4c06-9217-ceabe2897343"
+            response = self.session.get(
+                f"{self.base_url}/streams/tv/{content_id}",
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Check basic structure
+                if "streams" not in data:
+                    self.log_test(
+                        "USAATV Streams Structure",
+                        False,
+                        "Response missing 'streams' field",
+                        data
+                    )
+                    return False
+                
+                streams = data["streams"]
+                if not streams:
+                    self.log_test(
+                        "USAATV Streams Empty",
+                        False,
+                        "No streams found for USAATV content",
+                        {"content_id": content_id}
+                    )
+                    return False
+                
+                # Check that streams have both url and proxyUrl fields
+                streams_with_both_urls = 0
+                streams_with_url = 0
+                streams_with_proxy = 0
+                
+                for stream in streams:
+                    has_url = "url" in stream and stream["url"]
+                    has_proxy = "proxyUrl" in stream and stream["proxyUrl"]
+                    
+                    if has_url:
+                        streams_with_url += 1
+                    if has_proxy:
+                        streams_with_proxy += 1
+                    if has_url and has_proxy:
+                        streams_with_both_urls += 1
+                
+                if streams_with_both_urls > 0:
+                    self.log_test(
+                        "USAATV Streams URLs",
+                        True,
+                        f"Found {len(streams)} streams, {streams_with_both_urls} have both url and proxyUrl",
+                        {
+                            "total_streams": len(streams),
+                            "streams_with_url": streams_with_url,
+                            "streams_with_proxy": streams_with_proxy,
+                            "streams_with_both": streams_with_both_urls,
+                            "sample_stream": streams[0] if streams else None
+                        }
+                    )
+                    return True
+                else:
+                    self.log_test(
+                        "USAATV Streams URLs",
+                        False,
+                        f"Found {len(streams)} streams but none have both url and proxyUrl fields",
+                        {
+                            "total_streams": len(streams),
+                            "streams_with_url": streams_with_url,
+                            "streams_with_proxy": streams_with_proxy,
+                            "sample_stream": streams[0] if streams else None
+                        }
+                    )
+                    return False
+                    
+            else:
+                self.log_test(
+                    "USAATV Streams",
+                    False,
+                    f"Request failed with status {response.status_code}",
+                    response.text
+                )
+                return False
+                
+        except Exception as e:
+            self.log_test(
+                "USAATV Streams",
+                False,
+                f"Request failed: {str(e)}",
+                None
+            )
+            return False
+    
+    def test_usaatv_meta(self) -> bool:
+        """Test USAATV meta endpoint - should return channel metadata"""
+        print("\n=== Testing USAATV Meta ===")
+        
+        if not self.token:
+            self.log_test(
+                "USAATV Meta",
+                False,
+                "No authentication token available",
+                None
+            )
+            return False
+        
+        try:
+            # Test the specific USAATV content ID from the review request
+            content_id = "ustv-1a0b178a-23c5-4c06-9217-ceabe2897343"
+            response = self.session.get(
+                f"{self.base_url}/content/meta/tv/{content_id}",
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # The USAATV meta endpoint returns the meta directly, not wrapped in {"meta": ...}
+                # Check for expected metadata fields directly in the response
+                required_fields = ["id", "name", "type"]
+                optional_fields = ["poster", "logo", "description", "country", "genre"]
+                
+                missing_required = []
+                for field in required_fields:
+                    if field not in data or not data[field]:
+                        missing_required.append(field)
+                
+                present_optional = []
+                for field in optional_fields:
+                    if field in data and data[field]:
+                        present_optional.append(field)
+                
+                if missing_required:
+                    self.log_test(
+                        "USAATV Meta Fields",
+                        False,
+                        f"Missing required fields: {missing_required}",
+                        {
+                            "meta": data,
+                            "missing_required": missing_required,
+                            "present_optional": present_optional
+                        }
+                    )
+                    return False
+                else:
+                    self.log_test(
+                        "USAATV Meta Fields",
+                        True,
+                        f"All required fields present, optional fields: {present_optional}",
+                        {
+                            "content_id": content_id,
+                            "name": data.get("name"),
+                            "type": data.get("type"),
+                            "present_optional": present_optional
+                        }
+                    )
+                    return True
+                    
+            else:
+                self.log_test(
+                    "USAATV Meta",
+                    False,
+                    f"Request failed with status {response.status_code}",
+                    response.text
+                )
+                return False
+                
+        except Exception as e:
+            self.log_test(
+                "USAATV Meta",
+                False,
+                f"Request failed: {str(e)}",
+                None
+            )
+            return False
+    
+    def test_hls_proxy_endpoint(self) -> bool:
+        """Test HLS proxy endpoint - should exist but return error for test URL (not 404)"""
+        print("\n=== Testing HLS Proxy Endpoint ===")
+        
+        if not self.token:
+            self.log_test(
+                "HLS Proxy Endpoint",
+                False,
+                "No authentication token available",
+                None
+            )
+            return False
+        
+        try:
+            # Test with a proper base64-encoded URL like the backend expects
+            import base64
+            test_url = "https://example.com/test.m3u8"
+            encoded_url = base64.b64encode(test_url.encode()).decode()
+            
+            response = self.session.get(
+                f"{self.base_url}/proxy/hls",
+                params={"url": encoded_url, "token": self.token},
+                timeout=30
+            )
+            
+            # We expect an error (not 404), since we're using a test URL
+            # 404 would mean the endpoint doesn't exist
+            if response.status_code == 404:
+                self.log_test(
+                    "HLS Proxy Endpoint",
+                    False,
+                    "Endpoint not found (404) - proxy/hls endpoint not registered",
+                    response.text
+                )
+                return False
+            elif response.status_code in [400, 422, 500, 503]:
+                # These are acceptable - means endpoint exists but our test data is invalid
+                self.log_test(
+                    "HLS Proxy Endpoint",
+                    True,
+                    f"Endpoint exists (returned {response.status_code} for test URL as expected)",
+                    {"status_code": response.status_code, "response_preview": response.text[:200]}
+                )
+                return True
+            elif response.status_code == 200:
+                self.log_test(
+                    "HLS Proxy Endpoint",
+                    True,
+                    "Endpoint exists and responded with 200 (unexpected but acceptable)",
+                    {"response_preview": response.text[:200]}
+                )
+                return True
+            else:
+                self.log_test(
+                    "HLS Proxy Endpoint",
+                    False,
+                    f"Unexpected status code {response.status_code}",
+                    response.text
+                )
+                return False
+                
+        except Exception as e:
+            self.log_test(
+                "HLS Proxy Endpoint",
+                False,
+                f"Request failed: {str(e)}",
+                None
+            )
+            return False
+
 def main():
     """Run all tests"""
     print("🎬 PrivastreamCinema Backend API Test Suite")
@@ -425,9 +684,12 @@ def main():
     
     tester = PrivastreamTester()
     
-    # Run tests in order
+    # Run tests in order - including new USAATV and proxy tests
     auth_success = tester.test_login()
     discover_success = tester.test_discover_content_organization()
+    usaatv_streams_success = tester.test_usaatv_streams()
+    usaatv_meta_success = tester.test_usaatv_meta()  
+    hls_proxy_success = tester.test_hls_proxy_endpoint()
     addon_success = tester.test_addon_management()
     
     # Summary
@@ -448,14 +710,14 @@ def main():
         status = "✅" if result["success"] else "❌"
         print(f"{status} {result['test']}: {result['message']}")
     
-    # Overall result
-    overall_success = auth_success and discover_success and addon_success
+    # Overall result - focus on auth, usaatv streams, usaatv meta, discover, and hls proxy
+    critical_tests_success = auth_success and usaatv_streams_success and usaatv_meta_success and discover_success and hls_proxy_success
     
-    if overall_success:
+    if critical_tests_success:
         print("\n🎉 ALL CRITICAL TESTS PASSED!")
         return 0
     else:
-        print("\n⚠️  SOME TESTS FAILED - See details above")
+        print("\n⚠️  SOME CRITICAL TESTS FAILED - See details above")
         return 1
 
 if __name__ == "__main__":

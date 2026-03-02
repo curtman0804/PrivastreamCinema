@@ -121,6 +121,8 @@ export interface Stream {
   name: string;
   title?: string;
   url?: string;
+  directUrl?: string;
+  proxyUrl?: string;
   infoHash?: string;
   sources?: string[];
   behaviorHints?: {
@@ -133,6 +135,9 @@ export interface Stream {
   addon?: string;
   seeders?: number;
   quality?: string;
+  externalUrl?: string;
+  requiresWebView?: boolean;
+  isLive?: boolean;
 }
 
 export interface LibraryResponse {

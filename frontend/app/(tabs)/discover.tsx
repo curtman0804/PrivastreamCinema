@@ -85,10 +85,13 @@ export default function DiscoverScreen() {
   }, [fetchContinueWatching]);
 
   // Handle section focus - scroll section title to top of screen
+  // Use setTimeout so the focus engine picks the right element first
   const handleSectionFocus = useCallback((sectionKey: string) => {
     const y = sectionPositions.current[sectionKey];
     if (y !== undefined && scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({ y: y, animated: true });
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
+      }, 150);
     }
   }, []);
 
@@ -406,28 +409,29 @@ function ContinueWatchingItem({
         </View>
       </Pressable>
 
-      {/* X button to remove - separate focusable element, positioned above poster */}
-      <Pressable
-        onPress={onRemove}
-        onFocus={() => setXFocused(true)}
-        onBlur={() => setXFocused(false)}
-        accessible={true}
-        accessibilityLabel="Remove from Continue Watching"
-        style={[styles.removeButton, isTV && styles.removeButtonTV, xFocused && styles.removeButtonFocused]}
-      >
-        <Ionicons name="close-circle" size={isTV ? 24 : 18} color={xFocused ? colors.primary : "rgba(255,255,255,0.8)"} />
-      </Pressable>
-      
-      {/* Title - outside focus border */}
-      <View style={styles.continueTitle}>
-        <Text style={styles.continueTitleText} numberOfLines={2}>
-          {item.title}
-        </Text>
-        {item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
-          <Text style={styles.continueEpisode}>
-            S{item.season} E{item.episode}
+      {/* Title row with X button */}
+      <View style={styles.continueTitleRow}>
+        <View style={styles.continueTitleContent}>
+          <Text style={styles.continueTitleText} numberOfLines={2}>
+            {item.title}
           </Text>
-        )}
+          {item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
+            <Text style={styles.continueEpisode}>
+              S{item.season} E{item.episode}
+            </Text>
+          )}
+        </View>
+        <Pressable
+          onPress={onRemove}
+          onFocus={() => setXFocused(true)}
+          onBlur={() => setXFocused(false)}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel="Remove from Continue Watching"
+          style={[styles.removeButton, isTV && styles.removeButtonTV, xFocused && styles.removeButtonFocused]}
+        >
+          <Ionicons name="close" size={isTV ? 20 : 14} color={xFocused ? colors.primary : "rgba(255,255,255,0.6)"} />
+        </Pressable>
       </View>
     </View>
   );
@@ -597,28 +601,32 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   removeButton: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 4,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: 'transparent',
-    zIndex: 10,
   },
   removeButtonTV: {
-    top: 0,
-    right: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    padding: 12,
+    minWidth: 48,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   removeButtonFocused: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+  },
+  continueTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingTop: 6,
+    paddingRight: 2,
+  },
+  continueTitleContent: {
+    flex: 1,
   },
 });

@@ -1237,10 +1237,19 @@ async def get_all_streams(
                         elif call_sign:
                             title_parts.append(call_sign)
                         
+                        # Create proxy URL as fallback for CORS/header issues
+                        import base64
+                        encoded_url = base64.b64encode(url.encode()).decode()
+                        if '.m3u8' in url:
+                            proxy_url = f"/api/proxy/hls?url={encoded_url}"
+                        else:
+                            proxy_url = f"/api/proxy/video?url={encoded_url}"
+                        
                         formatted_streams.append({
                             "name": display_name,
                             "title": ' • '.join(title_parts),
-                            "url": url,
+                            "url": url,  # Direct URL - works from user's device
+                            "proxyUrl": proxy_url,  # Proxy fallback
                             "addon": "USA TV",
                             "quality": quality,
                             "isLive": True,
@@ -3009,6 +3018,148 @@ async def proxy_stream(
             'Cache-Control': 'no-cache',
         }
     )
+
+
+
+@api_router.get("/proxy/hls")
+async def proxy_hls(
+    request: Request,
+    url: str,
+    token: Optional[str] = None,
+    current_user: Optional[User] = None
+):
+    """Proxy HLS streams - rewrites m3u8 manifest URLs to go through our proxy"""
+    import base64
+    from urllib.parse import urljoin, urlparse, quote
+    
+    # Allow authentication via query param token
+    if not current_user and token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_id = payload.get("user_id")
+            if user_id:
+                user = await db.users.find_one({"id": user_id})
+                if user:
+                    current_user = User(**user)
+        except:
+            pass
+    
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Decode URL if base64 encoded
+    try:
+        if not url.startswith('http'):
+            url = base64.b64decode(url).decode('utf-8')
+    except:
+        pass
+    
+    logger.info(f"HLS proxy: {url[:80]}...")
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.5',
+    }
+    
+    # Extract domain for referer
+    try:
+        parsed = urlparse(url)
+        referer = f"{parsed.scheme}://{parsed.netloc}/"
+        headers['Referer'] = referer
+        headers['Origin'] = referer.rstrip('/')
+    except:
+        pass
+    
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+            response = await client.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                logger.warning(f"HLS proxy error: {response.status_code} for {url[:80]}")
+                raise HTTPException(status_code=response.status_code, detail="Stream unavailable")
+            
+            content = response.text
+            content_type = response.headers.get('content-type', '')
+            
+            # If this is an m3u8 manifest, rewrite URLs to go through our proxy
+            if '.m3u8' in url or 'mpegurl' in content_type.lower() or content.strip().startswith('#EXTM3U'):
+                lines = content.split('\n')
+                rewritten_lines = []
+                
+                # Get the auth token for sub-requests
+                auth_token = token
+                if not auth_token:
+                    # Extract from Authorization header
+                    auth_header = request.headers.get('authorization', '')
+                    if auth_header.startswith('Bearer '):
+                        auth_token = auth_header[7:]
+                
+                for line in lines:
+                    stripped = line.strip()
+                    # Skip empty lines and comments (except EXT tags)
+                    if not stripped or stripped.startswith('#'):
+                        rewritten_lines.append(line)
+                        continue
+                    
+                    # This is a URL line - make it absolute and proxy it
+                    if stripped.startswith('http://') or stripped.startswith('https://'):
+                        absolute_url = stripped
+                    else:
+                        # Relative URL - resolve against base
+                        absolute_url = urljoin(url, stripped)
+                    
+                    # Encode and create proxy URL
+                    encoded = base64.b64encode(absolute_url.encode()).decode()
+                    
+                    # Use hls proxy for .m3u8, video proxy for .ts segments
+                    if '.m3u8' in stripped:
+                        proxy_path = f"/api/proxy/hls?url={quote(encoded)}"
+                    else:
+                        proxy_path = f"/api/proxy/hls?url={quote(encoded)}"
+                    
+                    if auth_token:
+                        proxy_path += f"&token={quote(auth_token)}"
+                    
+                    rewritten_lines.append(proxy_path)
+                
+                rewritten_content = '\n'.join(rewritten_lines)
+                
+                return Response(
+                    content=rewritten_content,
+                    media_type='application/vnd.apple.mpegurl',
+                    headers={
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+                        'Access-Control-Allow-Headers': '*',
+                        'Cache-Control': 'no-cache',
+                    }
+                )
+            else:
+                # Not a manifest - stream as-is (e.g., .ts segments)
+                # Determine content type
+                ct = 'video/mp2t'
+                if '.ts' in url:
+                    ct = 'video/mp2t'
+                elif '.mp4' in url:
+                    ct = 'video/mp4'
+                elif '.aac' in url:
+                    ct = 'audio/aac'
+                
+                return Response(
+                    content=response.content,
+                    media_type=ct,
+                    headers={
+                        'Access-Control-Allow-Origin': '*',
+                        'Cache-Control': 'no-cache',
+                    }
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"HLS proxy error: {e}")
+        raise HTTPException(status_code=503, detail=str(e))
+
 
 
 @api_router.get("/proxy/xhamster/{video_id:path}")

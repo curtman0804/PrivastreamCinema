@@ -357,17 +357,24 @@ export default function DetailsScreen() {
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
       
+      // Build fallback URLs - include other proxy streams + direct URLs
       const fallbacks = await buildFallbackUrls();
+      
+      // Also include direct URLs from USAATV streams as fallbacks
+      const directFallbacks = streams
+        .filter(s => s !== stream && (s.directUrl || (s.url && !s.url.startsWith('/api/proxy/'))))
+        .map(s => s.directUrl || s.url)
+        .filter(Boolean);
       
       router.push({
         pathname: '/player',
         params: { 
           directUrl: absoluteUrl,
           title: contentTitle,
-          isLive: 'false',
+          isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
           contentId: subtitleContentId,
-          fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks]),
+          fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks, ...directFallbacks]),
           backdrop: content?.background || '',
           poster: content?.poster || '',
           logo: content?.logo || '',
@@ -401,6 +408,23 @@ export default function DetailsScreen() {
         .filter(s => s.url && !s.infoHash && s.url !== stream.url)
         .map(s => s.url)
         .filter(Boolean);
+      
+      // For live TV streams, also include proxy URLs as additional fallbacks
+      if (type === 'tv') {
+        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
+        const authToken = await AsyncStorage.getItem('auth_token');
+        
+        // Add proxy URLs for all streams as fallbacks
+        const proxyFallbacks = streams
+          .filter(s => s.proxyUrl)
+          .map(s => {
+            const tokenParam = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
+            return `${backendUrl}${s!.proxyUrl}${tokenParam}`;
+          })
+          .filter(Boolean);
+        
+        allStreamUrls.push(...proxyFallbacks);
+      }
       
       router.push({
         pathname: '/player',

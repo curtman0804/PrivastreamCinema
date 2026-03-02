@@ -84,13 +84,12 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       onSectionFocus();
     }
     
-    // Scroll so focused item is visible (not at the edge)
-    const targetPosition = Math.max(0, index - 1);
-    
+    // Scroll so the focused item is visible at the left edge
+    // Using viewPosition: 0.05 gives a tiny left margin instead of flush-left
     flatListRef.current?.scrollToIndex({
-      index: targetPosition,
+      index: index,
       animated: true,
-      viewPosition: 0,
+      viewPosition: 0.05,
     });
   }, [onSectionFocus]);
 
