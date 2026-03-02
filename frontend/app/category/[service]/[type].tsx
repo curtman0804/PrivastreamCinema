@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef, memo } from 'react';
 import {
   View,
   Text,
@@ -18,20 +18,61 @@ import { ContentItem } from '../../../src/api/client';
 import apiClient from '../../../src/api/client';
 import colors from '../../../src/styles/colors';
 
+// ============================================
+// CategoryItem - MUST be outside the screen component
+// so FlatList can properly diff and reuse cells
+// ============================================
+const CategoryItem = memo(({ 
+  item, 
+  itemWidth, 
+  itemHeight, 
+  gap, 
+  onPress 
+}: { 
+  item: ContentItem; 
+  itemWidth: number; 
+  itemHeight: number; 
+  gap: number; 
+  onPress: (item: ContentItem) => void;
+}) => {
+  const [focused, setFocused] = useState(false);
+  return (
+    <Pressable
+      style={[
+        styles.gridItem,
+        { width: itemWidth, marginHorizontal: gap / 2 },
+        focused && styles.gridItemFocused,
+      ]}
+      onPress={() => onPress(item)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+    >
+      <Image
+        source={{ uri: item.poster }}
+        style={[styles.gridPoster, { height: itemHeight }]}
+        contentFit="cover"
+        recyclingKey={item.id || item.imdb_id}
+      />
+      <Text style={styles.itemTitle} numberOfLines={2}>{item.name}</Text>
+    </Pressable>
+  );
+});
+
+// ============================================
+// CategoryScreen
+// ============================================
 export default function CategoryScreen() {
   const { service, type } = useLocalSearchParams<{ service: string; type: string }>();
   const router = useRouter();
   const { discoverData } = useContentStore();
   const [items, setItems] = useState<ContentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [skip, setSkip] = useState(0);
+  const [totalLoaded, setTotalLoaded] = useState(0);
+  const [backFocused, setBackFocused] = useState(false);
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
 
-  // Calculate grid dimensions to match discover page poster sizes
-  // Fire Stick reports ~960dp width, so use smaller divisor for more columns
+  // Grid sizing - Fire Stick reports ~960dp
   const numColumns = isTV ? Math.max(6, Math.floor(width / 140)) : 3;
   const horizontalPadding = isTV ? 24 : 16;
   const gap = isTV ? 12 : 8;
@@ -39,91 +80,87 @@ export default function CategoryScreen() {
   const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
 
   const decodedService = service ? decodeURIComponent(service) : '';
+  const initialLoadDone = useRef(false);
 
-  const isLoadingRef = React.useRef(false);
-  const skipRef = React.useRef(0);
-  const hasMoreRef = React.useRef(true);
-  const initialLoadDone = React.useRef(false);
+  // Fix duplicate title
+  const typeLabel = type === 'movies' ? 'Movies' : type === 'series' ? 'Series' : 'Channels';
+  const lowerService = decodedService.toLowerCase();
+  const displayTitle = lowerService.includes(typeLabel.toLowerCase()) 
+    ? decodedService 
+    : `${decodedService} ${typeLabel}`;
 
-  const fetchCategoryContent = async (skipValue: number, append: boolean) => {
-    if (!decodedService || !type) return;
-    if (isLoadingRef.current) return; // Prevent duplicate calls
-    
-    isLoadingRef.current = true;
-    
+  // Fetch a single page from the API
+  const fetchPage = useCallback(async (skipValue: number): Promise<{ items: ContentItem[]; hasMore: boolean }> => {
     try {
-      if (append) {
-        setIsLoadingMore(true);
-      } else {
-        setIsLoading(true);
-      }
-      
-      console.log(`Fetching category: ${decodedService}, skip=${skipValue}`);
-      const response = await apiClient.get(`/api/content/category/${encodeURIComponent(decodedService)}/${type}?skip=${skipValue}&limit=500`);
+      const response = await apiClient.get(
+        `/api/content/category/${encodeURIComponent(decodedService)}/${type}?skip=${skipValue}&limit=100`
+      );
       const data = response.data;
-      
       const newItems = data.items || [];
-      console.log(`Received ${newItems.length} items`);
-      
-      if (append && newItems.length > 0) {
-        setItems(prev => {
-          const existingIds = new Set(prev.map(item => item.id || item.imdb_id));
-          const uniqueNewItems = newItems.filter((item: ContentItem) => !existingIds.has(item.id || item.imdb_id));
-          return [...prev, ...uniqueNewItems];
-        });
-      } else if (!append) {
-        setItems(newItems);
-      }
-      
-      const moreAvailable = newItems.length >= 20;
-      hasMoreRef.current = moreAvailable;
-      setHasMore(moreAvailable);
-      skipRef.current = skipValue + newItems.length;
-      setSkip(skipRef.current);
+      return { items: newItems, hasMore: newItems.length >= 20 };
     } catch (error) {
-      console.log('Error fetching category:', error);
-      if (!append && discoverData) {
-        const serviceData = discoverData.services[decodedService];
-        if (serviceData) {
-          let categoryItems: ContentItem[] = [];
-          if (type === 'movies') categoryItems = serviceData.movies || [];
-          else if (type === 'series') categoryItems = serviceData.series || [];
-          else if (type === 'channels') categoryItems = serviceData.channels || [];
-          setItems(categoryItems.filter(Boolean));
-          hasMoreRef.current = false;
-          setHasMore(false);
-        }
-      }
-    } finally {
-      setIsLoading(false);
-      setIsLoadingMore(false);
-      isLoadingRef.current = false;
-    }
-  };
-
-  useEffect(() => {
-    if (!initialLoadDone.current && decodedService && type) {
-      initialLoadDone.current = true;
-      // Load first page, then auto-fetch remaining pages
-      fetchCategoryContent(0, false).then(() => {
-        // Auto-fetch all remaining pages in background
-        const fetchRemaining = async () => {
-          while (hasMoreRef.current && !isLoadingRef.current) {
-            await fetchCategoryContent(skipRef.current, true);
-          }
-        };
-        fetchRemaining();
-      });
+      console.log('Error fetching category page:', error);
+      return { items: [], hasMore: false };
     }
   }, [decodedService, type]);
 
-  const handleLoadMore = useCallback(() => {
-    if (isLoadingRef.current || !hasMoreRef.current) return;
-    console.log(`Loading more from skip=${skipRef.current}`);
-    fetchCategoryContent(skipRef.current, true);
-  }, []);
+  // Load all content
+  useEffect(() => {
+    if (initialLoadDone.current || !decodedService || !type) return;
+    initialLoadDone.current = true;
 
-  const handleItemPress = (item: ContentItem) => {
+    const loadAll = async () => {
+      setIsLoading(true);
+
+      // Fetch first page and show it immediately
+      const firstPage = await fetchPage(0);
+      if (firstPage.items.length === 0 && discoverData) {
+        // Fallback to cached discover data
+        const serviceData = discoverData.services[decodedService];
+        if (serviceData) {
+          let fallback: ContentItem[] = [];
+          if (type === 'movies') fallback = serviceData.movies || [];
+          else if (type === 'series') fallback = serviceData.series || [];
+          else if (type === 'channels') fallback = serviceData.channels || [];
+          setItems(fallback.filter(Boolean));
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      setItems(firstPage.items);
+      setTotalLoaded(firstPage.items.length);
+      setIsLoading(false);
+
+      // If there are more pages, fetch them in background (cap at 500 items total)
+      if (firstPage.hasMore) {
+        let allItems = [...firstPage.items];
+        let currentSkip = firstPage.items.length;
+        let hasMore = true;
+        const MAX_ITEMS = 500;
+
+        while (hasMore && allItems.length < MAX_ITEMS) {
+          const page = await fetchPage(currentSkip);
+          if (page.items.length > 0) {
+            const existingIds = new Set(allItems.map(i => i.id || i.imdb_id));
+            const unique = page.items.filter(i => !existingIds.has(i.id || i.imdb_id));
+            allItems = [...allItems, ...unique];
+            currentSkip += page.items.length;
+            setTotalLoaded(allItems.length);
+          }
+          hasMore = page.hasMore && allItems.length < MAX_ITEMS;
+        }
+
+        // Single state update with all items
+        setItems(allItems);
+        setTotalLoaded(allItems.length);
+      }
+    };
+
+    loadAll();
+  }, [decodedService, type, fetchPage]);
+
+  const handleItemPress = useCallback((item: ContentItem) => {
     const id = item.imdb_id || item.id;
     const encodedId = encodeURIComponent(id);
     router.push({
@@ -133,39 +170,19 @@ export default function CategoryScreen() {
         poster: item.poster || '',
       }
     });
-  };
+  }, [router]);
 
-  const CategoryItem = ({ item }: { item: ContentItem }) => {
-    const [focused, setFocused] = useState(false);
-    return (
-      <Pressable 
-        style={[
-          { width: ITEM_WIDTH, marginBottom: 16, marginHorizontal: gap / 2, borderRadius: 8, borderWidth: 2, borderColor: 'transparent' },
-          focused && { borderColor: colors.primary },
-        ]}
-        onPress={() => handleItemPress(item)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-      >
-        <Image
-          source={{ uri: item.poster }}
-          style={{ width: '100%', height: ITEM_HEIGHT, borderRadius: 6, backgroundColor: colors.backgroundLight }}
-          contentFit="cover"
-          placeholder={require('../../../assets/images/icon.png')}
-          placeholderContentFit="contain"
-        />
-        <Text style={styles.itemTitle} numberOfLines={2}>{item.name}</Text>
-      </Pressable>
-    );
-  };
+  const renderItem = useCallback(({ item }: { item: ContentItem }) => (
+    <CategoryItem
+      item={item}
+      itemWidth={ITEM_WIDTH}
+      itemHeight={ITEM_HEIGHT}
+      gap={gap}
+      onPress={handleItemPress}
+    />
+  ), [ITEM_WIDTH, ITEM_HEIGHT, gap, handleItemPress]);
 
-  // Fix duplicate title: if service name already includes the type word, don't append it
-  const typeLabel = type === 'movies' ? 'Movies' : type === 'series' ? 'Series' : 'Channels';
-  const lowerService = decodedService.toLowerCase();
-  const lowerType = typeLabel.toLowerCase();
-  const displayTitle = lowerService.includes(lowerType) ? decodedService : `${decodedService} ${typeLabel}`;
-
-  const [backFocused, setBackFocused] = useState(false);
+  const keyExtractor = useCallback((item: ContentItem) => item.id || item.imdb_id || '', []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -179,7 +196,9 @@ export default function CategoryScreen() {
         >
           <Ionicons name="arrow-back" size={isTV ? 28 : 24} color={backFocused ? colors.primary : "#FFFFFF"} />
         </Pressable>
-        <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>{displayTitle}</Text>
+        <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>
+          {displayTitle} {totalLoaded > 0 ? `(${totalLoaded})` : ''}
+        </Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -196,30 +215,16 @@ export default function CategoryScreen() {
       ) : (
         <FlatList
           data={items}
-          renderItem={({ item }) => <CategoryItem item={item} />}
-          keyExtractor={(item) => item.id || item.imdb_id || Math.random().toString()}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
           numColumns={numColumns}
           key={numColumns}
           contentContainerStyle={[styles.gridContent, { paddingHorizontal: horizontalPadding }]}
           showsVerticalScrollIndicator={false}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          initialNumToRender={30}
-          maxToRenderPerBatch={20}
+          initialNumToRender={numColumns * 4}
+          maxToRenderPerBatch={numColumns * 3}
           removeClippedSubviews={false}
-          windowSize={21}
-          ListFooterComponent={
-            isLoadingMore ? (
-              <View style={styles.loadMoreContainer}>
-                <ActivityIndicator size="small" color="#B8A05C" />
-                <Text style={styles.loadMoreText}>Loading more... ({items.length} loaded)</Text>
-              </View>
-            ) : !hasMore && items.length > 0 ? (
-              <View style={styles.footerContainer}>
-                <Text style={styles.endText}>End of catalog ({items.length} items)</Text>
-              </View>
-            ) : null
-          }
+          windowSize={11}
         />
       )}
     </SafeAreaView>
@@ -273,6 +278,20 @@ const styles = StyleSheet.create({
   gridContent: {
     paddingVertical: 16,
   },
+  gridItem: {
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  gridItemFocused: {
+    borderColor: colors.primary,
+  },
+  gridPoster: {
+    width: '100%',
+    borderRadius: 6,
+    backgroundColor: colors.backgroundLight,
+  },
   itemTitle: {
     color: colors.textPrimary,
     fontSize: 12,
@@ -287,24 +306,5 @@ const styles = StyleSheet.create({
   emptyText: {
     color: colors.textSecondary,
     fontSize: 16,
-  },
-  loadMoreContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  loadMoreText: {
-    color: colors.textSecondary,
-    marginLeft: 10,
-    fontSize: 14,
-  },
-  footerContainer: {
-    paddingVertical: 20,
-    alignItems: 'center',
-  },
-  endText: {
-    color: colors.textSecondary,
-    fontSize: 14,
   },
 });
