@@ -22,6 +22,7 @@ interface ContentCardProps {
   showProgress?: number;
   inLibrary?: boolean;
   onLibraryChange?: () => void;
+  hasTVPreferredFocus?: boolean;
 }
 
 export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 'medium') => {
@@ -48,6 +49,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   showProgress,
   inLibrary = false,
   onLibraryChange,
+  hasTVPreferredFocus = false,
 }) => {
   const { width, height } = useWindowDimensions();
   const [isFocused, setIsFocused] = useState(false);
@@ -112,6 +114,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       onFocus={handleFocus}
       onBlur={() => setIsFocused(false)}
       android_ripple={null}
+      hasTVPreferredFocus={hasTVPreferredFocus}
       style={[styles.container, { width: cardWidth }]}
       accessible={true}
       accessibilityRole="button"

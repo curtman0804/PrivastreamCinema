@@ -19,6 +19,7 @@ interface ServiceRowProps {
   items: ContentItem[];
   onItemPress: (item: ContentItem) => void;
   onSectionFocus?: () => void;
+  isFirstRow?: boolean;
 }
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
@@ -28,20 +29,21 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   items: initialItems,
   onItemPress,
   onSectionFocus,
+  isFirstRow = false,
 }) => {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
   const flatListRef = useRef<FlatList>(null);
 
-  // Items state - start with initial items from discover
+  // Items state
   const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Refs for pagination (never cause re-renders)
+  // ALL refs — never cause re-renders
   const skipRef = useRef(initialItems?.length || 0);
   const hasMoreRef = useRef(true);
   const isLoadingRef = useRef(false);
-  const initializedRef = useRef(true); // Already initialized via useState
+  const totalRef = useRef(initialItems?.length || 0);
 
   const validItems = useMemo(() => 
     (allItems || []).filter(Boolean), [allItems]);
@@ -51,7 +53,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const cardWidth = useMemo(() => 
     getCardWidth(width, isTV, 'medium'), [width, isTV]);
 
-  // Fetch next page from API
+  // Fetch next page — stable deps, no state in closure
   const fetchMore = useCallback(async () => {
     if (isLoadingRef.current || !hasMoreRef.current) return;
     isLoadingRef.current = true;
@@ -65,7 +67,9 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         setAllItems(prev => {
           const ids = new Set(prev.map(i => i.id || i.imdb_id));
           const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
-          return [...prev, ...unique];
+          const updated = [...prev, ...unique];
+          totalRef.current = updated.length;
+          return updated;
         });
         skipRef.current += newItems.length;
       }
@@ -78,30 +82,31 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // Card focus handler - notify parent + load more if near end
+  // STABLE focus handler — uses ONLY refs, never changes
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
-    // Load more when within last 10 items
-    const total = allItems.length;
-    if (index >= total - 10 && hasMoreRef.current && !isLoadingRef.current) {
+    // Load more when within last 10 items (uses ref, not state)
+    if (index >= totalRef.current - 10 && hasMoreRef.current && !isLoadingRef.current) {
       fetchMore();
     }
-  }, [onSectionFocus, fetchMore, allItems.length]);
+  }, [onSectionFocus, fetchMore]);
 
-  // Render each card
+  // STABLE render function — handleCardFocus never changes, so this never changes
+  // FlatList won't re-render existing items when new items are appended
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <ContentCard
       item={item}
       onPress={() => onItemPress(item)}
       onCardFocus={() => handleCardFocus(index)}
       showTitle={true}
+      hasTVPreferredFocus={isFirstRow && index === 0}
     />
-  ), [onItemPress, handleCardFocus]);
+  ), [onItemPress, handleCardFocus, isFirstRow]);
 
   const keyExtractor = useCallback((item: ContentItem) => 
     item.id || item.imdb_id || `${item.name}`, []);
 
-  // Also trigger via onEndReached as backup
+  // Backup trigger via scroll position
   const handleEndReached = useCallback(() => {
     if (!isLoadingRef.current && hasMoreRef.current) {
       fetchMore();

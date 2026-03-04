@@ -251,7 +251,9 @@ export default function DiscoverScreen() {
           )}
           
           {/* Content Rows from Addons */}
-          {Object.entries(discoverData?.services || {}).map(([serviceName, content]) => {
+          {(() => {
+            let firstRowRendered = false;
+            return Object.entries(discoverData?.services || {}).map(([serviceName, content]) => {
             // Avoid duplicate labels - service names like "Popular Movies" already contain the type
             const hasMoviesInName = serviceName.toLowerCase().includes('movie');
             const hasSeriesInName = serviceName.toLowerCase().includes('series');
@@ -259,7 +261,10 @@ export default function DiscoverScreen() {
             
             return (
             <React.Fragment key={serviceName}>
-              {content?.movies && content.movies.length > 0 && (
+              {content?.movies && content.movies.length > 0 && (() => {
+                const isFirst = !firstRowRendered && continueWatching.length === 0;
+                if (isFirst) firstRowRendered = true;
+                return (
                 <View
                   onLayout={(e) => { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}
                 >
@@ -270,10 +275,15 @@ export default function DiscoverScreen() {
                     items={content.movies.slice(0, 30)}
                     onItemPress={handleItemPress}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
+                    isFirstRow={isFirst}
                   />
                 </View>
-              )}
-              {content?.series && content.series.length > 0 && (
+                );
+              })()}
+              {content?.series && content.series.length > 0 && (() => {
+                const isFirst = !firstRowRendered && continueWatching.length === 0;
+                if (isFirst) firstRowRendered = true;
+                return (
                 <View
                   onLayout={(e) => { sectionPositions.current[`${serviceName}-series`] = e.nativeEvent.layout.y; }}
                 >
@@ -284,10 +294,15 @@ export default function DiscoverScreen() {
                     items={content.series.slice(0, 30)}
                     onItemPress={handleItemPress}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
+                    isFirstRow={isFirst}
                   />
                 </View>
-              )}
-              {content?.channels && content.channels.length > 0 && (
+                );
+              })()}
+              {content?.channels && content.channels.length > 0 && (() => {
+                const isFirst = !firstRowRendered && continueWatching.length === 0;
+                if (isFirst) firstRowRendered = true;
+                return (
                 <View
                   onLayout={(e) => { sectionPositions.current[`${serviceName}-channels`] = e.nativeEvent.layout.y; }}
                 >
@@ -301,12 +316,15 @@ export default function DiscoverScreen() {
                     }))}
                     onItemPress={handleItemPress}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
+                    isFirstRow={isFirst}
                   />
                 </View>
-              )}
+                );
+              })()}
             </React.Fragment>
           );
-          })}
+          });
+          })()}
           <View style={styles.bottomPadding} />
         </ScrollView>
       )}
