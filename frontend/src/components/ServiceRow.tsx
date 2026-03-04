@@ -4,8 +4,10 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  Pressable,
   useWindowDimensions,
   ActivityIndicator,
+  findNodeHandle,
 } from 'react-native';
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
@@ -39,11 +41,22 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // ALL refs — never cause re-renders
+  // Refs for pagination - never cause re-renders
   const skipRef = useRef(initialItems?.length || 0);
   const hasMoreRef = useRef(true);
   const isLoadingRef = useRef(false);
   const totalRef = useRef(initialItems?.length || 0);
+  // Ref for the footer "load more" button to prevent focus escape
+  const footerRef = useRef<View>(null);
+  const [footerTag, setFooterTag] = useState<number | undefined>(undefined);
+
+  // Get footer native tag after mount
+  useEffect(() => {
+    if (footerRef.current) {
+      const tag = findNodeHandle(footerRef.current);
+      if (tag) setFooterTag(tag);
+    }
+  });
 
   const validItems = useMemo(() => 
     (allItems || []).filter(Boolean), [allItems]);
@@ -53,7 +66,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const cardWidth = useMemo(() => 
     getCardWidth(width, isTV, 'medium'), [width, isTV]);
 
-  // Fetch next page — stable deps, no state in closure
+  // Fetch next page
   const fetchMore = useCallback(async () => {
     if (isLoadingRef.current || !hasMoreRef.current) return;
     isLoadingRef.current = true;
@@ -82,17 +95,24 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // STABLE focus handler — uses ONLY refs, never changes
+  // STABLE focus handler using refs only
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
-    // Load more when within last 10 items (uses ref, not state)
-    if (index >= totalRef.current - 10 && hasMoreRef.current && !isLoadingRef.current) {
+    // Prefetch when within last 15 items
+    if (index >= totalRef.current - 15 && hasMoreRef.current && !isLoadingRef.current) {
       fetchMore();
     }
   }, [onSectionFocus, fetchMore]);
 
-  // STABLE render function — handleCardFocus never changes, so this never changes
-  // FlatList won't re-render existing items when new items are appended
+  // When footer gets focus, load more items
+  const handleFooterFocus = useCallback(() => {
+    onSectionFocus?.();
+    if (hasMoreRef.current && !isLoadingRef.current) {
+      fetchMore();
+    }
+  }, [onSectionFocus, fetchMore]);
+
+  // STABLE render function
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <ContentCard
       item={item}
@@ -106,23 +126,37 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const keyExtractor = useCallback((item: ContentItem) => 
     item.id || item.imdb_id || `${item.name}`, []);
 
-  // Backup trigger via scroll position
   const handleEndReached = useCallback(() => {
     if (!isLoadingRef.current && hasMoreRef.current) {
       fetchMore();
     }
   }, [fetchMore]);
 
+  // Focusable footer that prevents focus from escaping to next row
+  // nextFocusRight points to itself so pressing right stays here
+  // nextFocusDown is not set, allowing down navigation to next row
   const ListFooter = useCallback(() => {
-    if (isLoadingMore) {
-      return (
-        <View style={styles.loadingFooter}>
+    if (!hasMoreRef.current && !isLoadingMore) return null;
+    return (
+      <Pressable
+        ref={footerRef}
+        onFocus={handleFooterFocus}
+        nextFocusRight={footerTag}
+        android_ripple={null}
+        style={styles.footerButton}
+        accessible={true}
+        accessibilityLabel="Loading more content"
+      >
+        {isLoadingMore ? (
           <ActivityIndicator size="small" color={colors.primary} />
-        </View>
-      );
-    }
-    return null;
-  }, [isLoadingMore]);
+        ) : (
+          <View style={styles.footerDot}>
+            <Text style={styles.footerText}>...</Text>
+          </View>
+        )}
+      </Pressable>
+    );
+  }, [isLoadingMore, handleFooterFocus, footerTag]);
 
   return (
     <View style={styles.container}>
@@ -193,14 +227,24 @@ const styles = StyleSheet.create({
   flatListStyle: {
     overflow: 'visible',
   },
-  loadingFooter: {
+  footerStyle: {
+    justifyContent: 'center',
+    paddingLeft: 8,
+  },
+  footerButton: {
     justifyContent: 'center',
     alignItems: 'center',
     width: 60,
     height: '100%',
+    minHeight: 100,
   },
-  footerStyle: {
+  footerDot: {
     justifyContent: 'center',
-    paddingLeft: 8,
+    alignItems: 'center',
+  },
+  footerText: {
+    color: colors.textSecondary,
+    fontSize: 24,
+    fontWeight: 'bold',
   },
 });
