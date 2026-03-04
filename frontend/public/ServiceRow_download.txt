@@ -21,10 +21,24 @@ interface ServiceRowProps {
   onSectionFocus?: () => void;
 }
 
-// Memoized card - only re-render if the actual item changes
-const MemoizedContentCard = memo(ContentCard, (prev, next) => {
-  return prev.item?.id === next.item?.id && 
-         prev.item?.imdb_id === next.item?.imdb_id;
+// Card wrapper that handles focus - separated to prevent re-renders
+const FocusableCard = memo(({ 
+  item, 
+  onPress, 
+  onFocus,
+}: { 
+  item: ContentItem; 
+  onPress: () => void;
+  onFocus: () => void;
+}) => (
+  <ContentCard
+    item={item}
+    onPress={onPress}
+    onCardFocus={onFocus}
+    showTitle={true}
+  />
+), (prev, next) => {
+  return prev.item?.id === next.item?.id && prev.item?.imdb_id === next.item?.imdb_id;
 });
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
@@ -43,18 +57,20 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const [allItems, setAllItems] = useState<ContentItem[]>(initialItems || []);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Pagination refs
+  // ALL pagination tracking via refs (no re-renders)
   const skipRef = useRef(initialItems?.length || 0);
   const hasMoreRef = useRef(true);
   const isLoadingRef = useRef(false);
   const initializedRef = useRef(false);
+  const itemCountRef = useRef(initialItems?.length || 0);
 
-  // Only initialize once
+  // Initialize once
   useEffect(() => {
     if (!initializedRef.current && initialItems && initialItems.length > 0) {
       initializedRef.current = true;
       setAllItems(initialItems);
       skipRef.current = initialItems.length;
+      itemCountRef.current = initialItems.length;
     }
   }, [initialItems]);
 
@@ -67,7 +83,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     getCardWidth(width, isTV, 'medium'), [width, isTV]);
   const itemWidth = cardWidth + 16;
 
-  // Fetch next page
+  // Fetch next page - uses ONLY refs, no state dependencies
   const fetchMore = useCallback(async () => {
     if (isLoadingRef.current || !hasMoreRef.current) return;
     isLoadingRef.current = true;
@@ -81,7 +97,9 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         setAllItems(prev => {
           const ids = new Set(prev.map(i => i.id || i.imdb_id));
           const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
-          return [...prev, ...unique];
+          const updated = [...prev, ...unique];
+          itemCountRef.current = updated.length;
+          return updated;
         });
         skipRef.current += newItems.length;
       }
@@ -94,31 +112,36 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // On card focus: scroll into view + load more if near end
+  // STABLE focus handler - no changing deps
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
     
-    // Smooth scroll to focused card
+    // Scroll to focused card
     flatListRef.current?.scrollToIndex({
       index,
       animated: true,
       viewPosition: 0.1,
     });
 
-    // Prefetch when within last 10 items
-    if (index >= validItems.length - 10 && hasMoreRef.current && !isLoadingRef.current) {
+    // Load more when near end (using ref, not state)
+    if (index >= itemCountRef.current - 15 && hasMoreRef.current && !isLoadingRef.current) {
       fetchMore();
     }
-  }, [onSectionFocus, validItems.length, fetchMore]);
+  }, [onSectionFocus, fetchMore]);
 
+  // STABLE press handler
+  const handleItemPress = useCallback((item: ContentItem) => {
+    onItemPress(item);
+  }, [onItemPress]);
+
+  // STABLE render function - deps don't change
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
-    <MemoizedContentCard
+    <FocusableCard
       item={item}
-      onPress={() => onItemPress(item)}
-      onCardFocus={() => handleCardFocus(index)}
-      showTitle={true}
+      onPress={() => handleItemPress(item)}
+      onFocus={() => handleCardFocus(index)}
     />
-  ), [onItemPress, handleCardFocus]);
+  ), [handleItemPress, handleCardFocus]);
 
   const keyExtractor = useCallback((item: ContentItem, index: number) => 
     item.id || item.imdb_id || `item-${index}`, []);
@@ -137,6 +160,13 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       });
     }, 100);
   }, []);
+
+  // Also use onEndReached as backup trigger
+  const handleEndReached = useCallback(() => {
+    if (!isLoadingRef.current && hasMoreRef.current) {
+      fetchMore();
+    }
+  }, [fetchMore]);
 
   const ListFooter = useCallback(() => {
     if (isLoadingMore) {
@@ -166,16 +196,15 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
         style={styles.flatListStyle}
-        // Balanced settings: smooth nav, no freeze, minimal flicker
         initialNumToRender={8}
-        maxToRenderPerBatch={5}
+        maxToRenderPerBatch={8}
         windowSize={11}
         updateCellsBatchingPeriod={50}
         removeClippedSubviews={false}
-        // Performance
         getItemLayout={getItemLayout}
         onScrollToIndexFailed={onScrollToIndexFailed}
-        // Footer
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={5}
         ListFooterComponent={ListFooter}
         ListFooterComponentStyle={styles.footerStyle}
       />
