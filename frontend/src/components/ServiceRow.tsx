@@ -4,10 +4,8 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  Pressable,
   useWindowDimensions,
   ActivityIndicator,
-  findNodeHandle,
 } from 'react-native';
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
@@ -24,40 +22,6 @@ interface ServiceRowProps {
   isFirstRow?: boolean;
 }
 
-// End-of-row focus trap - prevents focus from escaping to next row
-const RowEndCap = memo(({ onFocus, isLoading }: { onFocus: () => void; isLoading: boolean }) => {
-  const [focused, setFocused] = useState(false);
-  const selfRef = useRef<View>(null);
-  const [selfTag, setSelfTag] = useState<number | undefined>(undefined);
-
-  const handleLayout = useCallback(() => {
-    if (selfRef.current) {
-      const tag = findNodeHandle(selfRef.current);
-      if (tag) setSelfTag(tag);
-    }
-  }, []);
-
-  return (
-    <Pressable
-      ref={selfRef}
-      onLayout={handleLayout}
-      onFocus={() => { setFocused(true); onFocus(); }}
-      onBlur={() => setFocused(false)}
-      nextFocusRight={selfTag}
-      android_ripple={null}
-      style={[styles.endCap, focused && styles.endCapFocused]}
-      accessible={true}
-      accessibilityLabel="Loading more"
-    >
-      {isLoading ? (
-        <ActivityIndicator size="small" color={colors.primary} />
-      ) : (
-        <Text style={styles.endCapText}>›</Text>
-      )}
-    </Pressable>
-  );
-});
-
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   title,
   serviceName,
@@ -72,7 +36,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 
   // Items state
   const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   // Refs for controlled pagination
   const skipRef = useRef(initialItems?.length || 0);
@@ -95,7 +58,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 
     isFetchingRef.current = true;
     lastFetchTime.current = now;
-    setIsLoadingMore(true);
     try {
       const resp = await apiClient.get(
         `/api/content/category/${encodeURIComponent(serviceName)}/${contentType}?skip=${skipRef.current}&limit=100`
@@ -118,7 +80,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       hasMoreRef.current = false;
     } finally {
       isFetchingRef.current = false;
-      setIsLoadingMore(false);
     }
   }, [serviceName, contentType]);
 
@@ -131,13 +92,12 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [onSectionFocus, fetchMore]);
 
-  // End cap focus handler
-  const handleEndCapFocus = useCallback(() => {
-    onSectionFocus?.();
-    if (hasMoreRef.current) {
+  // End reached backup trigger
+  const handleEndReached = useCallback(() => {
+    if (!isFetchingRef.current && hasMoreRef.current) {
       fetchMore();
     }
-  }, [onSectionFocus, fetchMore]);
+  }, [fetchMore]);
 
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <ContentCard
@@ -151,11 +111,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 
   const keyExtractor = useCallback((item: ContentItem) => 
     item.id || item.imdb_id || `${item.name}`, []);
-
-  // Footer: focusable end cap that traps focus + triggers loading
-  const ListFooter = useCallback(() => (
-    <RowEndCap onFocus={handleEndCapFocus} isLoading={isLoadingMore} />
-  ), [handleEndCapFocus, isLoadingMore]);
 
   return (
     <View style={styles.container}>
@@ -177,7 +132,8 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         maxToRenderPerBatch={5}
         windowSize={9}
         removeClippedSubviews={false}
-        ListFooterComponent={ListFooter}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={3}
       />
     </View>
   );
@@ -220,24 +176,5 @@ const styles = StyleSheet.create({
   },
   flatListStyle: {
     overflow: 'visible',
-  },
-  endCap: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 48,
-    height: 150,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    marginLeft: 4,
-  },
-  endCapFocused: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(184, 160, 92, 0.15)',
-  },
-  endCapText: {
-    color: colors.textSecondary,
-    fontSize: 28,
-    fontWeight: 'bold',
   },
 });
