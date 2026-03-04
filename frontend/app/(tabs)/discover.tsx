@@ -267,7 +267,7 @@ export default function DiscoverScreen() {
                     title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
                     serviceName={serviceName}
                     contentType="movies"
-                    items={content.movies}
+                    items={content.movies.slice(0, 30)}
                     onItemPress={handleItemPress}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
                   />
@@ -281,7 +281,7 @@ export default function DiscoverScreen() {
                     title={hasSeriesInName ? serviceName : `${serviceName} Series`}
                     serviceName={serviceName}
                     contentType="series"
-                    items={content.series}
+                    items={content.series.slice(0, 30)}
                     onItemPress={handleItemPress}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
                   />
@@ -295,7 +295,7 @@ export default function DiscoverScreen() {
                     title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
                     serviceName={serviceName}
                     contentType="channels"
-                    items={content.channels.map((ch: any) => ({
+                    items={content.channels.slice(0, 30).map((ch: any) => ({
                       ...ch,
                       type: 'tv' as const,
                     }))}

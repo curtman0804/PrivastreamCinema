@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
@@ -21,24 +21,6 @@ interface ServiceRowProps {
   onSectionFocus?: () => void;
 }
 
-// Memoized card - won't re-render unless item data changes
-const MemoCard = memo(({ 
-  item, 
-  onPress,
-  onFocus,
-}: { 
-  item: ContentItem; 
-  onPress: () => void;
-  onFocus: () => void;
-}) => (
-  <ContentCard
-    item={item}
-    onPress={onPress}
-    onCardFocus={onFocus}
-    showTitle={true}
-  />
-), (prev, next) => prev.item?.id === next.item?.id && prev.item?.imdb_id === next.item?.imdb_id);
-
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   title,
   serviceName,
@@ -49,34 +31,27 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 }) => {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
+  const flatListRef = useRef<FlatList>(null);
 
-  // Items state
-  const [allItems, setAllItems] = useState<ContentItem[]>(initialItems || []);
+  // Items state - start with initial items from discover
+  const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Pagination refs only (no re-renders)
+  // Refs for pagination (never cause re-renders)
   const skipRef = useRef(initialItems?.length || 0);
   const hasMoreRef = useRef(true);
   const isLoadingRef = useRef(false);
-  const initializedRef = useRef(false);
-  const totalRef = useRef(initialItems?.length || 0);
-
-  // Initialize once
-  useEffect(() => {
-    if (!initializedRef.current && initialItems && initialItems.length > 0) {
-      initializedRef.current = true;
-      setAllItems(initialItems);
-      skipRef.current = initialItems.length;
-      totalRef.current = initialItems.length;
-    }
-  }, [initialItems]);
+  const initializedRef = useRef(true); // Already initialized via useState
 
   const validItems = useMemo(() => 
     (allItems || []).filter(Boolean), [allItems]);
   
   if (validItems.length === 0) return null;
 
-  // Fetch next page
+  const cardWidth = useMemo(() => 
+    getCardWidth(width, isTV, 'medium'), [width, isTV]);
+
+  // Fetch next page from API
   const fetchMore = useCallback(async () => {
     if (isLoadingRef.current || !hasMoreRef.current) return;
     isLoadingRef.current = true;
@@ -90,9 +65,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         setAllItems(prev => {
           const ids = new Set(prev.map(i => i.id || i.imdb_id));
           const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
-          const updated = [...prev, ...unique];
-          totalRef.current = updated.length;
-          return updated;
+          return [...prev, ...unique];
         });
         skipRef.current += newItems.length;
       }
@@ -105,44 +78,74 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // When a card gets focus
+  // Card focus handler - notify parent + load more if near end
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
-    // Load more when within last 20 items
-    if (index >= totalRef.current - 20 && hasMoreRef.current && !isLoadingRef.current) {
+    // Load more when within last 10 items
+    const total = allItems.length;
+    if (index >= total - 10 && hasMoreRef.current && !isLoadingRef.current) {
       fetchMore();
     }
-  }, [onSectionFocus, fetchMore]);
+  }, [onSectionFocus, fetchMore, allItems.length]);
 
-  const displayTitle = title || serviceName || 'Content';
+  // Render each card
+  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
+    <ContentCard
+      item={item}
+      onPress={() => onItemPress(item)}
+      onCardFocus={() => handleCardFocus(index)}
+      showTitle={true}
+    />
+  ), [onItemPress, handleCardFocus]);
+
+  const keyExtractor = useCallback((item: ContentItem) => 
+    item.id || item.imdb_id || `${item.name}`, []);
+
+  // Also trigger via onEndReached as backup
+  const handleEndReached = useCallback(() => {
+    if (!isLoadingRef.current && hasMoreRef.current) {
+      fetchMore();
+    }
+  }, [fetchMore]);
+
+  const ListFooter = useCallback(() => {
+    if (isLoadingMore) {
+      return (
+        <View style={styles.loadingFooter}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      );
+    }
+    return null;
+  }, [isLoadingMore]);
 
   return (
     <View style={styles.container}>
       <View style={[styles.header, isTV && styles.headerTV]}>
-        <Text style={[styles.title, isTV && styles.titleTV]}>{displayTitle}</Text>
+        <Text style={[styles.title, isTV && styles.titleTV]}>
+          {title || serviceName || 'Content'}
+        </Text>
       </View>
       
-      {/* ScrollView instead of FlatList - NO view recycling = NO flicker */}
-      <ScrollView
+      <FlatList
+        ref={flatListRef}
         horizontal
+        data={validItems}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
-        style={styles.scrollStyle}
-      >
-        {validItems.map((item, index) => (
-          <MemoCard
-            key={item.id || item.imdb_id || `${index}`}
-            item={item}
-            onPress={() => onItemPress(item)}
-            onFocus={() => handleCardFocus(index)}
-          />
-        ))}
-        {isLoadingMore && (
-          <View style={styles.loadingFooter}>
-            <ActivityIndicator size="small" color={colors.primary} />
-          </View>
-        )}
-      </ScrollView>
+        style={styles.flatListStyle}
+        initialNumToRender={8}
+        maxToRenderPerBatch={5}
+        windowSize={9}
+        updateCellsBatchingPeriod={50}
+        removeClippedSubviews={false}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={3}
+        ListFooterComponent={ListFooter}
+        ListFooterComponentStyle={styles.footerStyle}
+      />
     </View>
   );
 });
@@ -182,13 +185,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 16,
   },
-  scrollStyle: {
+  flatListStyle: {
     overflow: 'visible',
   },
   loadingFooter: {
     justifyContent: 'center',
     alignItems: 'center',
     width: 60,
+    height: '100%',
+  },
+  footerStyle: {
+    justifyContent: 'center',
     paddingLeft: 8,
   },
 });
