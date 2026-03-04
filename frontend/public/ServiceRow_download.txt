@@ -80,8 +80,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const isFetchingRef = useRef(false);
   const lastFetchTime = useRef(0);
   const totalRef = useRef(initialItems?.length || 0);
-  // Cap at 500 items to prevent memory issues on Fire Stick
-  const MAX_ITEMS = 500;
 
   const validItems = useMemo(() => 
     (allItems || []).filter(Boolean), [allItems]);
@@ -94,7 +92,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     // Cooldown: at least 2 seconds between fetches
     if (isFetchingRef.current || !hasMoreRef.current) return;
     if (now - lastFetchTime.current < 2000) return;
-    if (totalRef.current >= MAX_ITEMS) { hasMoreRef.current = false; return; }
 
     isFetchingRef.current = true;
     lastFetchTime.current = now;
@@ -108,7 +105,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         setAllItems(prev => {
           const ids = new Set(prev.map(i => i.id || i.imdb_id));
           const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
-          const updated = [...prev, ...unique].slice(0, MAX_ITEMS);
+          const updated = [...prev, ...unique];
           totalRef.current = updated.length;
           return updated;
         });
