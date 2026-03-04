@@ -272,7 +272,7 @@ export default function DiscoverScreen() {
                     title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
                     serviceName={serviceName}
                     contentType="movies"
-                    items={content.movies.slice(0, 30)}
+                    items={content.movies}
                     onItemPress={handleItemPress}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
                     isFirstRow={isFirst}
@@ -291,7 +291,7 @@ export default function DiscoverScreen() {
                     title={hasSeriesInName ? serviceName : `${serviceName} Series`}
                     serviceName={serviceName}
                     contentType="series"
-                    items={content.series.slice(0, 30)}
+                    items={content.series}
                     onItemPress={handleItemPress}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
                     isFirstRow={isFirst}
@@ -310,7 +310,7 @@ export default function DiscoverScreen() {
                     title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
                     serviceName={serviceName}
                     contentType="channels"
-                    items={content.channels.slice(0, 30).map((ch: any) => ({
+                    items={content.channels.map((ch: any) => ({
                       ...ch,
                       type: 'tv' as const,
                     }))}
