@@ -21,7 +21,7 @@ interface ServiceRowProps {
   onSectionFocus?: () => void;
 }
 
-// Memoized content card - prevent any unnecessary re-renders
+// Memoized card - only re-render if the actual item changes
 const MemoizedContentCard = memo(ContentCard, (prev, next) => {
   return prev.item?.id === next.item?.id && 
          prev.item?.imdb_id === next.item?.imdb_id;
@@ -39,17 +39,17 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const isTV = width > height || width > 800;
   const flatListRef = useRef<FlatList>(null);
 
-  // Internal state for loaded items
+  // Items state
   const [allItems, setAllItems] = useState<ContentItem[]>(initialItems || []);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Pagination refs - never cause re-renders
+  // Pagination refs
   const skipRef = useRef(initialItems?.length || 0);
   const hasMoreRef = useRef(true);
   const isLoadingRef = useRef(false);
   const initializedRef = useRef(false);
 
-  // Only set initial items once
+  // Only initialize once
   useEffect(() => {
     if (!initializedRef.current && initialItems && initialItems.length > 0) {
       initializedRef.current = true;
@@ -58,44 +58,35 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [initialItems]);
 
-  // Valid items
   const validItems = useMemo(() => 
     (allItems || []).filter(Boolean), [allItems]);
   
   if (validItems.length === 0) return null;
 
-  // Card width calculation
   const cardWidth = useMemo(() => 
     getCardWidth(width, isTV, 'medium'), [width, isTV]);
   const itemWidth = cardWidth + 16;
 
-  // Fetch more items from backend
+  // Fetch next page
   const fetchMore = useCallback(async () => {
     if (isLoadingRef.current || !hasMoreRef.current) return;
-    
     isLoadingRef.current = true;
     setIsLoadingMore(true);
-
     try {
-      const response = await apiClient.get(
+      const resp = await apiClient.get(
         `/api/content/category/${encodeURIComponent(serviceName)}/${contentType}?skip=${skipRef.current}&limit=100`
       );
-      const data = response.data;
-      const newItems: ContentItem[] = data.items || [];
-
+      const newItems: ContentItem[] = resp.data.items || [];
       if (newItems.length > 0) {
         setAllItems(prev => {
-          const existingIds = new Set(prev.map(i => i.id || i.imdb_id));
-          const unique = newItems.filter(i => !existingIds.has(i.id || i.imdb_id));
+          const ids = new Set(prev.map(i => i.id || i.imdb_id));
+          const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
           return [...prev, ...unique];
         });
         skipRef.current += newItems.length;
       }
-
-      const moreAvailable = data.hasMore !== undefined ? data.hasMore : newItems.length >= 20;
-      hasMoreRef.current = moreAvailable;
-    } catch (error) {
-      console.log(`[ServiceRow] Error loading more for ${serviceName}:`, error);
+      hasMoreRef.current = resp.data.hasMore !== undefined ? resp.data.hasMore : newItems.length >= 20;
+    } catch {
       hasMoreRef.current = false;
     } finally {
       isLoadingRef.current = false;
@@ -103,29 +94,23 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // Handle card focus - trigger load more when near end
+  // On card focus: scroll into view + load more if near end
   const handleCardFocus = useCallback((index: number) => {
-    // Notify parent that this section received focus (for vertical scroll)
-    if (onSectionFocus) {
-      onSectionFocus();
-    }
+    onSectionFocus?.();
     
-    // Scroll the focused item into view
-    if (flatListRef.current) {
-      flatListRef.current.scrollToIndex({
-        index: index,
-        animated: true,
-        viewPosition: 0.1,
-      });
-    }
+    // Smooth scroll to focused card
+    flatListRef.current?.scrollToIndex({
+      index,
+      animated: true,
+      viewPosition: 0.1,
+    });
 
-    // Load more when within last 15 items
-    if (index >= validItems.length - 15 && hasMoreRef.current && !isLoadingRef.current) {
+    // Prefetch when within last 10 items
+    if (index >= validItems.length - 10 && hasMoreRef.current && !isLoadingRef.current) {
       fetchMore();
     }
   }, [onSectionFocus, validItems.length, fetchMore]);
 
-  // Memoized render item
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <MemoizedContentCard
       item={item}
@@ -135,25 +120,16 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     />
   ), [onItemPress, handleCardFocus]);
 
-  // Stable key extractor
   const keyExtractor = useCallback((item: ContentItem, index: number) => 
     item.id || item.imdb_id || `item-${index}`, []);
 
-  // Display title
-  const displayTitle = title || serviceName || 'Content';
-
-  // Fixed item layout for zero-cost scrolling (no measuring needed)
   const getItemLayout = useCallback((_data: any, index: number) => ({
     length: itemWidth,
     offset: itemWidth * index,
     index,
   }), [itemWidth]);
 
-  // Handle scroll failure
-  const onScrollToIndexFailed = useCallback((info: {
-    index: number;
-    highestMeasuredFrameIndex: number;
-  }) => {
+  const onScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number }) => {
     setTimeout(() => {
       flatListRef.current?.scrollToIndex({ 
         index: Math.min(info.index, info.highestMeasuredFrameIndex),
@@ -162,7 +138,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }, 100);
   }, []);
 
-  // Loading indicator at end of row
   const ListFooter = useCallback(() => {
     if (isLoadingMore) {
       return (
@@ -176,12 +151,12 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 
   return (
     <View style={styles.container}>
-      {/* Row Header - just title, no buttons */}
       <View style={[styles.header, isTV && styles.headerTV]}>
-        <Text style={[styles.title, isTV && styles.titleTV]}>{displayTitle}</Text>
+        <Text style={[styles.title, isTV && styles.titleTV]}>
+          {title || serviceName || 'Content'}
+        </Text>
       </View>
       
-      {/* Horizontal content row */}
       <FlatList
         ref={flatListRef}
         horizontal
@@ -191,18 +166,16 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
         style={styles.flatListStyle}
-        // HIGH values to prevent view recycling (prevents flicker)
-        initialNumToRender={15}
-        maxToRenderPerBatch={15}
-        windowSize={51}
-        // CRITICAL: prevent clipping-related flicker
+        // Balanced settings: smooth nav, no freeze, minimal flicker
+        initialNumToRender={8}
+        maxToRenderPerBatch={5}
+        windowSize={11}
+        updateCellsBatchingPeriod={50}
         removeClippedSubviews={false}
         // Performance
         getItemLayout={getItemLayout}
         onScrollToIndexFailed={onScrollToIndexFailed}
-        updateCellsBatchingPeriod={100}
-        // Disable end-reached (we use focus-based loading instead)
-        onEndReached={null}
+        // Footer
         ListFooterComponent={ListFooter}
         ListFooterComponentStyle={styles.footerStyle}
       />
