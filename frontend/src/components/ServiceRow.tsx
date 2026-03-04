@@ -4,9 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  Pressable,
   useWindowDimensions,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { ContentCard, getCardWidth } from './ContentCard';
@@ -50,13 +48,14 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const skipRef = useRef(initialItems?.length || 0);
   const hasMoreRef = useRef(true);
   const isLoadingRef = useRef(false);
+  const initializedRef = useRef(false);
 
-  // Update items when initial items change (e.g., refresh)
+  // Only set initial items once on mount - don't reset on every parent re-render
   useEffect(() => {
-    if (initialItems && initialItems.length > 0) {
+    if (!initializedRef.current && initialItems && initialItems.length > 0) {
+      initializedRef.current = true;
       setAllItems(initialItems);
       skipRef.current = initialItems.length;
-      hasMoreRef.current = true;
     }
   }, [initialItems]);
 
@@ -194,11 +193,11 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
         style={styles.flatListStyle}
-        initialNumToRender={isTV ? 7 : 4}
-        maxToRenderPerBatch={5}
-        updateCellsBatchingPeriod={30}
-        windowSize={7}
-        removeClippedSubviews={Platform.OS === 'android'}
+        initialNumToRender={isTV ? 10 : 5}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        windowSize={11}
+        removeClippedSubviews={false}
         decelerationRate="fast"
         scrollEventThrottle={16}
         onScrollToIndexFailed={onScrollToIndexFailed}
