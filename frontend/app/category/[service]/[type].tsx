@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Platform,
+  findNodeHandle,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,13 +28,15 @@ const CategoryItem = memo(({
   itemWidth, 
   itemHeight, 
   gap, 
-  onPress 
+  onPress,
+  onFocusItem,
 }: { 
   item: ContentItem; 
   itemWidth: number; 
   itemHeight: number; 
   gap: number; 
   onPress: (item: ContentItem) => void;
+  onFocusItem?: () => void;
 }) => {
   const [focused, setFocused] = useState(false);
   return (
@@ -44,8 +47,12 @@ const CategoryItem = memo(({
         focused && styles.gridItemFocused,
       ]}
       onPress={() => onPress(item)}
-      onFocus={() => setFocused(true)}
+      onFocus={() => {
+        setFocused(true);
+        onFocusItem?.();
+      }}
       onBlur={() => setFocused(false)}
+      android_ripple={null}
     >
       <Image
         source={{ uri: item.poster }}
@@ -72,6 +79,7 @@ export default function CategoryScreen() {
   const [backFocused, setBackFocused] = useState(false);
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
+  const flatListRef = useRef<FlatList>(null);
 
   // Refs to prevent stale closures in callbacks
   const skipRef = useRef(0);
@@ -119,17 +127,19 @@ export default function CategoryScreen() {
       if (newItems.length > 0) {
         if (isFirstPage) {
           setItems(newItems);
+          skipRef.current = newItems.length;
         } else {
           setItems(prev => {
             const existingIds = new Set(prev.map(i => i.id || i.imdb_id));
             const unique = newItems.filter(i => !existingIds.has(i.id || i.imdb_id));
+            skipRef.current = currentSkip + newItems.length;
             return [...prev, ...unique];
           });
         }
-        skipRef.current = currentSkip + newItems.length;
       }
 
-      const moreAvailable = newItems.length >= 20;
+      // If API returned hasMore field, use it; otherwise check if we got enough items
+      const moreAvailable = data.hasMore !== undefined ? data.hasMore : newItems.length >= 20;
       hasMoreRef.current = moreAvailable;
       setHasMore(moreAvailable);
     } catch (error) {
@@ -181,43 +191,38 @@ export default function CategoryScreen() {
     });
   }, [router]);
 
-  const renderItem = useCallback(({ item }: { item: ContentItem }) => (
+  // Auto-scroll when a poster is focused so it's visible
+  const handleItemFocus = useCallback((index: number) => {
+    const rowIndex = Math.floor(index / numColumns);
+    // Scroll to the row so the focused item is visible
+    if (flatListRef.current) {
+      const rowHeight = ITEM_HEIGHT + 40; // poster + title + margin
+      flatListRef.current.scrollToOffset({
+        offset: Math.max(0, rowIndex * rowHeight - 60), // 60px offset for header
+        animated: true,
+      });
+    }
+  }, [numColumns, ITEM_HEIGHT]);
+
+  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <CategoryItem
       item={item}
       itemWidth={ITEM_WIDTH}
       itemHeight={ITEM_HEIGHT}
       gap={gap}
       onPress={handleItemPress}
+      onFocusItem={() => handleItemFocus(index)}
     />
-  ), [ITEM_WIDTH, ITEM_HEIGHT, gap, handleItemPress]);
+  ), [ITEM_WIDTH, ITEM_HEIGHT, gap, handleItemPress, handleItemFocus]);
 
   const keyExtractor = useCallback((item: ContentItem) => item.id || item.imdb_id || '', []);
 
   const LoadMoreFooter = () => {
-    const [loadMoreFocused, setLoadMoreFocused] = useState(false);
-    
     if (isLoadingMore) {
       return (
         <View style={styles.footerContainer}>
           <ActivityIndicator size="small" color={colors.primary} />
           <Text style={styles.footerText}>Loading more... ({items.length} loaded)</Text>
-        </View>
-      );
-    }
-    if (hasMore && items.length > 0) {
-      return (
-        <View style={styles.footerContainer}>
-          <Pressable
-            onPress={handleLoadMore}
-            onFocus={() => setLoadMoreFocused(true)}
-            onBlur={() => setLoadMoreFocused(false)}
-            style={[styles.loadMoreButton, loadMoreFocused && styles.loadMoreButtonFocused]}
-          >
-            <Ionicons name="chevron-down" size={20} color={loadMoreFocused ? colors.textPrimary : colors.textSecondary} />
-            <Text style={[styles.loadMoreText, loadMoreFocused && styles.loadMoreTextFocused]}>
-              Load More ({items.length} loaded)
-            </Text>
-          </Pressable>
         </View>
       );
     }
@@ -239,6 +244,7 @@ export default function CategoryScreen() {
           onPress={() => router.back()} 
           onFocus={() => setBackFocused(true)}
           onBlur={() => setBackFocused(false)}
+          android_ripple={null}
           style={[styles.backButton, backFocused && styles.backButtonFocused]}
         >
           <Ionicons name="arrow-back" size={isTV ? 28 : 24} color={backFocused ? colors.primary : "#FFFFFF"} />
@@ -259,6 +265,7 @@ export default function CategoryScreen() {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={items}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
@@ -267,11 +274,11 @@ export default function CategoryScreen() {
           contentContainerStyle={[styles.gridContent, { paddingHorizontal: horizontalPadding }]}
           showsVerticalScrollIndicator={false}
           onEndReached={handleLoadMore}
-          onEndReachedThreshold={1.5}
+          onEndReachedThreshold={2.0}
           initialNumToRender={numColumns * 4}
           maxToRenderPerBatch={numColumns * 3}
           removeClippedSubviews={false}
-          windowSize={11}
+          windowSize={15}
           ListFooterComponent={LoadMoreFooter}
         />
       )}
@@ -329,7 +336,7 @@ const styles = StyleSheet.create({
   gridItem: {
     marginBottom: 16,
     borderRadius: 8,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: 'transparent',
   },
   gridItemFocused: {
@@ -365,28 +372,5 @@ const styles = StyleSheet.create({
   footerText: {
     color: colors.textSecondary,
     fontSize: 14,
-  },
-  loadMoreButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  loadMoreButtonFocused: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(184, 160, 92, 0.2)',
-  },
-  loadMoreText: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  loadMoreTextFocused: {
-    color: colors.textPrimary,
   },
 });

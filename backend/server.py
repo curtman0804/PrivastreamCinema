@@ -2078,19 +2078,18 @@ async def get_category_content(
                         # Filter out items with empty names or IDs
                         metas = [m for m in metas if m.get('name') and m.get('id')]
                         
-                        # If we requested with skip>0 but got same items from start,
-                        # the addon doesn't support pagination - do it manually
                         total_available = len(metas)
-                        if skip > 0 and total_available > 0:
-                            # Manual pagination: slice the full list
-                            page_items = metas[skip:skip+limit]
-                        else:
-                            page_items = metas[:limit]
+                        # When skip>0, the API already returns items from that offset
+                        # Just take up to limit items from the result
+                        page_items = metas[:limit]
+                        
+                        # hasMore = we got a full page of results (likely more available)
+                        has_more = len(page_items) >= 20
                         
                         return {
                             "items": page_items, 
-                            "total": total_available, 
-                            "hasMore": (skip + len(page_items)) < total_available,
+                            "total": skip + total_available, 
+                            "hasMore": has_more,
                             "catalogId": catalog_id,
                             "baseUrl": base_url
                         }
