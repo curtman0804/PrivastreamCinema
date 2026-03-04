@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
@@ -21,10 +21,10 @@ interface ServiceRowProps {
   onSectionFocus?: () => void;
 }
 
-// Card wrapper that handles focus - separated to prevent re-renders
-const FocusableCard = memo(({ 
+// Memoized card - won't re-render unless item data changes
+const MemoCard = memo(({ 
   item, 
-  onPress, 
+  onPress,
   onFocus,
 }: { 
   item: ContentItem; 
@@ -37,9 +37,7 @@ const FocusableCard = memo(({
     onCardFocus={onFocus}
     showTitle={true}
   />
-), (prev, next) => {
-  return prev.item?.id === next.item?.id && prev.item?.imdb_id === next.item?.imdb_id;
-});
+), (prev, next) => prev.item?.id === next.item?.id && prev.item?.imdb_id === next.item?.imdb_id);
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   title,
@@ -51,18 +49,17 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 }) => {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
-  const flatListRef = useRef<FlatList>(null);
 
   // Items state
   const [allItems, setAllItems] = useState<ContentItem[]>(initialItems || []);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // ALL pagination tracking via refs (no re-renders)
+  // Pagination refs only (no re-renders)
   const skipRef = useRef(initialItems?.length || 0);
   const hasMoreRef = useRef(true);
   const isLoadingRef = useRef(false);
   const initializedRef = useRef(false);
-  const itemCountRef = useRef(initialItems?.length || 0);
+  const totalRef = useRef(initialItems?.length || 0);
 
   // Initialize once
   useEffect(() => {
@@ -70,7 +67,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       initializedRef.current = true;
       setAllItems(initialItems);
       skipRef.current = initialItems.length;
-      itemCountRef.current = initialItems.length;
+      totalRef.current = initialItems.length;
     }
   }, [initialItems]);
 
@@ -79,11 +76,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   
   if (validItems.length === 0) return null;
 
-  const cardWidth = useMemo(() => 
-    getCardWidth(width, isTV, 'medium'), [width, isTV]);
-  const itemWidth = cardWidth + 16;
-
-  // Fetch next page - uses ONLY refs, no state dependencies
+  // Fetch next page
   const fetchMore = useCallback(async () => {
     if (isLoadingRef.current || !hasMoreRef.current) return;
     isLoadingRef.current = true;
@@ -98,7 +91,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
           const ids = new Set(prev.map(i => i.id || i.imdb_id));
           const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
           const updated = [...prev, ...unique];
-          itemCountRef.current = updated.length;
+          totalRef.current = updated.length;
           return updated;
         });
         skipRef.current += newItems.length;
@@ -112,102 +105,44 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // STABLE focus handler - no changing deps
+  // When a card gets focus
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
-    
-    // Scroll to focused card
-    flatListRef.current?.scrollToIndex({
-      index,
-      animated: true,
-      viewPosition: 0.1,
-    });
-
-    // Load more when near end (using ref, not state)
-    if (index >= itemCountRef.current - 15 && hasMoreRef.current && !isLoadingRef.current) {
+    // Load more when within last 20 items
+    if (index >= totalRef.current - 20 && hasMoreRef.current && !isLoadingRef.current) {
       fetchMore();
     }
   }, [onSectionFocus, fetchMore]);
 
-  // STABLE press handler
-  const handleItemPress = useCallback((item: ContentItem) => {
-    onItemPress(item);
-  }, [onItemPress]);
-
-  // STABLE render function - deps don't change
-  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
-    <FocusableCard
-      item={item}
-      onPress={() => handleItemPress(item)}
-      onFocus={() => handleCardFocus(index)}
-    />
-  ), [handleItemPress, handleCardFocus]);
-
-  const keyExtractor = useCallback((item: ContentItem, index: number) => 
-    item.id || item.imdb_id || `item-${index}`, []);
-
-  const getItemLayout = useCallback((_data: any, index: number) => ({
-    length: itemWidth,
-    offset: itemWidth * index,
-    index,
-  }), [itemWidth]);
-
-  const onScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number }) => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToIndex({ 
-        index: Math.min(info.index, info.highestMeasuredFrameIndex),
-        animated: true 
-      });
-    }, 100);
-  }, []);
-
-  // Also use onEndReached as backup trigger
-  const handleEndReached = useCallback(() => {
-    if (!isLoadingRef.current && hasMoreRef.current) {
-      fetchMore();
-    }
-  }, [fetchMore]);
-
-  const ListFooter = useCallback(() => {
-    if (isLoadingMore) {
-      return (
-        <View style={styles.loadingFooter}>
-          <ActivityIndicator size="small" color={colors.primary} />
-        </View>
-      );
-    }
-    return null;
-  }, [isLoadingMore]);
+  const displayTitle = title || serviceName || 'Content';
 
   return (
     <View style={styles.container}>
       <View style={[styles.header, isTV && styles.headerTV]}>
-        <Text style={[styles.title, isTV && styles.titleTV]}>
-          {title || serviceName || 'Content'}
-        </Text>
+        <Text style={[styles.title, isTV && styles.titleTV]}>{displayTitle}</Text>
       </View>
       
-      <FlatList
-        ref={flatListRef}
+      {/* ScrollView instead of FlatList - NO view recycling = NO flicker */}
+      <ScrollView
         horizontal
-        data={validItems}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
-        style={styles.flatListStyle}
-        initialNumToRender={8}
-        maxToRenderPerBatch={8}
-        windowSize={11}
-        updateCellsBatchingPeriod={50}
-        removeClippedSubviews={false}
-        getItemLayout={getItemLayout}
-        onScrollToIndexFailed={onScrollToIndexFailed}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={5}
-        ListFooterComponent={ListFooter}
-        ListFooterComponentStyle={styles.footerStyle}
-      />
+        style={styles.scrollStyle}
+      >
+        {validItems.map((item, index) => (
+          <MemoCard
+            key={item.id || item.imdb_id || `${index}`}
+            item={item}
+            onPress={() => onItemPress(item)}
+            onFocus={() => handleCardFocus(index)}
+          />
+        ))}
+        {isLoadingMore && (
+          <View style={styles.loadingFooter}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 });
@@ -247,17 +182,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 16,
   },
-  flatListStyle: {
+  scrollStyle: {
     overflow: 'visible',
   },
   loadingFooter: {
     justifyContent: 'center',
     alignItems: 'center',
     width: 60,
-    height: '100%',
-  },
-  footerStyle: {
-    justifyContent: 'center',
     paddingLeft: 8,
   },
 });
