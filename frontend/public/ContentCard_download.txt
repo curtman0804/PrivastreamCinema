@@ -133,7 +133,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
             source={{ uri: item.poster }}
             style={styles.posterImage}
             contentFit="cover"
-            transition={150}
             recyclingKey={item.id || item.imdb_id}
             cachePolicy="memory-disk"
           />

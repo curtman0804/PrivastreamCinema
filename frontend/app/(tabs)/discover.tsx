@@ -32,6 +32,7 @@ export default function DiscoverScreen() {
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionPositions = useRef<Record<string, number>>({});
+  const lastFocusedSection = useRef<string>('');
 
   // Use same card width calculation as ContentCard for consistency
   const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
@@ -84,12 +85,13 @@ export default function DiscoverScreen() {
     setRefreshing(false);
   }, [fetchContinueWatching]);
 
-  // Handle section focus - scroll section title to top of screen
-  // Use animated:false for instant response (no competing animations)
+  // Handle section focus - ONLY scroll parent when a DIFFERENT section gets focus
   const handleSectionFocus = useCallback((sectionKey: string) => {
+    if (sectionKey === lastFocusedSection.current) return; // Same section, don't scroll
+    lastFocusedSection.current = sectionKey;
     const y = sectionPositions.current[sectionKey];
     if (y !== undefined && scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({ y: Math.max(0, y - 16), animated: false });
+      scrollViewRef.current.scrollTo({ y: Math.max(0, y - 16), animated: true });
     }
   }, []);
 
