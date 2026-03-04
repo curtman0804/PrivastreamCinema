@@ -4,7 +4,10 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  Pressable,
   useWindowDimensions,
+  ActivityIndicator,
+  findNodeHandle,
 } from 'react-native';
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
@@ -21,6 +24,40 @@ interface ServiceRowProps {
   isFirstRow?: boolean;
 }
 
+// End-of-row focus trap - prevents focus from escaping to next row
+const RowEndCap = memo(({ onFocus, isLoading }: { onFocus: () => void; isLoading: boolean }) => {
+  const [focused, setFocused] = useState(false);
+  const selfRef = useRef<View>(null);
+  const [selfTag, setSelfTag] = useState<number | undefined>(undefined);
+
+  const handleLayout = useCallback(() => {
+    if (selfRef.current) {
+      const tag = findNodeHandle(selfRef.current);
+      if (tag) setSelfTag(tag);
+    }
+  }, []);
+
+  return (
+    <Pressable
+      ref={selfRef}
+      onLayout={handleLayout}
+      onFocus={() => { setFocused(true); onFocus(); }}
+      onBlur={() => setFocused(false)}
+      nextFocusRight={selfTag}
+      android_ripple={null}
+      style={[styles.endCap, focused && styles.endCapFocused]}
+      accessible={true}
+      accessibilityLabel="Loading more"
+    >
+      {isLoading ? (
+        <ActivityIndicator size="small" color={colors.primary} />
+      ) : (
+        <Text style={styles.endCapText}>›</Text>
+      )}
+    </Pressable>
+  );
+});
+
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   title,
   serviceName,
@@ -33,51 +70,77 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
 
-  // Simple items state - starts with initial, can grow once
+  // Items state
   const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Simple fetch tracking
-  const hasFetchedMore = useRef(false);
-  const isFetching = useRef(false);
+  // Refs for controlled pagination
+  const skipRef = useRef(initialItems?.length || 0);
+  const hasMoreRef = useRef(true);
+  const isFetchingRef = useRef(false);
+  const lastFetchTime = useRef(0);
+  const totalRef = useRef(initialItems?.length || 0);
+  // Cap at 500 items to prevent memory issues on Fire Stick
+  const MAX_ITEMS = 500;
 
   const validItems = useMemo(() => 
     (allItems || []).filter(Boolean), [allItems]);
   
   if (validItems.length === 0) return null;
 
-  // Fetch ONE extra batch when user gets near end - no loop
-  const fetchMoreOnce = useCallback(async () => {
-    if (hasFetchedMore.current || isFetching.current) return;
-    isFetching.current = true;
+  // Fetch more with cooldown - prevents runaway loop
+  const fetchMore = useCallback(async () => {
+    const now = Date.now();
+    // Cooldown: at least 2 seconds between fetches
+    if (isFetchingRef.current || !hasMoreRef.current) return;
+    if (now - lastFetchTime.current < 2000) return;
+    if (totalRef.current >= MAX_ITEMS) { hasMoreRef.current = false; return; }
+
+    isFetchingRef.current = true;
+    lastFetchTime.current = now;
+    setIsLoadingMore(true);
     try {
-      const skip = allItems.length;
       const resp = await apiClient.get(
-        `/api/content/category/${encodeURIComponent(serviceName)}/${contentType}?skip=${skip}&limit=100`
+        `/api/content/category/${encodeURIComponent(serviceName)}/${contentType}?skip=${skipRef.current}&limit=100`
       );
       const newItems: ContentItem[] = resp.data.items || [];
       if (newItems.length > 0) {
         setAllItems(prev => {
           const ids = new Set(prev.map(i => i.id || i.imdb_id));
           const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
-          return [...prev, ...unique];
+          const updated = [...prev, ...unique].slice(0, MAX_ITEMS);
+          totalRef.current = updated.length;
+          return updated;
         });
+        skipRef.current += newItems.length;
       }
-      hasFetchedMore.current = true;
+      hasMoreRef.current = resp.data.hasMore !== undefined 
+        ? resp.data.hasMore 
+        : newItems.length >= 20;
     } catch {
-      hasFetchedMore.current = true;
+      hasMoreRef.current = false;
     } finally {
-      isFetching.current = false;
+      isFetchingRef.current = false;
+      setIsLoadingMore(false);
     }
-  }, [serviceName, contentType, allItems.length]);
+  }, [serviceName, contentType]);
 
-  // Card focus - simple, stable
+  // Card focus handler
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
-    // Fetch more when within last 10 items (only fires once)
-    if (index >= allItems.length - 10) {
-      fetchMoreOnce();
+    // Pre-fetch when within last 15 items
+    if (index >= totalRef.current - 15 && hasMoreRef.current) {
+      fetchMore();
     }
-  }, [onSectionFocus, allItems.length, fetchMoreOnce]);
+  }, [onSectionFocus, fetchMore]);
+
+  // End cap focus handler
+  const handleEndCapFocus = useCallback(() => {
+    onSectionFocus?.();
+    if (hasMoreRef.current) {
+      fetchMore();
+    }
+  }, [onSectionFocus, fetchMore]);
 
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <ContentCard
@@ -91,6 +154,11 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 
   const keyExtractor = useCallback((item: ContentItem) => 
     item.id || item.imdb_id || `${item.name}`, []);
+
+  // Footer: focusable end cap that traps focus + triggers loading
+  const ListFooter = useCallback(() => (
+    <RowEndCap onFocus={handleEndCapFocus} isLoading={isLoadingMore} />
+  ), [handleEndCapFocus, isLoadingMore]);
 
   return (
     <View style={styles.container}>
@@ -112,6 +180,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         maxToRenderPerBatch={5}
         windowSize={9}
         removeClippedSubviews={false}
+        ListFooterComponent={ListFooter}
       />
     </View>
   );
@@ -154,5 +223,25 @@ const styles = StyleSheet.create({
   },
   flatListStyle: {
     overflow: 'visible',
+  },
+  endCap: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 48,
+    height: '100%',
+    minHeight: 100,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    marginLeft: 4,
+  },
+  endCapFocused: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
+  },
+  endCapText: {
+    color: colors.textSecondary,
+    fontSize: 28,
+    fontWeight: 'bold',
   },
 });
