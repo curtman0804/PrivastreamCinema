@@ -87,11 +87,13 @@ export default function DiscoverScreen() {
 
   // Handle section focus - ONLY scroll parent when a DIFFERENT section gets focus
   const handleSectionFocus = useCallback((sectionKey: string) => {
-    if (sectionKey === lastFocusedSection.current) return; // Same section, don't scroll
+    if (sectionKey === lastFocusedSection.current) return;
     lastFocusedSection.current = sectionKey;
+    // Let Android TV handle scrolling natively - it auto-scrolls to focused elements
+    // Only do a gentle nudge if needed
     const y = sectionPositions.current[sectionKey];
     if (y !== undefined && scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({ y: Math.max(0, y - 16), animated: true });
+      scrollViewRef.current.scrollTo({ y: Math.max(0, y - 40), animated: true });
     }
   }, []);
 
