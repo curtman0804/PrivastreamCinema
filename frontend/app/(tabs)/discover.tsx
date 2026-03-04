@@ -267,11 +267,10 @@ export default function DiscoverScreen() {
                 >
                   <ServiceRow
                     title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
-                    items={content.movies.slice(0, 30)}
+                    serviceName={serviceName}
+                    contentType="movies"
+                    items={content.movies}
                     onItemPress={handleItemPress}
-                    onSeeAll={content.movies.length > 10 ? () => {
-                      router.push(`/category/${encodeURIComponent(serviceName)}/movies`);
-                    } : undefined}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
                   />
                 </View>
@@ -282,11 +281,10 @@ export default function DiscoverScreen() {
                 >
                   <ServiceRow
                     title={hasSeriesInName ? serviceName : `${serviceName} Series`}
-                    items={content.series.slice(0, 30)}
+                    serviceName={serviceName}
+                    contentType="series"
+                    items={content.series}
                     onItemPress={handleItemPress}
-                    onSeeAll={content.series.length > 10 ? () => {
-                      router.push(`/category/${encodeURIComponent(serviceName)}/series`);
-                    } : undefined}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
                   />
                 </View>
@@ -297,14 +295,13 @@ export default function DiscoverScreen() {
                 >
                   <ServiceRow
                     title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
-                    items={content.channels.slice(0, 30).map((ch: any) => ({
+                    serviceName={serviceName}
+                    contentType="channels"
+                    items={content.channels.map((ch: any) => ({
                       ...ch,
                       type: 'tv' as const,
                     }))}
                     onItemPress={handleItemPress}
-                    onSeeAll={content.channels.length > 10 ? () => {
-                      router.push(`/category/${encodeURIComponent(serviceName)}/channels`);
-                    } : undefined}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
                   />
                 </View>

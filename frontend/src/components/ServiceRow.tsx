@@ -7,24 +7,24 @@ import {
   Pressable,
   useWindowDimensions,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
+import apiClient from '../api/client';
 import { colors } from '../styles/colors';
 
 interface ServiceRowProps {
   title: string;
-  serviceName?: string;
+  serviceName: string;
+  contentType: 'movies' | 'series' | 'channels';
   items: ContentItem[];
   onItemPress: (item: ContentItem) => void;
-  onSeeAll?: () => void;
   onSectionFocus?: () => void;
 }
 
 // Memoized content card to prevent re-renders
 const MemoizedContentCard = memo(ContentCard, (prev, next) => {
-  // Only re-render if item id changes
   return prev.item?.id === next.item?.id && 
          prev.item?.imdb_id === next.item?.imdb_id;
 });
@@ -32,61 +32,87 @@ const MemoizedContentCard = memo(ContentCard, (prev, next) => {
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   title,
   serviceName,
-  items,
+  contentType,
+  items: initialItems,
   onItemPress,
-  onSeeAll,
   onSectionFocus,
 }) => {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
   const flatListRef = useRef<FlatList>(null);
-  const seeAllRef = useRef<View>(null);
-  const [seeAllFocused, setSeeAllFocused] = useState(false);
-  const [seeAllNodeId, setSeeAllNodeId] = useState<number | undefined>(undefined);
-  // Use ref instead of state to avoid re-renders when focus changes between cards
   const currentFocusIndexRef = useRef(0);
 
-  // Get native node handle for See All button to trap focus (prevent right-arrow from escaping)
-  // Only needed on Android TV - findNodeHandle is not supported on web
+  // Internal state for loaded items - starts with initial items from discover
+  const [allItems, setAllItems] = useState<ContentItem[]>(initialItems || []);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Pagination refs
+  const skipRef = useRef(initialItems?.length || 0);
+  const hasMoreRef = useRef(true);
+  const isLoadingRef = useRef(false);
+
+  // Update items when initial items change (e.g., refresh)
   useEffect(() => {
-    if (!onSeeAll || Platform.OS !== 'android') return;
-    const timer = setTimeout(() => {
-      try {
-        // Dynamic require to avoid web bundling issues
-        const RN = require('react-native');
-        if (seeAllRef.current && RN.findNodeHandle) {
-          const handle = RN.findNodeHandle(seeAllRef.current);
-          if (handle) setSeeAllNodeId(handle);
-        }
-      } catch (e) {
-        // findNodeHandle not available on this platform
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [onSeeAll]);
-  
-  // Memoize valid items to prevent recalculation
+    if (initialItems && initialItems.length > 0) {
+      setAllItems(initialItems);
+      skipRef.current = initialItems.length;
+      hasMoreRef.current = true;
+    }
+  }, [initialItems]);
+
+  // Valid items
   const validItems = useMemo(() => 
-    (items || []).filter(Boolean), [items]);
+    (allItems || []).filter(Boolean), [allItems]);
   
   if (validItems.length === 0) return null;
 
-  // Use shared card width calculation - memoized
+  // Card width calculation
   const cardWidth = useMemo(() => 
     getCardWidth(width, isTV, 'medium'), [width, isTV]);
-  const itemWidth = cardWidth + 16; // card width + marginRight
+  const itemWidth = cardWidth + 16;
+
+  // Fetch more items from the backend
+  const fetchMore = useCallback(async () => {
+    if (isLoadingRef.current || !hasMoreRef.current) return;
+    
+    isLoadingRef.current = true;
+    setIsLoadingMore(true);
+
+    try {
+      const response = await apiClient.get(
+        `/api/content/category/${encodeURIComponent(serviceName)}/${contentType}?skip=${skipRef.current}&limit=100`
+      );
+      const data = response.data;
+      const newItems: ContentItem[] = data.items || [];
+
+      if (newItems.length > 0) {
+        setAllItems(prev => {
+          const existingIds = new Set(prev.map(i => i.id || i.imdb_id));
+          const unique = newItems.filter(i => !existingIds.has(i.id || i.imdb_id));
+          return [...prev, ...unique];
+        });
+        skipRef.current += newItems.length;
+      }
+
+      const moreAvailable = data.hasMore !== undefined ? data.hasMore : newItems.length >= 20;
+      hasMoreRef.current = moreAvailable;
+    } catch (error) {
+      console.log(`[ServiceRow] Error loading more for ${serviceName}:`, error);
+      hasMoreRef.current = false;
+    } finally {
+      isLoadingRef.current = false;
+      setIsLoadingMore(false);
+    }
+  }, [serviceName, contentType]);
 
   // Handle card focus - scroll to keep focused item visible + notify parent
-  // Uses ref instead of state to avoid triggering re-renders during navigation
   const handleCardFocus = useCallback((index: number) => {
     currentFocusIndexRef.current = index;
     
-    // Notify parent to scroll section title to top
     if (onSectionFocus) {
       onSectionFocus();
     }
     
-    // Scroll so the focused item is visible at the left edge
     flatListRef.current?.scrollToIndex({
       index: index,
       animated: true,
@@ -108,11 +134,11 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const keyExtractor = useCallback((item: ContentItem, index: number) => 
     item.id || item.imdb_id || `item-${index}`, []);
 
-  // Display title - use serviceName or title
+  // Display title
   const displayTitle = title || serviceName || 'Content';
 
   // Memoized getItemLayout for performance
-  const getItemLayout = useCallback((data: any, index: number) => ({
+  const getItemLayout = useCallback((_data: any, index: number) => ({
     length: itemWidth,
     offset: itemWidth * index,
     index,
@@ -132,14 +158,33 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }, 50);
   }, []);
 
+  // Trigger load more when reaching end
+  const handleEndReached = useCallback(() => {
+    if (!isLoadingRef.current && hasMoreRef.current) {
+      fetchMore();
+    }
+  }, [fetchMore]);
+
+  // Loading indicator at the end of the row
+  const ListFooter = useCallback(() => {
+    if (isLoadingMore) {
+      return (
+        <View style={styles.loadingFooter}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      );
+    }
+    return null;
+  }, [isLoadingMore]);
+
   return (
     <View style={styles.container}>
-      {/* Row Header - Title only */}
+      {/* Row Header */}
       <View style={[styles.header, isTV && styles.headerTV]}>
         <Text style={[styles.title, isTV && styles.titleTV]}>{displayTitle}</Text>
       </View>
       
-      {/* Content Row - Optimized FlatList with See All button at end */}
+      {/* Content Row - Infinite horizontal scroll */}
       <FlatList
         ref={flatListRef}
         horizontal
@@ -149,49 +194,20 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
         style={styles.flatListStyle}
-        // Performance optimizations
         initialNumToRender={isTV ? 7 : 4}
-        maxToRenderPerBatch={3}
+        maxToRenderPerBatch={5}
         updateCellsBatchingPeriod={30}
-        windowSize={5}
+        windowSize={7}
         removeClippedSubviews={Platform.OS === 'android'}
         decelerationRate="fast"
         scrollEventThrottle={16}
         onScrollToIndexFailed={onScrollToIndexFailed}
         getItemLayout={getItemLayout}
-        // Disable automatic scroll adjustments
         maintainVisibleContentPosition={null}
-        // Circular See All button at the end of the row
-        ListFooterComponent={onSeeAll ? (
-          <Pressable
-            ref={seeAllRef}
-            onPress={onSeeAll}
-            onFocus={() => {
-              setSeeAllFocused(true);
-              if (onSectionFocus) onSectionFocus();
-            }}
-            onBlur={() => setSeeAllFocused(false)}
-            // @ts-ignore - nextFocusRight is a valid Android TV prop
-            nextFocusRight={seeAllNodeId}
-            style={[
-              styles.seeAllCircle,
-              isTV && styles.seeAllCircleTV,
-              seeAllFocused && styles.seeAllCircleFocused,
-            ]}
-          >
-            <Text style={[
-              styles.seeAllLabel,
-              isTV && styles.seeAllLabelTV,
-              seeAllFocused && styles.seeAllLabelFocused,
-            ]}>SEE ALL</Text>
-            <Ionicons 
-              name="arrow-forward" 
-              size={isTV ? 20 : 16} 
-              color={seeAllFocused ? colors.textPrimary : colors.textSecondary} 
-            />
-          </Pressable>
-        ) : null}
-        ListFooterComponentStyle={onSeeAll ? styles.seeAllFooter : undefined}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={3}
+        ListFooterComponent={ListFooter}
+        ListFooterComponentStyle={styles.footerStyle}
       />
     </View>
   );
@@ -225,50 +241,25 @@ const styles = StyleSheet.create({
   titleTV: {
     fontSize: 22,
   },
-  seeAllCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  seeAllCircleTV: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-  },
-  seeAllCircleFocused: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(184, 160, 92, 0.25)',
-  },
-  seeAllLabel: {
-    color: colors.textSecondary,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  seeAllLabelTV: {
-    fontSize: 12,
-  },
-  seeAllLabelFocused: {
-    color: colors.textPrimary,
-  },
-  seeAllFooter: {
-    justifyContent: 'center',
-    paddingLeft: 8,
-  },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingVertical: 12, // Add vertical padding to prevent clipping of focused items
+    paddingVertical: 12,
   },
   scrollContentTV: {
     paddingHorizontal: 24,
-    paddingVertical: 16, // More padding on TV
+    paddingVertical: 16,
   },
   flatListStyle: {
-    overflow: 'visible', // Allow focused items to show outside bounds
+    overflow: 'visible',
+  },
+  loadingFooter: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 60,
+    height: '100%',
+  },
+  footerStyle: {
+    justifyContent: 'center',
+    paddingLeft: 8,
   },
 });
