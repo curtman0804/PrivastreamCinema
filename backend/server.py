@@ -2078,9 +2078,30 @@ async def get_category_content(
                         # Filter out items with empty names or IDs
                         metas = [m for m in metas if m.get('name') and m.get('id')]
                         
+                        # Detect addons that don't support pagination
+                        # If skip>0 and the first item matches what page 1 starts with,
+                        # this addon returns the same data regardless of skip
+                        if skip > 0 and len(metas) > 0:
+                            # Quick check: fetch page 1 to compare
+                            first_page_url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                            try:
+                                first_resp = await client.get(first_page_url)
+                                if first_resp.status_code == 200:
+                                    first_metas = first_resp.json().get('metas', [])
+                                    if first_metas and metas[0].get('id') == first_metas[0].get('id'):
+                                        # Same first item = addon doesn't support skip
+                                        logger.info(f"Addon {catalog_name} does not support pagination (duplicate results)")
+                                        return {
+                                            "items": [],
+                                            "total": len(first_metas),
+                                            "hasMore": False,
+                                            "catalogId": catalog_id,
+                                            "baseUrl": base_url
+                                        }
+                            except Exception:
+                                pass
+                        
                         total_available = len(metas)
-                        # When skip>0, the API already returns items from that offset
-                        # Just take up to limit items from the result
                         page_items = metas[:limit]
                         
                         # hasMore = we got a full page of results (likely more available)
