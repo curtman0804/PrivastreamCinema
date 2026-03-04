@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback } from 'react';
+import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,6 +6,7 @@ import {
   useWindowDimensions,
   Text,
   Alert,
+  findNodeHandle,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,8 @@ interface ContentCardProps {
   inLibrary?: boolean;
   onLibraryChange?: () => void;
   hasTVPreferredFocus?: boolean;
+  isFirstInRow?: boolean;
+  isLastInRow?: boolean;
 }
 
 export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 'medium') => {
@@ -50,15 +53,27 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   inLibrary = false,
   onLibraryChange,
   hasTVPreferredFocus = false,
+  isFirstInRow = false,
+  isLastInRow = false,
 }) => {
   const { width, height } = useWindowDimensions();
   const [isFocused, setIsFocused] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
+  const pressableRef = useRef<View>(null);
+  const [selfTag, setSelfTag] = useState<number | undefined>(undefined);
   
   const isTV = width > height || width > 800;
   const cardWidth = getCardWidth(width, isTV, size);
   const aspectRatio = posterShapes[posterShape];
   const cardHeight = cardWidth * aspectRatio;
+
+  // Get own node handle so we can point nextFocusRight/Left to ourselves
+  useEffect(() => {
+    if ((isFirstInRow || isLastInRow) && pressableRef.current) {
+      const tag = findNodeHandle(pressableRef.current);
+      if (tag) setSelfTag(tag);
+    }
+  }, [isFirstInRow, isLastInRow]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -108,6 +123,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   return (
     <Pressable
+      ref={pressableRef}
       onPress={onPress}
       onLongPress={handleLongPress}
       delayLongPress={500}
@@ -115,6 +131,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       onBlur={() => setIsFocused(false)}
       android_ripple={null}
       hasTVPreferredFocus={hasTVPreferredFocus}
+      nextFocusRight={isLastInRow && selfTag ? selfTag : undefined}
+      nextFocusLeft={isFirstInRow && selfTag ? selfTag : undefined}
       style={[styles.container, { width: cardWidth }]}
       accessible={true}
       accessibilityRole="button"

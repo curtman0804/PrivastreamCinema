@@ -106,8 +106,10 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       onCardFocus={() => handleCardFocus(index)}
       showTitle={true}
       hasTVPreferredFocus={isFirstRow && index === 0}
+      isFirstInRow={index === 0}
+      isLastInRow={index === validItems.length - 1}
     />
-  ), [onItemPress, handleCardFocus, isFirstRow]);
+  ), [onItemPress, handleCardFocus, isFirstRow, validItems.length]);
 
   const keyExtractor = useCallback((item: ContentItem) => 
     item.id || item.imdb_id || `${item.name}`, []);
