@@ -1,13 +1,10 @@
-import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import React, { memo, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  Pressable,
   useWindowDimensions,
-  ActivityIndicator,
-  findNodeHandle,
 } from 'react-native';
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
@@ -35,84 +32,53 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
 }) => {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
-  const flatListRef = useRef<FlatList>(null);
 
-  // Items state
+  // Simple items state - starts with initial, can grow once
   const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  // Refs for pagination - never cause re-renders
-  const skipRef = useRef(initialItems?.length || 0);
-  const hasMoreRef = useRef(true);
-  const isLoadingRef = useRef(false);
-  const totalRef = useRef(initialItems?.length || 0);
-  // Ref for the footer "load more" button to prevent focus escape
-  const footerRef = useRef<View>(null);
-  const [footerTag, setFooterTag] = useState<number | undefined>(undefined);
-
-  // Get footer native tag after mount
-  useEffect(() => {
-    if (footerRef.current) {
-      const tag = findNodeHandle(footerRef.current);
-      if (tag) setFooterTag(tag);
-    }
-  });
+  // Simple fetch tracking
+  const hasFetchedMore = useRef(false);
+  const isFetching = useRef(false);
 
   const validItems = useMemo(() => 
     (allItems || []).filter(Boolean), [allItems]);
   
   if (validItems.length === 0) return null;
 
-  const cardWidth = useMemo(() => 
-    getCardWidth(width, isTV, 'medium'), [width, isTV]);
-
-  // Fetch next page
-  const fetchMore = useCallback(async () => {
-    if (isLoadingRef.current || !hasMoreRef.current) return;
-    isLoadingRef.current = true;
-    setIsLoadingMore(true);
+  // Fetch ONE extra batch when user gets near end - no loop
+  const fetchMoreOnce = useCallback(async () => {
+    if (hasFetchedMore.current || isFetching.current) return;
+    isFetching.current = true;
     try {
+      const skip = allItems.length;
       const resp = await apiClient.get(
-        `/api/content/category/${encodeURIComponent(serviceName)}/${contentType}?skip=${skipRef.current}&limit=100`
+        `/api/content/category/${encodeURIComponent(serviceName)}/${contentType}?skip=${skip}&limit=100`
       );
       const newItems: ContentItem[] = resp.data.items || [];
       if (newItems.length > 0) {
         setAllItems(prev => {
           const ids = new Set(prev.map(i => i.id || i.imdb_id));
           const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
-          const updated = [...prev, ...unique];
-          totalRef.current = updated.length;
-          return updated;
+          return [...prev, ...unique];
         });
-        skipRef.current += newItems.length;
       }
-      hasMoreRef.current = resp.data.hasMore !== undefined ? resp.data.hasMore : newItems.length >= 20;
+      hasFetchedMore.current = true;
     } catch {
-      hasMoreRef.current = false;
+      hasFetchedMore.current = true;
     } finally {
-      isLoadingRef.current = false;
-      setIsLoadingMore(false);
+      isFetching.current = false;
     }
-  }, [serviceName, contentType]);
+  }, [serviceName, contentType, allItems.length]);
 
-  // STABLE focus handler using refs only
+  // Card focus - simple, stable
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
-    // Prefetch when within last 15 items
-    if (index >= totalRef.current - 15 && hasMoreRef.current && !isLoadingRef.current) {
-      fetchMore();
+    // Fetch more when within last 10 items (only fires once)
+    if (index >= allItems.length - 10) {
+      fetchMoreOnce();
     }
-  }, [onSectionFocus, fetchMore]);
+  }, [onSectionFocus, allItems.length, fetchMoreOnce]);
 
-  // When footer gets focus, load more items
-  const handleFooterFocus = useCallback(() => {
-    onSectionFocus?.();
-    if (hasMoreRef.current && !isLoadingRef.current) {
-      fetchMore();
-    }
-  }, [onSectionFocus, fetchMore]);
-
-  // STABLE render function
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <ContentCard
       item={item}
@@ -126,38 +92,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const keyExtractor = useCallback((item: ContentItem) => 
     item.id || item.imdb_id || `${item.name}`, []);
 
-  const handleEndReached = useCallback(() => {
-    if (!isLoadingRef.current && hasMoreRef.current) {
-      fetchMore();
-    }
-  }, [fetchMore]);
-
-  // Focusable footer that prevents focus from escaping to next row
-  // nextFocusRight points to itself so pressing right stays here
-  // nextFocusDown is not set, allowing down navigation to next row
-  const ListFooter = useCallback(() => {
-    if (!hasMoreRef.current && !isLoadingMore) return null;
-    return (
-      <Pressable
-        ref={footerRef}
-        onFocus={handleFooterFocus}
-        nextFocusRight={footerTag}
-        android_ripple={null}
-        style={styles.footerButton}
-        accessible={true}
-        accessibilityLabel="Loading more content"
-      >
-        {isLoadingMore ? (
-          <ActivityIndicator size="small" color={colors.primary} />
-        ) : (
-          <View style={styles.footerDot}>
-            <Text style={styles.footerText}>...</Text>
-          </View>
-        )}
-      </Pressable>
-    );
-  }, [isLoadingMore, handleFooterFocus, footerTag]);
-
   return (
     <View style={styles.container}>
       <View style={[styles.header, isTV && styles.headerTV]}>
@@ -167,7 +101,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       </View>
       
       <FlatList
-        ref={flatListRef}
         horizontal
         data={validItems}
         renderItem={renderItem}
@@ -178,12 +111,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         initialNumToRender={8}
         maxToRenderPerBatch={5}
         windowSize={9}
-        updateCellsBatchingPeriod={50}
         removeClippedSubviews={false}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={3}
-        ListFooterComponent={ListFooter}
-        ListFooterComponentStyle={styles.footerStyle}
       />
     </View>
   );
@@ -226,25 +154,5 @@ const styles = StyleSheet.create({
   },
   flatListStyle: {
     overflow: 'visible',
-  },
-  footerStyle: {
-    justifyContent: 'center',
-    paddingLeft: 8,
-  },
-  footerButton: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 60,
-    height: '100%',
-    minHeight: 100,
-  },
-  footerDot: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  footerText: {
-    color: colors.textSecondary,
-    fontSize: 24,
-    fontWeight: 'bold',
   },
 });
