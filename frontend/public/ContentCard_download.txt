@@ -42,6 +42,21 @@ export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 
   }
 };
 
+// Helper to get native tag from a ref — works on both old and new RN architectures
+const getNativeTag = (ref: any): number | null => {
+  if (!ref) return null;
+  // Try findNodeHandle (works on old architecture)
+  try {
+    const tag = findNodeHandle(ref);
+    if (tag && tag > 0) return tag;
+  } catch (_e) {}
+  // Try _nativeTag (works on both architectures)
+  if (ref._nativeTag && ref._nativeTag > 0) return ref._nativeTag;
+  // Try __nativeTag
+  if (ref.__nativeTag && ref.__nativeTag > 0) return ref.__nativeTag;
+  return null;
+};
+
 const ContentCardComponent: React.FC<ContentCardProps> = ({
   item,
   onPress,
@@ -60,18 +75,34 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
   const pressableRef = useRef<View>(null);
-  const [selfTag, setSelfTag] = useState<number | undefined>(undefined);
+  const [selfTag, setSelfTag] = useState<number>(0);
   
   const isTV = width > height || width > 800;
   const cardWidth = getCardWidth(width, isTV, size);
   const aspectRatio = posterShapes[posterShape];
   const cardHeight = cardWidth * aspectRatio;
 
-  // Get own native tag for focus trapping (only for first/last items)
+  // Get native tag via onLayout (fires after native view is fully laid out)
+  const handleLayout = useCallback(() => {
+    if ((isFirstInRow || isLastInRow) && pressableRef.current) {
+      const tag = getNativeTag(pressableRef.current);
+      if (tag && tag !== selfTag) {
+        setSelfTag(tag);
+      }
+    }
+  }, [isFirstInRow, isLastInRow, selfTag]);
+
+  // Also try on mount and when isFirst/isLast changes
   useEffect(() => {
     if ((isFirstInRow || isLastInRow) && pressableRef.current) {
-      const tag = findNodeHandle(pressableRef.current);
-      if (tag) setSelfTag(tag);
+      // Small delay to ensure native view is ready
+      const timer = setTimeout(() => {
+        if (pressableRef.current) {
+          const tag = getNativeTag(pressableRef.current);
+          if (tag && tag > 0) setSelfTag(tag);
+        }
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [isFirstInRow, isLastInRow]);
 
@@ -125,6 +156,15 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   if (!item) return null;
 
+  // Build focus trapping props
+  const focusTrapProps: any = {};
+  if (isLastInRow && selfTag > 0) {
+    focusTrapProps.nextFocusRight = selfTag;
+  }
+  if (isFirstInRow && selfTag > 0) {
+    focusTrapProps.nextFocusLeft = selfTag;
+  }
+
   return (
     <Pressable
       ref={pressableRef}
@@ -133,10 +173,10 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       delayLongPress={500}
       onFocus={handleFocus}
       onBlur={handleBlur}
+      onLayout={handleLayout}
       android_ripple={null}
       hasTVPreferredFocus={hasTVPreferredFocus}
-      nextFocusRight={isLastInRow && selfTag ? selfTag : undefined}
-      nextFocusLeft={isFirstInRow && selfTag ? selfTag : undefined}
+      {...focusTrapProps}
       style={[styles.container, { width: cardWidth }]}
       accessible={true}
       accessibilityRole="button"
