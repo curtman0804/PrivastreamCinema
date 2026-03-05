@@ -700,8 +700,8 @@ const styles = StyleSheet.create({
     height: 44,
   },
   logoImageTV: {
-    width: 128,
-    height: 128,
+    width: 64,
+    height: 64,
   },
   logoText: {
     color: colors.primary,
@@ -711,7 +711,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   logoTextTV: {
-    fontSize: 32,
-    marginLeft: 16,
+    fontSize: 24,
+    marginLeft: 14,
   },
 });

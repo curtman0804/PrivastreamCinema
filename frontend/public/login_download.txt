@@ -251,12 +251,12 @@ const styles = StyleSheet.create({
     marginBottom: 48,
   },
   logo: {
-    width: 200,
-    height: 100,
+    width: 400,
+    height: 200,
   },
   logoTV: {
-    width: 240,
-    height: 120,
+    width: 480,
+    height: 240,
   },
   form: {
     width: '100%',
