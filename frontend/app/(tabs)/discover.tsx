@@ -85,10 +85,18 @@ export default function DiscoverScreen() {
     setRefreshing(false);
   }, [fetchContinueWatching]);
 
-  // Handle section focus - let Android TV handle scrolling natively
-  // No manual scrollTo - it conflicts with the system's focus-based scrolling
-  const handleSectionFocus = useCallback((_sectionKey: string) => {
-    // No-op: Android TV automatically scrolls to focused elements
+  // Handle section focus - scroll parent to show category title
+  const handleSectionFocus = useCallback((sectionKey: string) => {
+    if (lastFocusedSection.current === sectionKey) return;
+    lastFocusedSection.current = sectionKey;
+    
+    const sectionY = sectionPositions.current[sectionKey];
+    if (sectionY !== undefined && scrollViewRef.current) {
+      // Small delay to override Android TV's auto-scroll (which only shows the card, not the title)
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, sectionY - 10), animated: true });
+      }, 50);
+    }
   }, []);
 
   // Item width for snap scrolling

@@ -244,7 +244,7 @@ export const ContentCard = memo(ContentCardComponent);
 const styles = StyleSheet.create({
   container: {
     marginRight: 16,
-    marginBottom: 8,
+    marginBottom: 2,
   },
   posterContainer: {
     borderRadius: 6,
@@ -306,9 +306,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   titleContainer: {
-    paddingTop: 8,
+    paddingTop: 6,
     paddingHorizontal: 4,
-    height: 48,
+    height: 38,
   },
   title: {
     color: colors.textPrimary,

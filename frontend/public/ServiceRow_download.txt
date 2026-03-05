@@ -187,7 +187,7 @@ export const MetaRow = ServiceRow;
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 32,
+    marginBottom: 8,
     overflow: 'visible',
   },
   header: {
@@ -195,11 +195,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   headerTV: {
     paddingHorizontal: TV_PADDING_LEFT,
-    marginBottom: 20,
+    marginBottom: 6,
   },
   title: {
     color: colors.textPrimary,
@@ -213,12 +213,12 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingLeft: MOBILE_PADDING,
     paddingRight: MOBILE_PADDING + 32,
-    paddingVertical: 12,
+    paddingVertical: 4,
   },
   scrollContentTV: {
     paddingLeft: TV_PADDING_LEFT,
     paddingRight: TV_PADDING_RIGHT + 60,
-    paddingVertical: 16,
+    paddingVertical: 4,
   },
   flatListStyle: {
     overflow: 'visible',
