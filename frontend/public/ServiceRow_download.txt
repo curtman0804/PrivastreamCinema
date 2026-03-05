@@ -175,7 +175,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         maxToRenderPerBatch={8}
         updateCellsBatchingPeriod={50}
         windowSize={5}
-        removeClippedSubviews={false}
+        removeClippedSubviews={true}
         onEndReached={handleEndReached}
         onEndReachedThreshold={3}
       />
