@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(184, 160, 92, 0.15)',
   },
   headerTitle: {
-    color: colors.textPrimary,
+    color: colors.primary,
     fontSize: 18,
     fontWeight: '600',
   },
@@ -348,18 +348,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundLight,
   },
   itemTitle: {
-    color: colors.textPrimary,
+    color: colors.primary,
     fontSize: 12,
     marginTop: 6,
     textAlign: 'center',
   },
   loadingText: {
-    color: colors.textSecondary,
+    color: colors.primaryDark,
     marginTop: 12,
     fontSize: 14,
   },
   emptyText: {
-    color: colors.textSecondary,
+    color: colors.primaryDark,
     fontSize: 16,
   },
   footerContainer: {
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   footerText: {
-    color: colors.textSecondary,
+    color: colors.primaryDark,
     fontSize: 14,
   },
 });

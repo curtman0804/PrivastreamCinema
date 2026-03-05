@@ -764,7 +764,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#B8A05C',
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
@@ -832,13 +832,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(184, 160, 92, 0.3)',
   },
   libraryButtonText: {
-    color: '#FFFFFF',
+    color: '#B8A05C',
     fontSize: 14,
     fontWeight: '600',
   },
   description: {
     fontSize: 14,
-    color: '#CCCCCC',
+    color: '#D4BC78',
     lineHeight: 22,
     marginBottom: 16,
     textAlign: 'center',
@@ -852,7 +852,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#B8A05C',
     marginBottom: 12,
   },
   seasonSection: {
@@ -903,7 +903,7 @@ const styles = StyleSheet.create({
   },
   episodeTitle: {
     fontSize: 12,
-    color: '#FFFFFF',
+    color: '#B8A05C',
     fontWeight: '500',
   },
   streamsSection: {
@@ -953,7 +953,7 @@ const styles = StyleSheet.create({
   streamSource: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#B8A05C',
   },
   qualityBadge: {
     backgroundColor: 'rgba(184, 160, 92, 0.3)',

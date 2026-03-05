@@ -68,10 +68,14 @@ function StreamCard({
     if (name.includes('4K') || name.includes('2160')) quality = '4K';
     else if (name.includes('1080')) quality = '1080p';
     else if (name.includes('720')) quality = '720p';
+    else if (name.toUpperCase().includes('HD') && !name.toUpperCase().includes('SD')) quality = 'HD';
     
-    // Extract source
+    // Extract source - use provider code for USAATV, otherwise addon name
     let source = stream.addon || 'Unknown';
-    if (name.includes('TPB') || name.includes('🏴‍☠️')) source = 'TPB';
+    if (stream.provider) {
+      // USAATV streams have provider abbreviation (AX, CV, MJ, TP, etc.)
+      source = stream.provider;
+    } else if (name.includes('TPB') || name.includes('🏴‍☠️')) source = 'TPB';
     else if (name.includes('⚡') || name.includes('Torrentio')) source = 'Torrentio';
     else if (name.includes('EZTV')) source = 'EZTV';
     
@@ -357,17 +361,24 @@ export default function DetailsScreen() {
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
       
+      // Build fallback URLs - include other proxy streams + direct URLs
       const fallbacks = await buildFallbackUrls();
+      
+      // Also include direct URLs from USAATV streams as fallbacks
+      const directFallbacks = streams
+        .filter(s => s !== stream && (s.directUrl || (s.url && !s.url.startsWith('/api/proxy/'))))
+        .map(s => s.directUrl || s.url)
+        .filter(Boolean);
       
       router.push({
         pathname: '/player',
         params: { 
           directUrl: absoluteUrl,
           title: contentTitle,
-          isLive: 'false',
+          isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
           contentId: subtitleContentId,
-          fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks]),
+          fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks, ...directFallbacks]),
           backdrop: content?.background || '',
           poster: content?.poster || '',
           logo: content?.logo || '',
@@ -401,6 +412,23 @@ export default function DetailsScreen() {
         .filter(s => s.url && !s.infoHash && s.url !== stream.url)
         .map(s => s.url)
         .filter(Boolean);
+      
+      // For live TV streams, also include proxy URLs as additional fallbacks
+      if (type === 'tv') {
+        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
+        const authToken = await AsyncStorage.getItem('auth_token');
+        
+        // Add proxy URLs for all streams as fallbacks
+        const proxyFallbacks = streams
+          .filter(s => s.proxyUrl)
+          .map(s => {
+            const tokenParam = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
+            return `${backendUrl}${s!.proxyUrl}${tokenParam}`;
+          })
+          .filter(Boolean);
+        
+        allStreamUrls.push(...proxyFallbacks);
+      }
       
       router.push({
         pathname: '/player',
@@ -632,13 +660,15 @@ export default function DetailsScreen() {
           {(type === 'movie' || type === 'tv' || isEpisodePage) && (
             <View style={styles.streamsSection}>
               <Text style={styles.sectionTitle}>
-                {isLoadingStreams ? 'Finding Streams...' : `${streams.length} Streams Available`}
+                {isLoadingStreams ? (type === 'tv' ? 'Verifying Live Streams...' : 'Finding Streams...') : `${streams.length} Stream${streams.length !== 1 ? 's' : ''} Available`}
               </Text>
               
               {isLoadingStreams ? (
                 <View style={styles.streamLoading}>
                   <ActivityIndicator size="small" color="#B8A05C" />
-                  <Text style={styles.streamLoadingText}>Searching sources...</Text>
+                  <Text style={styles.streamLoadingText}>
+                    {type === 'tv' ? 'Checking available channels...' : 'Searching sources...'}
+                  </Text>
                 </View>
               ) : streams.length === 0 ? (
                 <View style={styles.noStreams}>
@@ -734,7 +764,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#B8A05C',
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
@@ -802,13 +832,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(184, 160, 92, 0.3)',
   },
   libraryButtonText: {
-    color: '#FFFFFF',
+    color: '#B8A05C',
     fontSize: 14,
     fontWeight: '600',
   },
   description: {
     fontSize: 14,
-    color: '#CCCCCC',
+    color: '#D4BC78',
     lineHeight: 22,
     marginBottom: 16,
     textAlign: 'center',
@@ -822,7 +852,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#B8A05C',
     marginBottom: 12,
   },
   seasonSection: {
@@ -873,7 +903,7 @@ const styles = StyleSheet.create({
   },
   episodeTitle: {
     fontSize: 12,
-    color: '#FFFFFF',
+    color: '#B8A05C',
     fontWeight: '500',
   },
   streamsSection: {
@@ -923,7 +953,7 @@ const styles = StyleSheet.create({
   streamSource: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#B8A05C',
   },
   qualityBadge: {
     backgroundColor: 'rgba(184, 160, 92, 0.3)',

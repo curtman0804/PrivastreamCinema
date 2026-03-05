@@ -224,7 +224,7 @@ export default function DiscoverScreen() {
           {/* Fixed Logo Header */}
           <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
             <Image
-              source={require('../../assets/images/logo.png')}
+              source={require('../../assets/images/logo_header.png')}
               style={[styles.logoImage, isTV && styles.logoImageTV]}
               contentFit="contain"
             />
@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
     height: 140,
   },
   welcomeText: {
-    color: colors.textPrimary,
+    color: colors.primary,
     fontSize: 22,
     fontWeight: '600',
     marginBottom: 8,
@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
   },
   welcomeSubtext: {
-    color: colors.textSecondary,
+    color: colors.primaryDark,
     fontSize: 16,
     marginBottom: 32,
   },
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   addonsButtonText: {
-    color: colors.textPrimary,
+    color: colors.primary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   continueEpisode: {
-    color: colors.textSecondary,
+    color: colors.primaryDark,
     fontSize: 11,
     textAlign: 'center',
     marginTop: 2,
