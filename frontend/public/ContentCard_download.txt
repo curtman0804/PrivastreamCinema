@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
+import React, { memo, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,7 +6,6 @@ import {
   useWindowDimensions,
   Text,
   Alert,
-  findNodeHandle,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,8 +23,6 @@ interface ContentCardProps {
   inLibrary?: boolean;
   onLibraryChange?: () => void;
   hasTVPreferredFocus?: boolean;
-  isFirstInRow?: boolean;
-  isLastInRow?: boolean;
 }
 
 export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 'medium') => {
@@ -53,32 +50,24 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   inLibrary = false,
   onLibraryChange,
   hasTVPreferredFocus = false,
-  isFirstInRow = false,
-  isLastInRow = false,
 }) => {
   const { width, height } = useWindowDimensions();
   const [isFocused, setIsFocused] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
-  const pressableRef = useRef<View>(null);
-  const [selfTag, setSelfTag] = useState<number | undefined>(undefined);
   
   const isTV = width > height || width > 800;
   const cardWidth = getCardWidth(width, isTV, size);
   const aspectRatio = posterShapes[posterShape];
   const cardHeight = cardWidth * aspectRatio;
 
-  // Get own node handle so we can point nextFocusRight/Left to ourselves
-  useEffect(() => {
-    if ((isFirstInRow || isLastInRow) && pressableRef.current) {
-      const tag = findNodeHandle(pressableRef.current);
-      if (tag) setSelfTag(tag);
-    }
-  }, [isFirstInRow, isLastInRow]);
-
   const handleFocus = useCallback(() => {
     setIsFocused(true);
     onCardFocus?.();
   }, [onCardFocus]);
+
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+  }, []);
 
   const handleLongPress = useCallback(async () => {
     const contentId = item.imdb_id || item.id;
@@ -123,16 +112,13 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   return (
     <Pressable
-      ref={pressableRef}
       onPress={onPress}
       onLongPress={handleLongPress}
       delayLongPress={500}
       onFocus={handleFocus}
-      onBlur={() => setIsFocused(false)}
+      onBlur={handleBlur}
       android_ripple={null}
       hasTVPreferredFocus={hasTVPreferredFocus}
-      nextFocusRight={isLastInRow && selfTag ? selfTag : undefined}
-      nextFocusLeft={isFirstInRow && selfTag ? selfTag : undefined}
       style={[styles.container, { width: cardWidth }]}
       accessible={true}
       accessibilityRole="button"
@@ -145,11 +131,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         { height: cardHeight },
         isFocused && styles.posterFocused,
       ]}>
-        {/* Image with scale transform on focus - Stremio style */}
-        <View style={[
-          styles.imageWrapper,
-          isFocused && styles.imageWrapperFocused,
-        ]}>
+        {/* Image */}
+        <View style={styles.imageWrapper}>
           <Image
             source={{ uri: item.poster }}
             style={styles.posterImage}
@@ -177,7 +160,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           </View>
         )}
         
-        {/* Progress bar (Stremio style - inside poster at bottom) */}
+        {/* Progress bar */}
         {showProgress !== undefined && showProgress > 0 && (
           <View style={styles.progressContainer}>
             <View style={styles.progressBackground} />
@@ -186,7 +169,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         )}
       </View>
       
-      {/* Title bar - OUTSIDE poster, no focus styling */}
+      {/* Title bar - OUTSIDE poster */}
       {showTitle && (item.name || item.title) && (
         <View style={styles.titleContainer}>
           <Text style={[styles.title, isTV && styles.titleTV]} numberOfLines={2}>
@@ -221,9 +204,6 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 4,
     overflow: 'hidden',
-  },
-  imageWrapperFocused: {
-    // No transform - it causes rendering issues on Fire Stick
   },
   posterImage: {
     width: '100%',

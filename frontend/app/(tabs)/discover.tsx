@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionHeaderTV: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 48,
   },
   sectionTitle: {
     color: colors.textPrimary,
@@ -573,7 +573,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   rowContentTV: {
-    paddingHorizontal: 24,
+    paddingLeft: 48,
+    paddingRight: 108,
   },
   // Continue watching item - Stremio style
   continueItem: {

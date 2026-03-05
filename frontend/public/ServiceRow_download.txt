@@ -5,12 +5,16 @@ import {
   StyleSheet,
   FlatList,
   useWindowDimensions,
-  ActivityIndicator,
 } from 'react-native';
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
 import apiClient from '../api/client';
 import { colors } from '../styles/colors';
+
+const ITEM_GAP = 16;
+const TV_PADDING_LEFT = 48;
+const TV_PADDING_RIGHT = 48;
+const MOBILE_PADDING = 16;
 
 interface ServiceRowProps {
   title: string;
@@ -34,6 +38,10 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
 
+  // Pre-compute card dimensions once — used for getItemLayout
+  const cardWidth = getCardWidth(width, isTV, 'medium');
+  const itemTotalWidth = cardWidth + ITEM_GAP;
+
   // Items state
   const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
 
@@ -49,10 +57,9 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   
   if (validItems.length === 0) return null;
 
-  // Fetch more with cooldown - prevents runaway loop
+  // Fetch more with cooldown
   const fetchMore = useCallback(async () => {
     const now = Date.now();
-    // Cooldown: at least 2 seconds between fetches
     if (isFetchingRef.current || !hasMoreRef.current) return;
     if (now - lastFetchTime.current < 2000) return;
 
@@ -83,22 +90,30 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // Card focus handler
+  // Card focus handler — no deps on item count
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
-    // Pre-fetch when within last 15 items
     if (index >= totalRef.current - 15 && hasMoreRef.current) {
       fetchMore();
     }
   }, [onSectionFocus, fetchMore]);
 
-  // End reached backup trigger
   const handleEndReached = useCallback(() => {
     if (!isFetchingRef.current && hasMoreRef.current) {
       fetchMore();
     }
   }, [fetchMore]);
 
+  // CRITICAL: getItemLayout lets FlatList instantly calculate scroll positions
+  // without measuring each item. This is the #1 fix for navigation speed.
+  const paddingLeft = isTV ? TV_PADDING_LEFT : MOBILE_PADDING;
+  const getItemLayout = useCallback((_data: any, index: number) => ({
+    length: itemTotalWidth,
+    offset: paddingLeft + (index * itemTotalWidth),
+    index,
+  }), [itemTotalWidth, paddingLeft]);
+
+  // renderItem — NO validItems.length in deps (was breaking memoization)
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <ContentCard
       item={item}
@@ -106,10 +121,8 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       onCardFocus={() => handleCardFocus(index)}
       showTitle={true}
       hasTVPreferredFocus={isFirstRow && index === 0}
-      isFirstInRow={index === 0}
-      isLastInRow={index === validItems.length - 1}
     />
-  ), [onItemPress, handleCardFocus, isFirstRow, validItems.length]);
+  ), [onItemPress, handleCardFocus, isFirstRow]);
 
   const keyExtractor = useCallback((item: ContentItem) => 
     item.id || item.imdb_id || `${item.name}`, []);
@@ -127,13 +140,18 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
         data={validItems}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
+        getItemLayout={getItemLayout}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isTV && styles.scrollContentTV,
+        ]}
         style={styles.flatListStyle}
-        initialNumToRender={8}
-        maxToRenderPerBatch={5}
-        windowSize={9}
-        removeClippedSubviews={false}
+        initialNumToRender={10}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={50}
+        windowSize={5}
+        removeClippedSubviews={true}
         onEndReached={handleEndReached}
         onEndReachedThreshold={3}
       />
@@ -156,7 +174,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   headerTV: {
-    paddingHorizontal: 24,
+    paddingHorizontal: TV_PADDING_LEFT,
     marginBottom: 20,
   },
   title: {
@@ -169,11 +187,13 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
   scrollContent: {
-    paddingHorizontal: 16,
+    paddingLeft: MOBILE_PADDING,
+    paddingRight: MOBILE_PADDING + 32,
     paddingVertical: 12,
   },
   scrollContentTV: {
-    paddingHorizontal: 24,
+    paddingLeft: TV_PADDING_LEFT,
+    paddingRight: TV_PADDING_RIGHT + 60,
     paddingVertical: 16,
   },
   flatListStyle: {
