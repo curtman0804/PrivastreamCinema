@@ -16,6 +16,10 @@ const TV_PADDING_LEFT = 48;
 const TV_PADDING_RIGHT = 48;
 const MOBILE_PADDING = 16;
 
+// The screen position (0-indexed) where the focused card should "lock" on TV.
+// 2 means the 3rd card slot from the left edge.
+const TV_FOCUS_ANCHOR = 2;
+
 interface ServiceRowProps {
   title: string;
   serviceName: string;
@@ -35,12 +39,13 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   onSectionFocus,
   isFirstRow = false,
 }) => {
-  const { width, height } = useWindowDimensions();
-  const isTV = width > height || width > 800;
+  const { width: screenWidth, height } = useWindowDimensions();
+  const isTV = screenWidth > height || screenWidth > 800;
 
-  // Pre-compute card dimensions once — used for getItemLayout
-  const cardWidth = getCardWidth(width, isTV, 'medium');
+  // Pre-compute card dimensions — used for getItemLayout + scroll math
+  const cardWidth = getCardWidth(screenWidth, isTV, 'medium');
   const itemTotalWidth = cardWidth + ITEM_GAP;
+  const paddingLeft = isTV ? TV_PADDING_LEFT : MOBILE_PADDING;
 
   // Items state
   const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
@@ -51,9 +56,16 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const isFetchingRef = useRef(false);
   const lastFetchTime = useRef(0);
   const totalRef = useRef(initialItems?.length || 0);
+  const flatListRef = useRef<FlatList>(null);
+
+  // Ref for item count — used in renderItem without being in its deps
+  const itemCountRef = useRef(initialItems?.length || 0);
 
   const validItems = useMemo(() => 
     (allItems || []).filter(Boolean), [allItems]);
+  
+  // Keep ref synced
+  itemCountRef.current = validItems.length;
   
   if (validItems.length === 0) return null;
 
@@ -90,13 +102,22 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // Card focus handler — no deps on item count
+  // Card focus handler — Netflix-style carousel scrolling
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
+
+    // Netflix-style: keep focused card at the anchor position
+    if (isTV && flatListRef.current) {
+      // Calculate the scroll offset that places card[index] at the anchor slot
+      const targetOffset = Math.max(0, (index - TV_FOCUS_ANCHOR) * itemTotalWidth);
+      flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
+    }
+
+    // Pre-fetch when within last 15 items
     if (index >= totalRef.current - 15 && hasMoreRef.current) {
       fetchMore();
     }
-  }, [onSectionFocus, fetchMore]);
+  }, [onSectionFocus, fetchMore, itemTotalWidth, isTV]);
 
   const handleEndReached = useCallback(() => {
     if (!isFetchingRef.current && hasMoreRef.current) {
@@ -104,16 +125,15 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [fetchMore]);
 
-  // CRITICAL: getItemLayout lets FlatList instantly calculate scroll positions
-  // without measuring each item. This is the #1 fix for navigation speed.
-  const paddingLeft = isTV ? TV_PADDING_LEFT : MOBILE_PADDING;
+  // CRITICAL: getItemLayout lets FlatList instantly calculate positions
   const getItemLayout = useCallback((_data: any, index: number) => ({
     length: itemTotalWidth,
     offset: paddingLeft + (index * itemTotalWidth),
     index,
   }), [itemTotalWidth, paddingLeft]);
 
-  // renderItem — NO validItems.length in deps (was breaking memoization)
+  // renderItem — uses itemCountRef (ref) instead of validItems.length (state)
+  // so the callback doesn't change when items are added.
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <ContentCard
       item={item}
@@ -121,6 +141,8 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       onCardFocus={() => handleCardFocus(index)}
       showTitle={true}
       hasTVPreferredFocus={isFirstRow && index === 0}
+      isFirstInRow={index === 0}
+      isLastInRow={index === itemCountRef.current - 1}
     />
   ), [onItemPress, handleCardFocus, isFirstRow]);
 
@@ -136,8 +158,10 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       </View>
       
       <FlatList
+        ref={flatListRef}
         horizontal
         data={validItems}
+        extraData={validItems.length}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         getItemLayout={getItemLayout}
