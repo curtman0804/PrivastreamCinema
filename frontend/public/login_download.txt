@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: colors.primary,
+    color: colors.textPrimary,
     fontSize: 16,
   },
   eyeButton: {
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   loginButtonText: {
-    color: colors.primary,
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '600',
   },

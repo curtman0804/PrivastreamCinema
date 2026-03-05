@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#B8A05C',
+    color: '#FFFFFF',
   },
   addButton: {
     width: 44,
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#B8A05C',
+    color: '#FFFFFF',
   },
   adminBadge: {
     backgroundColor: '#B8A05C',
@@ -370,11 +370,11 @@ const styles = StyleSheet.create({
   adminBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#B8A05C',
+    color: '#FFFFFF',
   },
   email: {
     fontSize: 13,
-    color: '#9A8540',
+    color: '#888888',
     marginTop: 2,
   },
   deleteButton: {
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
   emptyText: {
-    color: '#9A8540',
+    color: '#888888',
     fontSize: 16,
     marginTop: 12,
   },
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#B8A05C',
+    color: '#FFFFFF',
   },
   inputContainer: {
     marginBottom: 16,
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#9A8540',
+    color: '#888888',
     marginBottom: 8,
   },
   input: {
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: '#B8A05C',
+    color: '#FFFFFF',
   },
   adminToggle: {
     flexDirection: 'row',
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
   },
   adminToggleText: {
     fontSize: 15,
-    color: '#B8A05C',
+    color: '#FFFFFF',
   },
   submitButton: {
     backgroundColor: '#B8A05C',
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   submitButtonText: {
-    color: '#B8A05C',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
