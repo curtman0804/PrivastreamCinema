@@ -233,6 +233,18 @@ export default function DiscoverScreen() {
             />
           }
         >
+          {/* App Logo Header */}
+          <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
+            <Image
+              source={require('../../assets/images/logo.png')}
+              style={[styles.logoImage, isTV && styles.logoImageTV]}
+              contentFit="contain"
+            />
+            <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+              Privastream Cinema
+            </Text>
+          </View>
+
           {/* Continue Watching Section - Stremio style */}
           {continueWatching.length > 0 && (
             <View 
@@ -570,7 +582,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 48,
   },
   sectionTitle: {
-    color: colors.textPrimary,
+    color: colors.primary,
     fontSize: 18,
     fontWeight: '600',
   },
@@ -666,5 +678,37 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: 'rgba(184, 160, 92, 0.5)',
     transform: [{ scale: 1.2 }],
+  },
+  // Logo header
+  logoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  logoHeaderTV: {
+    paddingHorizontal: 48,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  logoImage: {
+    width: 36,
+    height: 36,
+  },
+  logoImageTV: {
+    width: 48,
+    height: 48,
+  },
+  logoText: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 10,
+    letterSpacing: 0.5,
+  },
+  logoTextTV: {
+    fontSize: 24,
+    marginLeft: 14,
   },
 });

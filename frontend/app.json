@@ -4,7 +4,7 @@
     "slug": "privastreamcinema",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo.png",
     "scheme": "privastreamcinema",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,8 +14,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "monochromeImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/logo.png",
+        "monochromeImage": "./assets/images/logo.png",
         "backgroundColor": "#0F0F0F"
       },
       "splash": {
@@ -37,7 +37,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo_splash.png",
+          "image": "./assets/images/logo.png",
           "imageWidth": 300,
           "resizeMode": "contain",
           "backgroundColor": "#0F0F0F",

@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     height: 38,
   },
   title: {
-    color: colors.textPrimary,
+    color: colors.primary,
     fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
