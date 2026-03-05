@@ -219,21 +219,9 @@ export default function DiscoverScreen() {
           <GoToAddonsButton router={router} isTV={isTV} />
         </View>
       ) : (
-        /* Content ScrollView - Stremio Board style */
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-              colors={[colors.primary]}
-            />
-          }
-        >
-          {/* App Logo Header */}
+        /* Content area with fixed header */
+        <View style={{ flex: 1 }}>
+          {/* Fixed Logo Header */}
           <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
             <Image
               source={require('../../assets/images/logo.png')}
@@ -245,6 +233,20 @@ export default function DiscoverScreen() {
             </Text>
           </View>
 
+          {/* Scrollable Content */}
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.scrollView}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
+              />
+            }
+          >
           {/* Continue Watching Section - Stremio style */}
           {continueWatching.length > 0 && (
             <View 
@@ -347,6 +349,7 @@ export default function DiscoverScreen() {
           })()}
           <View style={styles.bottomPadding} />
         </ScrollView>
+        </View>
       )}
     </SafeAreaView>
   );
@@ -651,7 +654,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textPrimary,
   },
   continueTitleText: {
-    color: colors.textPrimary,
+    color: colors.primary,
     fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
