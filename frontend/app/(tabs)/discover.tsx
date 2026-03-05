@@ -696,12 +696,12 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   logoImage: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
   },
   logoImageTV: {
-    width: 48,
-    height: 48,
+    width: 64,
+    height: 64,
   },
   logoText: {
     color: colors.primary,
