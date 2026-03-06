@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef, useMemo } from 'react';
+import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,9 @@ interface ServiceRowProps {
   onItemPress: (item: ContentItem) => void;
   onSectionFocus?: () => void;
   isFirstRow?: boolean;
+  rowKey?: string;
+  registerRowRef?: (key: string, ref: React.RefObject<FlatList>) => void;
+  onRowScroll?: (offset: number) => void;
 }
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
@@ -38,6 +41,9 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   onItemPress,
   onSectionFocus,
   isFirstRow = false,
+  rowKey,
+  registerRowRef,
+  onRowScroll,
 }) => {
   const { width: screenWidth, height } = useWindowDimensions();
   const isTV = screenWidth > height || screenWidth > 800;
@@ -66,6 +72,13 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   
   // Keep ref synced
   itemCountRef.current = validItems.length;
+
+  // Register this row's FlatList ref with parent for cross-row sync
+  useEffect(() => {
+    if (rowKey && registerRowRef) {
+      registerRowRef(rowKey, flatListRef);
+    }
+  }, [rowKey, registerRowRef]);
   
   if (validItems.length === 0) return null;
 
@@ -102,22 +115,23 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // Card focus handler — Netflix-style carousel scrolling
+  // Card focus handler — Netflix-style carousel scrolling + row sync
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
 
     // Netflix-style: keep focused card at the anchor position
     if (isTV && flatListRef.current) {
-      // Calculate the scroll offset that places card[index] at the anchor slot
       const targetOffset = Math.max(0, (index - TV_FOCUS_ANCHOR) * itemTotalWidth);
       flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
+      // Sync ALL other rows to same offset so up/down navigation stays parallel
+      onRowScroll?.(targetOffset);
     }
 
     // Pre-fetch when within last 15 items
     if (index >= totalRef.current - 15 && hasMoreRef.current) {
       fetchMore();
     }
-  }, [onSectionFocus, fetchMore, itemTotalWidth, isTV]);
+  }, [onSectionFocus, fetchMore, itemTotalWidth, isTV, onRowScroll]);
 
   const handleEndReached = useCallback(() => {
     if (!isFetchingRef.current && hasMoreRef.current) {
@@ -133,7 +147,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   }), [itemTotalWidth, paddingLeft]);
 
   // renderItem — uses itemCountRef (ref) instead of validItems.length (state)
-  // so the callback doesn't change when items are added.
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <ContentCard
       item={item}

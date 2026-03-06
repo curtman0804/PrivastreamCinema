@@ -99,6 +99,24 @@ export default function DiscoverScreen() {
     }
   }, []);
 
+  // Row sync: keep all rows scrolled to the same horizontal offset
+  const rowRefsMap = useRef<Map<string, React.RefObject<any>>>(new Map());
+
+  const registerRowRef = useCallback((key: string, ref: React.RefObject<any>) => {
+    rowRefsMap.current.set(key, ref);
+  }, []);
+
+  const handleRowScroll = useCallback((offset: number) => {
+    // Sync ALL rows to the same scroll offset (no animation — instant sync)
+    rowRefsMap.current.forEach((ref) => {
+      if (ref.current) {
+        try {
+          ref.current.scrollToOffset({ offset, animated: false });
+        } catch (_e) {}
+      }
+    });
+  }, []);
+
   // Item width for snap scrolling
   const itemWidth = POSTER_WIDTH + 16;
 
@@ -298,6 +316,9 @@ export default function DiscoverScreen() {
                     onItemPress={handleItemPress}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
                     isFirstRow={isFirst}
+                    rowKey={`${serviceName}-movies`}
+                    registerRowRef={registerRowRef}
+                    onRowScroll={handleRowScroll}
                   />
                 </View>
                 );
@@ -317,6 +338,9 @@ export default function DiscoverScreen() {
                     onItemPress={handleItemPress}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
                     isFirstRow={isFirst}
+                    rowKey={`${serviceName}-series`}
+                    registerRowRef={registerRowRef}
+                    onRowScroll={handleRowScroll}
                   />
                 </View>
                 );
@@ -339,6 +363,9 @@ export default function DiscoverScreen() {
                     onItemPress={handleItemPress}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
                     isFirstRow={isFirst}
+                    rowKey={`${serviceName}-channels`}
+                    registerRowRef={registerRowRef}
+                    onRowScroll={handleRowScroll}
                   />
                 </View>
                 );

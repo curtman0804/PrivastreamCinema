@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "PrivastreamCinema",
+    "name": "Privastream Cinema",
     "slug": "privastreamcinema",
     "version": "1.0.0",
     "orientation": "default",
