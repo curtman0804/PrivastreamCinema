@@ -16,6 +16,10 @@ const TV_PADDING_LEFT = 48;
 const TV_PADDING_RIGHT = 48;
 const MOBILE_PADDING = 16;
 
+// Anchor position: the row starts scrolling once focus reaches this card index.
+// 4 means: posters 1-5 free movement, poster 6 triggers first scroll.
+const TV_SCROLL_ANCHOR = 4;
+
 interface ServiceRowProps {
   title: string;
   serviceName: string;
@@ -50,6 +54,11 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const lastFetchTime = useRef(0);
   const totalRef = useRef(initialItems?.length || 0);
   const itemCountRef = useRef(initialItems?.length || 0);
+  const flatListRef = useRef<FlatList>(null);
+
+  // Track whether user is navigating horizontally within this row
+  const isNavigatingInRowRef = useRef(false);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const validItems = useMemo(() => 
     (allItems || []).filter(Boolean), [allItems]);
@@ -90,16 +99,41 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // Simple focus handler — NO programmatic scrolling.
-  // Let the FlatList's native scroll-to-focus handle everything.
+  // Card focus handler
   const handleCardFocus = useCallback((index: number) => {
+    // Cancel any pending blur timer — user is still in this row
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+
     onSectionFocus?.();
 
-    // Pre-fetch when within last 15 items
+    if (isTV && flatListRef.current && isNavigatingInRowRef.current) {
+      // HORIZONTAL NAVIGATION — apply smooth 1-card scroll
+      const targetOffset = Math.max(0, (index - TV_SCROLL_ANCHOR) * itemTotalWidth);
+      flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
+    }
+    // If isNavigatingInRowRef is false, user entered from another row via up/down
+    // → DON'T scroll, just let the selector land where Android TV placed it
+
+    // Mark this row as active for horizontal navigation
+    isNavigatingInRowRef.current = true;
+
+    // Pre-fetch when near end
     if (index >= totalRef.current - 15 && hasMoreRef.current) {
       fetchMore();
     }
-  }, [onSectionFocus, fetchMore]);
+  }, [onSectionFocus, fetchMore, itemTotalWidth, isTV]);
+
+  // Card blur handler — detect when user leaves this row
+  const handleCardBlur = useCallback(() => {
+    // Set timer: if no card in this row gets focus within 150ms,
+    // user has left this row (pressed up/down)
+    blurTimerRef.current = setTimeout(() => {
+      isNavigatingInRowRef.current = false;
+    }, 150);
+  }, []);
 
   const handleEndReached = useCallback(() => {
     if (!isFetchingRef.current && hasMoreRef.current) {
@@ -118,12 +152,13 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       item={item}
       onPress={() => onItemPress(item)}
       onCardFocus={() => handleCardFocus(index)}
+      onCardBlur={handleCardBlur}
       showTitle={true}
       hasTVPreferredFocus={isFirstRow && index === 0}
       isFirstInRow={index === 0}
       isLastInRow={index === itemCountRef.current - 1}
     />
-  ), [onItemPress, handleCardFocus, isFirstRow]);
+  ), [onItemPress, handleCardFocus, handleCardBlur, isFirstRow]);
 
   const keyExtractor = useCallback((item: ContentItem) => 
     item.id || item.imdb_id || `${item.name}`, []);
@@ -137,6 +172,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       </View>
       
       <FlatList
+        ref={flatListRef}
         horizontal
         data={validItems}
         extraData={validItems.length}
@@ -195,7 +231,7 @@ const styles = StyleSheet.create({
   },
   scrollContentTV: {
     paddingLeft: TV_PADDING_LEFT,
-    paddingRight: TV_PADDING_RIGHT + 60,
+    paddingRight: TV_PADDING_RIGHT + 80,
     paddingVertical: 4,
   },
   flatListStyle: {

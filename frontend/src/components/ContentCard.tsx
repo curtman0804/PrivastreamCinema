@@ -26,6 +26,7 @@ interface ContentCardProps {
   hasTVPreferredFocus?: boolean;
   isFirstInRow?: boolean;
   isLastInRow?: boolean;
+  onCardBlur?: () => void;
 }
 
 export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 'medium') => {
@@ -70,6 +71,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   hasTVPreferredFocus = false,
   isFirstInRow = false,
   isLastInRow = false,
+  onCardBlur,
 }) => {
   const { width, height } = useWindowDimensions();
   const [isFocused, setIsFocused] = useState(false);
@@ -113,7 +115,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
-  }, []);
+    onCardBlur?.();
+  }, [onCardBlur]);
 
   const handleLongPress = useCallback(async () => {
     const contentId = item.imdb_id || item.id;
