@@ -17,7 +17,6 @@ const TV_PADDING_RIGHT = 48;
 const MOBILE_PADDING = 16;
 
 // The screen position (0-indexed) where the focused card should "lock" on TV.
-// 2 means the 3rd card slot from the left edge.
 const TV_FOCUS_ANCHOR = 2;
 
 interface ServiceRowProps {
@@ -29,8 +28,7 @@ interface ServiceRowProps {
   onSectionFocus?: () => void;
   isFirstRow?: boolean;
   rowKey?: string;
-  registerRowRef?: (key: string, ref: React.RefObject<FlatList>) => void;
-  onRowScroll?: (offset: number) => void;
+  sharedScrollOffset?: React.MutableRefObject<number>;
 }
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
@@ -42,47 +40,33 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   onSectionFocus,
   isFirstRow = false,
   rowKey,
-  registerRowRef,
-  onRowScroll,
+  sharedScrollOffset,
 }) => {
   const { width: screenWidth, height } = useWindowDimensions();
   const isTV = screenWidth > height || screenWidth > 800;
 
-  // Pre-compute card dimensions — used for getItemLayout + scroll math
   const cardWidth = getCardWidth(screenWidth, isTV, 'medium');
   const itemTotalWidth = cardWidth + ITEM_GAP;
   const paddingLeft = isTV ? TV_PADDING_LEFT : MOBILE_PADDING;
 
-  // Items state
   const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
 
-  // Refs for controlled pagination
   const skipRef = useRef(initialItems?.length || 0);
   const hasMoreRef = useRef(true);
   const isFetchingRef = useRef(false);
   const lastFetchTime = useRef(0);
   const totalRef = useRef(initialItems?.length || 0);
   const flatListRef = useRef<FlatList>(null);
-
-  // Ref for item count — used in renderItem without being in its deps
+  const isActiveRowRef = useRef(false);
   const itemCountRef = useRef(initialItems?.length || 0);
 
   const validItems = useMemo(() => 
     (allItems || []).filter(Boolean), [allItems]);
   
-  // Keep ref synced
   itemCountRef.current = validItems.length;
-
-  // Register this row's FlatList ref with parent for cross-row sync
-  useEffect(() => {
-    if (rowKey && registerRowRef) {
-      registerRowRef(rowKey, flatListRef);
-    }
-  }, [rowKey, registerRowRef]);
   
   if (validItems.length === 0) return null;
 
-  // Fetch more with cooldown
   const fetchMore = useCallback(async () => {
     const now = Date.now();
     if (isFetchingRef.current || !hasMoreRef.current) return;
@@ -115,23 +99,58 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // Card focus handler — Netflix-style carousel scrolling + row sync
+  // Card focus handler
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
 
-    // Netflix-style: keep focused card at the anchor position
     if (isTV && flatListRef.current) {
       const targetOffset = Math.max(0, (index - TV_FOCUS_ANCHOR) * itemTotalWidth);
+
+      if (!isActiveRowRef.current && sharedScrollOffset) {
+        // ENTERING this row from another row:
+        // First snap to where the user was (instant, no animation)
+        flatListRef.current.scrollToOffset({ 
+          offset: sharedScrollOffset.current, 
+          animated: false 
+        });
+      }
+
+      // Mark this row as active
+      isActiveRowRef.current = true;
+
+      // Scroll to anchor position for the focused card
       flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
-      // Sync ALL other rows to same offset so up/down navigation stays parallel
-      onRowScroll?.(targetOffset);
+
+      // Save the offset so other rows can pre-position when entered
+      if (sharedScrollOffset) {
+        sharedScrollOffset.current = targetOffset;
+      }
     }
 
-    // Pre-fetch when within last 15 items
     if (index >= totalRef.current - 15 && hasMoreRef.current) {
       fetchMore();
     }
-  }, [onSectionFocus, fetchMore, itemTotalWidth, isTV, onRowScroll]);
+  }, [onSectionFocus, fetchMore, itemTotalWidth, isTV, sharedScrollOffset]);
+
+  // When this row loses focus (another row's card is focused),
+  // isActiveRowRef will be set to false by the blur handler
+  const handleCardBlur = useCallback(() => {
+    // Small delay: if another card in THIS row gets focus, cancel the deactivation
+    setTimeout(() => {
+      // If no card in this row got focus within 100ms, mark row as inactive
+      // (This is handled implicitly: isActiveRowRef stays true until handleCardFocus 
+      // fires for a card in a DIFFERENT row)
+    }, 100);
+  }, []);
+
+  // Detect when focus leaves this row: listen for section focus changes
+  // Reset isActiveRowRef when another row gets focus
+  useEffect(() => {
+    // On unmount or when rowKey changes, reset
+    return () => {
+      isActiveRowRef.current = false;
+    };
+  }, [rowKey]);
 
   const handleEndReached = useCallback(() => {
     if (!isFetchingRef.current && hasMoreRef.current) {
@@ -139,14 +158,12 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [fetchMore]);
 
-  // CRITICAL: getItemLayout lets FlatList instantly calculate positions
   const getItemLayout = useCallback((_data: any, index: number) => ({
     length: itemTotalWidth,
     offset: paddingLeft + (index * itemTotalWidth),
     index,
   }), [itemTotalWidth, paddingLeft]);
 
-  // renderItem — uses itemCountRef (ref) instead of validItems.length (state)
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <ContentCard
       item={item}

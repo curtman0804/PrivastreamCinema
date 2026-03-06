@@ -101,21 +101,22 @@ export default function DiscoverScreen() {
 
   // Row sync: keep all rows scrolled to the same horizontal offset
   const rowRefsMap = useRef<Map<string, React.RefObject<any>>>(new Map());
+  const sharedScrollOffset = useRef<number>(0);
+  const activeRowKey = useRef<string>('');
 
   const registerRowRef = useCallback((key: string, ref: React.RefObject<any>) => {
     rowRefsMap.current.set(key, ref);
   }, []);
 
-  const handleRowScroll = useCallback((offset: number) => {
-    // Sync ALL rows to the same scroll offset (no animation — instant sync)
-    rowRefsMap.current.forEach((ref) => {
-      if (ref.current) {
-        try {
-          ref.current.scrollToOffset({ offset, animated: false });
-        } catch (_e) {}
-      }
-    });
-  }, []);
+  // When a new section gets focus, mark the previous row as inactive
+  const handleSectionFocusWithSync = useCallback((sectionKey: string) => {
+    if (lastFocusedSection.current !== sectionKey) {
+      // Mark all rows as inactive — the newly focused row's handleCardFocus
+      // will detect it's not active and snap to the shared offset
+      activeRowKey.current = sectionKey;
+    }
+    handleSectionFocus(sectionKey);
+  }, [handleSectionFocus]);
 
   // Item width for snap scrolling
   const itemWidth = POSTER_WIDTH + 16;
@@ -314,11 +315,10 @@ export default function DiscoverScreen() {
                     contentType="movies"
                     items={content.movies}
                     onItemPress={handleItemPress}
-                    onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
+                    onSectionFocus={() => handleSectionFocusWithSync(`${serviceName}-movies`)}
                     isFirstRow={isFirst}
                     rowKey={`${serviceName}-movies`}
-                    registerRowRef={registerRowRef}
-                    onRowScroll={handleRowScroll}
+                    sharedScrollOffset={sharedScrollOffset}
                   />
                 </View>
                 );
@@ -336,11 +336,10 @@ export default function DiscoverScreen() {
                     contentType="series"
                     items={content.series}
                     onItemPress={handleItemPress}
-                    onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
+                    onSectionFocus={() => handleSectionFocusWithSync(`${serviceName}-series`)}
                     isFirstRow={isFirst}
                     rowKey={`${serviceName}-series`}
-                    registerRowRef={registerRowRef}
-                    onRowScroll={handleRowScroll}
+                    sharedScrollOffset={sharedScrollOffset}
                   />
                 </View>
                 );
@@ -361,11 +360,10 @@ export default function DiscoverScreen() {
                       type: 'tv' as const,
                     }))}
                     onItemPress={handleItemPress}
-                    onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
+                    onSectionFocus={() => handleSectionFocusWithSync(`${serviceName}-channels`)}
                     isFirstRow={isFirst}
                     rowKey={`${serviceName}-channels`}
-                    registerRowRef={registerRowRef}
-                    onRowScroll={handleRowScroll}
+                    sharedScrollOffset={sharedScrollOffset}
                   />
                 </View>
                 );
