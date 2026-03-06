@@ -100,23 +100,7 @@ export default function DiscoverScreen() {
   }, []);
 
   // Row sync: keep all rows scrolled to the same horizontal offset
-  const rowRefsMap = useRef<Map<string, React.RefObject<any>>>(new Map());
-  const sharedScrollOffset = useRef<number>(0);
-  const activeRowKey = useRef<string>('');
-
-  const registerRowRef = useCallback((key: string, ref: React.RefObject<any>) => {
-    rowRefsMap.current.set(key, ref);
-  }, []);
-
-  // When a new section gets focus, mark the previous row as inactive
-  const handleSectionFocusWithSync = useCallback((sectionKey: string) => {
-    if (lastFocusedSection.current !== sectionKey) {
-      // Mark all rows as inactive — the newly focused row's handleCardFocus
-      // will detect it's not active and snap to the shared offset
-      activeRowKey.current = sectionKey;
-    }
-    handleSectionFocus(sectionKey);
-  }, [handleSectionFocus]);
+  // (No longer needed — removed carousel anchor scrolling)
 
   // Item width for snap scrolling
   const itemWidth = POSTER_WIDTH + 16;
@@ -315,10 +299,8 @@ export default function DiscoverScreen() {
                     contentType="movies"
                     items={content.movies}
                     onItemPress={handleItemPress}
-                    onSectionFocus={() => handleSectionFocusWithSync(`${serviceName}-movies`)}
+                    onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
                     isFirstRow={isFirst}
-                    rowKey={`${serviceName}-movies`}
-                    sharedScrollOffset={sharedScrollOffset}
                   />
                 </View>
                 );
@@ -336,10 +318,8 @@ export default function DiscoverScreen() {
                     contentType="series"
                     items={content.series}
                     onItemPress={handleItemPress}
-                    onSectionFocus={() => handleSectionFocusWithSync(`${serviceName}-series`)}
+                    onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
                     isFirstRow={isFirst}
-                    rowKey={`${serviceName}-series`}
-                    sharedScrollOffset={sharedScrollOffset}
                   />
                 </View>
                 );
@@ -360,10 +340,8 @@ export default function DiscoverScreen() {
                       type: 'tv' as const,
                     }))}
                     onItemPress={handleItemPress}
-                    onSectionFocus={() => handleSectionFocusWithSync(`${serviceName}-channels`)}
+                    onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
                     isFirstRow={isFirst}
-                    rowKey={`${serviceName}-channels`}
-                    sharedScrollOffset={sharedScrollOffset}
                   />
                 </View>
                 );

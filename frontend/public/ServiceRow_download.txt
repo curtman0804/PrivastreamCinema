@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import React, { memo, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,9 +16,6 @@ const TV_PADDING_LEFT = 48;
 const TV_PADDING_RIGHT = 48;
 const MOBILE_PADDING = 16;
 
-// The screen position (0-indexed) where the focused card should "lock" on TV.
-const TV_FOCUS_ANCHOR = 2;
-
 interface ServiceRowProps {
   title: string;
   serviceName: string;
@@ -27,8 +24,6 @@ interface ServiceRowProps {
   onItemPress: (item: ContentItem) => void;
   onSectionFocus?: () => void;
   isFirstRow?: boolean;
-  rowKey?: string;
-  sharedScrollOffset?: React.MutableRefObject<number>;
 }
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
@@ -39,8 +34,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   onItemPress,
   onSectionFocus,
   isFirstRow = false,
-  rowKey,
-  sharedScrollOffset,
 }) => {
   const { width: screenWidth, height } = useWindowDimensions();
   const isTV = screenWidth > height || screenWidth > 800;
@@ -56,8 +49,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const isFetchingRef = useRef(false);
   const lastFetchTime = useRef(0);
   const totalRef = useRef(initialItems?.length || 0);
-  const flatListRef = useRef<FlatList>(null);
-  const isActiveRowRef = useRef(false);
   const itemCountRef = useRef(initialItems?.length || 0);
 
   const validItems = useMemo(() => 
@@ -99,58 +90,16 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [serviceName, contentType]);
 
-  // Card focus handler
+  // Simple focus handler — NO programmatic scrolling.
+  // Let the FlatList's native scroll-to-focus handle everything.
   const handleCardFocus = useCallback((index: number) => {
     onSectionFocus?.();
 
-    if (isTV && flatListRef.current) {
-      const targetOffset = Math.max(0, (index - TV_FOCUS_ANCHOR) * itemTotalWidth);
-
-      if (!isActiveRowRef.current && sharedScrollOffset) {
-        // ENTERING this row from another row:
-        // First snap to where the user was (instant, no animation)
-        flatListRef.current.scrollToOffset({ 
-          offset: sharedScrollOffset.current, 
-          animated: false 
-        });
-      }
-
-      // Mark this row as active
-      isActiveRowRef.current = true;
-
-      // Scroll to anchor position for the focused card
-      flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
-
-      // Save the offset so other rows can pre-position when entered
-      if (sharedScrollOffset) {
-        sharedScrollOffset.current = targetOffset;
-      }
-    }
-
+    // Pre-fetch when within last 15 items
     if (index >= totalRef.current - 15 && hasMoreRef.current) {
       fetchMore();
     }
-  }, [onSectionFocus, fetchMore, itemTotalWidth, isTV, sharedScrollOffset]);
-
-  // When this row loses focus (another row's card is focused),
-  // isActiveRowRef will be set to false by the blur handler
-  const handleCardBlur = useCallback(() => {
-    // Small delay: if another card in THIS row gets focus, cancel the deactivation
-    setTimeout(() => {
-      // If no card in this row got focus within 100ms, mark row as inactive
-      // (This is handled implicitly: isActiveRowRef stays true until handleCardFocus 
-      // fires for a card in a DIFFERENT row)
-    }, 100);
-  }, []);
-
-  // Detect when focus leaves this row: listen for section focus changes
-  // Reset isActiveRowRef when another row gets focus
-  useEffect(() => {
-    // On unmount or when rowKey changes, reset
-    return () => {
-      isActiveRowRef.current = false;
-    };
-  }, [rowKey]);
+  }, [onSectionFocus, fetchMore]);
 
   const handleEndReached = useCallback(() => {
     if (!isFetchingRef.current && hasMoreRef.current) {
@@ -188,7 +137,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
       </View>
       
       <FlatList
-        ref={flatListRef}
         horizontal
         data={validItems}
         extraData={validItems.length}
