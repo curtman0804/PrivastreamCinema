@@ -8,7 +8,6 @@ import {
   RefreshControl,
   Pressable,
   useWindowDimensions,
-  Alert,
   findNodeHandle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,101 +21,66 @@ import { getCardWidth } from '../../src/components/ContentCard';
 
 type FilterType = 'movies' | 'series' | 'tv';
 
-// Helper to get native tag
-const getNativeTag = (ref: any): number | null => {
-  if (!ref) return null;
-  try {
-    const tag = findNodeHandle(ref);
-    if (tag && tag > 0) return tag;
-  } catch (_e) {}
-  if (ref._nativeTag && ref._nativeTag > 0) return ref._nativeTag;
-  if (ref.__nativeTag && ref.__nativeTag > 0) return ref.__nativeTag;
-  return null;
-};
-
-// Library card with X button (same pattern as Continue Watching)
-const LibraryCard = React.memo(({
+// Library card — EXACT same X-button pattern as ContinueWatchingCard in discover.tsx
+function LibraryCard({
   item,
-  onPress,
-  onRemove,
   cardWidth,
   cardHeight,
   isTV,
-  isFirstInRow,
-  isLastInRow,
+  onPress,
+  onRemove,
   onCardBlur,
 }: {
   item: ContentItem;
-  onPress: () => void;
-  onRemove: () => void;
   cardWidth: number;
   cardHeight: number;
   isTV: boolean;
-  isFirstInRow?: boolean;
-  isLastInRow?: boolean;
+  onPress: () => void;
+  onRemove: () => void;
   onCardBlur?: () => void;
-}) => {
+}) {
   const [isFocused, setIsFocused] = useState(false);
   const [xFocused, setXFocused] = useState(false);
+
+  // Refs for explicit focus navigation between poster and X button
   const posterRef = useRef<View>(null);
   const xButtonRef = useRef<View>(null);
-  const [posterTag, setPosterTag] = useState<number>(0);
-  const [xButtonTag, setXButtonTag] = useState<number>(0);
-  const selfTagRef = useRef<number>(0);
+  const [posterTag, setPosterTag] = useState<number | undefined>(undefined);
+  const [xButtonTag, setXButtonTag] = useState<number | undefined>(undefined);
 
-  const xButtonSize = isTV ? 28 : 22;
-  const xRowHeight = xButtonSize + 8;
-
-  const handlePosterLayout = useCallback(() => {
-    if (posterRef.current) {
-      const tag = getNativeTag(posterRef.current);
-      if (tag) {
-        setPosterTag(tag);
-        selfTagRef.current = tag;
-      }
-    }
+  useEffect(() => {
+    // Get native node handles after mount for nextFocusUp/Down wiring
+    const pTag = posterRef.current ? findNodeHandle(posterRef.current) : null;
+    const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
+    if (pTag) setPosterTag(pTag);
+    if (xTag) setXButtonTag(xTag);
   }, []);
 
-  const handleXLayout = useCallback(() => {
-    if (xButtonRef.current) {
-      const tag = getNativeTag(xButtonRef.current);
-      if (tag) setXButtonTag(tag);
-    }
-  }, []);
-
-  const handlePosterFocus = useCallback(() => {
+  const handleFocus = () => {
     setIsFocused(true);
-  }, []);
+  };
 
-  const handlePosterBlur = useCallback(() => {
-    setIsFocused(false);
-    onCardBlur?.();
-  }, [onCardBlur]);
+  const handleXFocus = () => {
+    setXFocused(true);
+  };
 
-  // Build focus trapping props for first/last
-  const focusTrapProps: any = {};
-  if (isLastInRow && selfTagRef.current > 0) {
-    focusTrapProps.nextFocusRight = selfTagRef.current;
-  }
-  if (isFirstInRow && selfTagRef.current > 0) {
-    focusTrapProps.nextFocusLeft = selfTagRef.current;
-  }
+  const xButtonSize = isTV ? 30 : 24;
+  const xRowHeight = xButtonSize + 8;
 
   return (
     <View style={{ width: cardWidth, marginRight: 16 }}>
-      {/* X button row - ABOVE poster, right-aligned */}
+      {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
       <View style={[styles.xButtonRow, { paddingTop: 8 }]}>
         <Pressable
           ref={xButtonRef}
           onPress={onRemove}
-          onFocus={() => setXFocused(true)}
+          onFocus={handleXFocus}
           onBlur={() => setXFocused(false)}
-          onLayout={handleXLayout}
           accessible={true}
           accessibilityRole="button"
-          accessibilityLabel={`Remove ${item.name || item.title}`}
+          accessibilityLabel={`Remove ${item.name || item.title} from Library`}
           android_ripple={null}
-          nextFocusDown={posterTag || undefined}
+          nextFocusDown={posterTag}
           style={[
             styles.removeButtonOverlay,
             { width: xButtonSize, height: xButtonSize, borderRadius: xButtonSize / 2 },
@@ -131,16 +95,14 @@ const LibraryCard = React.memo(({
         </Pressable>
       </View>
 
-      {/* Poster - pulled up to overlap X button */}
+      {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
         ref={posterRef}
         onPress={onPress}
-        onFocus={handlePosterFocus}
-        onBlur={handlePosterBlur}
-        onLayout={handlePosterLayout}
+        onFocus={handleFocus}
+        onBlur={() => { setIsFocused(false); onCardBlur?.(); }}
         android_ripple={null}
-        nextFocusUp={xButtonTag || undefined}
-        {...focusTrapProps}
+        nextFocusUp={xButtonTag}
         style={[
           styles.posterContainer,
           { height: cardHeight, marginTop: -xRowHeight },
@@ -167,7 +129,7 @@ const LibraryCard = React.memo(({
         )}
       </Pressable>
 
-      {/* Title */}
+      {/* Title below poster */}
       <View style={styles.titleContainer}>
         <Text style={[styles.cardTitle, isTV && styles.cardTitleTV]} numberOfLines={2}>
           {item.name || item.title}
@@ -175,7 +137,7 @@ const LibraryCard = React.memo(({
       </View>
     </View>
   );
-});
+}
 
 export default function LibraryScreen() {
   const router = useRouter();
@@ -211,29 +173,14 @@ export default function LibraryScreen() {
     router.push(`/details/${item.type}/${id}`);
   }, [router]);
 
-  const handleRemoveItem = useCallback((item: ContentItem) => {
+  const handleRemoveItem = useCallback(async (item: ContentItem) => {
     const contentId = item.imdb_id || item.id;
     const contentType = item.type || 'movie';
-    const contentName = item.name || item.title || 'this item';
-
-    Alert.alert(
-      'Remove from Library?',
-      `Remove "${contentName}" from your library?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await removeFromLibrary(contentType, contentId);
-            } catch (error) {
-              console.log('Remove error:', error);
-            }
-          },
-        },
-      ]
-    );
+    try {
+      await removeFromLibrary(contentType, contentId);
+    } catch (error) {
+      console.log('Remove error:', error);
+    }
   }, [removeFromLibrary]);
 
   const getFilteredContent = (): ContentItem[] => {
@@ -275,32 +222,31 @@ export default function LibraryScreen() {
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <LibraryCard
       item={item}
-      onPress={() => handleItemPress(item)}
+      onPress={() => { handleCardFocus(index); handleItemPress(item); }}
       onRemove={() => handleRemoveItem(item)}
       cardWidth={cardWidth}
       cardHeight={cardHeight}
       isTV={isTV}
-      isFirstInRow={index === 0}
-      isLastInRow={index === filteredContent.length - 1}
       onCardBlur={handleCardBlur}
     />
-  ), [handleItemPress, handleRemoveItem, cardWidth, cardHeight, isTV, filteredContent.length, handleCardBlur]);
+  ), [handleItemPress, handleRemoveItem, cardWidth, cardHeight, isTV, handleCardBlur, handleCardFocus]);
 
   const renderFilterButton = (type: FilterType, label: string) => {
     const isActive = filter === type;
     return (
       <Pressable
         onPress={() => setFilter(type)}
-        onFocus={() => {}}
         style={({ focused }) => [
           styles.filterButton,
           isActive && styles.filterButtonActive,
           focused && styles.filterButtonFocused,
         ]}
       >
-        <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
-          {label}
-        </Text>
+        {({ focused }) => (
+          <Text style={[styles.filterText, isActive && styles.filterTextActive, focused && styles.filterTextFocused]}>
+            {label}
+          </Text>
+        )}
       </Pressable>
     );
   };
@@ -408,6 +354,8 @@ const styles = StyleSheet.create({
   },
   filterButtonFocused: {
     borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
+    transform: [{ scale: 1.1 }],
   },
   filterText: {
     color: '#888888',
@@ -415,6 +363,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   filterTextActive: {
+    color: '#FFFFFF',
+  },
+  filterTextFocused: {
     color: '#FFFFFF',
   },
   loadingContainer: {
@@ -450,12 +401,11 @@ const styles = StyleSheet.create({
     paddingLeft: 48,
     paddingRight: 128,
   },
-  // X button row
+  // X button row - sits above poster, right-aligned (matches discover.tsx)
   xButtonRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     zIndex: 10,
+    paddingRight: 8,
   },
   removeButtonOverlay: {
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
