@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,10 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
-  TouchableOpacity,
   Pressable,
   useWindowDimensions,
   Alert,
+  findNodeHandle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,8 +18,164 @@ import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { ContentItem } from '../../src/api/client';
 import { colors } from '../../src/styles/colors';
+import { getCardWidth } from '../../src/components/ContentCard';
 
 type FilterType = 'movies' | 'series' | 'tv';
+
+// Helper to get native tag
+const getNativeTag = (ref: any): number | null => {
+  if (!ref) return null;
+  try {
+    const tag = findNodeHandle(ref);
+    if (tag && tag > 0) return tag;
+  } catch (_e) {}
+  if (ref._nativeTag && ref._nativeTag > 0) return ref._nativeTag;
+  if (ref.__nativeTag && ref.__nativeTag > 0) return ref.__nativeTag;
+  return null;
+};
+
+// Library card with X button (same pattern as Continue Watching)
+const LibraryCard = React.memo(({
+  item,
+  onPress,
+  onRemove,
+  cardWidth,
+  cardHeight,
+  isTV,
+  isFirstInRow,
+  isLastInRow,
+  onCardBlur,
+}: {
+  item: ContentItem;
+  onPress: () => void;
+  onRemove: () => void;
+  cardWidth: number;
+  cardHeight: number;
+  isTV: boolean;
+  isFirstInRow?: boolean;
+  isLastInRow?: boolean;
+  onCardBlur?: () => void;
+}) => {
+  const [isFocused, setIsFocused] = useState(false);
+  const [xFocused, setXFocused] = useState(false);
+  const posterRef = useRef<View>(null);
+  const xButtonRef = useRef<View>(null);
+  const [posterTag, setPosterTag] = useState<number>(0);
+  const [xButtonTag, setXButtonTag] = useState<number>(0);
+  const selfTagRef = useRef<number>(0);
+
+  const xButtonSize = isTV ? 28 : 22;
+  const xRowHeight = xButtonSize + 8;
+
+  const handlePosterLayout = useCallback(() => {
+    if (posterRef.current) {
+      const tag = getNativeTag(posterRef.current);
+      if (tag) {
+        setPosterTag(tag);
+        selfTagRef.current = tag;
+      }
+    }
+  }, []);
+
+  const handleXLayout = useCallback(() => {
+    if (xButtonRef.current) {
+      const tag = getNativeTag(xButtonRef.current);
+      if (tag) setXButtonTag(tag);
+    }
+  }, []);
+
+  const handlePosterFocus = useCallback(() => {
+    setIsFocused(true);
+  }, []);
+
+  const handlePosterBlur = useCallback(() => {
+    setIsFocused(false);
+    onCardBlur?.();
+  }, [onCardBlur]);
+
+  // Build focus trapping props for first/last
+  const focusTrapProps: any = {};
+  if (isLastInRow && selfTagRef.current > 0) {
+    focusTrapProps.nextFocusRight = selfTagRef.current;
+  }
+  if (isFirstInRow && selfTagRef.current > 0) {
+    focusTrapProps.nextFocusLeft = selfTagRef.current;
+  }
+
+  return (
+    <View style={{ width: cardWidth, marginRight: 16 }}>
+      {/* X button row - ABOVE poster, right-aligned */}
+      <View style={[styles.xButtonRow, { paddingTop: 8 }]}>
+        <Pressable
+          ref={xButtonRef}
+          onPress={onRemove}
+          onFocus={() => setXFocused(true)}
+          onBlur={() => setXFocused(false)}
+          onLayout={handleXLayout}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${item.name || item.title}`}
+          android_ripple={null}
+          nextFocusDown={posterTag || undefined}
+          style={[
+            styles.removeButtonOverlay,
+            { width: xButtonSize, height: xButtonSize, borderRadius: xButtonSize / 2 },
+            xFocused && styles.removeButtonOverlayFocused,
+          ]}
+        >
+          <Ionicons
+            name="close"
+            size={isTV ? 16 : 12}
+            color={xFocused ? '#fff' : 'rgba(255,255,255,0.9)'}
+          />
+        </Pressable>
+      </View>
+
+      {/* Poster - pulled up to overlap X button */}
+      <Pressable
+        ref={posterRef}
+        onPress={onPress}
+        onFocus={handlePosterFocus}
+        onBlur={handlePosterBlur}
+        onLayout={handlePosterLayout}
+        android_ripple={null}
+        nextFocusUp={xButtonTag || undefined}
+        {...focusTrapProps}
+        style={[
+          styles.posterContainer,
+          { height: cardHeight, marginTop: -xRowHeight },
+          isFocused && styles.posterFocused,
+        ]}
+      >
+        <View style={styles.imageWrapper}>
+          <Image
+            source={{ uri: item.poster }}
+            style={styles.posterImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
+        </View>
+
+        {!item.poster && (
+          <View style={styles.placeholder}>
+            <Ionicons
+              name={item.type === 'series' ? 'tv-outline' : 'film-outline'}
+              size={cardWidth * 0.4}
+              color={colors.primaryDark}
+            />
+          </View>
+        )}
+      </Pressable>
+
+      {/* Title */}
+      <View style={styles.titleContainer}>
+        <Text style={[styles.cardTitle, isTV && styles.cardTitleTV]} numberOfLines={2}>
+          {item.name || item.title}
+        </Text>
+      </View>
+    </View>
+  );
+});
 
 export default function LibraryScreen() {
   const router = useRouter();
@@ -29,13 +185,16 @@ export default function LibraryScreen() {
   const [filter, setFilter] = useState<FilterType>('movies');
   const [refreshing, setRefreshing] = useState(false);
 
-  // Calculate card dimensions
-  const numColumns = isTV ? 6 : 3;
-  const horizontalPadding = isTV ? 48 : 16;
-  const cardGap = isTV ? 16 : 12;
-  const totalGaps = (numColumns - 1) * cardGap;
-  const cardWidth = (width - (horizontalPadding * 2) - totalGaps) / numColumns;
+  const cardWidth = getCardWidth(width, isTV, 'medium');
   const cardHeight = cardWidth * 1.5;
+  const itemTotalWidth = cardWidth + 16;
+  const paddingLeft = isTV ? 48 : 16;
+
+  // Track horizontal nav for scroll behavior
+  const isNavigatingRef = useRef(false);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flatListRef = useRef<FlatList>(null);
+  const TV_SCROLL_ANCHOR = 4;
 
   useEffect(() => {
     fetchLibrary();
@@ -43,16 +202,16 @@ export default function LibraryScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchLibrary();
+    await fetchLibrary(true);
     setRefreshing(false);
   }, []);
 
-  const handleItemPress = (item: ContentItem) => {
+  const handleItemPress = useCallback((item: ContentItem) => {
     const id = item.imdb_id || item.id;
     router.push(`/details/${item.type}/${id}`);
-  };
+  }, [router]);
 
-  const handleRemoveItem = useCallback(async (item: ContentItem) => {
+  const handleRemoveItem = useCallback((item: ContentItem) => {
     const contentId = item.imdb_id || item.id;
     const contentType = item.type || 'movie';
     const contentName = item.name || item.title || 'this item';
@@ -70,7 +229,6 @@ export default function LibraryScreen() {
               await removeFromLibrary(contentType, contentId);
             } catch (error) {
               console.log('Remove error:', error);
-              Alert.alert('Error', 'Failed to remove from library');
             }
           },
         },
@@ -81,82 +239,71 @@ export default function LibraryScreen() {
   const getFilteredContent = (): ContentItem[] => {
     if (!library) return [];
     switch (filter) {
-      case 'movies':
-        return library.movies || [];
-      case 'series':
-        return library.series || [];
-      case 'tv':
-        return library.channels || [];
-      default:
-        return library.movies || [];
+      case 'movies': return library.movies || [];
+      case 'series': return library.series || [];
+      case 'tv': return library.channels || [];
+      default: return library.movies || [];
     }
   };
 
   const filteredContent = getFilteredContent();
 
-  const renderFilterButton = (type: FilterType, label: string) => (
-    <TouchableOpacity
-      style={[styles.filterButton, filter === type && styles.filterButtonActive]}
-      onPress={() => setFilter(type)}
-    >
-      <Text style={[styles.filterText, filter === type && styles.filterTextActive]}>
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
+  const handleCardFocus = useCallback((index: number) => {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    if (isTV && flatListRef.current && isNavigatingRef.current) {
+      const targetOffset = Math.max(0, (index - TV_SCROLL_ANCHOR) * itemTotalWidth);
+      flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
+    }
+    isNavigatingRef.current = true;
+  }, [itemTotalWidth, isTV]);
 
-  const renderItem = ({ item }: { item: ContentItem }) => (
-    <View style={[styles.cardWrapper, { width: cardWidth, marginRight: cardGap }]}>
+  const handleCardBlur = useCallback(() => {
+    blurTimerRef.current = setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 150);
+  }, []);
+
+  const getItemLayout = useCallback((_data: any, index: number) => ({
+    length: itemTotalWidth,
+    offset: paddingLeft + (index * itemTotalWidth),
+    index,
+  }), [itemTotalWidth, paddingLeft]);
+
+  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
+    <LibraryCard
+      item={item}
+      onPress={() => handleItemPress(item)}
+      onRemove={() => handleRemoveItem(item)}
+      cardWidth={cardWidth}
+      cardHeight={cardHeight}
+      isTV={isTV}
+      isFirstInRow={index === 0}
+      isLastInRow={index === filteredContent.length - 1}
+      onCardBlur={handleCardBlur}
+    />
+  ), [handleItemPress, handleRemoveItem, cardWidth, cardHeight, isTV, filteredContent.length, handleCardBlur]);
+
+  const renderFilterButton = (type: FilterType, label: string) => {
+    const isActive = filter === type;
+    return (
       <Pressable
-        onPress={() => handleItemPress(item)}
+        onPress={() => setFilter(type)}
+        onFocus={() => {}}
         style={({ focused }) => [
-          styles.posterContainer,
-          { height: cardHeight },
-          focused && styles.posterFocused,
+          styles.filterButton,
+          isActive && styles.filterButtonActive,
+          focused && styles.filterButtonFocused,
         ]}
       >
-        <View style={styles.imageWrapper}>
-          <Image
-            source={{ uri: item.poster }}
-            style={styles.posterImage}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-          />
-        </View>
-
-        {/* Placeholder when no poster */}
-        {!item.poster && (
-          <View style={styles.placeholder}>
-            <Ionicons
-              name={item.type === 'series' ? 'tv-outline' : 'film-outline'}
-              size={cardWidth * 0.4}
-              color={colors.primaryDark}
-            />
-          </View>
-        )}
-
-        {/* X button to remove */}
-        <Pressable
-          onPress={() => handleRemoveItem(item)}
-          style={({ focused }) => [
-            styles.removeButton,
-            focused && styles.removeButtonFocused,
-          ]}
-          accessible={true}
-          accessibilityLabel={`Remove ${item.name || item.title}`}
-        >
-          <Ionicons name="close" size={isTV ? 18 : 14} color="#FFFFFF" />
-        </Pressable>
-      </Pressable>
-
-      {/* Title */}
-      <View style={styles.titleContainer}>
-        <Text style={[styles.cardTitle, isTV && styles.cardTitleTV]} numberOfLines={2}>
-          {item.name || item.title}
+        <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+          {label}
         </Text>
-      </View>
-    </View>
-  );
+      </Pressable>
+    );
+  };
 
   if (isLoadingLibrary && !library) {
     return (
@@ -184,17 +331,22 @@ export default function LibraryScreen() {
         <View style={styles.emptyContainer}>
           <Ionicons name="bookmark-outline" size={64} color={colors.primaryDark} />
           <Text style={styles.emptyText}>Your library is empty</Text>
-          <Text style={styles.emptySubtext}>Save movies and shows to watch later</Text>
+          <Text style={styles.emptySubtext}>Long press any poster to add to library</Text>
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
+          horizontal
           data={filteredContent}
           renderItem={renderItem}
-          keyExtractor={(item) => item.imdb_id || item.id}
-          numColumns={numColumns}
-          key={numColumns}
+          keyExtractor={(item) => item.imdb_id || item.id || item.name || ''}
+          getItemLayout={getItemLayout}
+          showsHorizontalScrollIndicator={false}
           contentContainerStyle={[styles.listContent, isTV && styles.listContentTV]}
-          showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          removeClippedSubviews={true}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -248,9 +400,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: '#1a1a1a',
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   filterButtonActive: {
     backgroundColor: colors.primary,
+  },
+  filterButtonFocused: {
+    borderColor: colors.primary,
   },
   filterText: {
     color: '#888888',
@@ -285,15 +442,34 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingLeft: 16,
+    paddingRight: 48,
+    paddingTop: 8,
   },
   listContentTV: {
-    paddingHorizontal: 48,
+    paddingLeft: 48,
+    paddingRight: 128,
   },
-  cardWrapper: {
-    marginBottom: 16,
+  // X button row
+  xButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    zIndex: 10,
   },
+  removeButtonOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  removeButtonOverlayFocused: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.5)',
+    transform: [{ scale: 1.2 }],
+  },
+  // Poster
   posterContainer: {
     borderRadius: 6,
     overflow: 'visible',
@@ -320,23 +496,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#1a1a1a',
-  },
-  removeButton: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  removeButtonFocused: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(184, 160, 92, 0.5)',
   },
   titleContainer: {
     paddingTop: 6,
