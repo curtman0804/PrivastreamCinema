@@ -70,8 +70,8 @@ class MainActivity : ReactActivity() {
       super.invokeDefaultOnBackPressed()
   }
 
-  override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
-    if (event != null && event.action == KeyEvent.ACTION_DOWN) {
+  override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+    if (event.action == KeyEvent.ACTION_DOWN) {
       val eventName = when (event.keyCode) {
         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "playPause"
         KeyEvent.KEYCODE_MEDIA_PLAY -> "play"
