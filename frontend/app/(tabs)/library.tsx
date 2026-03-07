@@ -231,22 +231,23 @@ export default function LibraryScreen() {
     />
   ), [handleItemPress, handleRemoveItem, cardWidth, cardHeight, isTV, handleCardBlur, handleCardFocus]);
 
-  const renderFilterButton = (type: FilterType, label: string) => {
+  const FilterButton = ({ type, label }: { type: FilterType; label: string }) => {
     const isActive = filter === type;
+    const [btnFocused, setBtnFocused] = useState(false);
     return (
       <Pressable
         onPress={() => setFilter(type)}
-        style={({ focused }) => [
+        onFocus={() => setBtnFocused(true)}
+        onBlur={() => setBtnFocused(false)}
+        style={[
           styles.filterButton,
           isActive && styles.filterButtonActive,
-          focused && styles.filterButtonFocused,
+          btnFocused && styles.filterButtonFocused,
         ]}
       >
-        {({ focused }) => (
-          <Text style={[styles.filterText, isActive && styles.filterTextActive, focused && styles.filterTextFocused]}>
-            {label}
-          </Text>
-        )}
+        <Text style={[styles.filterText, isActive && styles.filterTextActive, btnFocused && styles.filterTextFocused]}>
+          {label}
+        </Text>
       </Pressable>
     );
   };
@@ -268,16 +269,15 @@ export default function LibraryScreen() {
       </View>
 
       <View style={[styles.filterContainer, isTV && styles.filterContainerTV]}>
-        {renderFilterButton('movies', 'Movies')}
-        {renderFilterButton('series', 'Series')}
-        {renderFilterButton('tv', 'TV Channels')}
+        <FilterButton type="movies" label="Movies" />
+        <FilterButton type="series" label="Series" />
+        <FilterButton type="tv" label="TV Channels" />
       </View>
 
       {filteredContent.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="bookmark-outline" size={64} color={colors.primaryDark} />
           <Text style={styles.emptyText}>Your library is empty</Text>
-          <Text style={styles.emptySubtext}>Long press any poster to add to library</Text>
         </View>
       ) : (
         <FlatList
