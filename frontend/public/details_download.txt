@@ -474,6 +474,8 @@ export default function DetailsScreen() {
         });
         setInLibrary(true);
       }
+      // Refresh library immediately so the Library tab updates in real-time
+      fetchLibrary(true);
     } catch (error) {
       console.log('Failed to toggle library:', error);
     }
