@@ -50,11 +50,7 @@ const withTVLauncher = (config) => {
       });
     }
 
-    // Add banner to the application element
     const application = manifest.application?.[0];
-    if (application) {
-      application.$["android:banner"] = "@drawable/tv_banner";
-    }
 
     // Add LEANBACK_LAUNCHER category to MainActivity's intent filter
     const activities = application?.activity || [];
