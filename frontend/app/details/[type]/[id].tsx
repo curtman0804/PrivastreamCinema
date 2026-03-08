@@ -172,6 +172,15 @@ export default function DetailsScreen() {
     id: rawId, 
     name: passedName, 
     poster: passedPoster,
+    background: passedBackground,
+    logo: passedLogo,
+    description: passedDescription,
+    imdbRating: passedRating,
+    year: passedYear,
+    runtime: passedRuntime,
+    genres: passedGenres,
+    cast: passedCast,
+    director: passedDirector,
     resumeEpisodeId,
     resumePosition,
     resumeSeason,
@@ -181,6 +190,15 @@ export default function DetailsScreen() {
     id: string;
     name?: string;
     poster?: string;
+    background?: string;
+    logo?: string;
+    description?: string;
+    imdbRating?: string;
+    year?: string;
+    runtime?: string;
+    genres?: string;
+    cast?: string;
+    director?: string;
     resumeEpisodeId?: string;
     resumePosition?: string;
     resumeSeason?: string;
@@ -197,8 +215,26 @@ export default function DetailsScreen() {
   
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   
-  const [content, setContent] = useState<ContentItem | null>(null);
-  const [isLoadingContent, setIsLoadingContent] = useState(true);
+  // Initialize content from passed params immediately (no API call needed for display)
+  const initialContent: ContentItem = {
+    id: id!,
+    imdb_id: id,
+    name: passedName || '',
+    type: type as 'movie' | 'series',
+    poster: passedPoster || '',
+    background: passedBackground || '',
+    logo: passedLogo || '',
+    description: passedDescription || '',
+    imdbRating: passedRating || '',
+    year: passedYear ? parseInt(passedYear) : undefined,
+    runtime: passedRuntime || '',
+    genres: passedGenres ? passedGenres.split(', ').filter(Boolean) : [],
+    cast: passedCast ? passedCast.split(', ').filter(Boolean) : undefined,
+    director: passedDirector ? passedDirector.split(', ').filter(Boolean) : undefined,
+  };
+  
+  const [content, setContent] = useState<ContentItem | null>(initialContent);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
 
@@ -272,20 +308,14 @@ export default function DetailsScreen() {
   }, [content, library]);
 
   const loadContent = async () => {
-    setIsLoadingContent(true);
     try {
       const contentId = isEpisodePage ? baseId : id;
       const data = await api.content.getMeta(type!, contentId!);
+      // Merge API data with initial params (API data takes precedence)
       setContent(data);
     } catch (error) {
       console.log('Failed to fetch meta:', error);
-      setContent({
-        id: id!,
-        imdb_id: id,
-        name: passedName || 'Unknown Title',
-        type: type as 'movie' | 'series',
-        poster: passedPoster || '',
-      });
+      // Keep using the initial content from params — already set
     }
     setIsLoadingContent(false);
   };
@@ -487,8 +517,8 @@ export default function DetailsScreen() {
     }
   };
 
-  // Use passed params for instant display while meta loads
-  const displayName = content?.name || passedName || 'Loading...';
+  // Use content data for display - background, name, poster are available immediately from params
+  const displayName = content?.name || 'Loading...';
   const displayPoster = content?.background || content?.poster || passedPoster;
 
   const rating = typeof content?.imdbRating === 'string' 

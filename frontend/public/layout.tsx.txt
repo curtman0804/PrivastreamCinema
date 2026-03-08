@@ -2,34 +2,14 @@ import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, Platform, useWindowDimensions } from 'react-native';
+import { View } from 'react-native';
 
 export default function RootLayout() {
-  const { width, height } = useWindowDimensions();
-  const isTV = Platform.isTV || width > 800;
-
   return (
     <SafeAreaProvider>
       <View style={{ flex: 1, backgroundColor: '#0c0c0c' }}>
         <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: '#0c0c0c' },
-            animation: isTV ? 'none' : 'default',
-          }}
-        >
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen 
-            name="details/[type]/[id]" 
-            options={{ animation: 'none' }} 
-          />
-          <Stack.Screen 
-            name="player" 
-            options={{ animation: 'none' }} 
-          />
-        </Stack>
+        <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
       </View>
     </SafeAreaProvider>
   );
