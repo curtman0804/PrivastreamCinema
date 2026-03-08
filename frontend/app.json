@@ -52,7 +52,6 @@
       ],
       "expo-font",
       "./plugins/withTVKeyEvents",
-      "./plugins/withTVLauncher",
       "expo-video"
     ],
     "experiments": {
