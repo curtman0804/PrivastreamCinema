@@ -2612,47 +2612,58 @@ async def search_content(
 @api_router.get("/content/meta/{content_type}/{content_id}")
 async def get_meta(content_type: str, content_id: str, current_user: User = Depends(get_current_user)):
     """Get metadata for content including episodes for series"""
+    
+    # Check meta cache (10 minute TTL)
+    meta_cache_key = f"meta:{content_type}:{content_id}"
+    cached_meta = _discover_cache.get(meta_cache_key)
+    if cached_meta and cached_meta["expires"] > datetime.utcnow():
+        logger.info(f"Meta cache HIT for {content_type}/{content_id}")
+        return cached_meta["data"]
+    
     try:
+        client = await get_shared_http_client()
+        
         # For TV channels, try USA TV addon first
         if content_type == 'tv' and content_id.startswith('ustv'):
             try:
-                async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-                    url = f"https://848b3516657c-usatv.baby-beamup.club/meta/{content_type}/{content_id}.json"
-                    response = await client.get(url)
-                    if response.status_code == 200:
-                        data = response.json()
-                        meta = data.get('meta', {})
-                        if meta:
-                            logger.info(f"Got TV channel meta for {meta.get('name', content_id)}")
-                            return meta
+                url = f"https://848b3516657c-usatv.baby-beamup.club/meta/{content_type}/{content_id}.json"
+                response = await client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    meta = data.get('meta', {})
+                    if meta:
+                        logger.info(f"Got TV channel meta for {meta.get('name', content_id)}")
+                        _discover_cache[meta_cache_key] = {"data": meta, "expires": datetime.utcnow() + timedelta(seconds=600)}
+                        return meta
             except Exception as e:
                 logger.warning(f"USA TV meta error: {e}")
         
         # For movies/series, use Cinemeta
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-            url = f"https://v3-cinemeta.strem.io/meta/{content_type}/{content_id}.json"
-            response = await client.get(url)
-            if response.status_code == 200:
-                data = response.json()
-                meta = data.get('meta', {})
-                
-                # For series, ensure videos (episodes) are included and properly formatted
-                if content_type == 'series' and 'videos' in meta:
-                    episodes = []
-                    for video in meta.get('videos', []):
-                        episodes.append({
-                            'id': video.get('id', ''),
-                            'season': video.get('season', 0),
-                            'episode': video.get('episode', 0),
-                            'name': video.get('name') or video.get('title', f"Episode {video.get('episode', 0)}"),
-                            'thumbnail': video.get('thumbnail'),
-                            'overview': video.get('overview'),
-                            'released': video.get('released'),
-                        })
-                    meta['videos'] = episodes
-                    logger.info(f"Returning {len(episodes)} episodes for {meta.get('name', 'Unknown')}")
-                
-                return meta
+        url = f"https://v3-cinemeta.strem.io/meta/{content_type}/{content_id}.json"
+        response = await client.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            meta = data.get('meta', {})
+            
+            # For series, ensure videos (episodes) are included and properly formatted
+            if content_type == 'series' and 'videos' in meta:
+                episodes = []
+                for video in meta.get('videos', []):
+                    episodes.append({
+                        'id': video.get('id', ''),
+                        'season': video.get('season', 0),
+                        'episode': video.get('episode', 0),
+                        'name': video.get('name') or video.get('title', f"Episode {video.get('episode', 0)}"),
+                        'thumbnail': video.get('thumbnail'),
+                        'overview': video.get('overview'),
+                        'released': video.get('released'),
+                    })
+                meta['videos'] = episodes
+                logger.info(f"Returning {len(episodes)} episodes for {meta.get('name', 'Unknown')}")
+            
+            # Cache the result
+            _discover_cache[meta_cache_key] = {"data": meta, "expires": datetime.utcnow() + timedelta(seconds=600)}
+            return meta
     except Exception as e:
         logger.error(f"Error fetching meta: {str(e)}")
     
