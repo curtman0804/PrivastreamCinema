@@ -28,6 +28,20 @@ load_dotenv(ROOT_DIR / '.env')
 JWT_SECRET = os.environ.get('JWT_SECRET', 'privastream-cinema-secret-key-2025')
 JWT_ALGORITHM = "HS256"
 
+# ==================== IN-MEMORY CACHE ====================
+# Cache discover results per user to avoid re-fetching from external APIs
+_discover_cache: Dict[str, Any] = {}  # {user_id: {"data": ..., "expires": datetime}}
+DISCOVER_CACHE_TTL = 300  # 5 minutes
+
+# Shared HTTP client for external API calls (reuse connections)
+_shared_http_client: Optional[httpx.AsyncClient] = None
+
+async def get_shared_http_client() -> httpx.AsyncClient:
+    global _shared_http_client
+    if _shared_http_client is None or _shared_http_client.is_closed:
+        _shared_http_client = httpx.AsyncClient(follow_redirects=True, timeout=15.0, limits=httpx.Limits(max_connections=20, max_keepalive_connections=10))
+    return _shared_http_client
+
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1022,6 +1036,13 @@ async def get_all_streams(
 ):
     """Fetch streams from ALL installed addons + built-in Torrentio-style aggregation"""
     
+    # Check stream cache first (2 minute TTL)
+    stream_cache_key = f"streams:{content_type}:{content_id}:{current_user.id}"
+    cached_streams = _discover_cache.get(stream_cache_key)
+    if cached_streams and cached_streams["expires"] > datetime.utcnow():
+        logger.info(f"Stream cache HIT for {content_type}/{content_id}")
+        return cached_streams["data"]
+    
     # Handle Porn+ / RedTube content IDs - extract video directly
     if 'RedTube-movie-' in content_id or 'porn_id:RedTube' in content_id:
         # Extract video ID from content ID (e.g., porn_id:RedTube-movie-196897861)
@@ -1275,16 +1296,16 @@ async def get_all_streams(
     content_title = ""
     content_year = ""
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=5.0) as client:
-            base_id = content_id.split(':')[0]
-            meta_url = f"https://v3-cinemeta.strem.io/meta/{content_type}/{base_id}.json"
-            meta_resp = await client.get(meta_url)
-            if meta_resp.status_code == 200:
-                meta = meta_resp.json().get('meta', {})
-                content_title = meta.get('name', '')
-                content_year = str(meta.get('year', ''))
-                if '–' in content_year:
-                    content_year = content_year.split('–')[0]
+        client = await get_shared_http_client()
+        base_id = content_id.split(':')[0]
+        meta_url = f"https://v3-cinemeta.strem.io/meta/{content_type}/{base_id}.json"
+        meta_resp = await client.get(meta_url)
+        if meta_resp.status_code == 200:
+            meta = meta_resp.json().get('meta', {})
+            content_title = meta.get('name', '')
+            content_year = str(meta.get('year', ''))
+            if '–' in content_year:
+                content_year = content_year.split('–')[0]
     except Exception as e:
         logger.warning(f"Failed to fetch meta for streams: {e}")
     
@@ -1805,7 +1826,15 @@ async def get_all_streams(
     unique_streams.sort(key=get_sort_score, reverse=True)
     
     logger.info(f"Found {len(unique_streams)} total streams for {content_type}/{content_id}")
-    return {"streams": unique_streams}
+    
+    # Cache the result (2 minute TTL for streams)
+    result_data = {"streams": unique_streams}
+    _discover_cache[stream_cache_key] = {
+        "data": result_data,
+        "expires": datetime.utcnow() + timedelta(seconds=120)
+    }
+    
+    return result_data
 
 
 # ==================== SUBTITLES ====================
@@ -1869,7 +1898,18 @@ async def get_subtitles(content_type: str, content_id: str, current_user: User =
 
 @api_router.get("/content/discover-organized")
 async def get_discover(current_user: User = Depends(get_current_user)):
-    """Get discover page content from installed addons - organized by service"""
+    """Get discover page content from installed addons - organized by service.
+    Uses parallel fetching and in-memory caching for speed."""
+    
+    # Check cache first
+    cache_key = current_user.id
+    cached = _discover_cache.get(cache_key)
+    if cached and cached["expires"] > datetime.utcnow():
+        logger.info(f"Discover cache HIT for user {current_user.username}")
+        return cached["data"]
+    
+    logger.info(f"Discover cache MISS - fetching fresh data for {current_user.username}")
+    
     addons = await db.addons.find({"userId": current_user.id}).sort("installedAt", 1).to_list(100)
     
     result = {
@@ -1889,14 +1929,28 @@ async def get_discover(current_user: User = Depends(get_current_user)):
         'hlu': 'Hulu', 'pmp': 'Paramount+', 'atp': 'Apple TV+', 'pcp': 'Peacock', 'dpe': 'Discovery+'
     }
     
-    # Cinemeta catalogs to fetch - only the ones that work without required params
-    # 'top' = Popular, 'year' requires genre=year param, 'imdbRating' = Featured/Top Rated
     cinemeta_fetch = [
         ('movie', 'top', 'Popular Movies'),
         ('series', 'top', 'Popular Series'),
-        ('movie', 'year', 'New Movies', 'genre=2025'),  # Fetch 2025 movies
-        ('series', 'year', 'New Series', 'genre=2025'),  # Fetch 2025 series
+        ('movie', 'year', 'New Movies', 'genre=2025'),
+        ('series', 'year', 'New Series', 'genre=2025'),
     ]
+    
+    # Build list of ALL fetch tasks to run in parallel
+    fetch_tasks = []
+    task_metadata = []  # Track what each task is for
+    
+    http_client = await get_shared_http_client()
+    
+    async def fetch_catalog(url: str) -> list:
+        """Fetch a single catalog URL and return metas"""
+        try:
+            response = await http_client.get(url)
+            if response.status_code == 200:
+                return response.json().get('metas', [])
+        except Exception as e:
+            logger.warning(f"Fetch failed for {url}: {e}")
+        return []
     
     for addon in addons:
         manifest = addon.get('manifest', {})
@@ -1905,7 +1959,7 @@ async def get_discover(current_user: User = Depends(get_current_user)):
         base_url = get_base_url(addon['manifestUrl'])
         catalogs = manifest.get('catalogs', [])
         
-        # Handle Cinemeta addon specially - fetch specific catalogs
+        # Handle Cinemeta addon
         if 'cinemeta' in addon_id:
             for fetch_config in cinemeta_fetch:
                 catalog_type = fetch_config[0]
@@ -1913,29 +1967,19 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 section_name = fetch_config[2]
                 extra_param = fetch_config[3] if len(fetch_config) > 3 else None
                 
-                try:
-                    if extra_param:
-                        url = f"{base_url}/catalog/{catalog_type}/{catalog_id}/{extra_param}.json"
-                    else:
-                        url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
-                    
-                    async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                        response = await client.get(url)
-                        if response.status_code == 200:
-                            metas = response.json().get('metas', [])  # Get all items
-                            
-                            if section_name not in result['services']:
-                                result['services'][section_name] = {'movies': [], 'series': [], 'channels': []}
-                            
-                            if catalog_type == 'movie':
-                                result['services'][section_name]['movies'].extend(metas)
-                            else:
-                                result['services'][section_name]['series'].extend(metas)
-                            logger.info(f"Cinemeta: {len(metas)} items for {section_name}")
-                except Exception as e:
-                    logger.warning(f"Error fetching Cinemeta {section_name}: {e}")
+                if extra_param:
+                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}/{extra_param}.json"
+                else:
+                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                
+                fetch_tasks.append(fetch_catalog(url))
+                task_metadata.append({
+                    "section": section_name,
+                    "type": catalog_type,
+                    "source": "cinemeta"
+                })
         
-        # Handle Streaming Catalogs addon - organize by streaming service
+        # Handle Streaming Catalogs addon
         elif 'netflix-catalog' in addon['manifestUrl'].lower() or 'streaming-catalogs' in addon_id:
             for catalog in catalogs:
                 catalog_type = catalog.get('type', '')
@@ -1945,44 +1989,33 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 if not service_name or catalog_type not in ['movie', 'series']:
                     continue
                 
-                try:
-                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
-                    async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                        response = await client.get(url)
-                        if response.status_code == 200:
-                            metas = response.json().get('metas', [])  # Get all items
-                            type_label = 'Movies' if catalog_type == 'movie' else 'Series'
-                            section_name = f"{service_name} {type_label}"
-                            
-                            if section_name not in result['services']:
-                                result['services'][section_name] = {'movies': [], 'series': [], 'channels': []}
-                            
-                            if catalog_type == 'movie':
-                                result['services'][section_name]['movies'].extend(metas)
-                            else:
-                                result['services'][section_name]['series'].extend(metas)
-                            logger.info(f"Streaming: {len(metas)} items for {section_name}")
-                except Exception as e:
-                    logger.warning(f"Error fetching {service_name}: {e}")
+                url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                type_label = 'Movies' if catalog_type == 'movie' else 'Series'
+                section_name = f"{service_name} {type_label}"
+                
+                fetch_tasks.append(fetch_catalog(url))
+                task_metadata.append({
+                    "section": section_name,
+                    "type": catalog_type,
+                    "source": "streaming"
+                })
         
         # Handle USA TV addon
         elif 'usatv' in addon['manifestUrl'].lower() or 'usatv' in addon_id:
             for catalog in catalogs:
                 if catalog.get('type') == 'tv':
                     catalog_id = catalog.get('id', 'usatv')
-                    try:
-                        url = f"{base_url}/catalog/tv/{catalog_id}.json"
-                        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                            response = await client.get(url)
-                            if response.status_code == 200:
-                                metas = response.json().get('metas', [])  # Get all channels
-                                result['services']['USA TV Channels'] = {'movies': [], 'series': [], 'channels': metas}
-                                logger.info(f"USA TV: {len(metas)} channels")
-                    except Exception as e:
-                        logger.warning(f"Error fetching USA TV: {e}")
+                    url = f"{base_url}/catalog/tv/{catalog_id}.json"
+                    
+                    fetch_tasks.append(fetch_catalog(url))
+                    task_metadata.append({
+                        "section": "USA TV Channels",
+                        "type": "tv",
+                        "source": "usatv"
+                    })
                     break
         
-        # Generic addon handling - show each catalog as a separate section
+        # Generic addon handling
         else:
             for catalog in catalogs:
                 catalog_type = catalog.get('type', '')
@@ -1991,29 +2024,64 @@ async def get_discover(current_user: User = Depends(get_current_user)):
                 
                 if not catalog_type or not catalog_id:
                     continue
-                try:
-                    url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
-                    async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                        response = await client.get(url)
-                        if response.status_code == 200:
-                            metas = response.json().get('metas', [])[:30]  # Get 30 items for discover
-                            # Filter out items with empty names or IDs
-                            metas = [m for m in metas if m.get('name') and m.get('id')]
-                            
-                            if metas:
-                                # Use catalog name as section name
-                                section_name = catalog_name
-                                if section_name not in result['services']:
-                                    result['services'][section_name] = {'movies': [], 'series': [], 'channels': [], '_catalog_id': catalog_id, '_base_url': base_url}
-                                
-                                if catalog_type == 'movie':
-                                    result['services'][section_name]['movies'].extend(metas)
-                                elif catalog_type == 'series':
-                                    result['services'][section_name]['series'].extend(metas)
-                                elif catalog_type == 'tv':
-                                    result['services'][section_name]['channels'].extend(metas)
-                except Exception as e:
-                    logger.warning(f"Error fetching catalog {catalog_id}: {e}")
+                
+                url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
+                
+                fetch_tasks.append(fetch_catalog(url))
+                task_metadata.append({
+                    "section": catalog_name,
+                    "type": catalog_type,
+                    "source": "generic",
+                    "catalog_id": catalog_id,
+                    "base_url": base_url
+                })
+    
+    # FIRE ALL FETCHES IN PARALLEL
+    start_time = time.time()
+    logger.info(f"Firing {len(fetch_tasks)} catalog fetches in parallel...")
+    all_results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+    elapsed = time.time() - start_time
+    logger.info(f"All {len(fetch_tasks)} fetches completed in {elapsed:.2f}s")
+    
+    # Process results
+    for i, metas_result in enumerate(all_results):
+        if isinstance(metas_result, Exception):
+            logger.warning(f"Task {i} failed: {metas_result}")
+            continue
+        
+        metas = metas_result
+        meta = task_metadata[i]
+        section_name = meta["section"]
+        catalog_type = meta["type"]
+        
+        # For generic addons, limit to 30 items and filter
+        if meta["source"] == "generic":
+            metas = metas[:30]
+            metas = [m for m in metas if m.get('name') and m.get('id')]
+        
+        if not metas:
+            continue
+        
+        if section_name not in result['services']:
+            result['services'][section_name] = {'movies': [], 'series': [], 'channels': []}
+            if meta["source"] == "generic":
+                result['services'][section_name]['_catalog_id'] = meta.get('catalog_id', '')
+                result['services'][section_name]['_base_url'] = meta.get('base_url', '')
+        
+        if catalog_type == 'movie':
+            result['services'][section_name]['movies'].extend(metas)
+        elif catalog_type == 'series':
+            result['services'][section_name]['series'].extend(metas)
+        elif catalog_type == 'tv':
+            result['services'][section_name]['channels'].extend(metas)
+        
+        logger.info(f"{meta['source']}: {len(metas)} items for {section_name}")
+    
+    # Cache the result
+    _discover_cache[cache_key] = {
+        "data": result,
+        "expires": datetime.utcnow() + timedelta(seconds=DISCOVER_CACHE_TTL)
+    }
     
     return result
 

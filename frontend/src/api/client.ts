@@ -332,7 +332,6 @@ export const api = {
     },
     
     fetchTorrentioStreams: async (type: string, id: string): Promise<Stream[]> => {
-      // Use allorigins proxy for ALL platforms - direct fetch is blocked by Cloudflare
       const TORRENTIO_BASE = 'https://torrentio.strem.fun';
       const CONFIG = 'sort=seeders|qualityfilter=480p,scr,cam';
       const torrentioUrl = `${TORRENTIO_BASE}/${CONFIG}/stream/${type}/${id}.json`;
@@ -340,57 +339,43 @@ export const api = {
       try {
         let data: any;
         
-        // Approach 1: Try allorigins (works for both web and mobile)
-        try {
-          console.log(`[TORRENTIO] Trying allorigins proxy...`);
-          const allOriginsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(torrentioUrl)}`;
-          const response = await fetch(allOriginsUrl, {
+        // RACE all 3 approaches simultaneously — use whichever responds first
+        const racePromises = [
+          // Approach 1: allorigins proxy
+          fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(torrentioUrl)}`, {
             method: 'GET',
             headers: { 'Accept': 'application/json' },
-          });
-          if (response.ok) {
-            const result = await response.json();
-            if (result?.streams?.length > 0) {
-              console.log(`[TORRENTIO] allorigins success: ${result.streams.length} streams`);
-              data = result;
-            }
-          }
-        } catch (e: any) {
-          console.log(`[TORRENTIO] allorigins failed: ${e.message || e}`);
-        }
+          }).then(async r => {
+            if (!r.ok) throw new Error(`Status ${r.status}`);
+            const result = await r.json();
+            if (!result?.streams?.length) throw new Error('No streams');
+            console.log(`[TORRENTIO] allorigins won race: ${result.streams.length} streams`);
+            return result;
+          }),
+          // Approach 2: direct fetch
+          fetch(torrentioUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          }).then(async r => {
+            if (!r.ok) throw new Error(`Status ${r.status}`);
+            const result = await r.json();
+            if (!result?.streams?.length) throw new Error('No streams');
+            console.log(`[TORRENTIO] direct won race: ${result.streams.length} streams`);
+            return result;
+          }),
+          // Approach 3: backend proxy
+          apiClient.get(`/api/addon-proxy/torrentio/${type}/${id}`).then(r => {
+            if (!r.data?.streams?.length) throw new Error('No streams');
+            console.log(`[TORRENTIO] backend proxy won race: ${r.data.streams.length} streams`);
+            return r.data;
+          }),
+        ];
         
-        // Approach 2: Try direct fetch as fallback (may work on some mobile networks)
-        if (!data?.streams?.length) {
-          try {
-            console.log(`[TORRENTIO] Trying direct fetch...`);
-            const response = await fetch(torrentioUrl, {
-              method: 'GET',
-              headers: { 'Accept': 'application/json' },
-            });
-            if (response.ok) {
-              const result = await response.json();
-              if (result?.streams?.length > 0) {
-                console.log(`[TORRENTIO] Direct fetch success: ${result.streams.length} streams`);
-                data = result;
-              }
-            }
-          } catch (e: any) {
-            console.log(`[TORRENTIO] Direct fetch failed: ${e.message || e}`);
-          }
-        }
-        
-        // Approach 3: Try backend proxy as last resort
-        if (!data?.streams?.length) {
-          try {
-            console.log(`[TORRENTIO] Trying backend proxy...`);
-            const response = await apiClient.get(`/api/addon-proxy/torrentio/${type}/${id}`);
-            if (response.data?.streams?.length > 0) {
-              console.log(`[TORRENTIO] Backend proxy success: ${response.data.streams.length} streams`);
-              data = response.data;
-            }
-          } catch (e: any) {
-            console.log(`[TORRENTIO] Backend proxy failed: ${e.message || e}`);
-          }
+        try {
+          data = await Promise.any(racePromises);
+        } catch (e) {
+          console.log(`[TORRENTIO] All approaches failed`);
+          return [];
         }
         
         const rawStreams = data?.streams || [];
@@ -461,64 +446,49 @@ export const api = {
     },
     
     fetchTPBStreams: async (type: string, id: string): Promise<Stream[]> => {
-      // Use allorigins proxy for ALL platforms - direct fetch is blocked by Cloudflare
       const TPB_BASE = 'https://thepiratebay-plus.strem.fun';
       const tpbUrl = `${TPB_BASE}/stream/${type}/${id}.json`;
       
       try {
         let data: any;
         
-        // Approach 1: Try allorigins (works for both web and mobile)
-        try {
-          console.log(`[TPB+] Trying allorigins proxy...`);
-          const allOriginsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(tpbUrl)}`;
-          const response = await fetch(allOriginsUrl, {
+        // RACE all 3 approaches simultaneously — use whichever responds first
+        const racePromises = [
+          // Approach 1: allorigins proxy
+          fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(tpbUrl)}`, {
             method: 'GET',
             headers: { 'Accept': 'application/json' },
-          });
-          if (response.ok) {
-            const result = await response.json();
-            if (result?.streams?.length > 0) {
-              console.log(`[TPB+] allorigins success: ${result.streams.length} streams`);
-              data = result;
-            }
-          }
-        } catch (e: any) {
-          console.log(`[TPB+] allorigins failed: ${e.message || e}`);
-        }
+          }).then(async r => {
+            if (!r.ok) throw new Error(`Status ${r.status}`);
+            const result = await r.json();
+            if (!result?.streams?.length) throw new Error('No streams');
+            console.log(`[TPB+] allorigins won race: ${result.streams.length} streams`);
+            return result;
+          }),
+          // Approach 2: direct fetch
+          fetch(tpbUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          }).then(async r => {
+            if (!r.ok) throw new Error(`Status ${r.status}`);
+            const result = await r.json();
+            if (!result?.streams?.length) throw new Error('No streams');
+            console.log(`[TPB+] direct won race: ${result.streams.length} streams`);
+            return result;
+          }),
+          // Approach 3: backend proxy
+          apiClient.get(`/api/addon-proxy/tpb/${type}/${id}`).then(r => {
+            if (!r.data?.streams?.length) throw new Error('No streams');
+            console.log(`[TPB+] backend proxy won race: ${r.data.streams.length} streams`);
+            return r.data;
+          }),
+        ];
         
-        // Approach 2: Try direct fetch as fallback (may work on some mobile networks)
-        if (!data?.streams?.length) {
-          try {
-            console.log(`[TPB+] Trying direct fetch...`);
-            const response = await fetch(tpbUrl, {
-              method: 'GET',
-              headers: { 'Accept': 'application/json' },
-            });
-            if (response.ok) {
-              const result = await response.json();
-              if (result?.streams?.length > 0) {
-                console.log(`[TPB+] Direct fetch success: ${result.streams.length} streams`);
-                data = result;
-              }
-            }
-          } catch (e: any) {
-            console.log(`[TPB+] Direct fetch failed: ${e.message || e}`);
-          }
-        }
-        
-        // Approach 3: Try backend proxy as last resort
-        if (!data?.streams?.length) {
-          try {
-            console.log(`[TPB+] Trying backend proxy...`);
-            const response = await apiClient.get(`/api/addon-proxy/tpb/${type}/${id}`);
-            if (response.data?.streams?.length > 0) {
-              console.log(`[TPB+] Backend proxy success: ${response.data.streams.length} streams`);
-              data = response.data;
-            }
-          } catch (e: any) {
-            console.log(`[TPB+] Backend proxy failed: ${e.message || e}`);
-          }
+        try {
+          data = await Promise.any(racePromises);
+        } catch (e) {
+          console.log(`[TPB+] All approaches failed`);
+          return [];
         }
         
         const rawStreams = data?.streams || [];

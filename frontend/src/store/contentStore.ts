@@ -68,13 +68,24 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   fetchDiscover: async (forceRefresh = false) => {
+    const currentData = get().discoverData;
+    // Show cached data immediately (stale-while-revalidate)
+    if (currentData && !forceRefresh) {
+      // Still refresh in background, but don't show loading spinner
+      api.content.getDiscover().then(data => {
+        set({ discoverData: data });
+      }).catch(err => {
+        console.log('[ContentStore] Background refresh error:', err);
+      });
+      return;
+    }
     set({ isLoadingDiscover: true, error: null });
     try {
       const data = await api.content.getDiscover();
       set({ discoverData: data, isLoadingDiscover: false });
     } catch (error: any) {
       console.log('[ContentStore] fetchDiscover error:', error);
-      set({ error: error.message, isLoadingDiscover: false, discoverData: null });
+      set({ error: error.message, isLoadingDiscover: false, discoverData: currentData || null });
     }
   },
 
