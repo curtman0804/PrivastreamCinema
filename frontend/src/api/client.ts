@@ -199,8 +199,20 @@ export const api = {
       return response.data;
     },
     getMeta: async (type: string, id: string): Promise<ContentItem> => {
+      // Frontend meta cache (10 min TTL)
+      const cacheKey = `meta:${type}:${id}`;
+      if (!((api as any)._metaCache)) (api as any)._metaCache = new Map();
+      const cached = (api as any)._metaCache.get(cacheKey);
+      if (cached && Date.now() - cached.time < 600000) {
+        console.log(`[META] CACHE HIT for ${type}/${id}`);
+        return cached.data;
+      }
+      
       const encodedId = encodeURIComponent(id);
       const response = await apiClient.get(`/api/content/meta/${type}/${encodedId}`);
+      
+      // Cache the result
+      (api as any)._metaCache.set(cacheKey, { data: response.data, time: Date.now() });
       return response.data;
     },
   },
@@ -216,6 +228,15 @@ export const api = {
     getAllStreams: async (type: string, id: string, onProgress?: (streams: Stream[]) => void): Promise<{ streams: Stream[] }> => {
       console.log(`[STREAMS] ========== Fetching streams for ${type}/${id} ==========`);
       const startTime = Date.now();
+      
+      // Frontend stream cache (2 min TTL)
+      const cacheKey = `streams:${type}:${id}`;
+      const cached = (api as any)._streamCache?.get(cacheKey);
+      if (cached && Date.now() - cached.time < 120000) {
+        console.log(`[STREAMS] CACHE HIT: ${cached.streams.length} streams`);
+        if (onProgress) onProgress(cached.streams);
+        return { streams: cached.streams };
+      }
       
       // Encode ID to handle URLs and special characters
       const encodedId = encodeURIComponent(id);
@@ -328,6 +349,11 @@ export const api = {
       await Promise.allSettled([backendPromise, torrentioPromise, tpbPromise]);
       
       console.log(`[STREAMS] All sources done: ${allStreams.length} total streams in ${Date.now() - startTime}ms`);
+      
+      // Cache the result
+      if (!((api as any)._streamCache)) (api as any)._streamCache = new Map();
+      (api as any)._streamCache.set(cacheKey, { streams: allStreams, time: Date.now() });
+      
       return { streams: allStreams };
     },
     
@@ -336,39 +362,38 @@ export const api = {
       const CONFIG = 'sort=seeders|qualityfilter=480p,scr,cam';
       const torrentioUrl = `${TORRENTIO_BASE}/${CONFIG}/stream/${type}/${id}.json`;
       
+      // 3-second timeout wrapper
+      const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
+        Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+      
       try {
         let data: any;
         
-        // RACE all 3 approaches simultaneously — use whichever responds first
+        // RACE all 3 approaches with 3s timeout each
         const racePromises = [
-          // Approach 1: allorigins proxy
-          fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(torrentioUrl)}`, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
+          withTimeout(fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(torrentioUrl)}`, {
+            method: 'GET', headers: { 'Accept': 'application/json' },
           }).then(async r => {
             if (!r.ok) throw new Error(`Status ${r.status}`);
             const result = await r.json();
             if (!result?.streams?.length) throw new Error('No streams');
-            console.log(`[TORRENTIO] allorigins won race: ${result.streams.length} streams`);
+            console.log(`[TORRENTIO] allorigins: ${result.streams.length} streams`);
             return result;
-          }),
-          // Approach 2: direct fetch
-          fetch(torrentioUrl, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
+          }), 3000),
+          withTimeout(fetch(torrentioUrl, {
+            method: 'GET', headers: { 'Accept': 'application/json' },
           }).then(async r => {
             if (!r.ok) throw new Error(`Status ${r.status}`);
             const result = await r.json();
             if (!result?.streams?.length) throw new Error('No streams');
-            console.log(`[TORRENTIO] direct won race: ${result.streams.length} streams`);
+            console.log(`[TORRENTIO] direct: ${result.streams.length} streams`);
             return result;
-          }),
-          // Approach 3: backend proxy
-          apiClient.get(`/api/addon-proxy/torrentio/${type}/${id}`).then(r => {
+          }), 3000),
+          withTimeout(apiClient.get(`/api/addon-proxy/torrentio/${type}/${id}`).then(r => {
             if (!r.data?.streams?.length) throw new Error('No streams');
-            console.log(`[TORRENTIO] backend proxy won race: ${r.data.streams.length} streams`);
+            console.log(`[TORRENTIO] backend proxy: ${r.data.streams.length} streams`);
             return r.data;
-          }),
+          }), 3000),
         ];
         
         try {
@@ -449,39 +474,38 @@ export const api = {
       const TPB_BASE = 'https://thepiratebay-plus.strem.fun';
       const tpbUrl = `${TPB_BASE}/stream/${type}/${id}.json`;
       
+      // 3-second timeout wrapper
+      const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
+        Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+      
       try {
         let data: any;
         
-        // RACE all 3 approaches simultaneously — use whichever responds first
+        // RACE all 3 approaches with 3s timeout each
         const racePromises = [
-          // Approach 1: allorigins proxy
-          fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(tpbUrl)}`, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
+          withTimeout(fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(tpbUrl)}`, {
+            method: 'GET', headers: { 'Accept': 'application/json' },
           }).then(async r => {
             if (!r.ok) throw new Error(`Status ${r.status}`);
             const result = await r.json();
             if (!result?.streams?.length) throw new Error('No streams');
-            console.log(`[TPB+] allorigins won race: ${result.streams.length} streams`);
+            console.log(`[TPB+] allorigins: ${result.streams.length} streams`);
             return result;
-          }),
-          // Approach 2: direct fetch
-          fetch(tpbUrl, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
+          }), 3000),
+          withTimeout(fetch(tpbUrl, {
+            method: 'GET', headers: { 'Accept': 'application/json' },
           }).then(async r => {
             if (!r.ok) throw new Error(`Status ${r.status}`);
             const result = await r.json();
             if (!result?.streams?.length) throw new Error('No streams');
-            console.log(`[TPB+] direct won race: ${result.streams.length} streams`);
+            console.log(`[TPB+] direct: ${result.streams.length} streams`);
             return result;
-          }),
-          // Approach 3: backend proxy
-          apiClient.get(`/api/addon-proxy/tpb/${type}/${id}`).then(r => {
+          }), 3000),
+          withTimeout(apiClient.get(`/api/addon-proxy/tpb/${type}/${id}`).then(r => {
             if (!r.data?.streams?.length) throw new Error('No streams');
-            console.log(`[TPB+] backend proxy won race: ${r.data.streams.length} streams`);
+            console.log(`[TPB+] backend proxy: ${r.data.streams.length} streams`);
             return r.data;
-          }),
+          }), 3000),
         ];
         
         try {
