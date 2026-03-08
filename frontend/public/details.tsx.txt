@@ -9,6 +9,7 @@ import {
   Dimensions,
   Linking,
   FlatList,
+  InteractionManager,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -241,12 +242,17 @@ export default function DetailsScreen() {
   }, [content?.videos, selectedSeason]);
 
   useEffect(() => {
-    loadContent();
-    fetchLibrary();
-    
-    if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
-      fetchStreams(type, id);
-    }
+    // Defer all network requests until after the screen transition completes
+    // This makes the navigation feel instant - poster/name show immediately from params
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadContent();
+      fetchLibrary();
+      
+      if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
+        fetchStreams(type, id);
+      }
+    });
+    return () => task.cancel();
   }, [id, type]);
 
   useEffect(() => {
