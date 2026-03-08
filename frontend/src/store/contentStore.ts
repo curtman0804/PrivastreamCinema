@@ -19,6 +19,7 @@ interface ContentState {
   currentSearchQuery: string;
   streams: Stream[];
   currentPlaying: CurrentPlaying | null;
+  selectedItem: ContentItem | null;
   isLoadingDiscover: boolean;
   isLoadingAddons: boolean;
   isLoadingLibrary: boolean;
@@ -36,6 +37,7 @@ interface ContentState {
   removeFromLibrary: (type: string, id: string) => Promise<void>;
   clearSearch: () => void;
   setCurrentPlaying: (info: CurrentPlaying | null) => void;
+  setSelectedItem: (item: ContentItem | null) => void;
   resetStore: () => void;
 }
 
@@ -50,6 +52,7 @@ const initialState = {
   searchSkip: 0,
   currentSearchQuery: '',
   currentPlaying: null,
+  selectedItem: null,
   streams: [],
   isLoadingDiscover: false,
   isLoadingAddons: false,
@@ -208,5 +211,9 @@ export const useContentStore = create<ContentState>((set, get) => ({
 
   setCurrentPlaying: (info: CurrentPlaying | null) => {
     set({ currentPlaying: info });
+  },
+
+  setSelectedItem: (item: ContentItem | null) => {
+    set({ selectedItem: item });
   },
 }));

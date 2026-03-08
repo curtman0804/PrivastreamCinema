@@ -108,22 +108,9 @@ export default function DiscoverScreen() {
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
     const encodedId = encodeURIComponent(id);
-    router.push({
-      pathname: `/details/${item.type}/${encodedId}`,
-      params: {
-        name: item.name || '',
-        poster: item.poster || '',
-        background: item.background || '',
-        logo: item.logo || '',
-        description: item.description || '',
-        imdbRating: item.imdbRating || '',
-        year: item.year ? String(item.year) : '',
-        runtime: item.runtime || '',
-        genres: item.genres ? item.genres.join(', ') : (item.genre ? (Array.isArray(item.genre) ? item.genre.join(', ') : item.genre) : ''),
-        cast: item.cast ? (Array.isArray(item.cast) ? item.cast.join(', ') : item.cast) : '',
-        director: item.director ? (Array.isArray(item.director) ? item.director.join(', ') : item.director) : '',
-      }
-    });
+    // Store full item data in zustand (instant, no URL encoding overhead)
+    useContentStore.getState().setSelectedItem(item);
+    router.push(`/details/${item.type}/${encodedId}`);
   };
 
   // Handle continue watching item press

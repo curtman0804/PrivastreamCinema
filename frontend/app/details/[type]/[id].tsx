@@ -169,17 +169,6 @@ export default function DetailsScreen() {
   const { 
     type, 
     id: rawId, 
-    name: passedName, 
-    poster: passedPoster,
-    background: passedBackground,
-    logo: passedLogo,
-    description: passedDescription,
-    imdbRating: passedRating,
-    year: passedYear,
-    runtime: passedRuntime,
-    genres: passedGenres,
-    cast: passedCast,
-    director: passedDirector,
     resumeEpisodeId,
     resumePosition,
     resumeSeason,
@@ -187,17 +176,6 @@ export default function DetailsScreen() {
   } = useLocalSearchParams<{ 
     type: string; 
     id: string;
-    name?: string;
-    poster?: string;
-    background?: string;
-    logo?: string;
-    description?: string;
-    imdbRating?: string;
-    year?: string;
-    runtime?: string;
-    genres?: string;
-    cast?: string;
-    director?: string;
     resumeEpisodeId?: string;
     resumePosition?: string;
     resumeSeason?: string;
@@ -210,29 +188,19 @@ export default function DetailsScreen() {
     fetchStreams, 
     library,
     fetchLibrary,
+    selectedItem,
   } = useContentStore();
   
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   
-  // Initialize content from passed params immediately (no API call needed for display)
-  const initialContent: ContentItem = {
+  // Use selectedItem from store for instant display — no URL param parsing overhead
+  const [content, setContent] = useState<ContentItem | null>(selectedItem || {
     id: id!,
     imdb_id: id,
-    name: passedName || '',
+    name: '',
     type: type as 'movie' | 'series',
-    poster: passedPoster || '',
-    background: passedBackground || '',
-    logo: passedLogo || '',
-    description: passedDescription || '',
-    imdbRating: passedRating || '',
-    year: passedYear ? parseInt(passedYear) : undefined,
-    runtime: passedRuntime || '',
-    genres: passedGenres ? passedGenres.split(', ').filter(Boolean) : [],
-    cast: passedCast ? passedCast.split(', ').filter(Boolean) : undefined,
-    director: passedDirector ? passedDirector.split(', ').filter(Boolean) : undefined,
-  };
-  
-  const [content, setContent] = useState<ContentItem | null>(initialContent);
+    poster: '',
+  });
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
@@ -277,8 +245,8 @@ export default function DetailsScreen() {
   }, [content?.videos, selectedSeason]);
 
   useEffect(() => {
-    // Only fetch meta for series (need episodes) or if missing key data
-    const needsMeta = type === 'series' || (!passedBackground && !passedDescription);
+    // Only fetch meta for series (need episodes) or if missing background
+    const needsMeta = type === 'series' || !content?.background;
     if (needsMeta) {
       loadContent();
     }
@@ -515,9 +483,9 @@ export default function DetailsScreen() {
     }
   };
 
-  // Use content data for display - background, name, poster are available immediately from params
+  // Use content data for display - available immediately from store
   const displayName = content?.name || 'Loading...';
-  const displayPoster = content?.background || content?.poster || passedPoster;
+  const displayPoster = content?.background || content?.poster;
 
   const rating = typeof content?.imdbRating === 'string' 
     ? parseFloat(content.imdbRating) 
