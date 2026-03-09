@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,13 @@ import {
   Dimensions,
   Linking,
   FlatList,
+  InteractionManager,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useContentStore } from '../../../src/store/contentStore';
+import { useContentStore, getSelectedItemCache } from '../../../src/store/contentStore';
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -169,8 +170,6 @@ export default function DetailsScreen() {
   const { 
     type, 
     id: rawId, 
-    name: passedName, 
-    poster: passedPoster,
     resumeEpisodeId,
     resumePosition,
     resumeSeason,
@@ -178,8 +177,6 @@ export default function DetailsScreen() {
   } = useLocalSearchParams<{ 
     type: string; 
     id: string;
-    name?: string;
-    poster?: string;
     resumeEpisodeId?: string;
     resumePosition?: string;
     resumeSeason?: string;
@@ -196,10 +193,21 @@ export default function DetailsScreen() {
   
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   
-  const [content, setContent] = useState<ContentItem | null>(null);
-  const [isLoadingContent, setIsLoadingContent] = useState(true);
+  // Read the cached item immediately (set by Discover page before navigation)
+  // This gives instant poster/name/background display without any API call
+  const cachedItem = useRef(getSelectedItemCache()).current;
+  
+  const [content, setContent] = useState<ContentItem | null>(cachedItem || {
+    id: id!,
+    imdb_id: id,
+    name: '',
+    type: type as 'movie' | 'series',
+    poster: '',
+  });
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
+  const interactionRef = useRef<ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
 
   const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
@@ -241,12 +249,27 @@ export default function DetailsScreen() {
   }, [content?.videos, selectedSeason]);
 
   useEffect(() => {
-    loadContent();
-    fetchLibrary();
+    // PERFORMANCE: Defer ALL heavy API calls until AFTER the navigation 
+    // transition animation completes. This prevents the 3-5 second delay
+    // when clicking a poster. The screen shows cached data instantly,
+    // then loads additional data once the transition is done.
+    interactionRef.current = InteractionManager.runAfterInteractions(() => {
+      // Only fetch meta for series (need episodes) or if missing background
+      const needsMeta = type === 'series' || !content?.background;
+      if (needsMeta) {
+        loadContent();
+      }
+      fetchLibrary();
+      
+      if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
+        fetchStreams(type, id);
+      }
+    });
     
-    if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
-      fetchStreams(type, id);
-    }
+    return () => {
+      // Cancel deferred work if user navigates away quickly
+      interactionRef.current?.cancel();
+    };
   }, [id, type]);
 
   useEffect(() => {
@@ -266,20 +289,14 @@ export default function DetailsScreen() {
   }, [content, library]);
 
   const loadContent = async () => {
-    setIsLoadingContent(true);
     try {
       const contentId = isEpisodePage ? baseId : id;
       const data = await api.content.getMeta(type!, contentId!);
+      // Merge API data with initial params (API data takes precedence)
       setContent(data);
     } catch (error) {
       console.log('Failed to fetch meta:', error);
-      setContent({
-        id: id!,
-        imdb_id: id,
-        name: passedName || 'Unknown Title',
-        type: type as 'movie' | 'series',
-        poster: passedPoster || '',
-      });
+      // Keep using the initial content from params — already set
     }
     setIsLoadingContent(false);
   };
@@ -481,13 +498,9 @@ export default function DetailsScreen() {
     }
   };
 
-  if (isLoadingContent) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#B8A05C" />
-      </View>
-    );
-  }
+  // Use content data for display - available immediately from store
+  const displayName = content?.name || 'Loading...';
+  const displayPoster = content?.background || content?.poster;
 
   const rating = typeof content?.imdbRating === 'string' 
     ? parseFloat(content.imdbRating) 
@@ -511,7 +524,7 @@ export default function DetailsScreen() {
     <View style={styles.container}>
       {/* Full Screen Background Image */}
       <Image
-        source={{ uri: content?.background || content?.poster }}
+        source={{ uri: displayPoster }}
         style={styles.backgroundImage}
         contentFit="contain"
       />
@@ -549,7 +562,7 @@ export default function DetailsScreen() {
                 contentFit="contain"
               />
             ) : (
-              <Text style={styles.title}>{content?.name}</Text>
+              <Text style={styles.title}>{displayName}</Text>
             )}
             
             {/* Episode info if applicable */}

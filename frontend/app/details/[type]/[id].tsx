@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,13 @@ import {
   Dimensions,
   Linking,
   FlatList,
+  InteractionManager,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useContentStore } from '../../../src/store/contentStore';
+import { useContentStore, getSelectedItemCache } from '../../../src/store/contentStore';
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -188,13 +189,15 @@ export default function DetailsScreen() {
     fetchStreams, 
     library,
     fetchLibrary,
-    selectedItem,
   } = useContentStore();
   
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   
-  // Use selectedItem from store for instant display — no URL param parsing overhead
-  const [content, setContent] = useState<ContentItem | null>(selectedItem || {
+  // Read the cached item immediately (set by Discover page before navigation)
+  // This gives instant poster/name/background display without any API call
+  const cachedItem = useRef(getSelectedItemCache()).current;
+  
+  const [content, setContent] = useState<ContentItem | null>(cachedItem || {
     id: id!,
     imdb_id: id,
     name: '',
@@ -204,6 +207,7 @@ export default function DetailsScreen() {
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
+  const interactionRef = useRef<ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
 
   const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
@@ -245,16 +249,27 @@ export default function DetailsScreen() {
   }, [content?.videos, selectedSeason]);
 
   useEffect(() => {
-    // Only fetch meta for series (need episodes) or if missing background
-    const needsMeta = type === 'series' || !content?.background;
-    if (needsMeta) {
-      loadContent();
-    }
-    fetchLibrary();
+    // PERFORMANCE: Defer ALL heavy API calls until AFTER the navigation 
+    // transition animation completes. This prevents the 3-5 second delay
+    // when clicking a poster. The screen shows cached data instantly,
+    // then loads additional data once the transition is done.
+    interactionRef.current = InteractionManager.runAfterInteractions(() => {
+      // Only fetch meta for series (need episodes) or if missing background
+      const needsMeta = type === 'series' || !content?.background;
+      if (needsMeta) {
+        loadContent();
+      }
+      fetchLibrary();
+      
+      if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
+        fetchStreams(type, id);
+      }
+    });
     
-    if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
-      fetchStreams(type, id);
-    }
+    return () => {
+      // Cancel deferred work if user navigates away quickly
+      interactionRef.current?.cancel();
+    };
   }, [id, type]);
 
   useEffect(() => {

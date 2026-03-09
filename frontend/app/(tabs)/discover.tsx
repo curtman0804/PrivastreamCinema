@@ -34,6 +34,7 @@ export default function DiscoverScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionPositions = useRef<Record<string, number>>({});
   const lastFocusedSection = useRef<string>('');
+  const lastCWFetchTime = useRef<number>(0);
 
   // Use same card width calculation as ContentCard for consistency
   const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
@@ -45,6 +46,7 @@ export default function DiscoverScreen() {
       setIsLoadingProgress(true);
       const response = await api.watchProgress.getAll();
       setContinueWatching(response.continueWatching || []);
+      lastCWFetchTime.current = Date.now();
     } catch (err) {
       console.log('[Discover] Error fetching continue watching:', err);
     } finally {
@@ -58,11 +60,17 @@ export default function DiscoverScreen() {
     fetchContinueWatching();
   }, []);
 
-  // Re-fetch continue watching when screen comes into focus
+  // Re-fetch continue watching when screen comes into focus (with 30s cooldown)
   useFocusEffect(
     useCallback(() => {
+      // Skip re-fetch if data was loaded less than 30 seconds ago
+      // This prevents the delay when pressing back from Details page
+      const timeSinceLastFetch = Date.now() - lastCWFetchTime.current;
+      if (timeSinceLastFetch < 30000 && continueWatching.length >= 0) {
+        return;
+      }
       fetchContinueWatching();
-    }, [fetchContinueWatching])
+    }, [fetchContinueWatching, continueWatching.length])
   );
 
   // Check if there's any content to display
