@@ -175,6 +175,12 @@ export const useContentStore = create<ContentState>((set, get) => ({
   fetchStreams: async (type: string, id: string) => {
     set({ isLoadingStreams: true, streams: [], error: null });
     
+    // PERFORMANCE: Give the calling screen 400ms to render before
+    // starting heavy network requests. On low-powered devices like
+    // Fire Stick, this prevents the JS thread from being swamped
+    // during the screen transition.
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
     try {
       // Progressive loading: show streams as each source responds
       const result = await api.addons.getAllStreams(type, id, (partialStreams: Stream[]) => {
