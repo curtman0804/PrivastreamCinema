@@ -24,6 +24,7 @@ interface ContentState {
   searchSkip: number;
   currentSearchQuery: string;
   streams: Stream[];
+  selectedItem: ContentItem | null;
   currentPlaying: CurrentPlaying | null;
   isLoadingDiscover: boolean;
   isLoadingAddons: boolean;
@@ -32,6 +33,7 @@ interface ContentState {
   isLoadingMoreSearch: boolean;
   isLoadingStreams: boolean;
   error: string | null;
+  setSelectedItem: (item: ContentItem | null) => void;
   fetchDiscover: (forceRefresh?: boolean) => Promise<void>;
   fetchAddons: (forceRefresh?: boolean) => Promise<void>;
   fetchLibrary: (forceRefresh?: boolean) => Promise<void>;
@@ -56,6 +58,7 @@ const initialState = {
   searchSkip: 0,
   currentSearchQuery: '',
   currentPlaying: null,
+  selectedItem: null,
   streams: [],
   isLoadingDiscover: false,
   isLoadingAddons: false,
@@ -68,6 +71,10 @@ const initialState = {
 
 export const useContentStore = create<ContentState>((set, get) => ({
   ...initialState,
+
+  setSelectedItem: (item: ContentItem | null) => {
+    set({ selectedItem: item });
+  },
 
   resetStore: () => {
     set(initialState);

@@ -16,7 +16,6 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
-import { setSelectedItemCache } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 import { getCardWidth } from '../../src/components/ContentCard';
@@ -27,7 +26,7 @@ export default function DiscoverScreen() {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
   
-  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons, addons } = useContentStore();
+  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons, addons, setSelectedItem } = useContentStore();
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
@@ -117,8 +116,8 @@ export default function DiscoverScreen() {
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
     const encodedId = encodeURIComponent(id);
-    // Store in non-reactive cache (no re-renders triggered)
-    setSelectedItemCache(item);
+    // Store in zustand so Details page gets instant data
+    setSelectedItem(item);
     router.push(`/details/${item.type}/${encodedId}`);
   };
 

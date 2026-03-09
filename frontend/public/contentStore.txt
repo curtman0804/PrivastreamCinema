@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
 
+// Non-reactive cache for passing item data between screens
+// Does NOT trigger re-renders (unlike zustand state)
+let _selectedItemCache: ContentItem | null = null;
+export const setSelectedItemCache = (item: ContentItem | null) => { _selectedItemCache = item; };
+export const getSelectedItemCache = () => _selectedItemCache;
+
 interface CurrentPlaying {
   contentType: string;
   contentId: string;
@@ -18,6 +24,7 @@ interface ContentState {
   searchSkip: number;
   currentSearchQuery: string;
   streams: Stream[];
+  selectedItem: ContentItem | null;
   currentPlaying: CurrentPlaying | null;
   isLoadingDiscover: boolean;
   isLoadingAddons: boolean;
@@ -26,6 +33,7 @@ interface ContentState {
   isLoadingMoreSearch: boolean;
   isLoadingStreams: boolean;
   error: string | null;
+  setSelectedItem: (item: ContentItem | null) => void;
   fetchDiscover: (forceRefresh?: boolean) => Promise<void>;
   fetchAddons: (forceRefresh?: boolean) => Promise<void>;
   fetchLibrary: (forceRefresh?: boolean) => Promise<void>;
@@ -50,6 +58,7 @@ const initialState = {
   searchSkip: 0,
   currentSearchQuery: '',
   currentPlaying: null,
+  selectedItem: null,
   streams: [],
   isLoadingDiscover: false,
   isLoadingAddons: false,
@@ -63,18 +72,33 @@ const initialState = {
 export const useContentStore = create<ContentState>((set, get) => ({
   ...initialState,
 
+  setSelectedItem: (item: ContentItem | null) => {
+    set({ selectedItem: item });
+  },
+
   resetStore: () => {
     set(initialState);
   },
 
   fetchDiscover: async (forceRefresh = false) => {
+    const currentData = get().discoverData;
+    // Show cached data immediately (stale-while-revalidate)
+    if (currentData && !forceRefresh) {
+      // Still refresh in background, but don't show loading spinner
+      api.content.getDiscover().then(data => {
+        set({ discoverData: data });
+      }).catch(err => {
+        console.log('[ContentStore] Background refresh error:', err);
+      });
+      return;
+    }
     set({ isLoadingDiscover: true, error: null });
     try {
       const data = await api.content.getDiscover();
       set({ discoverData: data, isLoadingDiscover: false });
     } catch (error: any) {
       console.log('[ContentStore] fetchDiscover error:', error);
-      set({ error: error.message, isLoadingDiscover: false, discoverData: null });
+      set({ error: error.message, isLoadingDiscover: false, discoverData: currentData || null });
     }
   },
 

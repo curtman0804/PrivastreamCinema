@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useContentStore, getSelectedItemCache } from '../../../src/store/contentStore';
+import { useContentStore } from '../../../src/store/contentStore';
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -188,15 +188,13 @@ export default function DetailsScreen() {
     fetchStreams, 
     library,
     fetchLibrary,
+    selectedItem,
   } = useContentStore();
   
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   
-  // Read the cached item immediately (set by Discover page before navigation)
-  // This gives instant poster/name/background display without any API call
-  const cachedItem = getSelectedItemCache();
-  
-  const [content, setContent] = useState<ContentItem | null>(cachedItem || {
+  // Use selectedItem from store for instant display — no URL param parsing overhead
+  const [content, setContent] = useState<ContentItem | null>(selectedItem || {
     id: id!,
     imdb_id: id,
     name: '',
@@ -247,22 +245,16 @@ export default function DetailsScreen() {
   }, [content?.videos, selectedSeason]);
 
   useEffect(() => {
-    // Small delay to let the screen render first with cached data,
-    // then start the API calls. This prevents blocking the navigation transition.
-    const timer = setTimeout(() => {
-      // Only fetch meta for series (need episodes) or if missing background
-      const needsMeta = type === 'series' || !content?.background;
-      if (needsMeta) {
-        loadContent();
-      }
-      fetchLibrary();
-      
-      if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
-        fetchStreams(type, id);
-      }
-    }, 50);
+    // Only fetch meta for series (need episodes) or if missing background
+    const needsMeta = type === 'series' || !content?.background;
+    if (needsMeta) {
+      loadContent();
+    }
+    fetchLibrary();
     
-    return () => clearTimeout(timer);
+    if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
+      fetchStreams(type, id);
+    }
   }, [id, type]);
 
   useEffect(() => {
