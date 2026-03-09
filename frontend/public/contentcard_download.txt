@@ -192,15 +192,22 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         { height: cardHeight },
         isFocused && styles.posterFocused,
       ]}>
-        {/* Image */}
+        {/* Image or Placeholder */}
         <View style={styles.imageWrapper}>
-          <Image
-            source={item.poster ? { uri: item.poster } : require('../../assets/images/no-poster.png')}
-            style={styles.posterImage}
-            contentFit="cover"
-            recyclingKey={item.id || item.imdb_id}
-            cachePolicy="memory-disk"
-          />
+          {item.poster ? (
+            <Image
+              source={{ uri: item.poster }}
+              style={styles.posterImage}
+              contentFit="cover"
+              recyclingKey={item.id || item.imdb_id}
+              cachePolicy="memory-disk"
+            />
+          ) : (
+            <View style={[styles.posterImage, { backgroundColor: '#1e1e22', justifyContent: 'center', alignItems: 'center' }]}>
+              <Ionicons name="eye-outline" size={cardWidth * 0.3} color="rgba(140,120,70,0.4)" />
+              <Text style={{ color: 'rgba(140,120,70,0.6)', fontSize: 10, marginTop: 8, fontWeight: '600', letterSpacing: 1 }}>COMING SOON</Text>
+            </View>
+          )}
         </View>
         
         {/* Library indicator */}

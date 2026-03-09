@@ -133,8 +133,15 @@ function StreamCard({
 }
 
 // Episode Card Component
-// Placeholder image for missing posters/thumbnails
-const NO_POSTER = require('../../../assets/images/no-poster.png');
+// Placeholder component for missing posters/thumbnails
+function ComingSoonPlaceholder({ width, height }: { width: number | string; height: number | string }) {
+  return (
+    <View style={{ width: width as any, height: height as any, backgroundColor: '#1e1e22', justifyContent: 'center', alignItems: 'center' }}>
+      <Ionicons name="eye-outline" size={32} color="rgba(140,120,70,0.4)" />
+      <Text style={{ color: 'rgba(140,120,70,0.6)', fontSize: 9, marginTop: 6, fontWeight: '600', letterSpacing: 1 }}>COMING SOON</Text>
+    </View>
+  );
+}
 
 function EpisodeCard({ 
   episode, 
@@ -155,11 +162,15 @@ function EpisodeCard({
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
     >
-      <Image
-        source={thumbUri ? { uri: thumbUri } : NO_POSTER}
-        style={styles.episodeThumbnail}
-        contentFit="cover"
-      />
+      {thumbUri ? (
+        <Image
+          source={{ uri: thumbUri }}
+          style={styles.episodeThumbnail}
+          contentFit="cover"
+        />
+      ) : (
+        <ComingSoonPlaceholder width="100%" height={90} />
+      )}
       <View style={styles.episodeInfo}>
         <Text style={styles.episodeTitle} numberOfLines={2}>
           E{episode.episode}: {episode.name || `Episode ${episode.episode}`}
