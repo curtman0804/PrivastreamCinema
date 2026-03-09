@@ -210,17 +210,6 @@ export default function DetailsScreen() {
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
-  
-  // DEFERRED RENDERING: Show lightweight shell first, then mount heavy components
-  // This prevents the 3-second freeze on Fire Stick when mounting the full UI
-  const [isReady, setIsReady] = useState(false);
-  useEffect(() => {
-    // Use requestAnimationFrame to defer heavy rendering until after first paint
-    const raf = requestAnimationFrame(() => {
-      setIsReady(true);
-    });
-    return () => cancelAnimationFrame(raf);
-  }, []);
 
   const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
@@ -530,28 +519,22 @@ export default function DetailsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Fast shell: solid background + title renders INSTANTLY */}
-      {!isReady ? (
-        <View style={[styles.container, { backgroundColor: '#0f0f11', justifyContent: 'center', alignItems: 'center' }]}>
-          <Text style={styles.title}>{displayName || 'Loading...'}</Text>
-          <ActivityIndicator size="small" color="#B8A05C" style={{ marginTop: 20 }} />
-        </View>
-      ) : (
-        <>
-          {/* Full Screen Background Image — only mounts after first paint */}
-          <Image
-            source={{ uri: displayPoster }}
-            style={styles.backgroundImage}
-            contentFit="contain"
-            transition={200}
-          />
-          
-          {/* Gradient Overlay */}
-          <LinearGradient
-            colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)', 'rgba(15,15,17,0.95)', '#0f0f11']}
-            locations={[0, 0.4, 0.7, 1]}
-            style={styles.gradientOverlay}
-          />
+      {/* Full Screen Background Image */}
+      {displayPoster ? (
+        <Image
+          source={{ uri: displayPoster }}
+          style={styles.backgroundImage}
+          contentFit="contain"
+          transition={200}
+        />
+      ) : null}
+      
+      {/* Gradient Overlay */}
+      <LinearGradient
+        colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)', 'rgba(15,15,17,0.95)', '#0f0f11']}
+        locations={[0, 0.4, 0.7, 1]}
+        style={styles.gradientOverlay}
+      />
       
       {/* Content Overlay */}
       <View style={styles.contentOverlay}>
@@ -724,8 +707,6 @@ export default function DetailsScreen() {
           <View style={{ height: 100 }} />
         </ScrollView>
       </View>
-        </>
-      )}
     </View>
   );
 }

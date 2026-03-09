@@ -16,6 +16,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
+import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 import { getCardWidth } from '../../src/components/ContentCard';
@@ -120,6 +121,22 @@ export default function DiscoverScreen() {
 
   // Item width for snap scrolling
   const itemWidth = POSTER_WIDTH + 16;
+
+  // PRE-FETCH meta on poster focus (D-pad hover) so backdrop is ready before click
+  const prefetchingRef = useRef<Set<string>>(new Set());
+  const handleItemFocus = useCallback((item: ContentItem) => {
+    const id = item.imdb_id || item.id;
+    if (!id || prefetchingRef.current.has(id) || getMetaCache(id)) return;
+    prefetchingRef.current.add(id);
+    // Fire-and-forget: fetch meta in background
+    api.content.getMeta(item.type, id).then((meta) => {
+      setMetaCache(id, meta);
+      // Also pre-download the backdrop image so it's in expo-image disk cache
+      if (meta.background) {
+        Image.prefetch(meta.background);
+      }
+    }).catch(() => {});
+  }, []);
 
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
@@ -316,6 +333,7 @@ export default function DiscoverScreen() {
                     contentType="movies"
                     items={content.movies}
                     onItemPress={handleItemPress}
+                    onItemFocus={handleItemFocus}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
                     isFirstRow={isFirst}
                   />
@@ -335,6 +353,7 @@ export default function DiscoverScreen() {
                     contentType="series"
                     items={content.series}
                     onItemPress={handleItemPress}
+                    onItemFocus={handleItemFocus}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
                     isFirstRow={isFirst}
                   />
