@@ -153,6 +153,7 @@ function EpisodeCard({
   onPress: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
+  const [thumbError, setThumbError] = useState(false);
   const thumbUri = episode.thumbnail || fallbackPoster;
   
   return (
@@ -162,11 +163,12 @@ function EpisodeCard({
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
     >
-      {thumbUri ? (
+      {thumbUri && !thumbError ? (
         <Image
           source={{ uri: thumbUri }}
           style={styles.episodeThumbnail}
           contentFit="cover"
+          onError={() => setThumbError(true)}
         />
       ) : (
         <ComingSoonPlaceholder width="100%" height={90} />

@@ -76,6 +76,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const { width, height } = useWindowDimensions();
   const [isFocused, setIsFocused] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
+  const [posterError, setPosterError] = useState(false);
   const pressableRef = useRef<View>(null);
   const [selfTag, setSelfTag] = useState<number>(0);
   
@@ -194,13 +195,14 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       ]}>
         {/* Image or Placeholder */}
         <View style={styles.imageWrapper}>
-          {item.poster ? (
+          {item.poster && !posterError ? (
             <Image
               source={{ uri: item.poster }}
               style={styles.posterImage}
               contentFit="cover"
               recyclingKey={item.id || item.imdb_id}
               cachePolicy="memory-disk"
+              onError={() => setPosterError(true)}
             />
           ) : (
             <View style={[styles.posterImage, { backgroundColor: '#1e1e22', justifyContent: 'center', alignItems: 'center' }]}>
