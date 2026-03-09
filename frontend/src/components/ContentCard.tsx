@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { PLACEHOLDER_ICON_URI } from '../constants/placeholderIcon';
 import { ContentItem, SearchResult, api } from '../api/client';
 import { colors, posterShapes } from '../styles/colors';
 
@@ -207,8 +208,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           ) : (
             <View style={[styles.posterImage, { backgroundColor: '#1e1e22', justifyContent: 'center', alignItems: 'center' }]}>
               <Image
-                source={{ uri: `${process.env.EXPO_PUBLIC_BACKEND_URL}/api/download/app-icon-transparent.png` }}
-                style={{ width: cardWidth * 0.55, height: cardWidth * 0.55, opacity: 0.5 }}
+                source={{ uri: PLACEHOLDER_ICON_URI }}
+                style={{ width: cardWidth * 0.55, height: cardWidth * 0.55 }}
                 contentFit="contain"
               />
               <Text style={{ color: 'rgba(140,120,70,0.6)', fontSize: 10, marginTop: 8, fontWeight: '600', letterSpacing: 1 }}>COMING SOON</Text>

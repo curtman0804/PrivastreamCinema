@@ -14,6 +14,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { PLACEHOLDER_ICON_URI } from '../../../src/constants/placeholderIcon';
 import { useContentStore, getMetaCache, setMetaCache } from '../../../src/store/contentStore';
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -138,8 +139,8 @@ function ComingSoonPlaceholder({ width, height }: { width: number | string; heig
   return (
     <View style={{ width: width as any, height: height as any, backgroundColor: '#1e1e22', justifyContent: 'center', alignItems: 'center' }}>
       <Image
-        source={{ uri: `${process.env.EXPO_PUBLIC_BACKEND_URL}/api/download/app-icon-transparent.png` }}
-        style={{ width: 50, height: 50, opacity: 0.5 }}
+        source={{ uri: PLACEHOLDER_ICON_URI }}
+        style={{ width: 50, height: 50 }}
         contentFit="contain"
       />
       <Text style={{ color: 'rgba(140,120,70,0.6)', fontSize: 9, marginTop: 6, fontWeight: '600', letterSpacing: 1 }}>COMING SOON</Text>
