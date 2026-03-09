@@ -143,7 +143,10 @@ export default function LibraryScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
-  const { library, isLoadingLibrary, fetchLibrary, removeFromLibrary } = useContentStore();
+  const library = useContentStore(s => s.library);
+  const isLoadingLibrary = useContentStore(s => s.isLoadingLibrary);
+  const fetchLibrary = useContentStore(s => s.fetchLibrary);
+  const removeFromLibrary = useContentStore(s => s.removeFromLibrary);
   const [filter, setFilter] = useState<FilterType>('movies');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -171,17 +174,11 @@ export default function LibraryScreen() {
   const handleItemPress = useCallback((item: ContentItem) => {
     const id = item.imdb_id || item.id;
     const encodedId = encodeURIComponent(id);
-    // Pass display data as route params for instant rendering
     router.push({
       pathname: `/details/${item.type}/${encodedId}`,
       params: {
         name: item.name || '',
         poster: item.poster || '',
-        background: item.background || '',
-        logo: item.logo || '',
-        year: item.year ? String(item.year) : '',
-        imdbRating: item.imdbRating ? String(item.imdbRating) : '',
-        description: item.description || '',
       },
     });
   }, [router]);

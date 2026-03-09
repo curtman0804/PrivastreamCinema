@@ -26,7 +26,15 @@ export default function DiscoverScreen() {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
   
-  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons, addons } = useContentStore();
+  // CRITICAL: Use zustand SELECTORS — only re-render when these specific fields change.
+  // Without selectors, the Discover page re-renders when ANY store field changes
+  // (e.g., when Details page loads streams), causing hundreds of poster images
+  // to re-render and blocking the JS thread for 3+ seconds.
+  const discoverData = useContentStore(s => s.discoverData);
+  const isLoadingDiscover = useContentStore(s => s.isLoadingDiscover);
+  const fetchDiscover = useContentStore(s => s.fetchDiscover);
+  const fetchAddons = useContentStore(s => s.fetchAddons);
+  const addons = useContentStore(s => s.addons);
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
@@ -116,18 +124,12 @@ export default function DiscoverScreen() {
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
     const encodedId = encodeURIComponent(id);
-    // Pass display data as route params for INSTANT rendering on details page
-    // No store subscription needed for initial paint
+    // Minimal params for instant first paint — just name + poster
     router.push({
       pathname: `/details/${item.type}/${encodedId}`,
       params: {
         name: item.name || '',
         poster: item.poster || '',
-        background: item.background || '',
-        logo: item.logo || '',
-        year: item.year ? String(item.year) : '',
-        imdbRating: item.imdbRating ? String(item.imdbRating) : '',
-        description: item.description || '',
       },
     });
   };

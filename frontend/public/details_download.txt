@@ -174,9 +174,7 @@ export default function DetailsScreen() {
     resumeSeason,
     resumeEpisode,
     // Display data passed via route params for INSTANT rendering
-    name: paramName, poster: paramPoster, background: paramBackground,
-    logo: paramLogo, year: paramYear, imdbRating: paramRating,
-    description: paramDescription,
+    name: paramName, poster: paramPoster,
   } = useLocalSearchParams<{ 
     type: string; 
     id: string;
@@ -184,9 +182,7 @@ export default function DetailsScreen() {
     resumePosition?: string;
     resumeSeason?: string;
     resumeEpisode?: string;
-    name?: string; poster?: string; background?: string;
-    logo?: string; year?: string; imdbRating?: string;
-    description?: string;
+    name?: string; poster?: string;
   }>();
   const router = useRouter();
   
@@ -208,11 +204,6 @@ export default function DetailsScreen() {
     name: paramName || '',
     type: type as 'movie' | 'series',
     poster: paramPoster || '',
-    background: paramBackground || '',
-    logo: paramLogo || '',
-    year: paramYear ? parseInt(paramYear) : undefined,
-    imdbRating: paramRating || undefined,
-    description: paramDescription || '',
   };
   
   const [content, setContent] = useState<ContentItem | null>(initialContent);

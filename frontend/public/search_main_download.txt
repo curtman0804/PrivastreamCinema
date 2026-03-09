@@ -87,7 +87,10 @@ function FocusableButton({
 export default function SearchScreen() {
   const { q } = useLocalSearchParams<{ q?: string }>();
   const router = useRouter();
-  const { searchResults, isLoadingSearch, search, clearSearch } = useContentStore();
+  const searchResults = useContentStore(s => s.searchResults);
+  const isLoadingSearch = useContentStore(s => s.isLoadingSearch);
+  const search = useContentStore(s => s.search);
+  const clearSearch = useContentStore(s => s.clearSearch);
   const [searchQuery, setSearchQuery] = useState(q || '');
   const flatListRef = useRef<FlatList>(null);
 

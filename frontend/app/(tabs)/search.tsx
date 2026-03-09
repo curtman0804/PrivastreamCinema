@@ -18,14 +18,12 @@ import { SearchResult } from '../../src/api/client';
 export default function SearchScreen() {
   const router = useRouter();
   const { q: queryParam } = useLocalSearchParams<{ q?: string }>();
-  const { 
-    searchResults, 
-    searchMovies,
-    searchSeries,
-    isLoadingSearch, 
-    search, 
-    clearSearch 
-  } = useContentStore();
+  const searchResults = useContentStore(s => s.searchResults);
+  const searchMovies = useContentStore(s => s.searchMovies);
+  const searchSeries = useContentStore(s => s.searchSeries);
+  const isLoadingSearch = useContentStore(s => s.isLoadingSearch);
+  const search = useContentStore(s => s.search);
+  const clearSearch = useContentStore(s => s.clearSearch);
   const [hasSearched, setHasSearched] = useState(false);
   const [currentQuery, setCurrentQuery] = useState<string>('');
   const hasTriggeredInitialSearch = useRef(false);

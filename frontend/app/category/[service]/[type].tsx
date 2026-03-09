@@ -71,7 +71,7 @@ const CategoryItem = memo(({
 export default function CategoryScreen() {
   const { service, type } = useLocalSearchParams<{ service: string; type: string }>();
   const router = useRouter();
-  const { discoverData } = useContentStore();
+  const discoverData = useContentStore(s => s.discoverData);
   const [items, setItems] = useState<ContentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
