@@ -26,7 +26,7 @@ export default function DiscoverScreen() {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
   
-  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons, addons, setSelectedItem } = useContentStore();
+  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons, addons } = useContentStore();
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
@@ -116,9 +116,20 @@ export default function DiscoverScreen() {
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
     const encodedId = encodeURIComponent(id);
-    // Store in zustand so Details page gets instant data
-    setSelectedItem(item);
-    router.push(`/details/${item.type}/${encodedId}`);
+    // Pass display data as route params for INSTANT rendering on details page
+    // No store subscription needed for initial paint
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || '',
+        poster: item.poster || '',
+        background: item.background || '',
+        logo: item.logo || '',
+        year: item.year ? String(item.year) : '',
+        imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+        description: item.description || '',
+      },
+    });
   };
 
   // Handle continue watching item press

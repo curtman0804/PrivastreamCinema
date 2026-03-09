@@ -187,6 +187,11 @@ export default function CategoryScreen() {
       params: {
         name: item.name || '',
         poster: item.poster || '',
+        background: item.background || '',
+        logo: item.logo || '',
+        year: item.year ? String(item.year) : '',
+        imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+        description: item.description || '',
       }
     });
   }, [router]);

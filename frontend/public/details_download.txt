@@ -173,6 +173,10 @@ export default function DetailsScreen() {
     resumePosition,
     resumeSeason,
     resumeEpisode,
+    // Display data passed via route params for INSTANT rendering
+    name: paramName, poster: paramPoster, background: paramBackground,
+    logo: paramLogo, year: paramYear, imdbRating: paramRating,
+    description: paramDescription,
   } = useLocalSearchParams<{ 
     type: string; 
     id: string;
@@ -180,26 +184,34 @@ export default function DetailsScreen() {
     resumePosition?: string;
     resumeSeason?: string;
     resumeEpisode?: string;
+    name?: string; poster?: string; background?: string;
+    logo?: string; year?: string; imdbRating?: string;
+    description?: string;
   }>();
   const router = useRouter();
-  const { 
-    streams, 
-    isLoadingStreams, 
-    fetchStreams, 
-    library,
-    fetchLibrary,
-    selectedItem,
-  } = useContentStore();
+  
+  // Use zustand SELECTORS — only re-render when these specific fields change
+  // This prevents re-renders from unrelated store changes (discover data, addons, etc.)
+  const streams = useContentStore(s => s.streams);
+  const isLoadingStreams = useContentStore(s => s.isLoadingStreams);
+  const fetchStreams = useContentStore(s => s.fetchStreams);
+  const library = useContentStore(s => s.library);
+  const fetchLibrary = useContentStore(s => s.fetchLibrary);
   
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   
-  // Use selectedItem from store for instant display — no URL param parsing overhead
-  const [content, setContent] = useState<ContentItem | null>(selectedItem || {
+  // Build initial content from route params — available INSTANTLY, no API needed
+  const [content, setContent] = useState<ContentItem | null>({
     id: id!,
     imdb_id: id,
-    name: '',
+    name: paramName || '',
     type: type as 'movie' | 'series',
-    poster: '',
+    poster: paramPoster || '',
+    background: paramBackground || '',
+    logo: paramLogo || '',
+    year: paramYear ? parseInt(paramYear) : undefined,
+    imdbRating: paramRating || undefined,
+    description: paramDescription || '',
   });
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);

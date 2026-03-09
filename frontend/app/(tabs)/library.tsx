@@ -170,9 +170,20 @@ export default function LibraryScreen() {
 
   const handleItemPress = useCallback((item: ContentItem) => {
     const id = item.imdb_id || item.id;
-    // Store full item data in zustand (instant, no URL encoding overhead)
-    useContentStore.getState().setSelectedItem(item);
-    router.push(`/details/${item.type}/${id}`);
+    const encodedId = encodeURIComponent(id);
+    // Pass display data as route params for instant rendering
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || '',
+        poster: item.poster || '',
+        background: item.background || '',
+        logo: item.logo || '',
+        year: item.year ? String(item.year) : '',
+        imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+        description: item.description || '',
+      },
+    });
   }, [router]);
 
   const handleRemoveItem = useCallback(async (item: ContentItem) => {

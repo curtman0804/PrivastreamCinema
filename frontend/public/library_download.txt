@@ -8,7 +8,6 @@ import {
   RefreshControl,
   Pressable,
   useWindowDimensions,
-  Alert,
   findNodeHandle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -171,32 +170,30 @@ export default function LibraryScreen() {
 
   const handleItemPress = useCallback((item: ContentItem) => {
     const id = item.imdb_id || item.id;
-    router.push(`/details/${item.type}/${id}`);
+    const encodedId = encodeURIComponent(id);
+    // Pass display data as route params for instant rendering
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || '',
+        poster: item.poster || '',
+        background: item.background || '',
+        logo: item.logo || '',
+        year: item.year ? String(item.year) : '',
+        imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+        description: item.description || '',
+      },
+    });
   }, [router]);
 
-  const handleRemoveItem = useCallback((item: ContentItem) => {
+  const handleRemoveItem = useCallback(async (item: ContentItem) => {
     const contentId = item.imdb_id || item.id;
     const contentType = item.type || 'movie';
-    const contentName = item.name || item.title || 'this item';
-
-    Alert.alert(
-      'Remove from Library?',
-      `Remove "${contentName}" from your library?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await removeFromLibrary(contentType, contentId);
-            } catch (error) {
-              console.log('Remove error:', error);
-            }
-          },
-        },
-      ]
-    );
+    try {
+      await removeFromLibrary(contentType, contentId);
+    } catch (error) {
+      console.log('Remove error:', error);
+    }
   }, [removeFromLibrary]);
 
   const getFilteredContent = (): ContentItem[] => {
@@ -247,18 +244,21 @@ export default function LibraryScreen() {
     />
   ), [handleItemPress, handleRemoveItem, cardWidth, cardHeight, isTV, handleCardBlur, handleCardFocus]);
 
-  const renderFilterButton = (type: FilterType, label: string) => {
+  const FilterButton = ({ type, label }: { type: FilterType; label: string }) => {
     const isActive = filter === type;
+    const [btnFocused, setBtnFocused] = useState(false);
     return (
       <Pressable
         onPress={() => setFilter(type)}
-        style={({ focused }) => [
+        onFocus={() => setBtnFocused(true)}
+        onBlur={() => setBtnFocused(false)}
+        style={[
           styles.filterButton,
           isActive && styles.filterButtonActive,
-          focused && styles.filterButtonFocused,
+          btnFocused && styles.filterButtonFocused,
         ]}
       >
-        <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+        <Text style={[styles.filterText, isActive && styles.filterTextActive, btnFocused && styles.filterTextFocused]}>
           {label}
         </Text>
       </Pressable>
@@ -282,16 +282,15 @@ export default function LibraryScreen() {
       </View>
 
       <View style={[styles.filterContainer, isTV && styles.filterContainerTV]}>
-        {renderFilterButton('movies', 'Movies')}
-        {renderFilterButton('series', 'Series')}
-        {renderFilterButton('tv', 'TV Channels')}
+        <FilterButton type="movies" label="Movies" />
+        <FilterButton type="series" label="Series" />
+        <FilterButton type="tv" label="TV Channels" />
       </View>
 
       {filteredContent.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="bookmark-outline" size={64} color={colors.primaryDark} />
           <Text style={styles.emptyText}>Your library is empty</Text>
-          <Text style={styles.emptySubtext}>Long press any poster to add to library</Text>
         </View>
       ) : (
         <FlatList
@@ -368,6 +367,8 @@ const styles = StyleSheet.create({
   },
   filterButtonFocused: {
     borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
+    transform: [{ scale: 1.1 }],
   },
   filterText: {
     color: '#888888',
@@ -375,6 +376,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   filterTextActive: {
+    color: '#FFFFFF',
+  },
+  filterTextFocused: {
     color: '#FFFFFF',
   },
   loadingContainer: {
@@ -410,12 +414,11 @@ const styles = StyleSheet.create({
     paddingLeft: 48,
     paddingRight: 128,
   },
-  // X button row - sits above poster, right-aligned
+  // X button row - sits above poster, right-aligned (matches discover.tsx)
   xButtonRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     zIndex: 10,
+    paddingRight: 8,
   },
   removeButtonOverlay: {
     backgroundColor: 'rgba(0, 0, 0, 0.7)',

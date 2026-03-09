@@ -64,8 +64,10 @@ export default function SearchScreen() {
     router.push({
       pathname: `/details/${item.type}/${encodeURIComponent(item.id)}`,
       params: {
-        name: item.name,
-        poster: item.poster,
+        name: item.name || '',
+        poster: item.poster || '',
+        year: item.year ? String(item.year) : '',
+        imdbRating: item.imdbRating ? String(item.imdbRating) : '',
       },
     });
   };
