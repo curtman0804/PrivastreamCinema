@@ -3407,7 +3407,11 @@ async def download_file(filename: str):
     import os
     file_path = os.path.join(os.path.dirname(__file__), "static", filename)
     if os.path.exists(file_path):
-        return FileResponse(file_path, media_type="text/plain", filename=filename)
+        # Detect media type from extension
+        ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+        media_types = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif'}
+        media_type = media_types.get(ext, 'text/plain')
+        return FileResponse(file_path, media_type=media_type, filename=filename)
     raise HTTPException(status_code=404, detail="File not found")
 
 
