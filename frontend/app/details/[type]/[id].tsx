@@ -9,7 +9,6 @@ import {
   Dimensions,
   Linking,
   FlatList,
-  InteractionManager,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -195,7 +194,7 @@ export default function DetailsScreen() {
   
   // Read the cached item immediately (set by Discover page before navigation)
   // This gives instant poster/name/background display without any API call
-  const cachedItem = useRef(getSelectedItemCache()).current;
+  const cachedItem = getSelectedItemCache();
   
   const [content, setContent] = useState<ContentItem | null>(cachedItem || {
     id: id!,
@@ -207,7 +206,6 @@ export default function DetailsScreen() {
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
-  const interactionRef = useRef<ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
 
   const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
@@ -249,11 +247,9 @@ export default function DetailsScreen() {
   }, [content?.videos, selectedSeason]);
 
   useEffect(() => {
-    // PERFORMANCE: Defer ALL heavy API calls until AFTER the navigation 
-    // transition animation completes. This prevents the 3-5 second delay
-    // when clicking a poster. The screen shows cached data instantly,
-    // then loads additional data once the transition is done.
-    interactionRef.current = InteractionManager.runAfterInteractions(() => {
+    // Small delay to let the screen render first with cached data,
+    // then start the API calls. This prevents blocking the navigation transition.
+    const timer = setTimeout(() => {
       // Only fetch meta for series (need episodes) or if missing background
       const needsMeta = type === 'series' || !content?.background;
       if (needsMeta) {
@@ -264,12 +260,9 @@ export default function DetailsScreen() {
       if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
         fetchStreams(type, id);
       }
-    });
+    }, 50);
     
-    return () => {
-      // Cancel deferred work if user navigates away quickly
-      interactionRef.current?.cancel();
-    };
+    return () => clearTimeout(timer);
   }, [id, type]);
 
   useEffect(() => {
