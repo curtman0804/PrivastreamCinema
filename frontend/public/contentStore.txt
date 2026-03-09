@@ -1,11 +1,17 @@
 import { create } from 'zustand';
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
 
-// Non-reactive cache for passing item data between screens
-// Does NOT trigger re-renders (unlike zustand state)
-let _selectedItemCache: ContentItem | null = null;
-export const setSelectedItemCache = (item: ContentItem | null) => { _selectedItemCache = item; };
-export const getSelectedItemCache = () => _selectedItemCache;
+// ============================================================
+// MODULE-LEVEL CACHES — persist across screen mounts/unmounts
+// These are NOT in zustand to avoid triggering re-renders
+// ============================================================
+const _metaCache: Record<string, ContentItem> = {};
+const _streamsCache: Record<string, Stream[]> = {};
+
+export const getMetaCache = (key: string) => _metaCache[key] || null;
+export const setMetaCache = (key: string, data: ContentItem) => { _metaCache[key] = data; };
+export const getStreamsCache = (key: string) => _streamsCache[key] || null;
+export const setStreamsCache = (key: string, data: Stream[]) => { _streamsCache[key] = data; };
 
 interface CurrentPlaying {
   contentType: string;
@@ -173,25 +179,28 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   fetchStreams: async (type: string, id: string) => {
-    set({ isLoadingStreams: true, streams: [], error: null });
+    const cacheKey = `${type}/${id}`;
     
-    // PERFORMANCE: Give the calling screen 400ms to render before
-    // starting heavy network requests. On low-powered devices like
-    // Fire Stick, this prevents the JS thread from being swamped
-    // during the screen transition.
-    await new Promise(resolve => setTimeout(resolve, 400));
+    // CHECK CACHE FIRST — instant return if we have data
+    const cached = getStreamsCache(cacheKey);
+    if (cached && cached.length > 0) {
+      set({ streams: cached, isLoadingStreams: false, error: null });
+      return cached;
+    }
+    
+    set({ isLoadingStreams: true, streams: [], error: null });
     
     try {
       // Progressive loading: show streams as each source responds
       const result = await api.addons.getAllStreams(type, id, (partialStreams: Stream[]) => {
-        // Update streams in store as each source returns
         set({ streams: partialStreams });
-        // Stop loading indicator as soon as we have ANY streams
         if (partialStreams.length > 0) {
           set({ isLoadingStreams: false });
         }
       });
       const allStreams = result.streams || [];
+      // Cache the result for instant re-access
+      setStreamsCache(cacheKey, allStreams);
       set({ streams: allStreams, isLoadingStreams: false });
       return allStreams;
     } catch (error: any) {

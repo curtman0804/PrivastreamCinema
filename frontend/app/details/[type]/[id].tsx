@@ -14,7 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useContentStore } from '../../../src/store/contentStore';
+import { useContentStore, getMetaCache, setMetaCache } from '../../../src/store/contentStore';
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -200,8 +200,9 @@ export default function DetailsScreen() {
   
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   
-  // Build initial content from route params — available INSTANTLY, no API needed
-  const [content, setContent] = useState<ContentItem | null>({
+  // Try meta cache first (instant), then route params, then bare minimum
+  const cachedMeta = id ? getMetaCache(id) : null;
+  const initialContent: ContentItem = cachedMeta || {
     id: id!,
     imdb_id: id,
     name: paramName || '',
@@ -212,7 +213,9 @@ export default function DetailsScreen() {
     year: paramYear ? parseInt(paramYear) : undefined,
     imdbRating: paramRating || undefined,
     description: paramDescription || '',
-  });
+  };
+  
+  const [content, setContent] = useState<ContentItem | null>(initialContent);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
@@ -257,10 +260,14 @@ export default function DetailsScreen() {
   }, [content?.videos, selectedSeason]);
 
   useEffect(() => {
-    // Only fetch meta for series (need episodes) or if missing background
-    const needsMeta = type === 'series' || !content?.background;
-    if (needsMeta) {
-      loadContent();
+    // If we have cached meta with background, skip the meta fetch entirely
+    const hasCachedMeta = cachedMeta && cachedMeta.background;
+    if (!hasCachedMeta) {
+      // Only fetch meta for series (need episodes) or if missing background
+      const needsMeta = type === 'series' || !content?.background;
+      if (needsMeta) {
+        loadContent();
+      }
     }
     fetchLibrary();
     
@@ -289,7 +296,8 @@ export default function DetailsScreen() {
     try {
       const contentId = isEpisodePage ? baseId : id;
       const data = await api.content.getMeta(type!, contentId!);
-      // Merge API data with initial params (API data takes precedence)
+      // Cache the meta data for instant re-access
+      if (contentId) setMetaCache(contentId, data);
       setContent(data);
     } catch (error) {
       console.log('Failed to fetch meta:', error);
