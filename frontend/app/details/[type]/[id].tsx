@@ -9,7 +9,7 @@ import {
   Dimensions,
   Linking,
   FlatList,
-  ImageBackground,
+  Image as RNImage,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -518,14 +518,17 @@ export default function DetailsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Full Screen Background — using lightweight ImageBackground instead of expo-image + LinearGradient */}
-      <ImageBackground
-        source={displayPoster ? { uri: displayPoster } : undefined}
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      >
-        {/* Dark gradient overlay using simple Views instead of heavy LinearGradient */}
-        <View style={styles.gradientOverlay} />
+      {/* Background Image — lightweight RN Image, no expo-image overhead */}
+      {displayPoster ? (
+        <RNImage
+          source={{ uri: displayPoster }}
+          style={styles.backgroundImage}
+          resizeMode="cover"
+        />
+      ) : null}
+      
+      {/* Dark overlay — simple View, no LinearGradient overhead */}
+      <View style={styles.gradientOverlay} />
       
       {/* Content Overlay */}
       <View style={styles.contentOverlay}>
@@ -698,7 +701,6 @@ export default function DetailsScreen() {
           <View style={{ height: 100 }} />
         </ScrollView>
       </View>
-      </ImageBackground>
     </View>
   );
 }
@@ -715,7 +717,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f0f11',
   },
   backgroundImage: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: width,
+    height: height,
   },
   gradientOverlay: {
     position: 'absolute',
