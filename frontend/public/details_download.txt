@@ -507,7 +507,8 @@ export default function DetailsScreen() {
 
   // Use content data for display - available immediately from store
   const displayName = content?.name || 'Loading...';
-  const displayPoster = content?.background || content?.poster;
+  // ONLY use backdrop image, no poster fallback — prevents the jarring poster→backdrop switch
+  const displayPoster = content?.background || '';
 
   const rating = typeof content?.imdbRating === 'string' 
     ? parseFloat(content.imdbRating) 
