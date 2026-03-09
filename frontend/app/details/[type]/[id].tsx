@@ -133,6 +133,9 @@ function StreamCard({
 }
 
 // Episode Card Component
+// Placeholder image for missing posters/thumbnails
+const NO_POSTER = require('../../../assets/images/no-poster.png');
+
 function EpisodeCard({ 
   episode, 
   fallbackPoster, 
@@ -143,6 +146,7 @@ function EpisodeCard({
   onPress: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
+  const thumbUri = episode.thumbnail || fallbackPoster;
   
   return (
     <Pressable
@@ -152,7 +156,7 @@ function EpisodeCard({
       onBlur={() => setIsFocused(false)}
     >
       <Image
-        source={{ uri: episode.thumbnail || fallbackPoster }}
+        source={thumbUri ? { uri: thumbUri } : NO_POSTER}
         style={styles.episodeThumbnail}
         contentFit="cover"
       />
