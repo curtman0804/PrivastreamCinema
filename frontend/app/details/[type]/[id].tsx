@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useContentStore, getMetaCache, setMetaCache } from '../../../src/store/contentStore';
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
