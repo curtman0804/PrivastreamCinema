@@ -9,11 +9,10 @@ import {
   Dimensions,
   Linking,
   FlatList,
+  ImageBackground,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useContentStore, getMetaCache, setMetaCache } from '../../../src/store/contentStore';
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -519,22 +518,14 @@ export default function DetailsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Full Screen Background Image */}
-      {displayPoster ? (
-        <Image
-          source={{ uri: displayPoster }}
-          style={styles.backgroundImage}
-          contentFit="contain"
-          transition={200}
-        />
-      ) : null}
-      
-      {/* Gradient Overlay */}
-      <LinearGradient
-        colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)', 'rgba(15,15,17,0.95)', '#0f0f11']}
-        locations={[0, 0.4, 0.7, 1]}
-        style={styles.gradientOverlay}
-      />
+      {/* Full Screen Background — using lightweight ImageBackground instead of expo-image + LinearGradient */}
+      <ImageBackground
+        source={displayPoster ? { uri: displayPoster } : undefined}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      >
+        {/* Dark gradient overlay using simple Views instead of heavy LinearGradient */}
+        <View style={styles.gradientOverlay} />
       
       {/* Content Overlay */}
       <View style={styles.contentOverlay}>
@@ -707,6 +698,7 @@ export default function DetailsScreen() {
           <View style={{ height: 100 }} />
         </ScrollView>
       </View>
+      </ImageBackground>
     </View>
   );
 }
@@ -723,13 +715,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f0f11',
   },
   backgroundImage: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: width,
-    height: height,
+    flex: 1,
   },
   gradientOverlay: {
     position: 'absolute',
@@ -737,6 +723,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    backgroundColor: 'rgba(15, 15, 17, 0.75)',
   },
   contentOverlay: {
     flex: 1,
