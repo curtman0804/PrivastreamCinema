@@ -2,8 +2,7 @@ const { withAndroidManifest } = require("expo/config-plugins");
 
 /**
  * Makes the app appear in the TV app row on Google TV, Fire TV, etc.
- * - Adds LEANBACK_LAUNCHER category to MainActivity intent filter
- * - Declares leanback and touchscreen features
+ * Also explicitly sets the app label to ensure correct display name.
  */
 const withTVLauncher = (config) => {
   return withAndroidManifest(config, (config) => {
@@ -14,24 +13,32 @@ const withTVLauncher = (config) => {
     }
     const features = manifest["uses-feature"];
 
-    // Leanback feature (not required - works on both TV and mobile)
     if (!features.some((f) => f.$?.["android:name"] === "android.software.leanback")) {
       features.push({
         $: { "android:name": "android.software.leanback", "android:required": "false" },
       });
     }
 
-    // Touchscreen not required
     if (!features.some((f) => f.$?.["android:name"] === "android.hardware.touchscreen")) {
       features.push({
         $: { "android:name": "android.hardware.touchscreen", "android:required": "false" },
       });
     }
 
-    // Add LEANBACK_LAUNCHER to main activity
+    // Explicitly set application label to ensure correct name on TV launchers
     const application = manifest.application?.[0];
+    if (application) {
+      application.$["android:label"] = "Privastream Cinema";
+    }
+
+    // Add LEANBACK_LAUNCHER to main activity and set its label too
     const activities = application?.activity || [];
     for (const activity of activities) {
+      // Set activity label explicitly
+      if (activity.$?.["android:name"] === ".MainActivity") {
+        activity.$["android:label"] = "Privastream Cinema";
+      }
+      
       const intentFilters = activity["intent-filter"] || [];
       for (const filter of intentFilters) {
         const categories = filter.category || [];
