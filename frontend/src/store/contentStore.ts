@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
 
+// Non-reactive cache for passing item data between screens
+// Does NOT trigger re-renders (unlike zustand state)
+let _selectedItemCache: ContentItem | null = null;
+export const setSelectedItemCache = (item: ContentItem | null) => { _selectedItemCache = item; };
+export const getSelectedItemCache = () => _selectedItemCache;
+
 interface CurrentPlaying {
   contentType: string;
   contentId: string;
@@ -19,7 +25,6 @@ interface ContentState {
   currentSearchQuery: string;
   streams: Stream[];
   currentPlaying: CurrentPlaying | null;
-  selectedItem: ContentItem | null;
   isLoadingDiscover: boolean;
   isLoadingAddons: boolean;
   isLoadingLibrary: boolean;
@@ -37,7 +42,6 @@ interface ContentState {
   removeFromLibrary: (type: string, id: string) => Promise<void>;
   clearSearch: () => void;
   setCurrentPlaying: (info: CurrentPlaying | null) => void;
-  setSelectedItem: (item: ContentItem | null) => void;
   resetStore: () => void;
 }
 
@@ -52,7 +56,6 @@ const initialState = {
   searchSkip: 0,
   currentSearchQuery: '',
   currentPlaying: null,
-  selectedItem: null,
   streams: [],
   isLoadingDiscover: false,
   isLoadingAddons: false,
@@ -211,9 +214,5 @@ export const useContentStore = create<ContentState>((set, get) => ({
 
   setCurrentPlaying: (info: CurrentPlaying | null) => {
     set({ currentPlaying: info });
-  },
-
-  setSelectedItem: (item: ContentItem | null) => {
-    set({ selectedItem: item });
   },
 }));

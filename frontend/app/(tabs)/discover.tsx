@@ -16,6 +16,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
+import { setSelectedItemCache } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 import { getCardWidth } from '../../src/components/ContentCard';
@@ -108,8 +109,8 @@ export default function DiscoverScreen() {
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
     const encodedId = encodeURIComponent(id);
-    // Store full item data in zustand (instant, no URL encoding overhead)
-    useContentStore.getState().setSelectedItem(item);
+    // Store in non-reactive cache (no re-renders triggered)
+    setSelectedItemCache(item);
     router.push(`/details/${item.type}/${encodedId}`);
   };
 
