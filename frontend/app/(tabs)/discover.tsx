@@ -21,6 +21,9 @@ import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 import { getCardWidth } from '../../src/components/ContentCard';
 import { colors } from '../../src/styles/colors';
+import { Image as RNImage } from 'react-native';
+
+const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
 export default function DiscoverScreen() {
   const router = useRouter();
@@ -504,11 +507,19 @@ function ContinueWatchingItem({
         ]}
       >
         <View style={[styles.continueImageContainer, { height: posterHeight }]}>
-          <Image
-            source={{ uri: item.poster || item.backdrop || '' }}
-            style={styles.continueImage}
-            contentFit="cover"
-          />
+          {(item.poster || item.backdrop) ? (
+            <Image
+              source={{ uri: item.poster || item.backdrop || '' }}
+              style={styles.continueImage}
+              contentFit="cover"
+            />
+          ) : (
+            <RNImage
+              source={NO_POSTER_IMAGE}
+              style={styles.continueImage}
+              resizeMode="cover"
+            />
+          )}
           
           {/* Play overlay */}
           <View style={styles.playOverlay}>

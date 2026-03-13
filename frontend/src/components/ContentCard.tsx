@@ -14,8 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { ContentItem, SearchResult, api } from '../api/client';
 import { colors, posterShapes } from '../styles/colors';
 
-// App icon embedded as base64 — no external file dependency
-const PLACEHOLDER_ICON_URI = 'data:image/png;base64,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';
+// Fallback image for missing posters
+const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
 
 interface ContentCardProps {
@@ -210,14 +210,11 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
               onError={() => setPosterError(true)}
             />
           ) : (
-            <View style={[styles.posterImage, { backgroundColor: '#1e1e22', justifyContent: 'center', alignItems: 'center' }]}>
-              <RNImage
-                source={{ uri: PLACEHOLDER_ICON_URI }}
-                style={{ width: cardWidth * 0.55, height: cardWidth * 0.55 }}
-                resizeMode="contain"
-              />
-              <Text style={{ color: 'rgba(140,120,70,0.6)', fontSize: 10, marginTop: 8, fontWeight: '600', letterSpacing: 1 }}>COMING SOON</Text>
-            </View>
+            <RNImage
+              source={NO_POSTER_IMAGE}
+              style={styles.posterImage}
+              resizeMode="cover"
+            />
           )}
         </View>
         

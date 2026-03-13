@@ -50,8 +50,8 @@ function FocusableResultItem({
         source={{ uri: item.poster }}
         style={[styles.poster, isFocused && styles.posterFocused]}
         contentFit="cover"
-        placeholder={require('../assets/images/icon.png')}
-        placeholderContentFit="contain"
+        placeholder={require('../assets/images/no-poster.png')}
+        placeholderContentFit="cover"
       />
       <Text style={styles.itemTitle} numberOfLines={2}>{item.name}</Text>
     </Pressable>

@@ -13,11 +13,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { Image as RNImage } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { ContentItem } from '../../src/api/client';
 import { colors } from '../../src/styles/colors';
 import { getCardWidth } from '../../src/components/ContentCard';
+
+const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
 type FilterType = 'movies' | 'series' | 'tv';
 
@@ -120,10 +123,10 @@ function LibraryCard({
 
         {!item.poster && (
           <View style={styles.placeholder}>
-            <Ionicons
-              name={item.type === 'series' ? 'tv-outline' : 'film-outline'}
-              size={cardWidth * 0.4}
-              color={colors.primaryDark}
+            <RNImage
+              source={NO_POSTER_IMAGE}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="cover"
             />
           </View>
         )}

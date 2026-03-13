@@ -14,10 +14,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { Image as RNImage } from 'react-native';
 import { useContentStore } from '../../../src/store/contentStore';
 import { ContentItem } from '../../../src/api/client';
 import apiClient from '../../../src/api/client';
 import colors from '../../../src/styles/colors';
+
+const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
 
 // ============================================
 // CategoryItem - MUST be outside the screen component
@@ -54,12 +57,20 @@ const CategoryItem = memo(({
       onBlur={() => setFocused(false)}
       android_ripple={null}
     >
-      <Image
-        source={{ uri: item.poster }}
-        style={[styles.gridPoster, { height: itemHeight }]}
-        contentFit="cover"
-        recyclingKey={item.id || item.imdb_id}
-      />
+      {item.poster ? (
+        <Image
+          source={{ uri: item.poster }}
+          style={[styles.gridPoster, { height: itemHeight }]}
+          contentFit="cover"
+          recyclingKey={item.id || item.imdb_id}
+        />
+      ) : (
+        <RNImage
+          source={NO_POSTER_IMAGE}
+          style={[styles.gridPoster, { height: itemHeight }]}
+          resizeMode="cover"
+        />
+      )}
       <Text style={styles.itemTitle} numberOfLines={2}>{item.name}</Text>
     </Pressable>
   );
