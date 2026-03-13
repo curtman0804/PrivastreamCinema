@@ -50,6 +50,24 @@ import { colors, posterShapes } from &#x27;../styles/colors&#x27;;
 // Fallback image for missing posters
 const NO_POSTER_IMAGE = require(&#x27;../../assets/images/no-poster.png&#x27;);
 
+// Dynamic placeholder that scales icon + text to card size
+const NoPosterPlaceholder = ({ width, height }: { width: number; height: number }) =&gt; {
+  const iconSize = Math.min(width, height) * 0.45;
+  const fontSize = Math.max(Math.min(width, height) * 0.09, 10);
+  return (
+    &lt;View style={{ width: &#x27;100%&#x27;, height: &#x27;100%&#x27;, backgroundColor: &#x27;#1a1a2e&#x27;, justifyContent: &#x27;center&#x27;, alignItems: &#x27;center&#x27; }}&gt;
+      &lt;RNImage
+        source={NO_POSTER_IMAGE}
+        style={{ width: iconSize, height: iconSize }}
+        resizeMode=&quot;contain&quot;
+      /&gt;
+      &lt;Text style={{ color: &#x27;#e6c47a&#x27;, fontSize: fontSize, fontWeight: &#x27;bold&#x27;, marginTop: height * 0.03, letterSpacing: 2, textAlign: &#x27;center&#x27; }}&gt;
+        COMING SOON
+      &lt;/Text&gt;
+    &lt;/View&gt;
+  );
+};
+
 
 interface ContentCardProps {
   item: ContentItem | SearchResult;
@@ -243,11 +261,7 @@ const ContentCardComponent: React.FC&lt;ContentCardProps&gt; = ({
               onError={() =&gt; setPosterError(true)}
             /&gt;
           ) : (
-            &lt;RNImage
-              source={NO_POSTER_IMAGE}
-              style={styles.posterImage}
-              resizeMode=&quot;cover&quot;
-            /&gt;
+            &lt;NoPosterPlaceholder width={cardWidth} height={cardHeight} /&gt;
           )}
         &lt;/View&gt;
         

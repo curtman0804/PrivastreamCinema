@@ -17,6 +17,24 @@ import { colors, posterShapes } from '../styles/colors';
 // Fallback image for missing posters
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
+// Dynamic placeholder that scales icon + text to card size
+const NoPosterPlaceholder = ({ width, height }: { width: number; height: number }) => {
+  const iconSize = Math.min(width, height) * 0.45;
+  const fontSize = Math.max(Math.min(width, height) * 0.09, 10);
+  return (
+    <View style={{ width: '100%', height: '100%', backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' }}>
+      <RNImage
+        source={NO_POSTER_IMAGE}
+        style={{ width: iconSize, height: iconSize }}
+        resizeMode="contain"
+      />
+      <Text style={{ color: '#e6c47a', fontSize: fontSize, fontWeight: 'bold', marginTop: height * 0.03, letterSpacing: 2, textAlign: 'center' }}>
+        COMING SOON
+      </Text>
+    </View>
+  );
+};
+
 
 interface ContentCardProps {
   item: ContentItem | SearchResult;
@@ -210,11 +228,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
               onError={() => setPosterError(true)}
             />
           ) : (
-            <RNImage
-              source={NO_POSTER_IMAGE}
-              style={styles.posterImage}
-              resizeMode="cover"
-            />
+            <NoPosterPlaceholder width={cardWidth} height={cardHeight} />
           )}
         </View>
         
