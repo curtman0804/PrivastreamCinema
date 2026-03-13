@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>File 3: search.tsx</title>
+<style>
+body { background:#1a1a2e; color:#e0e0e0; font-family:monospace; padding:20px; }
+h1 { color:#e6c47a; }
+.path { color:#aaa; font-size:14px; margin:8px 0 16px; }
+.btn { background:#e6c47a; color:#000; border:none; padding:12px 24px; cursor:pointer;
+  font-weight:bold; border-radius:6px; font-size:16px; margin-bottom:16px; }
+pre { background:#0d1117; border:1px solid #333; padding:16px; overflow:auto;
+  font-size:12px; line-height:1.4; white-space:pre; }
+.nav { margin:20px 0; }
+.nav a { color:#4ea8de; margin-right:16px; text-decoration:none; font-size:14px; }
+</style>
+<script>
+function copyAll() {
+  var el = document.getElementById('code');
+  navigator.clipboard.writeText(el.textContent).then(function() {
+    document.getElementById('btn').textContent = 'COPIED!';
+    setTimeout(function() { document.getElementById('btn').textContent = 'Copy All Code'; }, 2000);
+  });
+}
+</script></head><body>
+<h1>File 3/6: search.tsx</h1>
+<div class="path">Paste into: <strong>frontend/app/search.tsx</strong></div>
+<div class="nav">
+  <a href="/api/download/file1.html">1-ContentCard</a>
+  <a href="/api/download/file2.html">2-details</a>
+  <a href="/api/download/file3.html">3-search</a>
+  <a href="/api/download/file4.html">4-category</a>
+  <a href="/api/download/file5.html">5-library</a>
+  <a href="/api/download/file6.html">6-discover</a>
+</div>
+<button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
+<pre id="code">import React, { useEffect, useState, useRef } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  Dimensions,
+  TextInput,
+} from &#x27;react-native&#x27;;
+import { useLocalSearchParams, useRouter } from &#x27;expo-router&#x27;;
+import { SafeAreaView } from &#x27;react-native-safe-area-context&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { Image } from &#x27;expo-image&#x27;;
+import { useContentStore } from &#x27;../src/store/contentStore&#x27;;
+import { ContentItem } from &#x27;../src/api/client&#x27;;
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get(&#x27;window&#x27;);
+const isTV = screenWidth &gt; screenHeight || screenWidth &gt; 800;
+
+// TV-optimized sizing: 6 columns on TV, 3 on mobile
+const NUM_COLUMNS = isTV ? 6 : 3;
+const HORIZONTAL_PADDING = isTV ? 32 : 16;
+const ITEM_SPACING = isTV ? 16 : 8;
+const ITEM_WIDTH = (screenWidth - (HORIZONTAL_PADDING * 2) - (ITEM_SPACING * (NUM_COLUMNS - 1))) / NUM_COLUMNS;
+const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
+
+// Focusable Search Result Item
+function FocusableResultItem({ 
+  item, 
+  onPress,
+}: { 
+  item: ContentItem;
+  onPress: () =&gt; void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    &lt;Pressable 
+      style={[
+        styles.itemContainer, 
+        isFocused &amp;&amp; styles.itemContainerFocused
+      ]}
+      onPress={onPress}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+    &gt;
+      &lt;Image
+        source={{ uri: item.poster }}
+        style={[styles.poster, isFocused &amp;&amp; styles.posterFocused]}
+        contentFit=&quot;cover&quot;
+        placeholder={require(&#x27;../assets/images/no-poster.png&#x27;)}
+        placeholderContentFit=&quot;cover&quot;
+      /&gt;
+      &lt;Text style={styles.itemTitle} numberOfLines={2}&gt;{item.name}&lt;/Text&gt;
+    &lt;/Pressable&gt;
+  );
+}
+
+// Focusable Button Component
+function FocusableButton({ 
+  onPress, 
+  style, 
+  focusedStyle,
+  children,
+}: {
+  onPress: () =&gt; void;
+  style: any;
+  focusedStyle?: any;
+  children: React.ReactNode;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    &lt;Pressable
+      style={[style, isFocused &amp;&amp; (focusedStyle || styles.defaultFocused)]}
+      onPress={onPress}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+    &gt;
+      {children}
+    &lt;/Pressable&gt;
+  );
+}
+
+export default function SearchScreen() {
+  const { q } = useLocalSearchParams&lt;{ q?: string }&gt;();
+  const router = useRouter();
+  const searchResults = useContentStore(s =&gt; s.searchResults);
+  const isLoadingSearch = useContentStore(s =&gt; s.isLoadingSearch);
+  const search = useContentStore(s =&gt; s.search);
+  const clearSearch = useContentStore(s =&gt; s.clearSearch);
+  const [searchQuery, setSearchQuery] = useState(q || &#x27;&#x27;);
+  const flatListRef = useRef&lt;FlatList&gt;(null);
+
+  // Auto-search when query param exists
+  useEffect(() =&gt; {
+    if (q) {
+      setSearchQuery(q);
+      const timer = setTimeout(() =&gt; {
+        search(q);
+      }, 100);
+      return () =&gt; clearTimeout(timer);
+    }
+  }, [q]);
+
+  const handleSearch = () =&gt; {
+    if (searchQuery.trim()) {
+      search(searchQuery.trim());
+    }
+  };
+
+  const handleItemPress = (item: ContentItem) =&gt; {
+    const id = item.imdb_id || item.id;
+    const encodedId = encodeURIComponent(id);
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || &#x27;&#x27;,
+        poster: item.poster || &#x27;&#x27;,
+        background: item.background || &#x27;&#x27;,
+        logo: item.logo || &#x27;&#x27;,
+        year: item.year ? String(item.year) : &#x27;&#x27;,
+        imdbRating: item.imdbRating ? String(item.imdbRating) : &#x27;&#x27;,
+        description: item.description || &#x27;&#x27;,
+      }
+    });
+  };
+
+  // Deduplicate results based on imdb_id or id
+  const deduplicatedResults = React.useMemo(() =&gt; {
+    const seen = new Set&lt;string&gt;();
+    return searchResults.filter(item =&gt; {
+      const key = item.imdb_id || item.id;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }, [searchResults]);
+
+  const renderItem = ({ item, index }: { item: ContentItem; index: number }) =&gt; (
+    &lt;FocusableResultItem
+      item={item}
+      onPress={() =&gt; handleItemPress(item)}
+    /&gt;
+  );
+
+  const getItemLayout = (_: any, index: number) =&gt; ({
+    length: ITEM_HEIGHT + 40, // poster height + title + margin
+    offset: (ITEM_HEIGHT + 40) * Math.floor(index / NUM_COLUMNS),
+    index,
+  });
+
+  return (
+    &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+      {/* Header */}
+      &lt;View style={styles.header}&gt;
+        &lt;FocusableButton 
+          onPress={() =&gt; router.back()} 
+          style={styles.backButton}
+          focusedStyle={styles.backButtonFocused}
+        &gt;
+          &lt;Ionicons name=&quot;arrow-back&quot; size={24} color=&quot;#FFFFFF&quot; /&gt;
+        &lt;/FocusableButton&gt;
+        &lt;View style={styles.searchInputContainer}&gt;
+          &lt;TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearch}
+            placeholder=&quot;Search movies, series, actors...&quot;
+            placeholderTextColor=&quot;#666&quot;
+            returnKeyType=&quot;search&quot;
+            autoFocus={!q}
+          /&gt;
+          &lt;FocusableButton 
+            onPress={handleSearch} 
+            style={styles.searchButton}
+            focusedStyle={styles.searchButtonFocused}
+          &gt;
+            &lt;Ionicons name=&quot;search&quot; size={20} color=&quot;#B8A05C&quot; /&gt;
+          &lt;/FocusableButton&gt;
+        &lt;/View&gt;
+      &lt;/View&gt;
+
+      {/* Results */}
+      {isLoadingSearch ? (
+        &lt;View style={styles.centerContainer}&gt;
+          &lt;ActivityIndicator size=&quot;large&quot; color=&quot;#B8A05C&quot; /&gt;
+          &lt;Text style={styles.searchingText}&gt;Searching...&lt;/Text&gt;
+        &lt;/View&gt;
+      ) : deduplicatedResults.length === 0 ? (
+        &lt;View style={styles.centerContainer}&gt;
+          &lt;Ionicons name=&quot;search-outline&quot; size={48} color=&quot;#444&quot; /&gt;
+          &lt;Text style={styles.noResultsText}&gt;
+            {q ? `No results for &quot;${q}&quot;` : &#x27;Search for movies, series, or actors&#x27;}
+          &lt;/Text&gt;
+        &lt;/View&gt;
+      ) : (
+        &lt;FlatList
+          ref={flatListRef}
+          data={deduplicatedResults}
+          renderItem={renderItem}
+          keyExtractor={(item, index) =&gt; `${item.imdb_id || item.id}-${index}`}
+          numColumns={NUM_COLUMNS}
+          contentContainerStyle={styles.gridContent}
+          showsVerticalScrollIndicator={false}
+          getItemLayout={getItemLayout}
+          initialNumToRender={NUM_COLUMNS * 3}
+          maxToRenderPerBatch={NUM_COLUMNS * 2}
+          windowSize={5}
+          ListHeaderComponent={
+            &lt;Text style={styles.resultsCount}&gt;
+              {deduplicatedResults.length} results for &quot;{searchQuery}&quot;
+            &lt;/Text&gt;
+          }
+        /&gt;
+      )}
+    &lt;/SafeAreaView&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: &#x27;#0f0f11&#x27;,
+  },
+  header: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: &#x27;#1a1a1d&#x27;,
+    gap: 12,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: &#x27;rgba(255,255,255,0.1)&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  backButtonFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    backgroundColor: &#x27;#1a1a1d&#x27;,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+  },
+  searchInput: {
+    flex: 1,
+    color: &#x27;#FFFFFF&#x27;,
+    fontSize: 16,
+    paddingVertical: 12,
+  },
+  searchButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  searchButtonFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  searchingText: {
+    color: &#x27;#999&#x27;,
+    marginTop: 12,
+    fontSize: 14,
+  },
+  noResultsText: {
+    color: &#x27;#666&#x27;,
+    marginTop: 12,
+    fontSize: 16,
+    textAlign: &#x27;center&#x27;,
+    paddingHorizontal: 32,
+  },
+  resultsCount: {
+    color: &#x27;#888&#x27;,
+    fontSize: 14,
+    paddingBottom: 16,
+  },
+  gridContent: {
+    padding: HORIZONTAL_PADDING,
+  },
+  itemContainer: {
+    width: ITEM_WIDTH,
+    marginBottom: 16,
+    marginRight: ITEM_SPACING,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+    padding: 4,
+  },
+  itemContainerFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.15)&#x27;,
+    transform: [{ scale: 1.02 }],
+  },
+  poster: {
+    width: &#x27;100%&#x27;,
+    height: ITEM_HEIGHT,
+    borderRadius: 6,
+    backgroundColor: &#x27;#1a1a1d&#x27;,
+  },
+  posterFocused: {
+    // Additional poster styling when focused
+  },
+  itemTitle: {
+    color: &#x27;#FFFFFF&#x27;,
+    fontSize: isTV ? 13 : 12,
+    marginTop: 6,
+    textAlign: &#x27;center&#x27;,
+  },
+  defaultFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+  },
+});
+</pre>
+</body></html>

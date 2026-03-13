@@ -571,6 +571,71 @@ async def create_default_admin():
             logger.info("Updated choyt to admin status")
 
 
+
+# ==================== FILE VIEWER ROUTES ====================
+from fastapi.responses import HTMLResponse
+import html as html_module
+
+FILE_MAP = {
+    "1": ("ContentCard.tsx", "/app/frontend/src/components/ContentCard.tsx", "frontend/src/components/ContentCard.tsx"),
+    "2": ("details [id].tsx", "/app/frontend/app/details/[type]/[id].tsx", "frontend/app/details/[type]/[id].tsx"),
+    "3": ("search.tsx", "/app/frontend/app/search.tsx", "frontend/app/search.tsx"),
+    "4": ("category [type].tsx", "/app/frontend/app/category/[service]/[type].tsx", "frontend/app/category/[service]/[type].tsx"),
+    "5": ("library.tsx", "/app/frontend/app/(tabs)/library.tsx", "frontend/app/(tabs)/library.tsx"),
+    "6": ("discover.tsx", "/app/frontend/app/(tabs)/discover.tsx", "frontend/app/(tabs)/discover.tsx"),
+}
+
+@api_router.get("/file/{file_id}")
+async def serve_single_file(file_id: str):
+    if file_id not in FILE_MAP:
+        raise HTTPException(status_code=404, detail="File not found")
+    name, filepath, dest = FILE_MAP[file_id]
+    try:
+        with open(filepath, 'r') as f:
+            content = f.read()
+    except Exception:
+        raise HTTPException(status_code=500, detail="Could not read file")
+    escaped = html_module.escape(content)
+    html_content = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>{name}</title>
+<style>
+body {{ background:#1a1a2e; color:#e0e0e0; font-family:monospace; padding:20px; margin:0; }}
+h1 {{ color:#e6c47a; }}
+.path {{ color:#aaa; font-size:14px; margin:8px 0 16px; }}
+.btn {{ background:#e6c47a; color:#000; border:none; padding:12px 24px; cursor:pointer;
+  font-weight:bold; border-radius:6px; font-size:16px; margin-bottom:16px; }}
+.btn:hover {{ background:#f0d88a; }}
+pre {{ background:#0d1117; border:1px solid #333; padding:16px; overflow:auto;
+  font-size:12px; line-height:1.4; white-space:pre; }}
+.nav {{ margin:20px 0; }}
+.nav a {{ color:#4ea8de; margin-right:16px; text-decoration:none; font-size:14px; }}
+.nav a:hover {{ text-decoration:underline; }}
+</style>
+<script>
+function copyAll() {{
+  var el = document.getElementById('code');
+  navigator.clipboard.writeText(el.textContent).then(function() {{
+    document.getElementById('btn').textContent = 'COPIED!';
+    setTimeout(function() {{ document.getElementById('btn').textContent = 'Copy All Code'; }}, 2000);
+  }});
+}}
+</script></head><body>
+<h1>File {file_id}/6: {name}</h1>
+<div class="path">Paste into: <strong>{dest}</strong></div>
+<div class="nav">
+  <a href="/api/file/1">1. ContentCard</a>
+  <a href="/api/file/2">2. details [id]</a>
+  <a href="/api/file/3">3. search</a>
+  <a href="/api/file/4">4. category [type]</a>
+  <a href="/api/file/5">5. library</a>
+  <a href="/api/file/6">6. discover</a>
+</div>
+<button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
+<pre id="code">{escaped}</pre>
+</body></html>"""
+    return HTMLResponse(content=html_content)
+
+
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/login", response_model=AuthResponse)
@@ -3409,22 +3474,14 @@ async def download_file(filename: str):
     if os.path.exists(file_path):
         # Detect media type from extension
         ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-        media_types = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif'}
+        media_types = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'html': 'text/html'}
         media_type = media_types.get(ext, 'text/plain')
-        return FileResponse(file_path, media_type=media_type, filename=filename)
+        return FileResponse(file_path, media_type=media_type)
     raise HTTPException(status_code=404, detail="File not found")
 
 
 # Include the router in the main app
 app.include_router(api_router)
-
-# Serve the file viewer page for code downloads
-@app.get("/api/files")
-async def serve_files_page():
-    html_path = Path(__file__).parent / "static_files.html"
-    if html_path.exists():
-        return FileResponse(html_path, media_type="text/html")
-    raise HTTPException(status_code=404, detail="Files page not found")
 
 app.add_middleware(
     CORSMiddleware,
