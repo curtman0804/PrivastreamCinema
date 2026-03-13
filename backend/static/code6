@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>File 6: discover.tsx</title>
+<style>
+body { background:#1a1a2e; color:#e0e0e0; font-family:monospace; padding:20px; }
+h1 { color:#e6c47a; }
+.path { color:#aaa; font-size:14px; margin:8px 0 16px; }
+.btn { background:#e6c47a; color:#000; border:none; padding:12px 24px; cursor:pointer;
+  font-weight:bold; border-radius:6px; font-size:16px; margin-bottom:16px; }
+pre { background:#0d1117; border:1px solid #333; padding:16px; overflow:auto;
+  font-size:12px; line-height:1.4; white-space:pre; }
+.nav { margin:20px 0; }
+.nav a { color:#4ea8de; margin-right:16px; text-decoration:none; font-size:14px; }
+</style>
+<script>
+function copyAll() {
+  var el = document.getElementById('code');
+  navigator.clipboard.writeText(el.textContent).then(function() {
+    document.getElementById('btn').textContent = 'COPIED!';
+    setTimeout(function() { document.getElementById('btn').textContent = 'Copy All Code'; }, 2000);
+  });
+}
+</script></head><body>
+<h1>File 6/6: discover.tsx</h1>
+<div class="path">Paste into: <strong>frontend/app/(tabs)/discover.tsx</strong></div>
+<div class="nav">
+  <a href="/api/download/file1.html">1-ContentCard</a>
+  <a href="/api/download/file2.html">2-details</a>
+  <a href="/api/download/file3.html">3-search</a>
+  <a href="/api/download/file4.html">4-category</a>
+  <a href="/api/download/file5.html">5-library</a>
+  <a href="/api/download/file6.html">6-discover</a>
+</div>
+<button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
+<pre id="code">import React, { useEffect, useCallback, useState, useMemo, useRef } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  RefreshControl,
+  ActivityIndicator,
+  Pressable,
+  FlatList,
+  useWindowDimensions,
+  findNodeHandle,
+} from &#x27;react-native&#x27;;
+import { SafeAreaView } from &#x27;react-native-safe-area-context&#x27;;
+import { useRouter, useFocusEffect } from &#x27;expo-router&#x27;;
+import { Image } from &#x27;expo-image&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { useContentStore } from &#x27;../../src/store/contentStore&#x27;;
+import { getMetaCache, setMetaCache } from &#x27;../../src/store/contentStore&#x27;;
+import { ServiceRow } from &#x27;../../src/components/ServiceRow&#x27;;
+import { ContentItem, api, WatchProgress } from &#x27;../../src/api/client&#x27;;
+import { getCardWidth } from &#x27;../../src/components/ContentCard&#x27;;
+import { colors } from &#x27;../../src/styles/colors&#x27;;
+import { Image as RNImage } from &#x27;react-native&#x27;;
+
+const NO_POSTER_IMAGE = require(&#x27;../../assets/images/no-poster.png&#x27;);
+
+export default function DiscoverScreen() {
+  const router = useRouter();
+  const { width, height } = useWindowDimensions();
+  const isTV = width &gt; height || width &gt; 800;
+  
+  // CRITICAL: Use zustand SELECTORS — only re-render when these specific fields change.
+  // Without selectors, the Discover page re-renders when ANY store field changes
+  // (e.g., when Details page loads streams), causing hundreds of poster images
+  // to re-render and blocking the JS thread for 3+ seconds.
+  const discoverData = useContentStore(s =&gt; s.discoverData);
+  const isLoadingDiscover = useContentStore(s =&gt; s.isLoadingDiscover);
+  const fetchDiscover = useContentStore(s =&gt; s.fetchDiscover);
+  const fetchAddons = useContentStore(s =&gt; s.fetchAddons);
+  const addons = useContentStore(s =&gt; s.addons);
+  const [refreshing, setRefreshing] = useState(false);
+  const [continueWatching, setContinueWatching] = useState&lt;WatchProgress[]&gt;([]);
+  const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+  const scrollViewRef = useRef&lt;ScrollView&gt;(null);
+  const sectionPositions = useRef&lt;Record&lt;string, number&gt;&gt;({});
+  const lastFocusedSection = useRef&lt;string&gt;(&#x27;&#x27;);
+  const lastCWFetchTime = useRef&lt;number&gt;(0);
+
+  // Use same card width calculation as ContentCard for consistency
+  const POSTER_WIDTH = getCardWidth(width, isTV, &#x27;medium&#x27;);
+  const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
+
+  // Fetch continue watching data
+  const fetchContinueWatching = useCallback(async () =&gt; {
+    try {
+      setIsLoadingProgress(true);
+      const response = await api.watchProgress.getAll();
+      setContinueWatching(response.continueWatching || []);
+      lastCWFetchTime.current = Date.now();
+    } catch (err) {
+      console.log(&#x27;[Discover] Error fetching continue watching:&#x27;, err);
+    } finally {
+      setIsLoadingProgress(false);
+    }
+  }, []);
+
+  useEffect(() =&gt; {
+    fetchAddons();
+    fetchDiscover();
+    fetchContinueWatching();
+  }, []);
+
+  // Re-fetch continue watching when screen comes into focus (with 30s cooldown)
+  useFocusEffect(
+    useCallback(() =&gt; {
+      // Skip re-fetch if data was loaded less than 30 seconds ago
+      // This prevents the delay when pressing back from Details page
+      const timeSinceLastFetch = Date.now() - lastCWFetchTime.current;
+      if (timeSinceLastFetch &lt; 30000 &amp;&amp; continueWatching.length &gt;= 0) {
+        return;
+      }
+      fetchContinueWatching();
+    }, [fetchContinueWatching, continueWatching.length])
+  );
+
+  // Check if there&#x27;s any content to display
+  const hasContent = useMemo(() =&gt; {
+    if (!discoverData?.services) return false;
+    return Object.values(discoverData.services).some(
+      (content: any) =&gt; 
+        (content?.movies?.length &gt; 0) || 
+        (content?.series?.length &gt; 0) || 
+        (content?.channels?.length &gt; 0)
+    );
+  }, [discoverData]);
+
+  const onRefresh = useCallback(async () =&gt; {
+    setRefreshing(true);
+    await Promise.all([
+      fetchAddons(),
+      fetchDiscover(),
+      fetchContinueWatching(),
+    ]);
+    setRefreshing(false);
+  }, [fetchContinueWatching]);
+
+  // Handle section focus - scroll parent to show category title
+  const handleSectionFocus = useCallback((sectionKey: string) =&gt; {
+    if (lastFocusedSection.current === sectionKey) return;
+    lastFocusedSection.current = sectionKey;
+    
+    const sectionY = sectionPositions.current[sectionKey];
+    if (sectionY !== undefined &amp;&amp; scrollViewRef.current) {
+      // Small delay to override Android TV&#x27;s auto-scroll (which only shows the card, not the title)
+      setTimeout(() =&gt; {
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, sectionY - 10), animated: true });
+      }, 50);
+    }
+  }, []);
+
+  // Row sync: keep all rows scrolled to the same horizontal offset
+  // (No longer needed — removed carousel anchor scrolling)
+
+  // Item width for snap scrolling
+  const itemWidth = POSTER_WIDTH + 16;
+
+  // PRE-FETCH meta on poster focus (D-pad hover) so backdrop is ready before click
+  const prefetchingRef = useRef&lt;Set&lt;string&gt;&gt;(new Set());
+  const handleItemFocus = useCallback((item: ContentItem) =&gt; {
+    const id = item.imdb_id || item.id;
+    if (!id || prefetchingRef.current.has(id) || getMetaCache(id)) return;
+    prefetchingRef.current.add(id);
+    // Fire-and-forget: fetch meta in background
+    api.content.getMeta(item.type, id).then((meta) =&gt; {
+      setMetaCache(id, meta);
+      // Also pre-download the backdrop image so it&#x27;s in expo-image disk cache
+      if (meta.background) {
+        Image.prefetch(meta.background);
+      }
+    }).catch(() =&gt; {});
+  }, []);
+
+  const handleItemPress = (item: ContentItem) =&gt; {
+    const id = item.imdb_id || item.id;
+    const encodedId = encodeURIComponent(id);
+    // Minimal params for instant first paint — just name + poster
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || &#x27;&#x27;,
+        poster: item.poster || &#x27;&#x27;,
+      },
+    });
+  };
+
+  // Handle continue watching item press
+  const handleContinueWatchingPress = (item: WatchProgress) =&gt; {
+    if (item.stream_info_hash || item.stream_url) {
+      router.push({
+        pathname: &#x27;/player&#x27;,
+        params: {
+          infoHash: item.stream_info_hash || &#x27;&#x27;,
+          directUrl: item.stream_url || &#x27;&#x27;,
+          fileIdx: item.stream_file_idx != null ? String(item.stream_file_idx) : &#x27;&#x27;,
+          filename: item.stream_filename || &#x27;&#x27;,
+          title: item.title || &#x27;&#x27;,
+          contentType: item.content_type,
+          contentId: item.content_id,
+          poster: item.poster || &#x27;&#x27;,
+          backdrop: item.backdrop || &#x27;&#x27;,
+          logo: item.logo || &#x27;&#x27;,
+          resumePosition: String(item.progress || 0),
+          season: item.season != null ? String(item.season) : &#x27;&#x27;,
+          episode: item.episode != null ? String(item.episode) : &#x27;&#x27;,
+          seriesId: item.series_id || &#x27;&#x27;,
+        },
+      });
+      return;
+    }
+    
+    let targetId = item.content_id;
+    let targetType = item.content_type;
+    
+    if (item.series_id) {
+      targetId = item.series_id;
+      targetType = &#x27;series&#x27;;
+    } else if (item.content_type === &#x27;series&#x27; &amp;&amp; item.content_id.includes(&#x27;:&#x27;)) {
+      const parts = item.content_id.split(&#x27;:&#x27;);
+      if (parts.length &gt;= 1) {
+        targetId = parts[0];
+      }
+    }
+    
+    const encodedId = encodeURIComponent(targetId);
+    router.push({
+      pathname: `/details/${targetType}/${encodedId}`,
+      params: {
+        name: item.title || &#x27;&#x27;,
+        poster: item.poster || &#x27;&#x27;,
+        resumeEpisodeId: item.content_type === &#x27;series&#x27; ? item.content_id : &#x27;&#x27;,
+        resumePosition: String(item.progress || 0),
+        resumeSeason: item.season !== undefined ? String(item.season) : &#x27;&#x27;,
+        resumeEpisode: item.episode !== undefined ? String(item.episode) : &#x27;&#x27;,
+      },
+    });
+  };
+
+  // Handle removing item from continue watching
+  const handleRemoveFromContinueWatching = async (item: WatchProgress) =&gt; {
+    try {
+      await api.watchProgress.delete(item.content_id);
+      setContinueWatching(prev =&gt; prev.filter(i =&gt; i.content_id !== item.content_id));
+    } catch (err) {
+      console.log(&#x27;[Discover] Error removing from continue watching:&#x27;, err);
+    }
+  };
+
+  // Render a continue watching item (Stremio style)
+  const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) =&gt; (
+    &lt;ContinueWatchingItem
+      item={item}
+      posterWidth={POSTER_WIDTH}
+      posterHeight={POSTER_HEIGHT}
+      isTV={isTV}
+      onPress={() =&gt; handleContinueWatchingPress(item)}
+      onRemove={() =&gt; handleRemoveFromContinueWatching(item)}
+      onSectionFocus={() =&gt; handleSectionFocus(&#x27;continue-watching&#x27;)}
+    /&gt;
+  );
+
+  // Show loading only on initial load
+  if (isLoadingDiscover &amp;&amp; !discoverData) {
+    return (
+      &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+        &lt;View style={styles.loadingContainer}&gt;
+          &lt;ActivityIndicator size=&quot;large&quot; color={colors.primary} /&gt;
+        &lt;/View&gt;
+      &lt;/SafeAreaView&gt;
+    );
+  }
+
+  return (
+    &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+      {/* Welcome Screen - No Addons and No Continue Watching */}
+      {!hasContent &amp;&amp; continueWatching.length === 0 &amp;&amp; !isLoadingDiscover ? (
+        &lt;View style={styles.welcomeContainer}&gt;
+          &lt;Image
+            source={require(&#x27;../../assets/images/logo_splash.png&#x27;)}
+            style={[styles.welcomeLogo, isTV &amp;&amp; styles.welcomeLogoTV]}
+            contentFit=&quot;contain&quot;
+          /&gt;
+          &lt;Text style={[styles.welcomeText, isTV &amp;&amp; styles.welcomeTextTV]}&gt;
+            Welcome to Privastream Cinema
+          &lt;/Text&gt;
+          &lt;Text style={[styles.welcomeSubtext, isTV &amp;&amp; styles.welcomeSubtextTV]}&gt;
+            Install addons to start streaming
+          &lt;/Text&gt;
+          &lt;GoToAddonsButton router={router} isTV={isTV} /&gt;
+        &lt;/View&gt;
+      ) : (
+        /* Content area with fixed header */
+        &lt;View style={{ flex: 1 }}&gt;
+          {/* Fixed Logo Header */}
+          &lt;View style={[styles.logoHeader, isTV &amp;&amp; styles.logoHeaderTV]}&gt;
+            &lt;Image
+              source={require(&#x27;../../assets/images/logo_header.png&#x27;)}
+              style={[styles.logoImage, isTV &amp;&amp; styles.logoImageTV]}
+              contentFit=&quot;contain&quot;
+            /&gt;
+            &lt;Text style={[styles.logoText, isTV &amp;&amp; styles.logoTextTV]}&gt;
+              Privastream Cinema
+            &lt;/Text&gt;
+          &lt;/View&gt;
+
+          {/* Scrollable Content */}
+          &lt;ScrollView
+            ref={scrollViewRef}
+            style={styles.scrollView}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              &lt;RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
+              /&gt;
+            }
+          &gt;
+          {/* Continue Watching Section - Stremio style */}
+          {continueWatching.length &gt; 0 &amp;&amp; (
+            &lt;View 
+              style={styles.section}
+              onLayout={(e) =&gt; { sectionPositions.current[&#x27;continue-watching&#x27;] = e.nativeEvent.layout.y; }}
+            &gt;
+              &lt;View style={[styles.sectionHeader, isTV &amp;&amp; styles.sectionHeaderTV]}&gt;
+                &lt;Text style={[styles.sectionTitle, isTV &amp;&amp; styles.sectionTitleTV]}&gt;
+                  Continue Watching
+                &lt;/Text&gt;
+              &lt;/View&gt;
+              &lt;FlatList
+                data={continueWatching}
+                renderItem={renderContinueWatchingItem}
+                keyExtractor={(item) =&gt; item.content_id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={[styles.rowContent, isTV &amp;&amp; styles.rowContentTV]}
+                removeClippedSubviews={false}
+                windowSize={21}
+                initialNumToRender={10}
+              /&gt;
+            &lt;/View&gt;
+          )}
+          
+          {/* Content Rows from Addons */}
+          {(() =&gt; {
+            let firstRowRendered = false;
+            return Object.entries(discoverData?.services || {}).map(([serviceName, content]) =&gt; {
+            // Avoid duplicate labels - service names like &quot;Popular Movies&quot; already contain the type
+            const hasMoviesInName = serviceName.toLowerCase().includes(&#x27;movie&#x27;);
+            const hasSeriesInName = serviceName.toLowerCase().includes(&#x27;series&#x27;);
+            const hasChannelsInName = serviceName.toLowerCase().includes(&#x27;channel&#x27;);
+            
+            return (
+            &lt;React.Fragment key={serviceName}&gt;
+              {content?.movies &amp;&amp; content.movies.length &gt; 0 &amp;&amp; (() =&gt; {
+                const isFirst = !firstRowRendered &amp;&amp; continueWatching.length === 0;
+                if (isFirst) firstRowRendered = true;
+                return (
+                &lt;View
+                  onLayout={(e) =&gt; { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}
+                &gt;
+                  &lt;ServiceRow
+                    title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
+                    serviceName={serviceName}
+                    contentType=&quot;movies&quot;
+                    items={content.movies}
+                    onItemPress={handleItemPress}
+                    onItemFocus={handleItemFocus}
+                    onSectionFocus={() =&gt; handleSectionFocus(`${serviceName}-movies`)}
+                    isFirstRow={isFirst}
+                  /&gt;
+                &lt;/View&gt;
+                );
+              })()}
+              {content?.series &amp;&amp; content.series.length &gt; 0 &amp;&amp; (() =&gt; {
+                const isFirst = !firstRowRendered &amp;&amp; continueWatching.length === 0;
+                if (isFirst) firstRowRendered = true;
+                return (
+                &lt;View
+                  onLayout={(e) =&gt; { sectionPositions.current[`${serviceName}-series`] = e.nativeEvent.layout.y; }}
+                &gt;
+                  &lt;ServiceRow
+                    title={hasSeriesInName ? serviceName : `${serviceName} Series`}
+                    serviceName={serviceName}
+                    contentType=&quot;series&quot;
+                    items={content.series}
+                    onItemPress={handleItemPress}
+                    onItemFocus={handleItemFocus}
+                    onSectionFocus={() =&gt; handleSectionFocus(`${serviceName}-series`)}
+                    isFirstRow={isFirst}
+                  /&gt;
+                &lt;/View&gt;
+                );
+              })()}
+              {content?.channels &amp;&amp; content.channels.length &gt; 0 &amp;&amp; (() =&gt; {
+                const isFirst = !firstRowRendered &amp;&amp; continueWatching.length === 0;
+                if (isFirst) firstRowRendered = true;
+                return (
+                &lt;View
+                  onLayout={(e) =&gt; { sectionPositions.current[`${serviceName}-channels`] = e.nativeEvent.layout.y; }}
+                &gt;
+                  &lt;ServiceRow
+                    title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
+                    serviceName={serviceName}
+                    contentType=&quot;channels&quot;
+                    items={content.channels.map((ch: any) =&gt; ({
+                      ...ch,
+                      type: &#x27;tv&#x27; as const,
+                    }))}
+                    onItemPress={handleItemPress}
+                    onSectionFocus={() =&gt; handleSectionFocus(`${serviceName}-channels`)}
+                    isFirstRow={isFirst}
+                  /&gt;
+                &lt;/View&gt;
+                );
+              })()}
+            &lt;/React.Fragment&gt;
+          );
+          });
+          })()}
+          &lt;View style={styles.bottomPadding} /&gt;
+        &lt;/ScrollView&gt;
+        &lt;/View&gt;
+      )}
+    &lt;/SafeAreaView&gt;
+  );
+}
+
+// Go To Addons Button (Stremio style)
+function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    &lt;Pressable 
+      onPress={() =&gt; router.push(&#x27;/(tabs)/addons&#x27;)}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+      style={[styles.addonsButton, isFocused &amp;&amp; styles.addonsButtonFocused]}
+    &gt;
+      &lt;Ionicons name=&quot;extension-puzzle&quot; size={20} color={colors.textPrimary} /&gt;
+      &lt;Text style={styles.addonsButtonText}&gt;Install Addons&lt;/Text&gt;
+    &lt;/Pressable&gt;
+  );
+}
+
+// Continue Watching Item (Stremio style with play overlay and X on poster)
+function ContinueWatchingItem({ 
+  item, 
+  posterWidth, 
+  posterHeight, 
+  isTV, 
+  onPress, 
+  onRemove,
+  onSectionFocus,
+}: { 
+  item: WatchProgress; 
+  posterWidth: number; 
+  posterHeight: number; 
+  isTV: boolean;
+  onPress: () =&gt; void;
+  onRemove: () =&gt; void;
+  onSectionFocus?: () =&gt; void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [xFocused, setXFocused] = useState(false);
+  const percentWatched = item.percent_watched || 0;
+
+  // Refs for explicit focus navigation between poster and X button
+  const posterRef = useRef&lt;View&gt;(null);
+  const xButtonRef = useRef&lt;View&gt;(null);
+  const [posterTag, setPosterTag] = useState&lt;number | undefined&gt;(undefined);
+  const [xButtonTag, setXButtonTag] = useState&lt;number | undefined&gt;(undefined);
+
+  useEffect(() =&gt; {
+    // Get native node handles after mount for nextFocusUp/Down wiring
+    const pTag = posterRef.current ? findNodeHandle(posterRef.current) : null;
+    const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
+    if (pTag) setPosterTag(pTag);
+    if (xTag) setXButtonTag(xTag);
+  }, []);
+
+  const handleFocus = () =&gt; {
+    setIsFocused(true);
+    onSectionFocus?.();
+  };
+
+  const handleXFocus = () =&gt; {
+    setXFocused(true);
+    onSectionFocus?.();
+  };
+
+  const xButtonSize = isTV ? 30 : 24;
+  // Total height of the X row = button size + top padding (8px)
+  const xRowHeight = xButtonSize + 8;
+  
+  return (
+    &lt;View style={[styles.continueItem, { width: posterWidth }]}&gt;
+      {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
+      &lt;View style={[styles.xButtonRow, { paddingTop: 8 }]}&gt;
+        &lt;Pressable
+          ref={xButtonRef}
+          onPress={onRemove}
+          onFocus={handleXFocus}
+          onBlur={() =&gt; setXFocused(false)}
+          accessible={true}
+          accessibilityRole=&quot;button&quot;
+          accessibilityLabel={`Remove ${item.title} from Continue Watching`}
+          android_ripple={null}
+          nextFocusDown={posterTag}
+          style={[
+            styles.removeButtonOverlay,
+            { width: xButtonSize, height: xButtonSize, borderRadius: xButtonSize / 2 },
+            xFocused &amp;&amp; styles.removeButtonOverlayFocused,
+          ]}
+        &gt;
+          &lt;Ionicons
+            name=&quot;close&quot;
+            size={isTV ? 16 : 12}
+            color={xFocused ? &#x27;#fff&#x27; : &#x27;rgba(255,255,255,0.9)&#x27;}
+          /&gt;
+        &lt;/Pressable&gt;
+      &lt;/View&gt;
+
+      {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
+      &lt;Pressable
+        ref={posterRef}
+        onPress={onPress}
+        onFocus={handleFocus}
+        onBlur={() =&gt; setIsFocused(false)}
+        android_ripple={null}
+        nextFocusUp={xButtonTag}
+        style={[
+          styles.continueImageWrapper,
+          { marginTop: -xRowHeight },
+          isFocused &amp;&amp; styles.continueImageWrapperFocused,
+        ]}
+      &gt;
+        &lt;View style={[styles.continueImageContainer, { height: posterHeight }]}&gt;
+          {(item.poster || item.backdrop) ? (
+            &lt;Image
+              source={{ uri: item.poster || item.backdrop || &#x27;&#x27; }}
+              style={styles.continueImage}
+              contentFit=&quot;cover&quot;
+            /&gt;
+          ) : (
+            &lt;RNImage
+              source={NO_POSTER_IMAGE}
+              style={styles.continueImage}
+              resizeMode=&quot;cover&quot;
+            /&gt;
+          )}
+          
+          {/* Play overlay */}
+          &lt;View style={styles.playOverlay}&gt;
+            &lt;View style={styles.playButton}&gt;
+              &lt;Ionicons name=&quot;play&quot; size={isTV ? 32 : 24} color={colors.textPrimary} /&gt;
+            &lt;/View&gt;
+          &lt;/View&gt;
+          
+          {/* Progress bar */}
+          &lt;View style={styles.progressContainer}&gt;
+            &lt;View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} /&gt;
+          &lt;/View&gt;
+        &lt;/View&gt;
+      &lt;/Pressable&gt;
+
+      {/* Title below poster */}
+      &lt;View style={styles.continueTitleContent}&gt;
+        &lt;Text style={styles.continueTitleText} numberOfLines={2}&gt;
+          {item.title}
+        &lt;/Text&gt;
+        {item.season != null &amp;&amp; item.episode != null &amp;&amp; item.season &gt; 0 &amp;&amp; item.episode &gt; 0 &amp;&amp; (
+          &lt;Text style={styles.continueEpisode}&gt;
+            S{item.season} E{item.episode}
+          &lt;/Text&gt;
+        )}
+      &lt;/View&gt;
+    &lt;/View&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  scrollView: {
+    flex: 1,
+    overflow: &#x27;visible&#x27;,
+  },
+  bottomPadding: {
+    height: 100,
+  },
+  // Welcome Screen
+  welcomeContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    paddingHorizontal: 40,
+  },
+  welcomeLogo: {
+    width: 200,
+    height: 100,
+    marginBottom: 24,
+  },
+  welcomeLogoTV: {
+    width: 280,
+    height: 140,
+  },
+  welcomeText: {
+    color: colors.primary,
+    fontSize: 22,
+    fontWeight: &#x27;600&#x27;,
+    marginBottom: 8,
+  },
+  welcomeTextTV: {
+    fontSize: 28,
+  },
+  welcomeSubtext: {
+    color: colors.primaryDark,
+    fontSize: 16,
+    marginBottom: 32,
+  },
+  welcomeSubtextTV: {
+    fontSize: 18,
+  },
+  addonsButton: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 8,
+    gap: 10,
+  },
+  addonsButtonFocused: {
+    transform: [{ scale: 1.05 }],
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  addonsButtonText: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: &#x27;600&#x27;,
+  },
+  // Section styles
+  section: {
+    marginBottom: 32,
+    overflow: &#x27;visible&#x27;,
+  },
+  sectionHeader: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  sectionHeaderTV: {
+    paddingHorizontal: 48,
+  },
+  sectionTitle: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: &#x27;600&#x27;,
+  },
+  sectionTitleTV: {
+    fontSize: 22,
+  },
+  rowContent: {
+    paddingHorizontal: 16,
+  },
+  rowContentTV: {
+    paddingLeft: 48,
+    paddingRight: 108,
+  },
+  // Continue watching item - Stremio style
+  continueItem: {
+    marginRight: 16,
+  },
+  // X button row - sits above poster, right-aligned
+  xButtonRow: {
+    alignItems: &#x27;flex-end&#x27;,
+    zIndex: 10,
+    paddingRight: 8,
+  },
+  continueImageWrapper: {
+    borderRadius: 6,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+    overflow: &#x27;hidden&#x27;,
+  },
+  continueImageWrapperFocused: {
+    borderColor: colors.primary,
+  },
+  continueImageContainer: {
+    backgroundColor: colors.backgroundLight,
+    position: &#x27;relative&#x27;,
+  },
+  continueImage: {
+    width: &#x27;100%&#x27;,
+    height: &#x27;100%&#x27;,
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  playButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: &#x27;rgba(0, 0, 0, 0.6)&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 2,
+    borderColor: colors.textPrimary,
+  },
+  progressContainer: {
+    position: &#x27;absolute&#x27;,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: &#x27;rgba(255, 255, 255, 0.3)&#x27;,
+  },
+  progressBar: {
+    height: &#x27;100%&#x27;,
+    backgroundColor: colors.textPrimary,
+  },
+  continueTitleText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: &#x27;500&#x27;,
+    textAlign: &#x27;center&#x27;,
+    paddingHorizontal: 4,
+  },
+  continueEpisode: {
+    color: colors.primaryDark,
+    fontSize: 11,
+    textAlign: &#x27;center&#x27;,
+    marginTop: 2,
+  },
+  continueTitleContent: {
+    paddingTop: 6,
+  },
+  // X button overlaid on top-right of poster
+  removeButtonOverlay: {
+    backgroundColor: &#x27;rgba(0, 0, 0, 0.7)&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  removeButtonOverlayFocused: {
+    borderColor: colors.primary,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.5)&#x27;,
+    transform: [{ scale: 1.2 }],
+  },
+  // Logo header
+  logoHeader: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  logoHeaderTV: {
+    paddingHorizontal: 48,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  logoImage: {
+    width: 44,
+    height: 44,
+  },
+  logoImageTV: {
+    width: 64,
+    height: 64,
+  },
+  logoText: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: &#x27;700&#x27;,
+    marginLeft: 10,
+    letterSpacing: 0.5,
+  },
+  logoTextTV: {
+    fontSize: 24,
+    marginLeft: 14,
+  },
+});
+</pre>
+</body></html>

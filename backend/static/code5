@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>File 5: library.tsx</title>
+<style>
+body { background:#1a1a2e; color:#e0e0e0; font-family:monospace; padding:20px; }
+h1 { color:#e6c47a; }
+.path { color:#aaa; font-size:14px; margin:8px 0 16px; }
+.btn { background:#e6c47a; color:#000; border:none; padding:12px 24px; cursor:pointer;
+  font-weight:bold; border-radius:6px; font-size:16px; margin-bottom:16px; }
+pre { background:#0d1117; border:1px solid #333; padding:16px; overflow:auto;
+  font-size:12px; line-height:1.4; white-space:pre; }
+.nav { margin:20px 0; }
+.nav a { color:#4ea8de; margin-right:16px; text-decoration:none; font-size:14px; }
+</style>
+<script>
+function copyAll() {
+  var el = document.getElementById('code');
+  navigator.clipboard.writeText(el.textContent).then(function() {
+    document.getElementById('btn').textContent = 'COPIED!';
+    setTimeout(function() { document.getElementById('btn').textContent = 'Copy All Code'; }, 2000);
+  });
+}
+</script></head><body>
+<h1>File 5/6: library.tsx</h1>
+<div class="path">Paste into: <strong>frontend/app/(tabs)/library.tsx</strong></div>
+<div class="nav">
+  <a href="/api/download/file1.html">1-ContentCard</a>
+  <a href="/api/download/file2.html">2-details</a>
+  <a href="/api/download/file3.html">3-search</a>
+  <a href="/api/download/file4.html">4-category</a>
+  <a href="/api/download/file5.html">5-library</a>
+  <a href="/api/download/file6.html">6-discover</a>
+</div>
+<button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
+<pre id="code">import React, { useEffect, useState, useCallback, useRef } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  ActivityIndicator,
+  RefreshControl,
+  Pressable,
+  useWindowDimensions,
+  findNodeHandle,
+} from &#x27;react-native&#x27;;
+import { SafeAreaView } from &#x27;react-native-safe-area-context&#x27;;
+import { useRouter } from &#x27;expo-router&#x27;;
+import { Image } from &#x27;expo-image&#x27;;
+import { Image as RNImage } from &#x27;react-native&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { useContentStore } from &#x27;../../src/store/contentStore&#x27;;
+import { ContentItem } from &#x27;../../src/api/client&#x27;;
+import { colors } from &#x27;../../src/styles/colors&#x27;;
+import { getCardWidth } from &#x27;../../src/components/ContentCard&#x27;;
+
+const NO_POSTER_IMAGE = require(&#x27;../../assets/images/no-poster.png&#x27;);
+
+type FilterType = &#x27;movies&#x27; | &#x27;series&#x27; | &#x27;tv&#x27;;
+
+// Library card — EXACT same X-button pattern as ContinueWatchingCard in discover.tsx
+function LibraryCard({
+  item,
+  cardWidth,
+  cardHeight,
+  isTV,
+  onPress,
+  onRemove,
+  onCardBlur,
+}: {
+  item: ContentItem;
+  cardWidth: number;
+  cardHeight: number;
+  isTV: boolean;
+  onPress: () =&gt; void;
+  onRemove: () =&gt; void;
+  onCardBlur?: () =&gt; void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [xFocused, setXFocused] = useState(false);
+
+  // Refs for explicit focus navigation between poster and X button
+  const posterRef = useRef&lt;View&gt;(null);
+  const xButtonRef = useRef&lt;View&gt;(null);
+  const [posterTag, setPosterTag] = useState&lt;number | undefined&gt;(undefined);
+  const [xButtonTag, setXButtonTag] = useState&lt;number | undefined&gt;(undefined);
+
+  useEffect(() =&gt; {
+    // Get native node handles after mount for nextFocusUp/Down wiring
+    const pTag = posterRef.current ? findNodeHandle(posterRef.current) : null;
+    const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
+    if (pTag) setPosterTag(pTag);
+    if (xTag) setXButtonTag(xTag);
+  }, []);
+
+  const handleFocus = () =&gt; {
+    setIsFocused(true);
+  };
+
+  const handleXFocus = () =&gt; {
+    setXFocused(true);
+  };
+
+  const xButtonSize = isTV ? 30 : 24;
+  const xRowHeight = xButtonSize + 8;
+
+  return (
+    &lt;View style={{ width: cardWidth, marginRight: 16 }}&gt;
+      {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
+      &lt;View style={[styles.xButtonRow, { paddingTop: 8 }]}&gt;
+        &lt;Pressable
+          ref={xButtonRef}
+          onPress={onRemove}
+          onFocus={handleXFocus}
+          onBlur={() =&gt; setXFocused(false)}
+          accessible={true}
+          accessibilityRole=&quot;button&quot;
+          accessibilityLabel={`Remove ${item.name || item.title} from Library`}
+          android_ripple={null}
+          nextFocusDown={posterTag}
+          style={[
+            styles.removeButtonOverlay,
+            { width: xButtonSize, height: xButtonSize, borderRadius: xButtonSize / 2 },
+            xFocused &amp;&amp; styles.removeButtonOverlayFocused,
+          ]}
+        &gt;
+          &lt;Ionicons
+            name=&quot;close&quot;
+            size={isTV ? 16 : 12}
+            color={xFocused ? &#x27;#fff&#x27; : &#x27;rgba(255,255,255,0.9)&#x27;}
+          /&gt;
+        &lt;/Pressable&gt;
+      &lt;/View&gt;
+
+      {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
+      &lt;Pressable
+        ref={posterRef}
+        onPress={onPress}
+        onFocus={handleFocus}
+        onBlur={() =&gt; { setIsFocused(false); onCardBlur?.(); }}
+        android_ripple={null}
+        nextFocusUp={xButtonTag}
+        style={[
+          styles.posterContainer,
+          { height: cardHeight, marginTop: -xRowHeight },
+          isFocused &amp;&amp; styles.posterFocused,
+        ]}
+      &gt;
+        &lt;View style={styles.imageWrapper}&gt;
+          &lt;Image
+            source={{ uri: item.poster }}
+            style={styles.posterImage}
+            contentFit=&quot;cover&quot;
+            cachePolicy=&quot;memory-disk&quot;
+          /&gt;
+        &lt;/View&gt;
+
+        {!item.poster &amp;&amp; (
+          &lt;View style={styles.placeholder}&gt;
+            &lt;RNImage
+              source={NO_POSTER_IMAGE}
+              style={{ width: &#x27;100%&#x27;, height: &#x27;100%&#x27; }}
+              resizeMode=&quot;cover&quot;
+            /&gt;
+          &lt;/View&gt;
+        )}
+      &lt;/Pressable&gt;
+
+      {/* Title below poster */}
+      &lt;View style={styles.titleContainer}&gt;
+        &lt;Text style={[styles.cardTitle, isTV &amp;&amp; styles.cardTitleTV]} numberOfLines={2}&gt;
+          {item.name || item.title}
+        &lt;/Text&gt;
+      &lt;/View&gt;
+    &lt;/View&gt;
+  );
+}
+
+export default function LibraryScreen() {
+  const router = useRouter();
+  const { width, height } = useWindowDimensions();
+  const isTV = width &gt; height || width &gt; 800;
+  const library = useContentStore(s =&gt; s.library);
+  const isLoadingLibrary = useContentStore(s =&gt; s.isLoadingLibrary);
+  const fetchLibrary = useContentStore(s =&gt; s.fetchLibrary);
+  const removeFromLibrary = useContentStore(s =&gt; s.removeFromLibrary);
+  const [filter, setFilter] = useState&lt;FilterType&gt;(&#x27;movies&#x27;);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const cardWidth = getCardWidth(width, isTV, &#x27;medium&#x27;);
+  const cardHeight = cardWidth * 1.5;
+  const itemTotalWidth = cardWidth + 16;
+  const paddingLeft = isTV ? 48 : 16;
+
+  // Track horizontal nav for scroll behavior
+  const isNavigatingRef = useRef(false);
+  const blurTimerRef = useRef&lt;ReturnType&lt;typeof setTimeout&gt; | null&gt;(null);
+  const flatListRef = useRef&lt;FlatList&gt;(null);
+  const TV_SCROLL_ANCHOR = 4;
+
+  useEffect(() =&gt; {
+    fetchLibrary();
+  }, []);
+
+  const onRefresh = useCallback(async () =&gt; {
+    setRefreshing(true);
+    await fetchLibrary(true);
+    setRefreshing(false);
+  }, []);
+
+  const handleItemPress = useCallback((item: ContentItem) =&gt; {
+    const id = item.imdb_id || item.id;
+    const encodedId = encodeURIComponent(id);
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || &#x27;&#x27;,
+        poster: item.poster || &#x27;&#x27;,
+      },
+    });
+  }, [router]);
+
+  const handleRemoveItem = useCallback(async (item: ContentItem) =&gt; {
+    const contentId = item.imdb_id || item.id;
+    const contentType = item.type || &#x27;movie&#x27;;
+    try {
+      await removeFromLibrary(contentType, contentId);
+    } catch (error) {
+      console.log(&#x27;Remove error:&#x27;, error);
+    }
+  }, [removeFromLibrary]);
+
+  const getFilteredContent = (): ContentItem[] =&gt; {
+    if (!library) return [];
+    switch (filter) {
+      case &#x27;movies&#x27;: return library.movies || [];
+      case &#x27;series&#x27;: return library.series || [];
+      case &#x27;tv&#x27;: return library.channels || [];
+      default: return library.movies || [];
+    }
+  };
+
+  const filteredContent = getFilteredContent();
+
+  const handleCardFocus = useCallback((index: number) =&gt; {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    if (isTV &amp;&amp; flatListRef.current &amp;&amp; isNavigatingRef.current) {
+      const targetOffset = Math.max(0, (index - TV_SCROLL_ANCHOR) * itemTotalWidth);
+      flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
+    }
+    isNavigatingRef.current = true;
+  }, [itemTotalWidth, isTV]);
+
+  const handleCardBlur = useCallback(() =&gt; {
+    blurTimerRef.current = setTimeout(() =&gt; {
+      isNavigatingRef.current = false;
+    }, 150);
+  }, []);
+
+  const getItemLayout = useCallback((_data: any, index: number) =&gt; ({
+    length: itemTotalWidth,
+    offset: paddingLeft + (index * itemTotalWidth),
+    index,
+  }), [itemTotalWidth, paddingLeft]);
+
+  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) =&gt; (
+    &lt;LibraryCard
+      item={item}
+      onPress={() =&gt; { handleCardFocus(index); handleItemPress(item); }}
+      onRemove={() =&gt; handleRemoveItem(item)}
+      cardWidth={cardWidth}
+      cardHeight={cardHeight}
+      isTV={isTV}
+      onCardBlur={handleCardBlur}
+    /&gt;
+  ), [handleItemPress, handleRemoveItem, cardWidth, cardHeight, isTV, handleCardBlur, handleCardFocus]);
+
+  const FilterButton = ({ type, label }: { type: FilterType; label: string }) =&gt; {
+    const isActive = filter === type;
+    const [btnFocused, setBtnFocused] = useState(false);
+    return (
+      &lt;Pressable
+        onPress={() =&gt; setFilter(type)}
+        onFocus={() =&gt; setBtnFocused(true)}
+        onBlur={() =&gt; setBtnFocused(false)}
+        style={[
+          styles.filterButton,
+          isActive &amp;&amp; styles.filterButtonActive,
+          btnFocused &amp;&amp; styles.filterButtonFocused,
+        ]}
+      &gt;
+        &lt;Text style={[styles.filterText, isActive &amp;&amp; styles.filterTextActive, btnFocused &amp;&amp; styles.filterTextFocused]}&gt;
+          {label}
+        &lt;/Text&gt;
+      &lt;/Pressable&gt;
+    );
+  };
+
+  if (isLoadingLibrary &amp;&amp; !library) {
+    return (
+      &lt;SafeAreaView style={styles.container}&gt;
+        &lt;View style={styles.loadingContainer}&gt;
+          &lt;ActivityIndicator size=&quot;large&quot; color={colors.primary} /&gt;
+        &lt;/View&gt;
+      &lt;/SafeAreaView&gt;
+    );
+  }
+
+  return (
+    &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+      &lt;View style={[styles.header, isTV &amp;&amp; styles.headerTV]}&gt;
+        &lt;Text style={[styles.headerTitle, isTV &amp;&amp; styles.headerTitleTV]}&gt;Library&lt;/Text&gt;
+      &lt;/View&gt;
+
+      &lt;View style={[styles.filterContainer, isTV &amp;&amp; styles.filterContainerTV]}&gt;
+        &lt;FilterButton type=&quot;movies&quot; label=&quot;Movies&quot; /&gt;
+        &lt;FilterButton type=&quot;series&quot; label=&quot;Series&quot; /&gt;
+        &lt;FilterButton type=&quot;tv&quot; label=&quot;TV Channels&quot; /&gt;
+      &lt;/View&gt;
+
+      {filteredContent.length === 0 ? (
+        &lt;View style={styles.emptyContainer}&gt;
+          &lt;Ionicons name=&quot;bookmark-outline&quot; size={64} color={colors.primaryDark} /&gt;
+          &lt;Text style={styles.emptyText}&gt;Your library is empty&lt;/Text&gt;
+        &lt;/View&gt;
+      ) : (
+        &lt;FlatList
+          ref={flatListRef}
+          horizontal
+          data={filteredContent}
+          renderItem={renderItem}
+          keyExtractor={(item) =&gt; item.imdb_id || item.id || item.name || &#x27;&#x27;}
+          getItemLayout={getItemLayout}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.listContent, isTV &amp;&amp; styles.listContentTV]}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          removeClippedSubviews={true}
+          refreshControl={
+            &lt;RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            /&gt;
+          }
+        /&gt;
+      )}
+    &lt;/SafeAreaView&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: &#x27;#000000&#x27;,
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: &#x27;#1a1a1a&#x27;,
+  },
+  headerTV: {
+    paddingHorizontal: 48,
+    paddingVertical: 16,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: &#x27;800&#x27;,
+    color: colors.primary,
+  },
+  headerTitleTV: {
+    fontSize: 32,
+  },
+  filterContainer: {
+    flexDirection: &#x27;row&#x27;,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  filterContainerTV: {
+    paddingHorizontal: 48,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: &#x27;#1a1a1a&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  filterButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  filterButtonFocused: {
+    borderColor: colors.primary,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+    transform: [{ scale: 1.1 }],
+  },
+  filterText: {
+    color: &#x27;#888888&#x27;,
+    fontSize: 14,
+    fontWeight: &#x27;600&#x27;,
+  },
+  filterTextActive: {
+    color: &#x27;#FFFFFF&#x27;,
+  },
+  filterTextFocused: {
+    color: &#x27;#FFFFFF&#x27;,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: &#x27;600&#x27;,
+    marginTop: 16,
+    textAlign: &#x27;center&#x27;,
+  },
+  emptySubtext: {
+    color: colors.primaryDark,
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: &#x27;center&#x27;,
+  },
+  listContent: {
+    paddingLeft: 16,
+    paddingRight: 48,
+    paddingTop: 8,
+  },
+  listContentTV: {
+    paddingLeft: 48,
+    paddingRight: 128,
+  },
+  // X button row - sits above poster, right-aligned (matches discover.tsx)
+  xButtonRow: {
+    alignItems: &#x27;flex-end&#x27;,
+    zIndex: 10,
+    paddingRight: 8,
+  },
+  removeButtonOverlay: {
+    backgroundColor: &#x27;rgba(0, 0, 0, 0.7)&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  removeButtonOverlayFocused: {
+    borderColor: colors.primary,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.5)&#x27;,
+    transform: [{ scale: 1.2 }],
+  },
+  // Poster
+  posterContainer: {
+    borderRadius: 6,
+    overflow: &#x27;visible&#x27;,
+    backgroundColor: &#x27;#1a1a1a&#x27;,
+    position: &#x27;relative&#x27;,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  posterFocused: {
+    borderColor: colors.primary,
+  },
+  imageWrapper: {
+    width: &#x27;100%&#x27;,
+    height: &#x27;100%&#x27;,
+    borderRadius: 4,
+    overflow: &#x27;hidden&#x27;,
+  },
+  posterImage: {
+    width: &#x27;100%&#x27;,
+    height: &#x27;100%&#x27;,
+  },
+  placeholder: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    backgroundColor: &#x27;#1a1a1a&#x27;,
+  },
+  titleContainer: {
+    paddingTop: 6,
+    paddingHorizontal: 2,
+    height: 38,
+  },
+  cardTitle: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: &#x27;500&#x27;,
+    textAlign: &#x27;center&#x27;,
+    lineHeight: 16,
+  },
+  cardTitleTV: {
+    fontSize: 13,
+  },
+});
+</pre>
+</body></html>

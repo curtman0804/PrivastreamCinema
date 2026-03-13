@@ -3470,14 +3470,14 @@ async def root():
 async def download_file(filename: str):
     """Serve files from the static directory for download"""
     import os
-    file_path = os.path.join(os.path.dirname(__file__), "static", filename)
+    file_path = os.path.join("/app/backend/static", filename)
     if os.path.exists(file_path):
         # Detect media type from extension
         ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
         media_types = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'html': 'text/html'}
         media_type = media_types.get(ext, 'text/plain')
         return FileResponse(file_path, media_type=media_type)
-    raise HTTPException(status_code=404, detail="File not found")
+    raise HTTPException(status_code=404, detail=f"File not found: {filename}")
 
 
 # Include the router in the main app

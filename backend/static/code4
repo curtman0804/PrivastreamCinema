@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>File 4: category_type.tsx</title>
+<style>
+body { background:#1a1a2e; color:#e0e0e0; font-family:monospace; padding:20px; }
+h1 { color:#e6c47a; }
+.path { color:#aaa; font-size:14px; margin:8px 0 16px; }
+.btn { background:#e6c47a; color:#000; border:none; padding:12px 24px; cursor:pointer;
+  font-weight:bold; border-radius:6px; font-size:16px; margin-bottom:16px; }
+pre { background:#0d1117; border:1px solid #333; padding:16px; overflow:auto;
+  font-size:12px; line-height:1.4; white-space:pre; }
+.nav { margin:20px 0; }
+.nav a { color:#4ea8de; margin-right:16px; text-decoration:none; font-size:14px; }
+</style>
+<script>
+function copyAll() {
+  var el = document.getElementById('code');
+  navigator.clipboard.writeText(el.textContent).then(function() {
+    document.getElementById('btn').textContent = 'COPIED!';
+    setTimeout(function() { document.getElementById('btn').textContent = 'Copy All Code'; }, 2000);
+  });
+}
+</script></head><body>
+<h1>File 4/6: category_type.tsx</h1>
+<div class="path">Paste into: <strong>frontend/app/category/[service]/[type].tsx</strong></div>
+<div class="nav">
+  <a href="/api/download/file1.html">1-ContentCard</a>
+  <a href="/api/download/file2.html">2-details</a>
+  <a href="/api/download/file3.html">3-search</a>
+  <a href="/api/download/file4.html">4-category</a>
+  <a href="/api/download/file5.html">5-library</a>
+  <a href="/api/download/file6.html">6-discover</a>
+</div>
+<button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
+<pre id="code">import React, { useEffect, useState, useCallback, useRef, memo } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  useWindowDimensions,
+  Platform,
+  findNodeHandle,
+} from &#x27;react-native&#x27;;
+import { useLocalSearchParams, useRouter } from &#x27;expo-router&#x27;;
+import { SafeAreaView } from &#x27;react-native-safe-area-context&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { Image } from &#x27;expo-image&#x27;;
+import { Image as RNImage } from &#x27;react-native&#x27;;
+import { useContentStore } from &#x27;../../../src/store/contentStore&#x27;;
+import { ContentItem } from &#x27;../../../src/api/client&#x27;;
+import apiClient from &#x27;../../../src/api/client&#x27;;
+import colors from &#x27;../../../src/styles/colors&#x27;;
+
+const NO_POSTER_IMAGE = require(&#x27;../../../assets/images/no-poster.png&#x27;);
+
+// ============================================
+// CategoryItem - MUST be outside the screen component
+// so FlatList can properly diff and reuse cells
+// ============================================
+const CategoryItem = memo(({ 
+  item, 
+  itemWidth, 
+  itemHeight, 
+  gap, 
+  onPress,
+  onFocusItem,
+}: { 
+  item: ContentItem; 
+  itemWidth: number; 
+  itemHeight: number; 
+  gap: number; 
+  onPress: (item: ContentItem) =&gt; void;
+  onFocusItem?: () =&gt; void;
+}) =&gt; {
+  const [focused, setFocused] = useState(false);
+  return (
+    &lt;Pressable
+      style={[
+        styles.gridItem,
+        { width: itemWidth, marginHorizontal: gap / 2 },
+        focused &amp;&amp; styles.gridItemFocused,
+      ]}
+      onPress={() =&gt; onPress(item)}
+      onFocus={() =&gt; {
+        setFocused(true);
+        onFocusItem?.();
+      }}
+      onBlur={() =&gt; setFocused(false)}
+      android_ripple={null}
+    &gt;
+      {item.poster ? (
+        &lt;Image
+          source={{ uri: item.poster }}
+          style={[styles.gridPoster, { height: itemHeight }]}
+          contentFit=&quot;cover&quot;
+          recyclingKey={item.id || item.imdb_id}
+        /&gt;
+      ) : (
+        &lt;RNImage
+          source={NO_POSTER_IMAGE}
+          style={[styles.gridPoster, { height: itemHeight }]}
+          resizeMode=&quot;cover&quot;
+        /&gt;
+      )}
+      &lt;Text style={styles.itemTitle} numberOfLines={2}&gt;{item.name}&lt;/Text&gt;
+    &lt;/Pressable&gt;
+  );
+});
+
+// ============================================
+// CategoryScreen - Infinite scroll pagination
+// ============================================
+export default function CategoryScreen() {
+  const { service, type } = useLocalSearchParams&lt;{ service: string; type: string }&gt;();
+  const router = useRouter();
+  const discoverData = useContentStore(s =&gt; s.discoverData);
+  const [items, setItems] = useState&lt;ContentItem[]&gt;([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [backFocused, setBackFocused] = useState(false);
+  const { width, height } = useWindowDimensions();
+  const isTV = width &gt; height || width &gt; 800;
+  const flatListRef = useRef&lt;FlatList&gt;(null);
+
+  // Refs to prevent stale closures in callbacks
+  const skipRef = useRef(0);
+  const isLoadingRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const initialLoadDone = useRef(false);
+
+  // Grid sizing - Fire Stick reports ~960dp
+  const numColumns = isTV ? Math.max(6, Math.floor(width / 140)) : 3;
+  const horizontalPadding = isTV ? 24 : 16;
+  const gap = isTV ? 12 : 8;
+  const ITEM_WIDTH = (width - horizontalPadding * 2 - (numColumns - 1) * gap) / numColumns;
+  const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
+
+  const decodedService = service ? decodeURIComponent(service) : &#x27;&#x27;;
+
+  // Fix duplicate title
+  const typeLabel = type === &#x27;movies&#x27; ? &#x27;Movies&#x27; : type === &#x27;series&#x27; ? &#x27;Series&#x27; : &#x27;Channels&#x27;;
+  const lowerService = decodedService.toLowerCase();
+  const displayTitle = lowerService.includes(typeLabel.toLowerCase()) 
+    ? decodedService 
+    : `${decodedService} ${typeLabel}`;
+
+  // Fetch one page of content
+  const fetchOnePage = useCallback(async (isFirstPage: boolean) =&gt; {
+    if (!decodedService || !type) return;
+    if (isLoadingRef.current) return;
+    if (!hasMoreRef.current &amp;&amp; !isFirstPage) return;
+
+    isLoadingRef.current = true;
+    if (isFirstPage) {
+      setIsLoading(true);
+    } else {
+      setIsLoadingMore(true);
+    }
+
+    try {
+      const currentSkip = isFirstPage ? 0 : skipRef.current;
+      const response = await apiClient.get(
+        `/api/content/category/${encodeURIComponent(decodedService)}/${type}?skip=${currentSkip}&amp;limit=100`
+      );
+      const data = response.data;
+      const newItems: ContentItem[] = data.items || [];
+
+      if (newItems.length &gt; 0) {
+        if (isFirstPage) {
+          setItems(newItems);
+          skipRef.current = newItems.length;
+        } else {
+          setItems(prev =&gt; {
+            const existingIds = new Set(prev.map(i =&gt; i.id || i.imdb_id));
+            const unique = newItems.filter(i =&gt; !existingIds.has(i.id || i.imdb_id));
+            skipRef.current = currentSkip + newItems.length;
+            return [...prev, ...unique];
+          });
+        }
+      }
+
+      // If API returned hasMore field, use it; otherwise check if we got enough items
+      const moreAvailable = data.hasMore !== undefined ? data.hasMore : newItems.length &gt;= 20;
+      hasMoreRef.current = moreAvailable;
+      setHasMore(moreAvailable);
+    } catch (error) {
+      console.log(&#x27;Error fetching category:&#x27;, error);
+      // Fallback to cached discover data on first page
+      if (isFirstPage &amp;&amp; discoverData) {
+        const serviceData = discoverData.services[decodedService];
+        if (serviceData) {
+          let fallback: ContentItem[] = [];
+          if (type === &#x27;movies&#x27;) fallback = serviceData.movies || [];
+          else if (type === &#x27;series&#x27;) fallback = serviceData.series || [];
+          else if (type === &#x27;channels&#x27;) fallback = serviceData.channels || [];
+          setItems(fallback.filter(Boolean));
+        }
+      }
+      hasMoreRef.current = false;
+      setHasMore(false);
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+      isLoadingRef.current = false;
+    }
+  }, [decodedService, type, discoverData]);
+
+  // Initial load
+  useEffect(() =&gt; {
+    if (!initialLoadDone.current &amp;&amp; decodedService &amp;&amp; type) {
+      initialLoadDone.current = true;
+      fetchOnePage(true);
+    }
+  }, [decodedService, type, fetchOnePage]);
+
+  // Load more when user scrolls to bottom
+  const handleLoadMore = useCallback(() =&gt; {
+    if (!isLoadingRef.current &amp;&amp; hasMoreRef.current) {
+      fetchOnePage(false);
+    }
+  }, [fetchOnePage]);
+
+  const handleItemPress = useCallback((item: ContentItem) =&gt; {
+    const id = item.imdb_id || item.id;
+    const encodedId = encodeURIComponent(id);
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || &#x27;&#x27;,
+        poster: item.poster || &#x27;&#x27;,
+        background: item.background || &#x27;&#x27;,
+        logo: item.logo || &#x27;&#x27;,
+        year: item.year ? String(item.year) : &#x27;&#x27;,
+        imdbRating: item.imdbRating ? String(item.imdbRating) : &#x27;&#x27;,
+        description: item.description || &#x27;&#x27;,
+      }
+    });
+  }, [router]);
+
+  // Auto-scroll when a poster is focused so it&#x27;s visible
+  const handleItemFocus = useCallback((index: number) =&gt; {
+    const rowIndex = Math.floor(index / numColumns);
+    // Scroll to the row so the focused item is visible
+    if (flatListRef.current) {
+      const rowHeight = ITEM_HEIGHT + 40; // poster + title + margin
+      flatListRef.current.scrollToOffset({
+        offset: Math.max(0, rowIndex * rowHeight - 60), // 60px offset for header
+        animated: true,
+      });
+    }
+  }, [numColumns, ITEM_HEIGHT]);
+
+  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) =&gt; (
+    &lt;CategoryItem
+      item={item}
+      itemWidth={ITEM_WIDTH}
+      itemHeight={ITEM_HEIGHT}
+      gap={gap}
+      onPress={handleItemPress}
+      onFocusItem={() =&gt; handleItemFocus(index)}
+    /&gt;
+  ), [ITEM_WIDTH, ITEM_HEIGHT, gap, handleItemPress, handleItemFocus]);
+
+  const keyExtractor = useCallback((item: ContentItem) =&gt; item.id || item.imdb_id || &#x27;&#x27;, []);
+
+  const LoadMoreFooter = () =&gt; {
+    if (isLoadingMore) {
+      return (
+        &lt;View style={styles.footerContainer}&gt;
+          &lt;ActivityIndicator size=&quot;small&quot; color={colors.primary} /&gt;
+          &lt;Text style={styles.footerText}&gt;Loading more... ({items.length} loaded)&lt;/Text&gt;
+        &lt;/View&gt;
+      );
+    }
+    if (!hasMore &amp;&amp; items.length &gt; 0) {
+      return (
+        &lt;View style={styles.footerContainer}&gt;
+          &lt;Text style={styles.footerText}&gt;All {items.length} items loaded&lt;/Text&gt;
+        &lt;/View&gt;
+      );
+    }
+    return null;
+  };
+
+  return (
+    &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+      {/* Header */}
+      &lt;View style={[styles.header, isTV &amp;&amp; styles.headerTV]}&gt;
+        &lt;Pressable 
+          onPress={() =&gt; router.back()} 
+          onFocus={() =&gt; setBackFocused(true)}
+          onBlur={() =&gt; setBackFocused(false)}
+          android_ripple={null}
+          style={[styles.backButton, backFocused &amp;&amp; styles.backButtonFocused]}
+        &gt;
+          &lt;Ionicons name=&quot;arrow-back&quot; size={isTV ? 28 : 24} color={backFocused ? colors.primary : &quot;#FFFFFF&quot;} /&gt;
+        &lt;/Pressable&gt;
+        &lt;Text style={[styles.headerTitle, isTV &amp;&amp; styles.headerTitleTV]}&gt;{displayTitle}&lt;/Text&gt;
+        &lt;View style={styles.placeholder} /&gt;
+      &lt;/View&gt;
+
+      {/* Content Grid */}
+      {isLoading ? (
+        &lt;View style={styles.emptyContainer}&gt;
+          &lt;ActivityIndicator size=&quot;large&quot; color={colors.primary} /&gt;
+          &lt;Text style={styles.loadingText}&gt;Loading {decodedService}...&lt;/Text&gt;
+        &lt;/View&gt;
+      ) : items.length === 0 ? (
+        &lt;View style={styles.emptyContainer}&gt;
+          &lt;Text style={styles.emptyText}&gt;No content found&lt;/Text&gt;
+        &lt;/View&gt;
+      ) : (
+        &lt;FlatList
+          ref={flatListRef}
+          data={items}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          numColumns={numColumns}
+          key={numColumns}
+          contentContainerStyle={[styles.gridContent, { paddingHorizontal: horizontalPadding }]}
+          showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={2.0}
+          initialNumToRender={numColumns * 4}
+          maxToRenderPerBatch={numColumns * 3}
+          removeClippedSubviews={false}
+          windowSize={15}
+          ListFooterComponent={LoadMoreFooter}
+        /&gt;
+      )}
+    &lt;/SafeAreaView&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  header: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    justifyContent: &#x27;space-between&#x27;,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.backgroundLight,
+  },
+  headerTV: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  backButtonFocused: {
+    borderColor: colors.primary,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.15)&#x27;,
+  },
+  headerTitle: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: &#x27;600&#x27;,
+  },
+  headerTitleTV: {
+    fontSize: 24,
+  },
+  placeholder: {
+    width: 40,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  gridContent: {
+    paddingVertical: 16,
+  },
+  gridItem: {
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  gridItemFocused: {
+    borderColor: colors.primary,
+  },
+  gridPoster: {
+    width: &#x27;100%&#x27;,
+    borderRadius: 6,
+    backgroundColor: colors.backgroundLight,
+  },
+  itemTitle: {
+    color: colors.primary,
+    fontSize: 12,
+    marginTop: 6,
+    textAlign: &#x27;center&#x27;,
+  },
+  loadingText: {
+    color: colors.primaryDark,
+    marginTop: 12,
+    fontSize: 14,
+  },
+  emptyText: {
+    color: colors.primaryDark,
+    fontSize: 16,
+  },
+  footerContainer: {
+    flexDirection: &#x27;row&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    paddingVertical: 24,
+    gap: 10,
+  },
+  footerText: {
+    color: colors.primaryDark,
+    fontSize: 14,
+  },
+});
+</pre>
+</body></html>

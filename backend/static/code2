@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>File 2: details_id.tsx</title>
+<style>
+body { background:#1a1a2e; color:#e0e0e0; font-family:monospace; padding:20px; }
+h1 { color:#e6c47a; }
+.path { color:#aaa; font-size:14px; margin:8px 0 16px; }
+.btn { background:#e6c47a; color:#000; border:none; padding:12px 24px; cursor:pointer;
+  font-weight:bold; border-radius:6px; font-size:16px; margin-bottom:16px; }
+pre { background:#0d1117; border:1px solid #333; padding:16px; overflow:auto;
+  font-size:12px; line-height:1.4; white-space:pre; }
+.nav { margin:20px 0; }
+.nav a { color:#4ea8de; margin-right:16px; text-decoration:none; font-size:14px; }
+</style>
+<script>
+function copyAll() {
+  var el = document.getElementById('code');
+  navigator.clipboard.writeText(el.textContent).then(function() {
+    document.getElementById('btn').textContent = 'COPIED!';
+    setTimeout(function() { document.getElementById('btn').textContent = 'Copy All Code'; }, 2000);
+  });
+}
+</script></head><body>
+<h1>File 2/6: details_id.tsx</h1>
+<div class="path">Paste into: <strong>frontend/app/details/[type]/[id].tsx</strong></div>
+<div class="nav">
+  <a href="/api/download/file1.html">1-ContentCard</a>
+  <a href="/api/download/file2.html">2-details</a>
+  <a href="/api/download/file3.html">3-search</a>
+  <a href="/api/download/file4.html">4-category</a>
+  <a href="/api/download/file5.html">5-library</a>
+  <a href="/api/download/file6.html">6-discover</a>
+</div>
+<button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
+<pre id="code">import React, { useEffect, useState, useMemo, useCallback } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Dimensions,
+  Linking,
+  FlatList,
+  Image as RNImage,
+} from &#x27;react-native&#x27;;
+import { useLocalSearchParams, useRouter } from &#x27;expo-router&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { Image } from &#x27;expo-image&#x27;;
+import { useContentStore, getMetaCache, setMetaCache } from &#x27;../../../src/store/contentStore&#x27;;
+
+// Fallback image for missing posters
+const NO_POSTER_IMAGE = require(&#x27;../../../assets/images/no-poster.png&#x27;);
+
+import { api, ContentItem, Stream, Episode } from &#x27;../../../src/api/client&#x27;;
+import AsyncStorage from &#x27;@react-native-async-storage/async-storage&#x27;;
+
+const { width, height } = Dimensions.get(&#x27;window&#x27;);
+
+// Focusable Button Component
+function FocusableButton({ 
+  onPress, 
+  style, 
+  focusedStyle,
+  children,
+  disabled = false,
+}: {
+  onPress?: () =&gt; void;
+  style: any;
+  focusedStyle?: any;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    &lt;Pressable
+      style={[style, isFocused &amp;&amp; (focusedStyle || styles.defaultFocused)]}
+      onPress={onPress}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+      disabled={disabled}
+    &gt;
+      {children}
+    &lt;/Pressable&gt;
+  );
+}
+
+// Stream Card Component - Stremio style horizontal card
+function StreamCard({ 
+  stream, 
+  onPress 
+}: { 
+  stream: Stream; 
+  onPress: () =&gt; void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  const parseStreamInfo = (stream: Stream) =&gt; {
+    const name = stream.name || &#x27;&#x27;;
+    const title = stream.title || &#x27;&#x27;;
+    
+    // Extract quality
+    let quality = &#x27;SD&#x27;;
+    if (name.includes(&#x27;4K&#x27;) || name.includes(&#x27;2160&#x27;)) quality = &#x27;4K&#x27;;
+    else if (name.includes(&#x27;1080&#x27;)) quality = &#x27;1080p&#x27;;
+    else if (name.includes(&#x27;720&#x27;)) quality = &#x27;720p&#x27;;
+    else if (name.toUpperCase().includes(&#x27;HD&#x27;) &amp;&amp; !name.toUpperCase().includes(&#x27;SD&#x27;)) quality = &#x27;HD&#x27;;
+    
+    // Extract source - use provider code for USAATV, otherwise addon name
+    let source = stream.addon || &#x27;Unknown&#x27;;
+    if (stream.provider) {
+      // USAATV streams have provider abbreviation (AX, CV, MJ, TP, etc.)
+      source = stream.provider;
+    } else if (name.includes(&#x27;TPB&#x27;) || name.includes(&#x27;🏴‍☠️&#x27;)) source = &#x27;TPB&#x27;;
+    else if (name.includes(&#x27;⚡&#x27;) || name.includes(&#x27;Torrentio&#x27;)) source = &#x27;Torrentio&#x27;;
+    else if (name.includes(&#x27;EZTV&#x27;)) source = &#x27;EZTV&#x27;;
+    
+    // Extract size from title
+    let size = &#x27;&#x27;;
+    const sizeMatch = title.match(/💾\s*([\d.]+\s*[GM]B)/);
+    if (sizeMatch) size = sizeMatch[1];
+    
+    // Extract seeders
+    let seeders = stream.seeders || 0;
+    if (!seeders) {
+      const seederMatch = title.match(/🌱\s*(\d+)/);
+      if (seederMatch) seeders = parseInt(seederMatch[1], 10);
+    }
+    
+    return { quality, source, size, seeders, title };
+  };
+  
+  const { quality, source, size, seeders, title } = parseStreamInfo(stream);
+  
+  return (
+    &lt;Pressable
+      style={[styles.streamCard, isFocused &amp;&amp; styles.streamCardFocused]}
+      onPress={onPress}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+    &gt;
+      &lt;View style={styles.streamCardHeader}&gt;
+        &lt;Text style={styles.streamSource}&gt;{source}&lt;/Text&gt;
+        &lt;View style={[styles.qualityBadge, quality === &#x27;4K&#x27; &amp;&amp; styles.qualityBadge4K]}&gt;
+          &lt;Text style={styles.qualityText}&gt;{quality}&lt;/Text&gt;
+        &lt;/View&gt;
+      &lt;/View&gt;
+      
+      &lt;View style={styles.streamCardBody}&gt;
+        {seeders &gt; 0 &amp;&amp; (
+          &lt;View style={styles.streamStat}&gt;
+            &lt;Ionicons name=&quot;people&quot; size={12} color=&quot;#888&quot; /&gt;
+            &lt;Text style={styles.streamStatText}&gt;{seeders}&lt;/Text&gt;
+          &lt;/View&gt;
+        )}
+        {size &amp;&amp; (
+          &lt;View style={styles.streamStat}&gt;
+            &lt;Ionicons name=&quot;document&quot; size={12} color=&quot;#888&quot; /&gt;
+            &lt;Text style={styles.streamStatText}&gt;{size}&lt;/Text&gt;
+          &lt;/View&gt;
+        )}
+      &lt;/View&gt;
+      
+      &lt;View style={styles.streamCardFooter}&gt;
+        &lt;Ionicons name=&quot;play-circle&quot; size={20} color=&quot;#B8A05C&quot; /&gt;
+      &lt;/View&gt;
+    &lt;/Pressable&gt;
+  );
+}
+
+// Episode Card Component
+// Placeholder component for missing posters/thumbnails
+function ComingSoonPlaceholder({ width, height }: { width: number | string; height: number | string }) {
+  return (
+    &lt;RNImage
+      source={NO_POSTER_IMAGE}
+      style={{ width: width as any, height: height as any }}
+      resizeMode=&quot;cover&quot;
+    /&gt;
+  );
+}
+
+function EpisodeCard({ 
+  episode, 
+  fallbackPoster, 
+  onPress 
+}: { 
+  episode: Episode; 
+  fallbackPoster?: string;
+  onPress: () =&gt; void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [thumbError, setThumbError] = useState(false);
+  const thumbUri = episode.thumbnail || fallbackPoster;
+  
+  return (
+    &lt;Pressable
+      style={[styles.episodeCard, isFocused &amp;&amp; styles.episodeCardFocused]}
+      onPress={onPress}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+    &gt;
+      {thumbUri &amp;&amp; !thumbError ? (
+        &lt;Image
+          source={{ uri: thumbUri }}
+          style={styles.episodeThumbnail}
+          contentFit=&quot;cover&quot;
+          onError={() =&gt; setThumbError(true)}
+        /&gt;
+      ) : (
+        &lt;ComingSoonPlaceholder width=&quot;100%&quot; height={90} /&gt;
+      )}
+      &lt;View style={styles.episodeInfo}&gt;
+        &lt;Text style={styles.episodeTitle} numberOfLines={2}&gt;
+          E{episode.episode}: {episode.name || `Episode ${episode.episode}`}
+        &lt;/Text&gt;
+      &lt;/View&gt;
+    &lt;/Pressable&gt;
+  );
+}
+
+export default function DetailsScreen() {
+  const { 
+    type, 
+    id: rawId, 
+    resumeEpisodeId,
+    resumePosition,
+    resumeSeason,
+    resumeEpisode,
+    // Display data passed via route params for INSTANT rendering
+    name: paramName, poster: paramPoster,
+  } = useLocalSearchParams&lt;{ 
+    type: string; 
+    id: string;
+    resumeEpisodeId?: string;
+    resumePosition?: string;
+    resumeSeason?: string;
+    resumeEpisode?: string;
+    name?: string; poster?: string;
+  }&gt;();
+  const router = useRouter();
+  
+  // Use zustand SELECTORS — only re-render when these specific fields change
+  // This prevents re-renders from unrelated store changes (discover data, addons, etc.)
+  const streams = useContentStore(s =&gt; s.streams);
+  const isLoadingStreams = useContentStore(s =&gt; s.isLoadingStreams);
+  const fetchStreams = useContentStore(s =&gt; s.fetchStreams);
+  const library = useContentStore(s =&gt; s.library);
+  const fetchLibrary = useContentStore(s =&gt; s.fetchLibrary);
+  
+  const id = rawId ? decodeURIComponent(rawId) : rawId;
+  
+  // Try meta cache first (instant), then route params, then bare minimum
+  const cachedMeta = id ? getMetaCache(id) : null;
+  const initialContent: ContentItem = cachedMeta || {
+    id: id!,
+    imdb_id: id,
+    name: paramName || &#x27;&#x27;,
+    type: type as &#x27;movie&#x27; | &#x27;series&#x27;,
+    poster: paramPoster || &#x27;&#x27;,
+  };
+  
+  const [content, setContent] = useState&lt;ContentItem | null&gt;(initialContent);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [inLibrary, setInLibrary] = useState(false);
+  const [selectedSeason, setSelectedSeason] = useState&lt;number&gt;(1);
+
+  const isEpisodePage = type !== &#x27;tv&#x27; &amp;&amp; id?.includes(&#x27;:&#x27;) &amp;&amp; !id?.startsWith(&#x27;porn&#x27;) &amp;&amp; !id?.startsWith(&#x27;http&#x27;);
+  const baseId = isEpisodePage ? id?.split(&#x27;:&#x27;)[0] : id;
+  const episodeSeason = isEpisodePage ? parseInt(id?.split(&#x27;:&#x27;)[1] || &#x27;1&#x27;) : null;
+  const episodeNumber = isEpisodePage ? parseInt(id?.split(&#x27;:&#x27;)[2] || &#x27;1&#x27;) : null;
+
+  const currentEpisode = useMemo(() =&gt; {
+    if (!isEpisodePage || !content?.videos || !episodeSeason || !episodeNumber) return null;
+    return content.videos.find(
+      ep =&gt; ep.season === episodeSeason &amp;&amp; ep.episode === episodeNumber
+    );
+  }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
+
+  const nextEpisode = useMemo(() =&gt; {
+    if (!isEpisodePage || !content?.videos || !episodeSeason || !episodeNumber) return null;
+    
+    const sameSeasonNext = content.videos.find(
+      ep =&gt; ep.season === episodeSeason &amp;&amp; ep.episode === episodeNumber + 1
+    );
+    if (sameSeasonNext) return sameSeasonNext;
+    
+    const nextSeasonFirst = content.videos.find(
+      ep =&gt; ep.season === episodeSeason + 1 &amp;&amp; ep.episode === 1
+    );
+    return nextSeasonFirst || null;
+  }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
+
+  const seasons = useMemo(() =&gt; {
+    if (!content?.videos) return [];
+    const seasonSet = new Set(content.videos.map(ep =&gt; ep.season).filter(s =&gt; s &gt; 0));
+    return Array.from(seasonSet).sort((a, b) =&gt; a - b);
+  }, [content?.videos]);
+
+  const episodesForSeason = useMemo(() =&gt; {
+    if (!content?.videos) return [];
+    return content.videos
+      .filter(ep =&gt; ep.season === selectedSeason)
+      .sort((a, b) =&gt; a.episode - b.episode);
+  }, [content?.videos, selectedSeason]);
+
+  useEffect(() =&gt; {
+    // If we have cached meta with background, skip the meta fetch entirely
+    const hasCachedMeta = cachedMeta &amp;&amp; cachedMeta.background;
+    if (!hasCachedMeta) {
+      // Only fetch meta for series (need episodes) or if missing background
+      const needsMeta = type === &#x27;series&#x27; || !content?.background;
+      if (needsMeta) {
+        loadContent();
+      }
+    }
+    fetchLibrary();
+    
+    if (type &amp;&amp; id &amp;&amp; (type === &#x27;movie&#x27; || type === &#x27;tv&#x27; || isEpisodePage)) {
+      fetchStreams(type, id);
+    }
+  }, [id, type]);
+
+  useEffect(() =&gt; {
+    if (seasons.length &gt; 0 &amp;&amp; !seasons.includes(selectedSeason)) {
+      setSelectedSeason(seasons[0]);
+    }
+  }, [seasons]);
+
+  useEffect(() =&gt; {
+    if (content &amp;&amp; library) {
+      const contentList = type === &#x27;movie&#x27; ? library.movies : library.series;
+      const found = contentList?.some(
+        (item) =&gt; item.id === content.id || item.imdb_id === content.id
+      );
+      setInLibrary(!!found);
+    }
+  }, [content, library]);
+
+  const loadContent = async () =&gt; {
+    try {
+      const contentId = isEpisodePage ? baseId : id;
+      const data = await api.content.getMeta(type!, contentId!);
+      // Cache the meta data for instant re-access
+      if (contentId) setMetaCache(contentId, data);
+      setContent(data);
+    } catch (error) {
+      console.log(&#x27;Failed to fetch meta:&#x27;, error);
+      // Keep using the initial content from params — already set
+    }
+    setIsLoadingContent(false);
+  };
+
+  const handleStreamSelect = async (stream: Stream) =&gt; {
+    const subtitleContentId = isEpisodePage 
+      ? `${baseId}:${episodeSeason}:${episodeNumber}`
+      : (id as string);
+    const contentTitle = currentEpisode 
+      ? `S${episodeSeason}E${episodeNumber} - ${currentEpisode.name || content?.name || &#x27;Video&#x27;}`
+      : content?.name || &#x27;Video&#x27;;
+    const cType = type as string || &#x27;movie&#x27;;
+    
+    const nextEpisodeData = nextEpisode ? {
+      nextEpisodeId: `${baseId}:${nextEpisode.season}:${nextEpisode.episode}`,
+      nextEpisodeTitle: `S${nextEpisode.season}E${nextEpisode.episode} - ${nextEpisode.name || &#x27;Next Episode&#x27;}`,
+      seriesId: baseId || id,
+      season: String(episodeSeason),
+      episode: String(episodeNumber),
+    } : {};
+    
+    const shouldResume = resumePosition &amp;&amp; parseFloat(resumePosition) &gt; 0 &amp;&amp; (
+      (type === &#x27;movie&#x27; &amp;&amp; !resumeEpisodeId) ||
+      (type === &#x27;series&#x27; &amp;&amp; resumeEpisodeId === subtitleContentId)
+    );
+    const resumeData = shouldResume ? { resumePosition } : {};
+    
+    const buildFallbackUrls = async (): Promise&lt;string[]&gt; =&gt; {
+      const authToken = await AsyncStorage.getItem(&#x27;auth_token&#x27;);
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://fire-stick-remote.preview.emergentagent.com&#x27;;
+      
+      return streams
+        .filter(s =&gt; s !== stream)
+        .filter(s =&gt; s.url &amp;&amp; s.url.startsWith(&#x27;/api/proxy/&#x27;))
+        .slice(0, 5)
+        .map(s =&gt; {
+          const separator = s.url!.includes(&#x27;?&#x27;) ? &#x27;&amp;&#x27; : &#x27;?&#x27;;
+          const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : &#x27;&#x27;;
+          return `${backendUrl}${s.url}${tokenParam}`;
+        });
+    };
+    
+    try {
+      await AsyncStorage.setItem(&#x27;currentPlaying&#x27;, JSON.stringify({
+        contentType: cType,
+        contentId: id,
+        title: contentTitle,
+      }));
+    } catch (e) {
+      console.log(&#x27;[DETAILS] Error saving to AsyncStorage:&#x27;, e);
+    }
+    
+    // Handle external URLs - route them to the internal player
+    if (stream.externalUrl || stream.requiresWebView) {
+      const streamUrl = stream.externalUrl || stream.url;
+      console.log(&#x27;[DETAILS] Playing external URL in internal player:&#x27;, streamUrl);
+      router.push({
+        pathname: &#x27;/player&#x27;,
+        params: { 
+          directUrl: streamUrl,
+          title: contentTitle,
+          isLive: &#x27;false&#x27;,
+          contentType: cType,
+          contentId: subtitleContentId,
+          backdrop: content?.background || &#x27;&#x27;,
+          poster: content?.poster || &#x27;&#x27;,
+          logo: content?.logo || &#x27;&#x27;,
+          ...nextEpisodeData,
+          ...resumeData,
+        },
+      });
+      return;
+    }
+    
+    if (stream.url &amp;&amp; stream.url.startsWith(&#x27;/api/proxy/&#x27;)) {
+      const authToken = await AsyncStorage.getItem(&#x27;auth_token&#x27;);
+      const separator = stream.url.includes(&#x27;?&#x27;) ? &#x27;&amp;&#x27; : &#x27;?&#x27;;
+      const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : &#x27;&#x27;;
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://fire-stick-remote.preview.emergentagent.com&#x27;;
+      const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
+      
+      // Build fallback URLs - include other proxy streams + direct URLs
+      const fallbacks = await buildFallbackUrls();
+      
+      // Also include direct URLs from USAATV streams as fallbacks
+      const directFallbacks = streams
+        .filter(s =&gt; s !== stream &amp;&amp; (s.directUrl || (s.url &amp;&amp; !s.url.startsWith(&#x27;/api/proxy/&#x27;))))
+        .map(s =&gt; s.directUrl || s.url)
+        .filter(Boolean);
+      
+      router.push({
+        pathname: &#x27;/player&#x27;,
+        params: { 
+          directUrl: absoluteUrl,
+          title: contentTitle,
+          isLive: type === &#x27;tv&#x27; ? &#x27;true&#x27; : &#x27;false&#x27;,
+          contentType: cType,
+          contentId: subtitleContentId,
+          fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks, ...directFallbacks]),
+          backdrop: content?.background || &#x27;&#x27;,
+          poster: content?.poster || &#x27;&#x27;,
+          logo: content?.logo || &#x27;&#x27;,
+          ...nextEpisodeData,
+          ...resumeData,
+        },
+      });
+      return;
+    }
+    
+    if (stream.infoHash) {
+      router.push({
+        pathname: &#x27;/player&#x27;,
+        params: { 
+          infoHash: stream.infoHash,
+          title: contentTitle,
+          contentType: cType,
+          contentId: subtitleContentId,
+          fileIdx: stream.fileIdx !== undefined ? String(stream.fileIdx) : &#x27;&#x27;,
+          filename: stream.filename || &#x27;&#x27;,
+          backdrop: content?.background || &#x27;&#x27;,
+          poster: content?.poster || &#x27;&#x27;,
+          logo: content?.logo || &#x27;&#x27;,
+          ...nextEpisodeData,
+          ...resumeData,
+        },
+      });
+    } else if (stream.url) {
+      // Build fallback URLs from all available streams with direct URLs
+      const allStreamUrls = streams
+        .filter(s =&gt; s.url &amp;&amp; !s.infoHash &amp;&amp; s.url !== stream.url)
+        .map(s =&gt; s.url)
+        .filter(Boolean);
+      
+      // For live TV streams, also include proxy URLs as additional fallbacks
+      if (type === &#x27;tv&#x27;) {
+        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://fire-stick-remote.preview.emergentagent.com&#x27;;
+        const authToken = await AsyncStorage.getItem(&#x27;auth_token&#x27;);
+        
+        // Add proxy URLs for all streams as fallbacks
+        const proxyFallbacks = streams
+          .filter(s =&gt; s.proxyUrl)
+          .map(s =&gt; {
+            const tokenParam = authToken ? `&amp;token=${encodeURIComponent(authToken)}` : &#x27;&#x27;;
+            return `${backendUrl}${s!.proxyUrl}${tokenParam}`;
+          })
+          .filter(Boolean);
+        
+        allStreamUrls.push(...proxyFallbacks);
+      }
+      
+      router.push({
+        pathname: &#x27;/player&#x27;,
+        params: { 
+          directUrl: stream.url,
+          title: contentTitle,
+          isLive: type === &#x27;tv&#x27; ? &#x27;true&#x27; : &#x27;false&#x27;,
+          contentType: cType,
+          contentId: subtitleContentId,
+          fallbackStreams: allStreamUrls.length &gt; 0 ? JSON.stringify(allStreamUrls) : &#x27;&#x27;,
+          backdrop: content?.background || &#x27;&#x27;,
+          poster: content?.poster || &#x27;&#x27;,
+          logo: content?.logo || &#x27;&#x27;,
+          ...nextEpisodeData,
+          ...resumeData,
+        },
+      });
+    }
+  };
+
+  const handleEpisodePress = (episode: Episode) =&gt; {
+    const episodeId = `${baseId || id}:${episode.season}:${episode.episode}`;
+    router.push({
+      pathname: `/details/${type}/${episodeId}`,
+    });
+  };
+
+  const toggleLibrary = async () =&gt; {
+    if (!content) return;
+    try {
+      if (inLibrary) {
+        await api.library.remove(type!, content.id);
+        setInLibrary(false);
+      } else {
+        await api.library.add({
+          id: content.id,
+          imdb_id: content.imdb_id || content.id,
+          name: content.name,
+          type: type as &#x27;movie&#x27; | &#x27;series&#x27;,
+          poster: content.poster,
+          year: content.year,
+          imdbRating: typeof content.imdbRating === &#x27;string&#x27; ? parseFloat(content.imdbRating) : content.imdbRating,
+        });
+        setInLibrary(true);
+      }
+      // Refresh library immediately so the Library tab updates in real-time
+      fetchLibrary(true);
+    } catch (error) {
+      console.log(&#x27;Failed to toggle library:&#x27;, error);
+    }
+  };
+
+  // Use content data for display - available immediately from store
+  const displayName = content?.name || &#x27;Loading...&#x27;;
+  // ONLY use backdrop image, no poster fallback — prevents the jarring poster→backdrop switch
+  const displayPoster = content?.background || &#x27;&#x27;;
+
+  const rating = typeof content?.imdbRating === &#x27;string&#x27; 
+    ? parseFloat(content.imdbRating) 
+    : content?.imdbRating;
+
+  // Render stream item for FlatList
+  const renderStreamItem = ({ item }: { item: Stream }) =&gt; (
+    &lt;StreamCard stream={item} onPress={() =&gt; handleStreamSelect(item)} /&gt;
+  );
+
+  // Render episode item for FlatList
+  const renderEpisodeItem = ({ item }: { item: Episode }) =&gt; (
+    &lt;EpisodeCard 
+      episode={item} 
+      fallbackPoster={content?.poster}
+      onPress={() =&gt; handleEpisodePress(item)} 
+    /&gt;
+  );
+
+  return (
+    &lt;View style={styles.container}&gt;
+      {/* Background Image — lightweight RN Image, no expo-image overhead */}
+      {displayPoster ? (
+        &lt;RNImage
+          source={{ uri: displayPoster }}
+          style={styles.backgroundImage}
+          resizeMode=&quot;cover&quot;
+        /&gt;
+      ) : null}
+      
+      {/* Dark overlay — simple View, no LinearGradient overhead */}
+      &lt;View style={styles.gradientOverlay} /&gt;
+      
+      {/* Content Overlay */}
+      &lt;View style={styles.contentOverlay}&gt;
+        {/* Back Button */}
+        &lt;FocusableButton 
+          style={styles.backButton}
+          focusedStyle={styles.backButtonFocused}
+          onPress={() =&gt; router.back()}
+        &gt;
+          &lt;Ionicons name=&quot;arrow-back&quot; size={24} color=&quot;#FFFFFF&quot; /&gt;
+        &lt;/FocusableButton&gt;
+
+        {/* Main Content - Scrollable */}
+        &lt;ScrollView 
+          style={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContentContainer}
+        &gt;
+          {/* Title Section */}
+          &lt;View style={styles.titleSection}&gt;
+            {content?.logo ? (
+              &lt;Image
+                source={{ uri: content.logo }}
+                style={styles.logoImage}
+                contentFit=&quot;contain&quot;
+              /&gt;
+            ) : (
+              &lt;Text style={styles.title}&gt;{displayName}&lt;/Text&gt;
+            )}
+            
+            {/* Episode info if applicable */}
+            {isEpisodePage &amp;&amp; currentEpisode &amp;&amp; (
+              &lt;Text style={styles.episodeSubtitle}&gt;
+                S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
+              &lt;/Text&gt;
+            )}
+          &lt;/View&gt;
+
+          {/* Meta Row */}
+          &lt;View style={styles.metaRow}&gt;
+            {rating &amp;&amp; rating &gt; 0 &amp;&amp; (
+              &lt;View style={styles.imdbBadge}&gt;
+                &lt;Text style={styles.imdbLabel}&gt;IMDb&lt;/Text&gt;
+                &lt;Text style={styles.imdbRating}&gt;{rating.toFixed(1)}&lt;/Text&gt;
+              &lt;/View&gt;
+            )}
+            {content?.year &amp;&amp; (
+              &lt;Text style={styles.metaText}&gt;{content.year}&lt;/Text&gt;
+            )}
+            {content?.runtime &amp;&amp; (
+              &lt;Text style={styles.metaText}&gt;{content.runtime}&lt;/Text&gt;
+            )}
+            {content?.genre &amp;&amp; Array.isArray(content.genre) &amp;&amp; content.genre.length &gt; 0 &amp;&amp; (
+              &lt;Text style={styles.metaText}&gt;{content.genre.slice(0, 2).join(&#x27; • &#x27;)}&lt;/Text&gt;
+            )}
+          &lt;/View&gt;
+
+          {/* Action Buttons Row */}
+          &lt;View style={styles.actionRow}&gt;
+            &lt;FocusableButton 
+              style={styles.libraryButton}
+              focusedStyle={styles.libraryButtonFocused}
+              onPress={toggleLibrary}
+            &gt;
+              &lt;Ionicons 
+                name={inLibrary ? &quot;checkmark&quot; : &quot;add&quot;} 
+                size={20} 
+                color=&quot;#FFFFFF&quot; 
+              /&gt;
+              &lt;Text style={styles.libraryButtonText}&gt;
+                {inLibrary ? &#x27;In Library&#x27; : &#x27;Add to Library&#x27;}
+              &lt;/Text&gt;
+            &lt;/FocusableButton&gt;
+          &lt;/View&gt;
+
+          {/* Description */}
+          {content?.description &amp;&amp; (
+            &lt;Text style={styles.description} numberOfLines={4}&gt;
+              {content.description}
+            &lt;/Text&gt;
+          )}
+
+          {/* Episode Description if applicable */}
+          {isEpisodePage &amp;&amp; currentEpisode?.overview &amp;&amp; (
+            &lt;Text style={styles.description} numberOfLines={3}&gt;
+              {currentEpisode.overview}
+            &lt;/Text&gt;
+          )}
+
+          {/* Cast &amp; Crew */}
+          {content?.cast &amp;&amp; Array.isArray(content.cast) &amp;&amp; content.cast.length &gt; 0 &amp;&amp; (
+            &lt;Text style={styles.castText}&gt;
+              Cast: {content.cast.slice(0, 4).join(&#x27;, &#x27;)}
+            &lt;/Text&gt;
+          )}
+
+          {/* Season Selector for Series */}
+          {type === &#x27;series&#x27; &amp;&amp; !isEpisodePage &amp;&amp; seasons.length &gt; 0 &amp;&amp; (
+            &lt;View style={styles.seasonSection}&gt;
+              &lt;Text style={styles.sectionTitle}&gt;Episodes&lt;/Text&gt;
+              &lt;ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.seasonSelector}
+              &gt;
+                {seasons.map((season) =&gt; (
+                  &lt;Pressable
+                    key={season}
+                    style={[
+                      styles.seasonButton,
+                      selectedSeason === season &amp;&amp; styles.seasonButtonActive,
+                    ]}
+                    onPress={() =&gt; setSelectedSeason(season)}
+                  &gt;
+                    &lt;Text style={[
+                      styles.seasonButtonText,
+                      selectedSeason === season &amp;&amp; styles.seasonButtonTextActive,
+                    ]}&gt;
+                      Season {season}
+                    &lt;/Text&gt;
+                  &lt;/Pressable&gt;
+                ))}
+              &lt;/ScrollView&gt;
+              
+              {/* Episodes List */}
+              &lt;FlatList
+                data={episodesForSeason}
+                renderItem={renderEpisodeItem}
+                keyExtractor={(item) =&gt; `${item.season}-${item.episode}`}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.episodesList}
+              /&gt;
+            &lt;/View&gt;
+          )}
+
+          {/* Streams Section - Stremio Style */}
+          {(type === &#x27;movie&#x27; || type === &#x27;tv&#x27; || isEpisodePage) &amp;&amp; (
+            &lt;View style={styles.streamsSection}&gt;
+              &lt;Text style={styles.sectionTitle}&gt;
+                {isLoadingStreams ? (type === &#x27;tv&#x27; ? &#x27;Verifying Live Streams...&#x27; : &#x27;Finding Streams...&#x27;) : `${streams.length} Stream${streams.length !== 1 ? &#x27;s&#x27; : &#x27;&#x27;} Available`}
+              &lt;/Text&gt;
+              
+              {isLoadingStreams ? (
+                &lt;View style={styles.streamLoading}&gt;
+                  &lt;ActivityIndicator size=&quot;small&quot; color=&quot;#B8A05C&quot; /&gt;
+                  &lt;Text style={styles.streamLoadingText}&gt;
+                    {type === &#x27;tv&#x27; ? &#x27;Checking available channels...&#x27; : &#x27;Searching sources...&#x27;}
+                  &lt;/Text&gt;
+                &lt;/View&gt;
+              ) : streams.length === 0 ? (
+                &lt;View style={styles.noStreams}&gt;
+                  &lt;Ionicons name=&quot;cloud-offline-outline&quot; size={32} color=&quot;#666&quot; /&gt;
+                  &lt;Text style={styles.noStreamsText}&gt;No streams found&lt;/Text&gt;
+                &lt;/View&gt;
+              ) : (
+                &lt;FlatList
+                  data={streams}
+                  renderItem={renderStreamItem}
+                  keyExtractor={(item, index) =&gt; `${item.infoHash || item.url || index}`}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.streamsList}
+                /&gt;
+              )}
+            &lt;/View&gt;
+          )}
+          
+          {/* Bottom padding */}
+          &lt;View style={{ height: 100 }} /&gt;
+        &lt;/ScrollView&gt;
+      &lt;/View&gt;
+    &lt;/View&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: &#x27;#0f0f11&#x27;,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    backgroundColor: &#x27;#0f0f11&#x27;,
+  },
+  backgroundImage: {
+    position: &#x27;absolute&#x27;,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: width,
+    height: height,
+  },
+  gradientOverlay: {
+    position: &#x27;absolute&#x27;,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: &#x27;rgba(15, 15, 17, 0.75)&#x27;,
+  },
+  contentOverlay: {
+    flex: 1,
+  },
+  backButton: {
+    position: &#x27;absolute&#x27;,
+    top: 50,
+    left: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: &#x27;rgba(0,0,0,0.5)&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    zIndex: 10,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  backButtonFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+  },
+  scrollContent: {
+    flex: 1,
+    marginTop: 100,
+  },
+  scrollContentContainer: {
+    paddingHorizontal: 20,
+  },
+  titleSection: {
+    marginBottom: 16,
+    marginTop: height * 0.25,
+    alignItems: &#x27;center&#x27;,
+  },
+  logoImage: {
+    width: width * 0.6,
+    height: 80,
+    alignSelf: &#x27;center&#x27;,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: &#x27;bold&#x27;,
+    color: &#x27;#B8A05C&#x27;,
+    textShadowColor: &#x27;rgba(0,0,0,0.8)&#x27;,
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+    textAlign: &#x27;center&#x27;,
+  },
+  episodeSubtitle: {
+    fontSize: 16,
+    color: &#x27;#B8A05C&#x27;,
+    marginTop: 8,
+    textAlign: &#x27;center&#x27;,
+  },
+  metaRow: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    flexWrap: &#x27;wrap&#x27;,
+    gap: 12,
+    marginBottom: 16,
+  },
+  imdbBadge: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    gap: 6,
+    backgroundColor: &#x27;rgba(245, 197, 24, 0.2)&#x27;,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  imdbLabel: {
+    backgroundColor: &#x27;#F5C518&#x27;,
+    color: &#x27;#000000&#x27;,
+    fontSize: 10,
+    fontWeight: &#x27;bold&#x27;,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 2,
+  },
+  imdbRating: {
+    color: &#x27;#F5C518&#x27;,
+    fontSize: 14,
+    fontWeight: &#x27;600&#x27;,
+  },
+  metaText: {
+    color: &#x27;#AAAAAA&#x27;,
+    fontSize: 14,
+  },
+  actionRow: {
+    flexDirection: &#x27;row&#x27;,
+    gap: 12,
+    marginBottom: 16,
+  },
+  libraryButton: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: &#x27;rgba(255,255,255,0.15)&#x27;,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: &#x27;rgba(255,255,255,0.2)&#x27;,
+  },
+  libraryButtonFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+  },
+  libraryButtonText: {
+    color: &#x27;#B8A05C&#x27;,
+    fontSize: 14,
+    fontWeight: &#x27;600&#x27;,
+  },
+  description: {
+    fontSize: 14,
+    color: &#x27;#D4BC78&#x27;,
+    lineHeight: 22,
+    marginBottom: 16,
+    textAlign: &#x27;center&#x27;,
+  },
+  castText: {
+    fontSize: 13,
+    color: &#x27;#888888&#x27;,
+    marginBottom: 24,
+    textAlign: &#x27;center&#x27;,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: &#x27;bold&#x27;,
+    color: &#x27;#B8A05C&#x27;,
+    marginBottom: 12,
+  },
+  seasonSection: {
+    marginBottom: 24,
+  },
+  seasonSelector: {
+    marginBottom: 16,
+  },
+  seasonButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    backgroundColor: &#x27;rgba(255,255,255,0.1)&#x27;,
+    borderRadius: 20,
+  },
+  seasonButtonActive: {
+    backgroundColor: &#x27;#B8A05C&#x27;,
+  },
+  seasonButtonText: {
+    color: &#x27;#AAAAAA&#x27;,
+    fontSize: 13,
+    fontWeight: &#x27;600&#x27;,
+  },
+  seasonButtonTextActive: {
+    color: &#x27;#000000&#x27;,
+  },
+  episodesList: {
+    gap: 12,
+  },
+  episodeCard: {
+    width: 160,
+    backgroundColor: &#x27;rgba(255,255,255,0.08)&#x27;,
+    borderRadius: 8,
+    overflow: &#x27;hidden&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  episodeCardFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+  },
+  episodeThumbnail: {
+    width: &#x27;100%&#x27;,
+    height: 90,
+    backgroundColor: &#x27;#333&#x27;,
+  },
+  episodeInfo: {
+    padding: 8,
+  },
+  episodeTitle: {
+    fontSize: 12,
+    color: &#x27;#B8A05C&#x27;,
+    fontWeight: &#x27;500&#x27;,
+  },
+  streamsSection: {
+    marginBottom: 24,
+  },
+  streamLoading: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    gap: 10,
+    paddingVertical: 20,
+  },
+  streamLoadingText: {
+    color: &#x27;#AAAAAA&#x27;,
+    fontSize: 14,
+  },
+  noStreams: {
+    alignItems: &#x27;center&#x27;,
+    paddingVertical: 30,
+  },
+  noStreamsText: {
+    color: &#x27;#666666&#x27;,
+    fontSize: 14,
+    marginTop: 8,
+  },
+  streamsList: {
+    gap: 12,
+    paddingVertical: 8,
+  },
+  streamCard: {
+    width: 140,
+    backgroundColor: &#x27;rgba(255,255,255,0.1)&#x27;,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 2,
+    borderColor: &#x27;rgba(255,255,255,0.1)&#x27;,
+  },
+  streamCardFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.2)&#x27;,
+  },
+  streamCardHeader: {
+    flexDirection: &#x27;row&#x27;,
+    justifyContent: &#x27;space-between&#x27;,
+    alignItems: &#x27;center&#x27;,
+    marginBottom: 8,
+  },
+  streamSource: {
+    fontSize: 13,
+    fontWeight: &#x27;600&#x27;,
+    color: &#x27;#B8A05C&#x27;,
+  },
+  qualityBadge: {
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  qualityBadge4K: {
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.6)&#x27;,
+  },
+  qualityText: {
+    fontSize: 10,
+    fontWeight: &#x27;bold&#x27;,
+    color: &#x27;#B8A05C&#x27;,
+  },
+  streamCardBody: {
+    flexDirection: &#x27;row&#x27;,
+    gap: 12,
+    marginBottom: 8,
+  },
+  streamStat: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    gap: 4,
+  },
+  streamStatText: {
+    fontSize: 11,
+    color: &#x27;#888888&#x27;,
+  },
+  streamCardFooter: {
+    alignItems: &#x27;center&#x27;,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: &#x27;rgba(255,255,255,0.1)&#x27;,
+  },
+  defaultFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    borderWidth: 2,
+  },
+});
+</pre>
+</body></html>
