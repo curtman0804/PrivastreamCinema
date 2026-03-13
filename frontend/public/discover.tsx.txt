@@ -16,23 +16,36 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
+import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 import { getCardWidth } from '../../src/components/ContentCard';
 import { colors } from '../../src/styles/colors';
+import { Image as RNImage } from 'react-native';
+
+const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
 export default function DiscoverScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
   
-  const { discoverData, isLoadingDiscover, fetchDiscover, fetchAddons, addons } = useContentStore();
+  // CRITICAL: Use zustand SELECTORS — only re-render when these specific fields change.
+  // Without selectors, the Discover page re-renders when ANY store field changes
+  // (e.g., when Details page loads streams), causing hundreds of poster images
+  // to re-render and blocking the JS thread for 3+ seconds.
+  const discoverData = useContentStore(s => s.discoverData);
+  const isLoadingDiscover = useContentStore(s => s.isLoadingDiscover);
+  const fetchDiscover = useContentStore(s => s.fetchDiscover);
+  const fetchAddons = useContentStore(s => s.fetchAddons);
+  const addons = useContentStore(s => s.addons);
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionPositions = useRef<Record<string, number>>({});
   const lastFocusedSection = useRef<string>('');
+  const lastCWFetchTime = useRef<number>(0);
 
   // Use same card width calculation as ContentCard for consistency
   const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
@@ -44,6 +57,7 @@ export default function DiscoverScreen() {
       setIsLoadingProgress(true);
       const response = await api.watchProgress.getAll();
       setContinueWatching(response.continueWatching || []);
+      lastCWFetchTime.current = Date.now();
     } catch (err) {
       console.log('[Discover] Error fetching continue watching:', err);
     } finally {
@@ -57,11 +71,17 @@ export default function DiscoverScreen() {
     fetchContinueWatching();
   }, []);
 
-  // Re-fetch continue watching when screen comes into focus
+  // Re-fetch continue watching when screen comes into focus (with 30s cooldown)
   useFocusEffect(
     useCallback(() => {
+      // Skip re-fetch if data was loaded less than 30 seconds ago
+      // This prevents the delay when pressing back from Details page
+      const timeSinceLastFetch = Date.now() - lastCWFetchTime.current;
+      if (timeSinceLastFetch < 30000 && continueWatching.length >= 0) {
+        return;
+      }
       fetchContinueWatching();
-    }, [fetchContinueWatching])
+    }, [fetchContinueWatching, continueWatching.length])
   );
 
   // Check if there's any content to display
@@ -105,12 +125,33 @@ export default function DiscoverScreen() {
   // Item width for snap scrolling
   const itemWidth = POSTER_WIDTH + 16;
 
+  // PRE-FETCH meta on poster focus (D-pad hover) so backdrop is ready before click
+  const prefetchingRef = useRef<Set<string>>(new Set());
+  const handleItemFocus = useCallback((item: ContentItem) => {
+    const id = item.imdb_id || item.id;
+    if (!id || prefetchingRef.current.has(id) || getMetaCache(id)) return;
+    prefetchingRef.current.add(id);
+    // Fire-and-forget: fetch meta in background
+    api.content.getMeta(item.type, id).then((meta) => {
+      setMetaCache(id, meta);
+      // Also pre-download the backdrop image so it's in expo-image disk cache
+      if (meta.background) {
+        Image.prefetch(meta.background);
+      }
+    }).catch(() => {});
+  }, []);
+
   const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
     const encodedId = encodeURIComponent(id);
-    // Store full item data in zustand (instant, no URL encoding overhead)
-    useContentStore.getState().setSelectedItem(item);
-    router.push(`/details/${item.type}/${encodedId}`);
+    // Minimal params for instant first paint — just name + poster
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || '',
+        poster: item.poster || '',
+      },
+    });
   };
 
   // Handle continue watching item press
@@ -295,6 +336,7 @@ export default function DiscoverScreen() {
                     contentType="movies"
                     items={content.movies}
                     onItemPress={handleItemPress}
+                    onItemFocus={handleItemFocus}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
                     isFirstRow={isFirst}
                   />
@@ -314,6 +356,7 @@ export default function DiscoverScreen() {
                     contentType="series"
                     items={content.series}
                     onItemPress={handleItemPress}
+                    onItemFocus={handleItemFocus}
                     onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
                     isFirstRow={isFirst}
                   />
@@ -464,11 +507,19 @@ function ContinueWatchingItem({
         ]}
       >
         <View style={[styles.continueImageContainer, { height: posterHeight }]}>
-          <Image
-            source={{ uri: item.poster || item.backdrop || '' }}
-            style={styles.continueImage}
-            contentFit="cover"
-          />
+          {(item.poster || item.backdrop) ? (
+            <Image
+              source={{ uri: item.poster || item.backdrop || '' }}
+              style={styles.continueImage}
+              contentFit="cover"
+            />
+          ) : (
+            <RNImage
+              source={NO_POSTER_IMAGE}
+              style={styles.continueImage}
+              resizeMode="cover"
+            />
+          )}
           
           {/* Play overlay */}
           <View style={styles.playOverlay}>
