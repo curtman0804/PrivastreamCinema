@@ -3418,6 +3418,14 @@ async def download_file(filename: str):
 # Include the router in the main app
 app.include_router(api_router)
 
+# Serve the file viewer page for code downloads
+@app.get("/api/files")
+async def serve_files_page():
+    html_path = Path(__file__).parent / "static_files.html"
+    if html_path.exists():
+        return FileResponse(html_path, media_type="text/html")
+    raise HTTPException(status_code=404, detail="Files page not found")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,

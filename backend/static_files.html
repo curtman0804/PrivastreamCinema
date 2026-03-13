@@ -1,0 +1,3440 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>PrivastreamCinema - Updated Files</title>
+<style>
+body { background: #1a1a2e; color: #e0e0e0; font-family: monospace; padding: 20px; margin: 0; }
+h1 { color: #e6c47a; text-align: center; }
+h2 { color: #4ea8de; margin-top: 40px; border-bottom: 1px solid #333; padding-bottom: 8px; }
+.path { color: #aaa; font-size: 13px; margin-bottom: 8px; }
+.copy-btn { background: #e6c47a; color: #000; border: none; padding: 8px 16px; cursor: pointer; 
+  font-weight: bold; border-radius: 4px; margin-bottom: 8px; font-size: 14px; }
+.copy-btn:hover { background: #f0d88a; }
+pre { background: #0d1117; border: 1px solid #333; padding: 16px; overflow-x: auto; 
+  max-height: 500px; overflow-y: auto; font-size: 12px; line-height: 1.4; white-space: pre; }
+.note { background: #2d1f00; border: 1px solid #e6c47a; padding: 16px; border-radius: 6px; margin: 20px 0; }
+</style>
+<script>
+function copyCode(id) {
+  var el = document.getElementById(id);
+  var text = el.textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = document.querySelector('[onclick="copyCode(\'' + id + '\')"]');
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy to Clipboard'; }, 2000);
+  });
+}
+</script></head><body>
+<h1>PrivastreamCinema - Updated Files</h1>
+<div class="note">
+<strong>Instructions:</strong> Click "Copy to Clipboard" for each file, then paste into the corresponding file in your project.
+<br><br><strong>For app icons:</strong> The icon .webp files are binary and can't be copy-pasted. You'll need to download the zip separately or regenerate them using the provided script at the bottom.
+</div>
+
+<h2>File 1: ContentCard.tsx</h2>
+<div class="path">Replace at: <strong>frontend/src/components/ContentCard.tsx</strong></div>
+<button class="copy-btn" onclick="copyCode('file0')">Copy to Clipboard</button>
+<pre id="file0">import React, { memo, useState, useCallback, useRef, useEffect } from &#x27;react&#x27;;
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  useWindowDimensions,
+  Text,
+  Alert,
+  findNodeHandle,
+  Image as RNImage,
+} from &#x27;react-native&#x27;;
+import { Image } from &#x27;expo-image&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { ContentItem, SearchResult, api } from &#x27;../api/client&#x27;;
+import { colors, posterShapes } from &#x27;../styles/colors&#x27;;
+
+// Fallback image for missing posters
+const NO_POSTER_IMAGE = require(&#x27;../../assets/images/no-poster.png&#x27;);
+
+
+interface ContentCardProps {
+  item: ContentItem | SearchResult;
+  onPress: () =&gt; void;
+  onCardFocus?: () =&gt; void;
+  size?: &#x27;small&#x27; | &#x27;medium&#x27; | &#x27;large&#x27;;
+  posterShape?: &#x27;poster&#x27; | &#x27;landscape&#x27; | &#x27;square&#x27;;
+  showTitle?: boolean;
+  showProgress?: number;
+  inLibrary?: boolean;
+  onLibraryChange?: () =&gt; void;
+  hasTVPreferredFocus?: boolean;
+  isFirstInRow?: boolean;
+  isLastInRow?: boolean;
+  onCardBlur?: () =&gt; void;
+}
+
+export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = &#x27;medium&#x27;) =&gt; {
+  if (isTV) {
+    const numCards = 6;
+    const horizontalPadding = 80;
+    const gapsBetweenCards = (numCards - 1) * 16;
+    let cardWidth = (screenWidth - horizontalPadding - gapsBetweenCards) / numCards;
+    return Math.min(cardWidth, 180);
+  } else {
+    const baseWidth = Math.min(screenWidth, 500);
+    const CARD_WIDTH = (baseWidth - 48) / 3;
+    return size === &#x27;small&#x27; ? CARD_WIDTH * 0.85 : size === &#x27;large&#x27; ? CARD_WIDTH * 1.15 : CARD_WIDTH;
+  }
+};
+
+// Helper to get native tag from a ref — works on both old and new RN architectures
+const getNativeTag = (ref: any): number | null =&gt; {
+  if (!ref) return null;
+  // Try findNodeHandle (works on old architecture)
+  try {
+    const tag = findNodeHandle(ref);
+    if (tag &amp;&amp; tag &gt; 0) return tag;
+  } catch (_e) {}
+  // Try _nativeTag (works on both architectures)
+  if (ref._nativeTag &amp;&amp; ref._nativeTag &gt; 0) return ref._nativeTag;
+  // Try __nativeTag
+  if (ref.__nativeTag &amp;&amp; ref.__nativeTag &gt; 0) return ref.__nativeTag;
+  return null;
+};
+
+const ContentCardComponent: React.FC&lt;ContentCardProps&gt; = ({
+  item,
+  onPress,
+  onCardFocus,
+  size = &#x27;medium&#x27;,
+  posterShape = &#x27;poster&#x27;,
+  showTitle = true,
+  showProgress,
+  inLibrary = false,
+  onLibraryChange,
+  hasTVPreferredFocus = false,
+  isFirstInRow = false,
+  isLastInRow = false,
+  onCardBlur,
+}) =&gt; {
+  const { width, height } = useWindowDimensions();
+  const [isFocused, setIsFocused] = useState(false);
+  const [isInLibrary, setIsInLibrary] = useState(inLibrary);
+  const [posterError, setPosterError] = useState(false);
+  const pressableRef = useRef&lt;View&gt;(null);
+  const [selfTag, setSelfTag] = useState&lt;number&gt;(0);
+  
+  const isTV = width &gt; height || width &gt; 800;
+  const cardWidth = getCardWidth(width, isTV, size);
+  const aspectRatio = posterShapes[posterShape];
+  const cardHeight = cardWidth * aspectRatio;
+
+  // Get native tag via onLayout (fires after native view is fully laid out)
+  const handleLayout = useCallback(() =&gt; {
+    if ((isFirstInRow || isLastInRow) &amp;&amp; pressableRef.current) {
+      const tag = getNativeTag(pressableRef.current);
+      if (tag &amp;&amp; tag !== selfTag) {
+        setSelfTag(tag);
+      }
+    }
+  }, [isFirstInRow, isLastInRow, selfTag]);
+
+  // Also try on mount and when isFirst/isLast changes
+  useEffect(() =&gt; {
+    if ((isFirstInRow || isLastInRow) &amp;&amp; pressableRef.current) {
+      // Small delay to ensure native view is ready
+      const timer = setTimeout(() =&gt; {
+        if (pressableRef.current) {
+          const tag = getNativeTag(pressableRef.current);
+          if (tag &amp;&amp; tag &gt; 0) setSelfTag(tag);
+        }
+      }, 100);
+      return () =&gt; clearTimeout(timer);
+    }
+  }, [isFirstInRow, isLastInRow]);
+
+  const handleFocus = useCallback(() =&gt; {
+    setIsFocused(true);
+    onCardFocus?.();
+  }, [onCardFocus]);
+
+  const handleBlur = useCallback(() =&gt; {
+    setIsFocused(false);
+    onCardBlur?.();
+  }, [onCardBlur]);
+
+  const handleLongPress = useCallback(async () =&gt; {
+    const contentId = item.imdb_id || item.id;
+    const contentName = item.name || item.title || &#x27;this item&#x27;;
+    
+    Alert.alert(
+      isInLibrary ? &#x27;Remove from Library?&#x27; : &#x27;Add to Library?&#x27;,
+      isInLibrary 
+        ? `Remove &quot;${contentName}&quot; from your library?`
+        : `Add &quot;${contentName}&quot; to your library?`,
+      [
+        { text: &#x27;Cancel&#x27;, style: &#x27;cancel&#x27; },
+        {
+          text: isInLibrary ? &#x27;Remove&#x27; : &#x27;Add&#x27;,
+          style: isInLibrary ? &#x27;destructive&#x27; : &#x27;default&#x27;,
+          onPress: async () =&gt; {
+            try {
+              if (isInLibrary) {
+                await api.library.remove(contentId);
+                setIsInLibrary(false);
+              } else {
+                await api.library.add({
+                  content_id: contentId,
+                  content_type: item.type || &#x27;movie&#x27;,
+                  name: contentName,
+                  poster: item.poster || &#x27;&#x27;,
+                });
+                setIsInLibrary(true);
+              }
+              onLibraryChange?.();
+            } catch (error) {
+              console.log(&#x27;Library error:&#x27;, error);
+              Alert.alert(&#x27;Error&#x27;, &#x27;Failed to update library&#x27;);
+            }
+          },
+        },
+      ]
+    );
+  }, [item, isInLibrary, onLibraryChange]);
+
+  if (!item) return null;
+
+  // Build focus trapping props
+  const focusTrapProps: any = {};
+  if (isLastInRow &amp;&amp; selfTag &gt; 0) {
+    focusTrapProps.nextFocusRight = selfTag;
+  }
+  if (isFirstInRow &amp;&amp; selfTag &gt; 0) {
+    focusTrapProps.nextFocusLeft = selfTag;
+  }
+
+  return (
+    &lt;Pressable
+      ref={pressableRef}
+      onPress={onPress}
+      onLongPress={handleLongPress}
+      delayLongPress={500}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onLayout={handleLayout}
+      android_ripple={null}
+      hasTVPreferredFocus={hasTVPreferredFocus}
+      {...focusTrapProps}
+      style={[styles.container, { width: cardWidth }]}
+      accessible={true}
+      accessibilityRole=&quot;button&quot;
+      accessibilityLabel={item.name || item.title || &#x27;Content&#x27;}
+      accessibilityHint=&quot;Long press to add or remove from library&quot;
+    &gt;
+      {/* Poster Container - Focus border only around this */}
+      &lt;View style={[
+        styles.posterContainer,
+        { height: cardHeight },
+        isFocused &amp;&amp; styles.posterFocused,
+      ]}&gt;
+        {/* Image or Placeholder */}
+        &lt;View style={styles.imageWrapper}&gt;
+          {item.poster &amp;&amp; !posterError ? (
+            &lt;Image
+              source={{ uri: item.poster }}
+              style={styles.posterImage}
+              contentFit=&quot;cover&quot;
+              recyclingKey={item.id || item.imdb_id}
+              cachePolicy=&quot;memory-disk&quot;
+              onError={() =&gt; setPosterError(true)}
+            /&gt;
+          ) : (
+            &lt;RNImage
+              source={NO_POSTER_IMAGE}
+              style={styles.posterImage}
+              resizeMode=&quot;cover&quot;
+            /&gt;
+          )}
+        &lt;/View&gt;
+        
+        {/* Library indicator */}
+        {isInLibrary &amp;&amp; (
+          &lt;View style={styles.libraryBadge}&gt;
+            &lt;Ionicons name=&quot;bookmark&quot; size={12} color={colors.textPrimary} /&gt;
+          &lt;/View&gt;
+        )}
+        
+        {/* Progress bar */}
+        {showProgress !== undefined &amp;&amp; showProgress &gt; 0 &amp;&amp; (
+          &lt;View style={styles.progressContainer}&gt;
+            &lt;View style={styles.progressBackground} /&gt;
+            &lt;View style={[styles.progressBar, { width: `${Math.min(showProgress, 100)}%` }]} /&gt;
+          &lt;/View&gt;
+        )}
+      &lt;/View&gt;
+      
+      {/* Title bar - OUTSIDE poster */}
+      {showTitle &amp;&amp; (item.name || item.title) &amp;&amp; (
+        &lt;View style={styles.titleContainer}&gt;
+          &lt;Text style={[styles.title, isTV &amp;&amp; styles.titleTV]} numberOfLines={2}&gt;
+            {item.name || item.title}
+          &lt;/Text&gt;
+        &lt;/View&gt;
+      )}
+    &lt;/Pressable&gt;
+  );
+};
+
+export const ContentCard = memo(ContentCardComponent);
+
+const styles = StyleSheet.create({
+  container: {
+    marginRight: 16,
+    marginBottom: 2,
+  },
+  posterContainer: {
+    borderRadius: 6,
+    overflow: &#x27;visible&#x27;,
+    backgroundColor: colors.backgroundLight,
+    position: &#x27;relative&#x27;,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  posterFocused: {
+    borderColor: colors.primary,
+  },
+  imageWrapper: {
+    width: &#x27;100%&#x27;,
+    height: &#x27;100%&#x27;,
+    borderRadius: 4,
+    overflow: &#x27;hidden&#x27;,
+  },
+  posterImage: {
+    width: &#x27;100%&#x27;,
+    height: &#x27;100%&#x27;,
+    backgroundColor: colors.backgroundLight,
+  },
+  placeholder: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    backgroundColor: colors.backgroundLight,
+  },
+  libraryBadge: {
+    position: &#x27;absolute&#x27;,
+    top: 8,
+    right: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 4,
+    padding: 4,
+  },
+  progressContainer: {
+    position: &#x27;absolute&#x27;,
+    bottom: 12,
+    left: 12,
+    right: 12,
+    height: 4,
+    borderRadius: 4,
+    overflow: &#x27;hidden&#x27;,
+  },
+  progressBackground: {
+    position: &#x27;absolute&#x27;,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.textPrimary,
+    opacity: 0.3,
+  },
+  progressBar: {
+    height: &#x27;100%&#x27;,
+    backgroundColor: colors.textPrimary,
+    borderRadius: 4,
+  },
+  titleContainer: {
+    paddingTop: 6,
+    paddingHorizontal: 4,
+    height: 38,
+  },
+  title: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: &#x27;500&#x27;,
+    textAlign: &#x27;center&#x27;,
+    lineHeight: 16,
+  },
+  titleTV: {
+    fontSize: 13,
+  },
+});
+</pre>
+
+<h2>File 2: details [id].tsx</h2>
+<div class="path">Replace at: <strong>frontend/app/details/[type]/[id].tsx</strong></div>
+<button class="copy-btn" onclick="copyCode('file1')">Copy to Clipboard</button>
+<pre id="file1">import React, { useEffect, useState, useMemo, useCallback } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Dimensions,
+  Linking,
+  FlatList,
+  Image as RNImage,
+} from &#x27;react-native&#x27;;
+import { useLocalSearchParams, useRouter } from &#x27;expo-router&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { Image } from &#x27;expo-image&#x27;;
+import { useContentStore, getMetaCache, setMetaCache } from &#x27;../../../src/store/contentStore&#x27;;
+
+// Fallback image for missing posters
+const NO_POSTER_IMAGE = require(&#x27;../../../assets/images/no-poster.png&#x27;);
+
+import { api, ContentItem, Stream, Episode } from &#x27;../../../src/api/client&#x27;;
+import AsyncStorage from &#x27;@react-native-async-storage/async-storage&#x27;;
+
+const { width, height } = Dimensions.get(&#x27;window&#x27;);
+
+// Focusable Button Component
+function FocusableButton({ 
+  onPress, 
+  style, 
+  focusedStyle,
+  children,
+  disabled = false,
+}: {
+  onPress?: () =&gt; void;
+  style: any;
+  focusedStyle?: any;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    &lt;Pressable
+      style={[style, isFocused &amp;&amp; (focusedStyle || styles.defaultFocused)]}
+      onPress={onPress}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+      disabled={disabled}
+    &gt;
+      {children}
+    &lt;/Pressable&gt;
+  );
+}
+
+// Stream Card Component - Stremio style horizontal card
+function StreamCard({ 
+  stream, 
+  onPress 
+}: { 
+  stream: Stream; 
+  onPress: () =&gt; void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  const parseStreamInfo = (stream: Stream) =&gt; {
+    const name = stream.name || &#x27;&#x27;;
+    const title = stream.title || &#x27;&#x27;;
+    
+    // Extract quality
+    let quality = &#x27;SD&#x27;;
+    if (name.includes(&#x27;4K&#x27;) || name.includes(&#x27;2160&#x27;)) quality = &#x27;4K&#x27;;
+    else if (name.includes(&#x27;1080&#x27;)) quality = &#x27;1080p&#x27;;
+    else if (name.includes(&#x27;720&#x27;)) quality = &#x27;720p&#x27;;
+    else if (name.toUpperCase().includes(&#x27;HD&#x27;) &amp;&amp; !name.toUpperCase().includes(&#x27;SD&#x27;)) quality = &#x27;HD&#x27;;
+    
+    // Extract source - use provider code for USAATV, otherwise addon name
+    let source = stream.addon || &#x27;Unknown&#x27;;
+    if (stream.provider) {
+      // USAATV streams have provider abbreviation (AX, CV, MJ, TP, etc.)
+      source = stream.provider;
+    } else if (name.includes(&#x27;TPB&#x27;) || name.includes(&#x27;🏴‍☠️&#x27;)) source = &#x27;TPB&#x27;;
+    else if (name.includes(&#x27;⚡&#x27;) || name.includes(&#x27;Torrentio&#x27;)) source = &#x27;Torrentio&#x27;;
+    else if (name.includes(&#x27;EZTV&#x27;)) source = &#x27;EZTV&#x27;;
+    
+    // Extract size from title
+    let size = &#x27;&#x27;;
+    const sizeMatch = title.match(/💾\s*([\d.]+\s*[GM]B)/);
+    if (sizeMatch) size = sizeMatch[1];
+    
+    // Extract seeders
+    let seeders = stream.seeders || 0;
+    if (!seeders) {
+      const seederMatch = title.match(/🌱\s*(\d+)/);
+      if (seederMatch) seeders = parseInt(seederMatch[1], 10);
+    }
+    
+    return { quality, source, size, seeders, title };
+  };
+  
+  const { quality, source, size, seeders, title } = parseStreamInfo(stream);
+  
+  return (
+    &lt;Pressable
+      style={[styles.streamCard, isFocused &amp;&amp; styles.streamCardFocused]}
+      onPress={onPress}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+    &gt;
+      &lt;View style={styles.streamCardHeader}&gt;
+        &lt;Text style={styles.streamSource}&gt;{source}&lt;/Text&gt;
+        &lt;View style={[styles.qualityBadge, quality === &#x27;4K&#x27; &amp;&amp; styles.qualityBadge4K]}&gt;
+          &lt;Text style={styles.qualityText}&gt;{quality}&lt;/Text&gt;
+        &lt;/View&gt;
+      &lt;/View&gt;
+      
+      &lt;View style={styles.streamCardBody}&gt;
+        {seeders &gt; 0 &amp;&amp; (
+          &lt;View style={styles.streamStat}&gt;
+            &lt;Ionicons name=&quot;people&quot; size={12} color=&quot;#888&quot; /&gt;
+            &lt;Text style={styles.streamStatText}&gt;{seeders}&lt;/Text&gt;
+          &lt;/View&gt;
+        )}
+        {size &amp;&amp; (
+          &lt;View style={styles.streamStat}&gt;
+            &lt;Ionicons name=&quot;document&quot; size={12} color=&quot;#888&quot; /&gt;
+            &lt;Text style={styles.streamStatText}&gt;{size}&lt;/Text&gt;
+          &lt;/View&gt;
+        )}
+      &lt;/View&gt;
+      
+      &lt;View style={styles.streamCardFooter}&gt;
+        &lt;Ionicons name=&quot;play-circle&quot; size={20} color=&quot;#B8A05C&quot; /&gt;
+      &lt;/View&gt;
+    &lt;/Pressable&gt;
+  );
+}
+
+// Episode Card Component
+// Placeholder component for missing posters/thumbnails
+function ComingSoonPlaceholder({ width, height }: { width: number | string; height: number | string }) {
+  return (
+    &lt;RNImage
+      source={NO_POSTER_IMAGE}
+      style={{ width: width as any, height: height as any }}
+      resizeMode=&quot;cover&quot;
+    /&gt;
+  );
+}
+
+function EpisodeCard({ 
+  episode, 
+  fallbackPoster, 
+  onPress 
+}: { 
+  episode: Episode; 
+  fallbackPoster?: string;
+  onPress: () =&gt; void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [thumbError, setThumbError] = useState(false);
+  const thumbUri = episode.thumbnail || fallbackPoster;
+  
+  return (
+    &lt;Pressable
+      style={[styles.episodeCard, isFocused &amp;&amp; styles.episodeCardFocused]}
+      onPress={onPress}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+    &gt;
+      {thumbUri &amp;&amp; !thumbError ? (
+        &lt;Image
+          source={{ uri: thumbUri }}
+          style={styles.episodeThumbnail}
+          contentFit=&quot;cover&quot;
+          onError={() =&gt; setThumbError(true)}
+        /&gt;
+      ) : (
+        &lt;ComingSoonPlaceholder width=&quot;100%&quot; height={90} /&gt;
+      )}
+      &lt;View style={styles.episodeInfo}&gt;
+        &lt;Text style={styles.episodeTitle} numberOfLines={2}&gt;
+          E{episode.episode}: {episode.name || `Episode ${episode.episode}`}
+        &lt;/Text&gt;
+      &lt;/View&gt;
+    &lt;/Pressable&gt;
+  );
+}
+
+export default function DetailsScreen() {
+  const { 
+    type, 
+    id: rawId, 
+    resumeEpisodeId,
+    resumePosition,
+    resumeSeason,
+    resumeEpisode,
+    // Display data passed via route params for INSTANT rendering
+    name: paramName, poster: paramPoster,
+  } = useLocalSearchParams&lt;{ 
+    type: string; 
+    id: string;
+    resumeEpisodeId?: string;
+    resumePosition?: string;
+    resumeSeason?: string;
+    resumeEpisode?: string;
+    name?: string; poster?: string;
+  }&gt;();
+  const router = useRouter();
+  
+  // Use zustand SELECTORS — only re-render when these specific fields change
+  // This prevents re-renders from unrelated store changes (discover data, addons, etc.)
+  const streams = useContentStore(s =&gt; s.streams);
+  const isLoadingStreams = useContentStore(s =&gt; s.isLoadingStreams);
+  const fetchStreams = useContentStore(s =&gt; s.fetchStreams);
+  const library = useContentStore(s =&gt; s.library);
+  const fetchLibrary = useContentStore(s =&gt; s.fetchLibrary);
+  
+  const id = rawId ? decodeURIComponent(rawId) : rawId;
+  
+  // Try meta cache first (instant), then route params, then bare minimum
+  const cachedMeta = id ? getMetaCache(id) : null;
+  const initialContent: ContentItem = cachedMeta || {
+    id: id!,
+    imdb_id: id,
+    name: paramName || &#x27;&#x27;,
+    type: type as &#x27;movie&#x27; | &#x27;series&#x27;,
+    poster: paramPoster || &#x27;&#x27;,
+  };
+  
+  const [content, setContent] = useState&lt;ContentItem | null&gt;(initialContent);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [inLibrary, setInLibrary] = useState(false);
+  const [selectedSeason, setSelectedSeason] = useState&lt;number&gt;(1);
+
+  const isEpisodePage = type !== &#x27;tv&#x27; &amp;&amp; id?.includes(&#x27;:&#x27;) &amp;&amp; !id?.startsWith(&#x27;porn&#x27;) &amp;&amp; !id?.startsWith(&#x27;http&#x27;);
+  const baseId = isEpisodePage ? id?.split(&#x27;:&#x27;)[0] : id;
+  const episodeSeason = isEpisodePage ? parseInt(id?.split(&#x27;:&#x27;)[1] || &#x27;1&#x27;) : null;
+  const episodeNumber = isEpisodePage ? parseInt(id?.split(&#x27;:&#x27;)[2] || &#x27;1&#x27;) : null;
+
+  const currentEpisode = useMemo(() =&gt; {
+    if (!isEpisodePage || !content?.videos || !episodeSeason || !episodeNumber) return null;
+    return content.videos.find(
+      ep =&gt; ep.season === episodeSeason &amp;&amp; ep.episode === episodeNumber
+    );
+  }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
+
+  const nextEpisode = useMemo(() =&gt; {
+    if (!isEpisodePage || !content?.videos || !episodeSeason || !episodeNumber) return null;
+    
+    const sameSeasonNext = content.videos.find(
+      ep =&gt; ep.season === episodeSeason &amp;&amp; ep.episode === episodeNumber + 1
+    );
+    if (sameSeasonNext) return sameSeasonNext;
+    
+    const nextSeasonFirst = content.videos.find(
+      ep =&gt; ep.season === episodeSeason + 1 &amp;&amp; ep.episode === 1
+    );
+    return nextSeasonFirst || null;
+  }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
+
+  const seasons = useMemo(() =&gt; {
+    if (!content?.videos) return [];
+    const seasonSet = new Set(content.videos.map(ep =&gt; ep.season).filter(s =&gt; s &gt; 0));
+    return Array.from(seasonSet).sort((a, b) =&gt; a - b);
+  }, [content?.videos]);
+
+  const episodesForSeason = useMemo(() =&gt; {
+    if (!content?.videos) return [];
+    return content.videos
+      .filter(ep =&gt; ep.season === selectedSeason)
+      .sort((a, b) =&gt; a.episode - b.episode);
+  }, [content?.videos, selectedSeason]);
+
+  useEffect(() =&gt; {
+    // If we have cached meta with background, skip the meta fetch entirely
+    const hasCachedMeta = cachedMeta &amp;&amp; cachedMeta.background;
+    if (!hasCachedMeta) {
+      // Only fetch meta for series (need episodes) or if missing background
+      const needsMeta = type === &#x27;series&#x27; || !content?.background;
+      if (needsMeta) {
+        loadContent();
+      }
+    }
+    fetchLibrary();
+    
+    if (type &amp;&amp; id &amp;&amp; (type === &#x27;movie&#x27; || type === &#x27;tv&#x27; || isEpisodePage)) {
+      fetchStreams(type, id);
+    }
+  }, [id, type]);
+
+  useEffect(() =&gt; {
+    if (seasons.length &gt; 0 &amp;&amp; !seasons.includes(selectedSeason)) {
+      setSelectedSeason(seasons[0]);
+    }
+  }, [seasons]);
+
+  useEffect(() =&gt; {
+    if (content &amp;&amp; library) {
+      const contentList = type === &#x27;movie&#x27; ? library.movies : library.series;
+      const found = contentList?.some(
+        (item) =&gt; item.id === content.id || item.imdb_id === content.id
+      );
+      setInLibrary(!!found);
+    }
+  }, [content, library]);
+
+  const loadContent = async () =&gt; {
+    try {
+      const contentId = isEpisodePage ? baseId : id;
+      const data = await api.content.getMeta(type!, contentId!);
+      // Cache the meta data for instant re-access
+      if (contentId) setMetaCache(contentId, data);
+      setContent(data);
+    } catch (error) {
+      console.log(&#x27;Failed to fetch meta:&#x27;, error);
+      // Keep using the initial content from params — already set
+    }
+    setIsLoadingContent(false);
+  };
+
+  const handleStreamSelect = async (stream: Stream) =&gt; {
+    const subtitleContentId = isEpisodePage 
+      ? `${baseId}:${episodeSeason}:${episodeNumber}`
+      : (id as string);
+    const contentTitle = currentEpisode 
+      ? `S${episodeSeason}E${episodeNumber} - ${currentEpisode.name || content?.name || &#x27;Video&#x27;}`
+      : content?.name || &#x27;Video&#x27;;
+    const cType = type as string || &#x27;movie&#x27;;
+    
+    const nextEpisodeData = nextEpisode ? {
+      nextEpisodeId: `${baseId}:${nextEpisode.season}:${nextEpisode.episode}`,
+      nextEpisodeTitle: `S${nextEpisode.season}E${nextEpisode.episode} - ${nextEpisode.name || &#x27;Next Episode&#x27;}`,
+      seriesId: baseId || id,
+      season: String(episodeSeason),
+      episode: String(episodeNumber),
+    } : {};
+    
+    const shouldResume = resumePosition &amp;&amp; parseFloat(resumePosition) &gt; 0 &amp;&amp; (
+      (type === &#x27;movie&#x27; &amp;&amp; !resumeEpisodeId) ||
+      (type === &#x27;series&#x27; &amp;&amp; resumeEpisodeId === subtitleContentId)
+    );
+    const resumeData = shouldResume ? { resumePosition } : {};
+    
+    const buildFallbackUrls = async (): Promise&lt;string[]&gt; =&gt; {
+      const authToken = await AsyncStorage.getItem(&#x27;auth_token&#x27;);
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://fire-stick-remote.preview.emergentagent.com&#x27;;
+      
+      return streams
+        .filter(s =&gt; s !== stream)
+        .filter(s =&gt; s.url &amp;&amp; s.url.startsWith(&#x27;/api/proxy/&#x27;))
+        .slice(0, 5)
+        .map(s =&gt; {
+          const separator = s.url!.includes(&#x27;?&#x27;) ? &#x27;&amp;&#x27; : &#x27;?&#x27;;
+          const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : &#x27;&#x27;;
+          return `${backendUrl}${s.url}${tokenParam}`;
+        });
+    };
+    
+    try {
+      await AsyncStorage.setItem(&#x27;currentPlaying&#x27;, JSON.stringify({
+        contentType: cType,
+        contentId: id,
+        title: contentTitle,
+      }));
+    } catch (e) {
+      console.log(&#x27;[DETAILS] Error saving to AsyncStorage:&#x27;, e);
+    }
+    
+    // Handle external URLs - route them to the internal player
+    if (stream.externalUrl || stream.requiresWebView) {
+      const streamUrl = stream.externalUrl || stream.url;
+      console.log(&#x27;[DETAILS] Playing external URL in internal player:&#x27;, streamUrl);
+      router.push({
+        pathname: &#x27;/player&#x27;,
+        params: { 
+          directUrl: streamUrl,
+          title: contentTitle,
+          isLive: &#x27;false&#x27;,
+          contentType: cType,
+          contentId: subtitleContentId,
+          backdrop: content?.background || &#x27;&#x27;,
+          poster: content?.poster || &#x27;&#x27;,
+          logo: content?.logo || &#x27;&#x27;,
+          ...nextEpisodeData,
+          ...resumeData,
+        },
+      });
+      return;
+    }
+    
+    if (stream.url &amp;&amp; stream.url.startsWith(&#x27;/api/proxy/&#x27;)) {
+      const authToken = await AsyncStorage.getItem(&#x27;auth_token&#x27;);
+      const separator = stream.url.includes(&#x27;?&#x27;) ? &#x27;&amp;&#x27; : &#x27;?&#x27;;
+      const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : &#x27;&#x27;;
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://fire-stick-remote.preview.emergentagent.com&#x27;;
+      const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
+      
+      // Build fallback URLs - include other proxy streams + direct URLs
+      const fallbacks = await buildFallbackUrls();
+      
+      // Also include direct URLs from USAATV streams as fallbacks
+      const directFallbacks = streams
+        .filter(s =&gt; s !== stream &amp;&amp; (s.directUrl || (s.url &amp;&amp; !s.url.startsWith(&#x27;/api/proxy/&#x27;))))
+        .map(s =&gt; s.directUrl || s.url)
+        .filter(Boolean);
+      
+      router.push({
+        pathname: &#x27;/player&#x27;,
+        params: { 
+          directUrl: absoluteUrl,
+          title: contentTitle,
+          isLive: type === &#x27;tv&#x27; ? &#x27;true&#x27; : &#x27;false&#x27;,
+          contentType: cType,
+          contentId: subtitleContentId,
+          fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks, ...directFallbacks]),
+          backdrop: content?.background || &#x27;&#x27;,
+          poster: content?.poster || &#x27;&#x27;,
+          logo: content?.logo || &#x27;&#x27;,
+          ...nextEpisodeData,
+          ...resumeData,
+        },
+      });
+      return;
+    }
+    
+    if (stream.infoHash) {
+      router.push({
+        pathname: &#x27;/player&#x27;,
+        params: { 
+          infoHash: stream.infoHash,
+          title: contentTitle,
+          contentType: cType,
+          contentId: subtitleContentId,
+          fileIdx: stream.fileIdx !== undefined ? String(stream.fileIdx) : &#x27;&#x27;,
+          filename: stream.filename || &#x27;&#x27;,
+          backdrop: content?.background || &#x27;&#x27;,
+          poster: content?.poster || &#x27;&#x27;,
+          logo: content?.logo || &#x27;&#x27;,
+          ...nextEpisodeData,
+          ...resumeData,
+        },
+      });
+    } else if (stream.url) {
+      // Build fallback URLs from all available streams with direct URLs
+      const allStreamUrls = streams
+        .filter(s =&gt; s.url &amp;&amp; !s.infoHash &amp;&amp; s.url !== stream.url)
+        .map(s =&gt; s.url)
+        .filter(Boolean);
+      
+      // For live TV streams, also include proxy URLs as additional fallbacks
+      if (type === &#x27;tv&#x27;) {
+        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://fire-stick-remote.preview.emergentagent.com&#x27;;
+        const authToken = await AsyncStorage.getItem(&#x27;auth_token&#x27;);
+        
+        // Add proxy URLs for all streams as fallbacks
+        const proxyFallbacks = streams
+          .filter(s =&gt; s.proxyUrl)
+          .map(s =&gt; {
+            const tokenParam = authToken ? `&amp;token=${encodeURIComponent(authToken)}` : &#x27;&#x27;;
+            return `${backendUrl}${s!.proxyUrl}${tokenParam}`;
+          })
+          .filter(Boolean);
+        
+        allStreamUrls.push(...proxyFallbacks);
+      }
+      
+      router.push({
+        pathname: &#x27;/player&#x27;,
+        params: { 
+          directUrl: stream.url,
+          title: contentTitle,
+          isLive: type === &#x27;tv&#x27; ? &#x27;true&#x27; : &#x27;false&#x27;,
+          contentType: cType,
+          contentId: subtitleContentId,
+          fallbackStreams: allStreamUrls.length &gt; 0 ? JSON.stringify(allStreamUrls) : &#x27;&#x27;,
+          backdrop: content?.background || &#x27;&#x27;,
+          poster: content?.poster || &#x27;&#x27;,
+          logo: content?.logo || &#x27;&#x27;,
+          ...nextEpisodeData,
+          ...resumeData,
+        },
+      });
+    }
+  };
+
+  const handleEpisodePress = (episode: Episode) =&gt; {
+    const episodeId = `${baseId || id}:${episode.season}:${episode.episode}`;
+    router.push({
+      pathname: `/details/${type}/${episodeId}`,
+    });
+  };
+
+  const toggleLibrary = async () =&gt; {
+    if (!content) return;
+    try {
+      if (inLibrary) {
+        await api.library.remove(type!, content.id);
+        setInLibrary(false);
+      } else {
+        await api.library.add({
+          id: content.id,
+          imdb_id: content.imdb_id || content.id,
+          name: content.name,
+          type: type as &#x27;movie&#x27; | &#x27;series&#x27;,
+          poster: content.poster,
+          year: content.year,
+          imdbRating: typeof content.imdbRating === &#x27;string&#x27; ? parseFloat(content.imdbRating) : content.imdbRating,
+        });
+        setInLibrary(true);
+      }
+      // Refresh library immediately so the Library tab updates in real-time
+      fetchLibrary(true);
+    } catch (error) {
+      console.log(&#x27;Failed to toggle library:&#x27;, error);
+    }
+  };
+
+  // Use content data for display - available immediately from store
+  const displayName = content?.name || &#x27;Loading...&#x27;;
+  // ONLY use backdrop image, no poster fallback — prevents the jarring poster→backdrop switch
+  const displayPoster = content?.background || &#x27;&#x27;;
+
+  const rating = typeof content?.imdbRating === &#x27;string&#x27; 
+    ? parseFloat(content.imdbRating) 
+    : content?.imdbRating;
+
+  // Render stream item for FlatList
+  const renderStreamItem = ({ item }: { item: Stream }) =&gt; (
+    &lt;StreamCard stream={item} onPress={() =&gt; handleStreamSelect(item)} /&gt;
+  );
+
+  // Render episode item for FlatList
+  const renderEpisodeItem = ({ item }: { item: Episode }) =&gt; (
+    &lt;EpisodeCard 
+      episode={item} 
+      fallbackPoster={content?.poster}
+      onPress={() =&gt; handleEpisodePress(item)} 
+    /&gt;
+  );
+
+  return (
+    &lt;View style={styles.container}&gt;
+      {/* Background Image — lightweight RN Image, no expo-image overhead */}
+      {displayPoster ? (
+        &lt;RNImage
+          source={{ uri: displayPoster }}
+          style={styles.backgroundImage}
+          resizeMode=&quot;cover&quot;
+        /&gt;
+      ) : null}
+      
+      {/* Dark overlay — simple View, no LinearGradient overhead */}
+      &lt;View style={styles.gradientOverlay} /&gt;
+      
+      {/* Content Overlay */}
+      &lt;View style={styles.contentOverlay}&gt;
+        {/* Back Button */}
+        &lt;FocusableButton 
+          style={styles.backButton}
+          focusedStyle={styles.backButtonFocused}
+          onPress={() =&gt; router.back()}
+        &gt;
+          &lt;Ionicons name=&quot;arrow-back&quot; size={24} color=&quot;#FFFFFF&quot; /&gt;
+        &lt;/FocusableButton&gt;
+
+        {/* Main Content - Scrollable */}
+        &lt;ScrollView 
+          style={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContentContainer}
+        &gt;
+          {/* Title Section */}
+          &lt;View style={styles.titleSection}&gt;
+            {content?.logo ? (
+              &lt;Image
+                source={{ uri: content.logo }}
+                style={styles.logoImage}
+                contentFit=&quot;contain&quot;
+              /&gt;
+            ) : (
+              &lt;Text style={styles.title}&gt;{displayName}&lt;/Text&gt;
+            )}
+            
+            {/* Episode info if applicable */}
+            {isEpisodePage &amp;&amp; currentEpisode &amp;&amp; (
+              &lt;Text style={styles.episodeSubtitle}&gt;
+                S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
+              &lt;/Text&gt;
+            )}
+          &lt;/View&gt;
+
+          {/* Meta Row */}
+          &lt;View style={styles.metaRow}&gt;
+            {rating &amp;&amp; rating &gt; 0 &amp;&amp; (
+              &lt;View style={styles.imdbBadge}&gt;
+                &lt;Text style={styles.imdbLabel}&gt;IMDb&lt;/Text&gt;
+                &lt;Text style={styles.imdbRating}&gt;{rating.toFixed(1)}&lt;/Text&gt;
+              &lt;/View&gt;
+            )}
+            {content?.year &amp;&amp; (
+              &lt;Text style={styles.metaText}&gt;{content.year}&lt;/Text&gt;
+            )}
+            {content?.runtime &amp;&amp; (
+              &lt;Text style={styles.metaText}&gt;{content.runtime}&lt;/Text&gt;
+            )}
+            {content?.genre &amp;&amp; Array.isArray(content.genre) &amp;&amp; content.genre.length &gt; 0 &amp;&amp; (
+              &lt;Text style={styles.metaText}&gt;{content.genre.slice(0, 2).join(&#x27; • &#x27;)}&lt;/Text&gt;
+            )}
+          &lt;/View&gt;
+
+          {/* Action Buttons Row */}
+          &lt;View style={styles.actionRow}&gt;
+            &lt;FocusableButton 
+              style={styles.libraryButton}
+              focusedStyle={styles.libraryButtonFocused}
+              onPress={toggleLibrary}
+            &gt;
+              &lt;Ionicons 
+                name={inLibrary ? &quot;checkmark&quot; : &quot;add&quot;} 
+                size={20} 
+                color=&quot;#FFFFFF&quot; 
+              /&gt;
+              &lt;Text style={styles.libraryButtonText}&gt;
+                {inLibrary ? &#x27;In Library&#x27; : &#x27;Add to Library&#x27;}
+              &lt;/Text&gt;
+            &lt;/FocusableButton&gt;
+          &lt;/View&gt;
+
+          {/* Description */}
+          {content?.description &amp;&amp; (
+            &lt;Text style={styles.description} numberOfLines={4}&gt;
+              {content.description}
+            &lt;/Text&gt;
+          )}
+
+          {/* Episode Description if applicable */}
+          {isEpisodePage &amp;&amp; currentEpisode?.overview &amp;&amp; (
+            &lt;Text style={styles.description} numberOfLines={3}&gt;
+              {currentEpisode.overview}
+            &lt;/Text&gt;
+          )}
+
+          {/* Cast &amp; Crew */}
+          {content?.cast &amp;&amp; Array.isArray(content.cast) &amp;&amp; content.cast.length &gt; 0 &amp;&amp; (
+            &lt;Text style={styles.castText}&gt;
+              Cast: {content.cast.slice(0, 4).join(&#x27;, &#x27;)}
+            &lt;/Text&gt;
+          )}
+
+          {/* Season Selector for Series */}
+          {type === &#x27;series&#x27; &amp;&amp; !isEpisodePage &amp;&amp; seasons.length &gt; 0 &amp;&amp; (
+            &lt;View style={styles.seasonSection}&gt;
+              &lt;Text style={styles.sectionTitle}&gt;Episodes&lt;/Text&gt;
+              &lt;ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.seasonSelector}
+              &gt;
+                {seasons.map((season) =&gt; (
+                  &lt;Pressable
+                    key={season}
+                    style={[
+                      styles.seasonButton,
+                      selectedSeason === season &amp;&amp; styles.seasonButtonActive,
+                    ]}
+                    onPress={() =&gt; setSelectedSeason(season)}
+                  &gt;
+                    &lt;Text style={[
+                      styles.seasonButtonText,
+                      selectedSeason === season &amp;&amp; styles.seasonButtonTextActive,
+                    ]}&gt;
+                      Season {season}
+                    &lt;/Text&gt;
+                  &lt;/Pressable&gt;
+                ))}
+              &lt;/ScrollView&gt;
+              
+              {/* Episodes List */}
+              &lt;FlatList
+                data={episodesForSeason}
+                renderItem={renderEpisodeItem}
+                keyExtractor={(item) =&gt; `${item.season}-${item.episode}`}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.episodesList}
+              /&gt;
+            &lt;/View&gt;
+          )}
+
+          {/* Streams Section - Stremio Style */}
+          {(type === &#x27;movie&#x27; || type === &#x27;tv&#x27; || isEpisodePage) &amp;&amp; (
+            &lt;View style={styles.streamsSection}&gt;
+              &lt;Text style={styles.sectionTitle}&gt;
+                {isLoadingStreams ? (type === &#x27;tv&#x27; ? &#x27;Verifying Live Streams...&#x27; : &#x27;Finding Streams...&#x27;) : `${streams.length} Stream${streams.length !== 1 ? &#x27;s&#x27; : &#x27;&#x27;} Available`}
+              &lt;/Text&gt;
+              
+              {isLoadingStreams ? (
+                &lt;View style={styles.streamLoading}&gt;
+                  &lt;ActivityIndicator size=&quot;small&quot; color=&quot;#B8A05C&quot; /&gt;
+                  &lt;Text style={styles.streamLoadingText}&gt;
+                    {type === &#x27;tv&#x27; ? &#x27;Checking available channels...&#x27; : &#x27;Searching sources...&#x27;}
+                  &lt;/Text&gt;
+                &lt;/View&gt;
+              ) : streams.length === 0 ? (
+                &lt;View style={styles.noStreams}&gt;
+                  &lt;Ionicons name=&quot;cloud-offline-outline&quot; size={32} color=&quot;#666&quot; /&gt;
+                  &lt;Text style={styles.noStreamsText}&gt;No streams found&lt;/Text&gt;
+                &lt;/View&gt;
+              ) : (
+                &lt;FlatList
+                  data={streams}
+                  renderItem={renderStreamItem}
+                  keyExtractor={(item, index) =&gt; `${item.infoHash || item.url || index}`}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.streamsList}
+                /&gt;
+              )}
+            &lt;/View&gt;
+          )}
+          
+          {/* Bottom padding */}
+          &lt;View style={{ height: 100 }} /&gt;
+        &lt;/ScrollView&gt;
+      &lt;/View&gt;
+    &lt;/View&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: &#x27;#0f0f11&#x27;,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    backgroundColor: &#x27;#0f0f11&#x27;,
+  },
+  backgroundImage: {
+    position: &#x27;absolute&#x27;,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: width,
+    height: height,
+  },
+  gradientOverlay: {
+    position: &#x27;absolute&#x27;,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: &#x27;rgba(15, 15, 17, 0.75)&#x27;,
+  },
+  contentOverlay: {
+    flex: 1,
+  },
+  backButton: {
+    position: &#x27;absolute&#x27;,
+    top: 50,
+    left: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: &#x27;rgba(0,0,0,0.5)&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    zIndex: 10,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  backButtonFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+  },
+  scrollContent: {
+    flex: 1,
+    marginTop: 100,
+  },
+  scrollContentContainer: {
+    paddingHorizontal: 20,
+  },
+  titleSection: {
+    marginBottom: 16,
+    marginTop: height * 0.25,
+    alignItems: &#x27;center&#x27;,
+  },
+  logoImage: {
+    width: width * 0.6,
+    height: 80,
+    alignSelf: &#x27;center&#x27;,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: &#x27;bold&#x27;,
+    color: &#x27;#B8A05C&#x27;,
+    textShadowColor: &#x27;rgba(0,0,0,0.8)&#x27;,
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+    textAlign: &#x27;center&#x27;,
+  },
+  episodeSubtitle: {
+    fontSize: 16,
+    color: &#x27;#B8A05C&#x27;,
+    marginTop: 8,
+    textAlign: &#x27;center&#x27;,
+  },
+  metaRow: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    flexWrap: &#x27;wrap&#x27;,
+    gap: 12,
+    marginBottom: 16,
+  },
+  imdbBadge: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    gap: 6,
+    backgroundColor: &#x27;rgba(245, 197, 24, 0.2)&#x27;,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  imdbLabel: {
+    backgroundColor: &#x27;#F5C518&#x27;,
+    color: &#x27;#000000&#x27;,
+    fontSize: 10,
+    fontWeight: &#x27;bold&#x27;,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 2,
+  },
+  imdbRating: {
+    color: &#x27;#F5C518&#x27;,
+    fontSize: 14,
+    fontWeight: &#x27;600&#x27;,
+  },
+  metaText: {
+    color: &#x27;#AAAAAA&#x27;,
+    fontSize: 14,
+  },
+  actionRow: {
+    flexDirection: &#x27;row&#x27;,
+    gap: 12,
+    marginBottom: 16,
+  },
+  libraryButton: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: &#x27;rgba(255,255,255,0.15)&#x27;,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: &#x27;rgba(255,255,255,0.2)&#x27;,
+  },
+  libraryButtonFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+  },
+  libraryButtonText: {
+    color: &#x27;#B8A05C&#x27;,
+    fontSize: 14,
+    fontWeight: &#x27;600&#x27;,
+  },
+  description: {
+    fontSize: 14,
+    color: &#x27;#D4BC78&#x27;,
+    lineHeight: 22,
+    marginBottom: 16,
+    textAlign: &#x27;center&#x27;,
+  },
+  castText: {
+    fontSize: 13,
+    color: &#x27;#888888&#x27;,
+    marginBottom: 24,
+    textAlign: &#x27;center&#x27;,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: &#x27;bold&#x27;,
+    color: &#x27;#B8A05C&#x27;,
+    marginBottom: 12,
+  },
+  seasonSection: {
+    marginBottom: 24,
+  },
+  seasonSelector: {
+    marginBottom: 16,
+  },
+  seasonButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    backgroundColor: &#x27;rgba(255,255,255,0.1)&#x27;,
+    borderRadius: 20,
+  },
+  seasonButtonActive: {
+    backgroundColor: &#x27;#B8A05C&#x27;,
+  },
+  seasonButtonText: {
+    color: &#x27;#AAAAAA&#x27;,
+    fontSize: 13,
+    fontWeight: &#x27;600&#x27;,
+  },
+  seasonButtonTextActive: {
+    color: &#x27;#000000&#x27;,
+  },
+  episodesList: {
+    gap: 12,
+  },
+  episodeCard: {
+    width: 160,
+    backgroundColor: &#x27;rgba(255,255,255,0.08)&#x27;,
+    borderRadius: 8,
+    overflow: &#x27;hidden&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  episodeCardFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+  },
+  episodeThumbnail: {
+    width: &#x27;100%&#x27;,
+    height: 90,
+    backgroundColor: &#x27;#333&#x27;,
+  },
+  episodeInfo: {
+    padding: 8,
+  },
+  episodeTitle: {
+    fontSize: 12,
+    color: &#x27;#B8A05C&#x27;,
+    fontWeight: &#x27;500&#x27;,
+  },
+  streamsSection: {
+    marginBottom: 24,
+  },
+  streamLoading: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    gap: 10,
+    paddingVertical: 20,
+  },
+  streamLoadingText: {
+    color: &#x27;#AAAAAA&#x27;,
+    fontSize: 14,
+  },
+  noStreams: {
+    alignItems: &#x27;center&#x27;,
+    paddingVertical: 30,
+  },
+  noStreamsText: {
+    color: &#x27;#666666&#x27;,
+    fontSize: 14,
+    marginTop: 8,
+  },
+  streamsList: {
+    gap: 12,
+    paddingVertical: 8,
+  },
+  streamCard: {
+    width: 140,
+    backgroundColor: &#x27;rgba(255,255,255,0.1)&#x27;,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 2,
+    borderColor: &#x27;rgba(255,255,255,0.1)&#x27;,
+  },
+  streamCardFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.2)&#x27;,
+  },
+  streamCardHeader: {
+    flexDirection: &#x27;row&#x27;,
+    justifyContent: &#x27;space-between&#x27;,
+    alignItems: &#x27;center&#x27;,
+    marginBottom: 8,
+  },
+  streamSource: {
+    fontSize: 13,
+    fontWeight: &#x27;600&#x27;,
+    color: &#x27;#B8A05C&#x27;,
+  },
+  qualityBadge: {
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  qualityBadge4K: {
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.6)&#x27;,
+  },
+  qualityText: {
+    fontSize: 10,
+    fontWeight: &#x27;bold&#x27;,
+    color: &#x27;#B8A05C&#x27;,
+  },
+  streamCardBody: {
+    flexDirection: &#x27;row&#x27;,
+    gap: 12,
+    marginBottom: 8,
+  },
+  streamStat: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    gap: 4,
+  },
+  streamStatText: {
+    fontSize: 11,
+    color: &#x27;#888888&#x27;,
+  },
+  streamCardFooter: {
+    alignItems: &#x27;center&#x27;,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: &#x27;rgba(255,255,255,0.1)&#x27;,
+  },
+  defaultFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    borderWidth: 2,
+  },
+});
+</pre>
+
+<h2>File 3: search.tsx</h2>
+<div class="path">Replace at: <strong>frontend/app/search.tsx</strong></div>
+<button class="copy-btn" onclick="copyCode('file2')">Copy to Clipboard</button>
+<pre id="file2">import React, { useEffect, useState, useRef } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  Dimensions,
+  TextInput,
+} from &#x27;react-native&#x27;;
+import { useLocalSearchParams, useRouter } from &#x27;expo-router&#x27;;
+import { SafeAreaView } from &#x27;react-native-safe-area-context&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { Image } from &#x27;expo-image&#x27;;
+import { useContentStore } from &#x27;../src/store/contentStore&#x27;;
+import { ContentItem } from &#x27;../src/api/client&#x27;;
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get(&#x27;window&#x27;);
+const isTV = screenWidth &gt; screenHeight || screenWidth &gt; 800;
+
+// TV-optimized sizing: 6 columns on TV, 3 on mobile
+const NUM_COLUMNS = isTV ? 6 : 3;
+const HORIZONTAL_PADDING = isTV ? 32 : 16;
+const ITEM_SPACING = isTV ? 16 : 8;
+const ITEM_WIDTH = (screenWidth - (HORIZONTAL_PADDING * 2) - (ITEM_SPACING * (NUM_COLUMNS - 1))) / NUM_COLUMNS;
+const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
+
+// Focusable Search Result Item
+function FocusableResultItem({ 
+  item, 
+  onPress,
+}: { 
+  item: ContentItem;
+  onPress: () =&gt; void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    &lt;Pressable 
+      style={[
+        styles.itemContainer, 
+        isFocused &amp;&amp; styles.itemContainerFocused
+      ]}
+      onPress={onPress}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+    &gt;
+      &lt;Image
+        source={{ uri: item.poster }}
+        style={[styles.poster, isFocused &amp;&amp; styles.posterFocused]}
+        contentFit=&quot;cover&quot;
+        placeholder={require(&#x27;../assets/images/no-poster.png&#x27;)}
+        placeholderContentFit=&quot;cover&quot;
+      /&gt;
+      &lt;Text style={styles.itemTitle} numberOfLines={2}&gt;{item.name}&lt;/Text&gt;
+    &lt;/Pressable&gt;
+  );
+}
+
+// Focusable Button Component
+function FocusableButton({ 
+  onPress, 
+  style, 
+  focusedStyle,
+  children,
+}: {
+  onPress: () =&gt; void;
+  style: any;
+  focusedStyle?: any;
+  children: React.ReactNode;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    &lt;Pressable
+      style={[style, isFocused &amp;&amp; (focusedStyle || styles.defaultFocused)]}
+      onPress={onPress}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+    &gt;
+      {children}
+    &lt;/Pressable&gt;
+  );
+}
+
+export default function SearchScreen() {
+  const { q } = useLocalSearchParams&lt;{ q?: string }&gt;();
+  const router = useRouter();
+  const searchResults = useContentStore(s =&gt; s.searchResults);
+  const isLoadingSearch = useContentStore(s =&gt; s.isLoadingSearch);
+  const search = useContentStore(s =&gt; s.search);
+  const clearSearch = useContentStore(s =&gt; s.clearSearch);
+  const [searchQuery, setSearchQuery] = useState(q || &#x27;&#x27;);
+  const flatListRef = useRef&lt;FlatList&gt;(null);
+
+  // Auto-search when query param exists
+  useEffect(() =&gt; {
+    if (q) {
+      setSearchQuery(q);
+      const timer = setTimeout(() =&gt; {
+        search(q);
+      }, 100);
+      return () =&gt; clearTimeout(timer);
+    }
+  }, [q]);
+
+  const handleSearch = () =&gt; {
+    if (searchQuery.trim()) {
+      search(searchQuery.trim());
+    }
+  };
+
+  const handleItemPress = (item: ContentItem) =&gt; {
+    const id = item.imdb_id || item.id;
+    const encodedId = encodeURIComponent(id);
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || &#x27;&#x27;,
+        poster: item.poster || &#x27;&#x27;,
+        background: item.background || &#x27;&#x27;,
+        logo: item.logo || &#x27;&#x27;,
+        year: item.year ? String(item.year) : &#x27;&#x27;,
+        imdbRating: item.imdbRating ? String(item.imdbRating) : &#x27;&#x27;,
+        description: item.description || &#x27;&#x27;,
+      }
+    });
+  };
+
+  // Deduplicate results based on imdb_id or id
+  const deduplicatedResults = React.useMemo(() =&gt; {
+    const seen = new Set&lt;string&gt;();
+    return searchResults.filter(item =&gt; {
+      const key = item.imdb_id || item.id;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }, [searchResults]);
+
+  const renderItem = ({ item, index }: { item: ContentItem; index: number }) =&gt; (
+    &lt;FocusableResultItem
+      item={item}
+      onPress={() =&gt; handleItemPress(item)}
+    /&gt;
+  );
+
+  const getItemLayout = (_: any, index: number) =&gt; ({
+    length: ITEM_HEIGHT + 40, // poster height + title + margin
+    offset: (ITEM_HEIGHT + 40) * Math.floor(index / NUM_COLUMNS),
+    index,
+  });
+
+  return (
+    &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+      {/* Header */}
+      &lt;View style={styles.header}&gt;
+        &lt;FocusableButton 
+          onPress={() =&gt; router.back()} 
+          style={styles.backButton}
+          focusedStyle={styles.backButtonFocused}
+        &gt;
+          &lt;Ionicons name=&quot;arrow-back&quot; size={24} color=&quot;#FFFFFF&quot; /&gt;
+        &lt;/FocusableButton&gt;
+        &lt;View style={styles.searchInputContainer}&gt;
+          &lt;TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearch}
+            placeholder=&quot;Search movies, series, actors...&quot;
+            placeholderTextColor=&quot;#666&quot;
+            returnKeyType=&quot;search&quot;
+            autoFocus={!q}
+          /&gt;
+          &lt;FocusableButton 
+            onPress={handleSearch} 
+            style={styles.searchButton}
+            focusedStyle={styles.searchButtonFocused}
+          &gt;
+            &lt;Ionicons name=&quot;search&quot; size={20} color=&quot;#B8A05C&quot; /&gt;
+          &lt;/FocusableButton&gt;
+        &lt;/View&gt;
+      &lt;/View&gt;
+
+      {/* Results */}
+      {isLoadingSearch ? (
+        &lt;View style={styles.centerContainer}&gt;
+          &lt;ActivityIndicator size=&quot;large&quot; color=&quot;#B8A05C&quot; /&gt;
+          &lt;Text style={styles.searchingText}&gt;Searching...&lt;/Text&gt;
+        &lt;/View&gt;
+      ) : deduplicatedResults.length === 0 ? (
+        &lt;View style={styles.centerContainer}&gt;
+          &lt;Ionicons name=&quot;search-outline&quot; size={48} color=&quot;#444&quot; /&gt;
+          &lt;Text style={styles.noResultsText}&gt;
+            {q ? `No results for &quot;${q}&quot;` : &#x27;Search for movies, series, or actors&#x27;}
+          &lt;/Text&gt;
+        &lt;/View&gt;
+      ) : (
+        &lt;FlatList
+          ref={flatListRef}
+          data={deduplicatedResults}
+          renderItem={renderItem}
+          keyExtractor={(item, index) =&gt; `${item.imdb_id || item.id}-${index}`}
+          numColumns={NUM_COLUMNS}
+          contentContainerStyle={styles.gridContent}
+          showsVerticalScrollIndicator={false}
+          getItemLayout={getItemLayout}
+          initialNumToRender={NUM_COLUMNS * 3}
+          maxToRenderPerBatch={NUM_COLUMNS * 2}
+          windowSize={5}
+          ListHeaderComponent={
+            &lt;Text style={styles.resultsCount}&gt;
+              {deduplicatedResults.length} results for &quot;{searchQuery}&quot;
+            &lt;/Text&gt;
+          }
+        /&gt;
+      )}
+    &lt;/SafeAreaView&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: &#x27;#0f0f11&#x27;,
+  },
+  header: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: &#x27;#1a1a1d&#x27;,
+    gap: 12,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: &#x27;rgba(255,255,255,0.1)&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  backButtonFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    backgroundColor: &#x27;#1a1a1d&#x27;,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+  },
+  searchInput: {
+    flex: 1,
+    color: &#x27;#FFFFFF&#x27;,
+    fontSize: 16,
+    paddingVertical: 12,
+  },
+  searchButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  searchButtonFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  searchingText: {
+    color: &#x27;#999&#x27;,
+    marginTop: 12,
+    fontSize: 14,
+  },
+  noResultsText: {
+    color: &#x27;#666&#x27;,
+    marginTop: 12,
+    fontSize: 16,
+    textAlign: &#x27;center&#x27;,
+    paddingHorizontal: 32,
+  },
+  resultsCount: {
+    color: &#x27;#888&#x27;,
+    fontSize: 14,
+    paddingBottom: 16,
+  },
+  gridContent: {
+    padding: HORIZONTAL_PADDING,
+  },
+  itemContainer: {
+    width: ITEM_WIDTH,
+    marginBottom: 16,
+    marginRight: ITEM_SPACING,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+    padding: 4,
+  },
+  itemContainerFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.15)&#x27;,
+    transform: [{ scale: 1.02 }],
+  },
+  poster: {
+    width: &#x27;100%&#x27;,
+    height: ITEM_HEIGHT,
+    borderRadius: 6,
+    backgroundColor: &#x27;#1a1a1d&#x27;,
+  },
+  posterFocused: {
+    // Additional poster styling when focused
+  },
+  itemTitle: {
+    color: &#x27;#FFFFFF&#x27;,
+    fontSize: isTV ? 13 : 12,
+    marginTop: 6,
+    textAlign: &#x27;center&#x27;,
+  },
+  defaultFocused: {
+    borderColor: &#x27;#B8A05C&#x27;,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+  },
+});
+</pre>
+
+<h2>File 4: category [type].tsx</h2>
+<div class="path">Replace at: <strong>frontend/app/category/[service]/[type].tsx</strong></div>
+<button class="copy-btn" onclick="copyCode('file3')">Copy to Clipboard</button>
+<pre id="file3">import React, { useEffect, useState, useCallback, useRef, memo } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  useWindowDimensions,
+  Platform,
+  findNodeHandle,
+} from &#x27;react-native&#x27;;
+import { useLocalSearchParams, useRouter } from &#x27;expo-router&#x27;;
+import { SafeAreaView } from &#x27;react-native-safe-area-context&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { Image } from &#x27;expo-image&#x27;;
+import { Image as RNImage } from &#x27;react-native&#x27;;
+import { useContentStore } from &#x27;../../../src/store/contentStore&#x27;;
+import { ContentItem } from &#x27;../../../src/api/client&#x27;;
+import apiClient from &#x27;../../../src/api/client&#x27;;
+import colors from &#x27;../../../src/styles/colors&#x27;;
+
+const NO_POSTER_IMAGE = require(&#x27;../../../assets/images/no-poster.png&#x27;);
+
+// ============================================
+// CategoryItem - MUST be outside the screen component
+// so FlatList can properly diff and reuse cells
+// ============================================
+const CategoryItem = memo(({ 
+  item, 
+  itemWidth, 
+  itemHeight, 
+  gap, 
+  onPress,
+  onFocusItem,
+}: { 
+  item: ContentItem; 
+  itemWidth: number; 
+  itemHeight: number; 
+  gap: number; 
+  onPress: (item: ContentItem) =&gt; void;
+  onFocusItem?: () =&gt; void;
+}) =&gt; {
+  const [focused, setFocused] = useState(false);
+  return (
+    &lt;Pressable
+      style={[
+        styles.gridItem,
+        { width: itemWidth, marginHorizontal: gap / 2 },
+        focused &amp;&amp; styles.gridItemFocused,
+      ]}
+      onPress={() =&gt; onPress(item)}
+      onFocus={() =&gt; {
+        setFocused(true);
+        onFocusItem?.();
+      }}
+      onBlur={() =&gt; setFocused(false)}
+      android_ripple={null}
+    &gt;
+      {item.poster ? (
+        &lt;Image
+          source={{ uri: item.poster }}
+          style={[styles.gridPoster, { height: itemHeight }]}
+          contentFit=&quot;cover&quot;
+          recyclingKey={item.id || item.imdb_id}
+        /&gt;
+      ) : (
+        &lt;RNImage
+          source={NO_POSTER_IMAGE}
+          style={[styles.gridPoster, { height: itemHeight }]}
+          resizeMode=&quot;cover&quot;
+        /&gt;
+      )}
+      &lt;Text style={styles.itemTitle} numberOfLines={2}&gt;{item.name}&lt;/Text&gt;
+    &lt;/Pressable&gt;
+  );
+});
+
+// ============================================
+// CategoryScreen - Infinite scroll pagination
+// ============================================
+export default function CategoryScreen() {
+  const { service, type } = useLocalSearchParams&lt;{ service: string; type: string }&gt;();
+  const router = useRouter();
+  const discoverData = useContentStore(s =&gt; s.discoverData);
+  const [items, setItems] = useState&lt;ContentItem[]&gt;([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [backFocused, setBackFocused] = useState(false);
+  const { width, height } = useWindowDimensions();
+  const isTV = width &gt; height || width &gt; 800;
+  const flatListRef = useRef&lt;FlatList&gt;(null);
+
+  // Refs to prevent stale closures in callbacks
+  const skipRef = useRef(0);
+  const isLoadingRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const initialLoadDone = useRef(false);
+
+  // Grid sizing - Fire Stick reports ~960dp
+  const numColumns = isTV ? Math.max(6, Math.floor(width / 140)) : 3;
+  const horizontalPadding = isTV ? 24 : 16;
+  const gap = isTV ? 12 : 8;
+  const ITEM_WIDTH = (width - horizontalPadding * 2 - (numColumns - 1) * gap) / numColumns;
+  const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
+
+  const decodedService = service ? decodeURIComponent(service) : &#x27;&#x27;;
+
+  // Fix duplicate title
+  const typeLabel = type === &#x27;movies&#x27; ? &#x27;Movies&#x27; : type === &#x27;series&#x27; ? &#x27;Series&#x27; : &#x27;Channels&#x27;;
+  const lowerService = decodedService.toLowerCase();
+  const displayTitle = lowerService.includes(typeLabel.toLowerCase()) 
+    ? decodedService 
+    : `${decodedService} ${typeLabel}`;
+
+  // Fetch one page of content
+  const fetchOnePage = useCallback(async (isFirstPage: boolean) =&gt; {
+    if (!decodedService || !type) return;
+    if (isLoadingRef.current) return;
+    if (!hasMoreRef.current &amp;&amp; !isFirstPage) return;
+
+    isLoadingRef.current = true;
+    if (isFirstPage) {
+      setIsLoading(true);
+    } else {
+      setIsLoadingMore(true);
+    }
+
+    try {
+      const currentSkip = isFirstPage ? 0 : skipRef.current;
+      const response = await apiClient.get(
+        `/api/content/category/${encodeURIComponent(decodedService)}/${type}?skip=${currentSkip}&amp;limit=100`
+      );
+      const data = response.data;
+      const newItems: ContentItem[] = data.items || [];
+
+      if (newItems.length &gt; 0) {
+        if (isFirstPage) {
+          setItems(newItems);
+          skipRef.current = newItems.length;
+        } else {
+          setItems(prev =&gt; {
+            const existingIds = new Set(prev.map(i =&gt; i.id || i.imdb_id));
+            const unique = newItems.filter(i =&gt; !existingIds.has(i.id || i.imdb_id));
+            skipRef.current = currentSkip + newItems.length;
+            return [...prev, ...unique];
+          });
+        }
+      }
+
+      // If API returned hasMore field, use it; otherwise check if we got enough items
+      const moreAvailable = data.hasMore !== undefined ? data.hasMore : newItems.length &gt;= 20;
+      hasMoreRef.current = moreAvailable;
+      setHasMore(moreAvailable);
+    } catch (error) {
+      console.log(&#x27;Error fetching category:&#x27;, error);
+      // Fallback to cached discover data on first page
+      if (isFirstPage &amp;&amp; discoverData) {
+        const serviceData = discoverData.services[decodedService];
+        if (serviceData) {
+          let fallback: ContentItem[] = [];
+          if (type === &#x27;movies&#x27;) fallback = serviceData.movies || [];
+          else if (type === &#x27;series&#x27;) fallback = serviceData.series || [];
+          else if (type === &#x27;channels&#x27;) fallback = serviceData.channels || [];
+          setItems(fallback.filter(Boolean));
+        }
+      }
+      hasMoreRef.current = false;
+      setHasMore(false);
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+      isLoadingRef.current = false;
+    }
+  }, [decodedService, type, discoverData]);
+
+  // Initial load
+  useEffect(() =&gt; {
+    if (!initialLoadDone.current &amp;&amp; decodedService &amp;&amp; type) {
+      initialLoadDone.current = true;
+      fetchOnePage(true);
+    }
+  }, [decodedService, type, fetchOnePage]);
+
+  // Load more when user scrolls to bottom
+  const handleLoadMore = useCallback(() =&gt; {
+    if (!isLoadingRef.current &amp;&amp; hasMoreRef.current) {
+      fetchOnePage(false);
+    }
+  }, [fetchOnePage]);
+
+  const handleItemPress = useCallback((item: ContentItem) =&gt; {
+    const id = item.imdb_id || item.id;
+    const encodedId = encodeURIComponent(id);
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || &#x27;&#x27;,
+        poster: item.poster || &#x27;&#x27;,
+        background: item.background || &#x27;&#x27;,
+        logo: item.logo || &#x27;&#x27;,
+        year: item.year ? String(item.year) : &#x27;&#x27;,
+        imdbRating: item.imdbRating ? String(item.imdbRating) : &#x27;&#x27;,
+        description: item.description || &#x27;&#x27;,
+      }
+    });
+  }, [router]);
+
+  // Auto-scroll when a poster is focused so it&#x27;s visible
+  const handleItemFocus = useCallback((index: number) =&gt; {
+    const rowIndex = Math.floor(index / numColumns);
+    // Scroll to the row so the focused item is visible
+    if (flatListRef.current) {
+      const rowHeight = ITEM_HEIGHT + 40; // poster + title + margin
+      flatListRef.current.scrollToOffset({
+        offset: Math.max(0, rowIndex * rowHeight - 60), // 60px offset for header
+        animated: true,
+      });
+    }
+  }, [numColumns, ITEM_HEIGHT]);
+
+  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) =&gt; (
+    &lt;CategoryItem
+      item={item}
+      itemWidth={ITEM_WIDTH}
+      itemHeight={ITEM_HEIGHT}
+      gap={gap}
+      onPress={handleItemPress}
+      onFocusItem={() =&gt; handleItemFocus(index)}
+    /&gt;
+  ), [ITEM_WIDTH, ITEM_HEIGHT, gap, handleItemPress, handleItemFocus]);
+
+  const keyExtractor = useCallback((item: ContentItem) =&gt; item.id || item.imdb_id || &#x27;&#x27;, []);
+
+  const LoadMoreFooter = () =&gt; {
+    if (isLoadingMore) {
+      return (
+        &lt;View style={styles.footerContainer}&gt;
+          &lt;ActivityIndicator size=&quot;small&quot; color={colors.primary} /&gt;
+          &lt;Text style={styles.footerText}&gt;Loading more... ({items.length} loaded)&lt;/Text&gt;
+        &lt;/View&gt;
+      );
+    }
+    if (!hasMore &amp;&amp; items.length &gt; 0) {
+      return (
+        &lt;View style={styles.footerContainer}&gt;
+          &lt;Text style={styles.footerText}&gt;All {items.length} items loaded&lt;/Text&gt;
+        &lt;/View&gt;
+      );
+    }
+    return null;
+  };
+
+  return (
+    &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+      {/* Header */}
+      &lt;View style={[styles.header, isTV &amp;&amp; styles.headerTV]}&gt;
+        &lt;Pressable 
+          onPress={() =&gt; router.back()} 
+          onFocus={() =&gt; setBackFocused(true)}
+          onBlur={() =&gt; setBackFocused(false)}
+          android_ripple={null}
+          style={[styles.backButton, backFocused &amp;&amp; styles.backButtonFocused]}
+        &gt;
+          &lt;Ionicons name=&quot;arrow-back&quot; size={isTV ? 28 : 24} color={backFocused ? colors.primary : &quot;#FFFFFF&quot;} /&gt;
+        &lt;/Pressable&gt;
+        &lt;Text style={[styles.headerTitle, isTV &amp;&amp; styles.headerTitleTV]}&gt;{displayTitle}&lt;/Text&gt;
+        &lt;View style={styles.placeholder} /&gt;
+      &lt;/View&gt;
+
+      {/* Content Grid */}
+      {isLoading ? (
+        &lt;View style={styles.emptyContainer}&gt;
+          &lt;ActivityIndicator size=&quot;large&quot; color={colors.primary} /&gt;
+          &lt;Text style={styles.loadingText}&gt;Loading {decodedService}...&lt;/Text&gt;
+        &lt;/View&gt;
+      ) : items.length === 0 ? (
+        &lt;View style={styles.emptyContainer}&gt;
+          &lt;Text style={styles.emptyText}&gt;No content found&lt;/Text&gt;
+        &lt;/View&gt;
+      ) : (
+        &lt;FlatList
+          ref={flatListRef}
+          data={items}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          numColumns={numColumns}
+          key={numColumns}
+          contentContainerStyle={[styles.gridContent, { paddingHorizontal: horizontalPadding }]}
+          showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={2.0}
+          initialNumToRender={numColumns * 4}
+          maxToRenderPerBatch={numColumns * 3}
+          removeClippedSubviews={false}
+          windowSize={15}
+          ListFooterComponent={LoadMoreFooter}
+        /&gt;
+      )}
+    &lt;/SafeAreaView&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  header: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    justifyContent: &#x27;space-between&#x27;,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.backgroundLight,
+  },
+  headerTV: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  backButtonFocused: {
+    borderColor: colors.primary,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.15)&#x27;,
+  },
+  headerTitle: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: &#x27;600&#x27;,
+  },
+  headerTitleTV: {
+    fontSize: 24,
+  },
+  placeholder: {
+    width: 40,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  gridContent: {
+    paddingVertical: 16,
+  },
+  gridItem: {
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  gridItemFocused: {
+    borderColor: colors.primary,
+  },
+  gridPoster: {
+    width: &#x27;100%&#x27;,
+    borderRadius: 6,
+    backgroundColor: colors.backgroundLight,
+  },
+  itemTitle: {
+    color: colors.primary,
+    fontSize: 12,
+    marginTop: 6,
+    textAlign: &#x27;center&#x27;,
+  },
+  loadingText: {
+    color: colors.primaryDark,
+    marginTop: 12,
+    fontSize: 14,
+  },
+  emptyText: {
+    color: colors.primaryDark,
+    fontSize: 16,
+  },
+  footerContainer: {
+    flexDirection: &#x27;row&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    paddingVertical: 24,
+    gap: 10,
+  },
+  footerText: {
+    color: colors.primaryDark,
+    fontSize: 14,
+  },
+});
+</pre>
+
+<h2>File 5: library.tsx</h2>
+<div class="path">Replace at: <strong>frontend/app/(tabs)/library.tsx</strong></div>
+<button class="copy-btn" onclick="copyCode('file4')">Copy to Clipboard</button>
+<pre id="file4">import React, { useEffect, useState, useCallback, useRef } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  ActivityIndicator,
+  RefreshControl,
+  Pressable,
+  useWindowDimensions,
+  findNodeHandle,
+} from &#x27;react-native&#x27;;
+import { SafeAreaView } from &#x27;react-native-safe-area-context&#x27;;
+import { useRouter } from &#x27;expo-router&#x27;;
+import { Image } from &#x27;expo-image&#x27;;
+import { Image as RNImage } from &#x27;react-native&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { useContentStore } from &#x27;../../src/store/contentStore&#x27;;
+import { ContentItem } from &#x27;../../src/api/client&#x27;;
+import { colors } from &#x27;../../src/styles/colors&#x27;;
+import { getCardWidth } from &#x27;../../src/components/ContentCard&#x27;;
+
+const NO_POSTER_IMAGE = require(&#x27;../../assets/images/no-poster.png&#x27;);
+
+type FilterType = &#x27;movies&#x27; | &#x27;series&#x27; | &#x27;tv&#x27;;
+
+// Library card — EXACT same X-button pattern as ContinueWatchingCard in discover.tsx
+function LibraryCard({
+  item,
+  cardWidth,
+  cardHeight,
+  isTV,
+  onPress,
+  onRemove,
+  onCardBlur,
+}: {
+  item: ContentItem;
+  cardWidth: number;
+  cardHeight: number;
+  isTV: boolean;
+  onPress: () =&gt; void;
+  onRemove: () =&gt; void;
+  onCardBlur?: () =&gt; void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [xFocused, setXFocused] = useState(false);
+
+  // Refs for explicit focus navigation between poster and X button
+  const posterRef = useRef&lt;View&gt;(null);
+  const xButtonRef = useRef&lt;View&gt;(null);
+  const [posterTag, setPosterTag] = useState&lt;number | undefined&gt;(undefined);
+  const [xButtonTag, setXButtonTag] = useState&lt;number | undefined&gt;(undefined);
+
+  useEffect(() =&gt; {
+    // Get native node handles after mount for nextFocusUp/Down wiring
+    const pTag = posterRef.current ? findNodeHandle(posterRef.current) : null;
+    const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
+    if (pTag) setPosterTag(pTag);
+    if (xTag) setXButtonTag(xTag);
+  }, []);
+
+  const handleFocus = () =&gt; {
+    setIsFocused(true);
+  };
+
+  const handleXFocus = () =&gt; {
+    setXFocused(true);
+  };
+
+  const xButtonSize = isTV ? 30 : 24;
+  const xRowHeight = xButtonSize + 8;
+
+  return (
+    &lt;View style={{ width: cardWidth, marginRight: 16 }}&gt;
+      {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
+      &lt;View style={[styles.xButtonRow, { paddingTop: 8 }]}&gt;
+        &lt;Pressable
+          ref={xButtonRef}
+          onPress={onRemove}
+          onFocus={handleXFocus}
+          onBlur={() =&gt; setXFocused(false)}
+          accessible={true}
+          accessibilityRole=&quot;button&quot;
+          accessibilityLabel={`Remove ${item.name || item.title} from Library`}
+          android_ripple={null}
+          nextFocusDown={posterTag}
+          style={[
+            styles.removeButtonOverlay,
+            { width: xButtonSize, height: xButtonSize, borderRadius: xButtonSize / 2 },
+            xFocused &amp;&amp; styles.removeButtonOverlayFocused,
+          ]}
+        &gt;
+          &lt;Ionicons
+            name=&quot;close&quot;
+            size={isTV ? 16 : 12}
+            color={xFocused ? &#x27;#fff&#x27; : &#x27;rgba(255,255,255,0.9)&#x27;}
+          /&gt;
+        &lt;/Pressable&gt;
+      &lt;/View&gt;
+
+      {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
+      &lt;Pressable
+        ref={posterRef}
+        onPress={onPress}
+        onFocus={handleFocus}
+        onBlur={() =&gt; { setIsFocused(false); onCardBlur?.(); }}
+        android_ripple={null}
+        nextFocusUp={xButtonTag}
+        style={[
+          styles.posterContainer,
+          { height: cardHeight, marginTop: -xRowHeight },
+          isFocused &amp;&amp; styles.posterFocused,
+        ]}
+      &gt;
+        &lt;View style={styles.imageWrapper}&gt;
+          &lt;Image
+            source={{ uri: item.poster }}
+            style={styles.posterImage}
+            contentFit=&quot;cover&quot;
+            cachePolicy=&quot;memory-disk&quot;
+          /&gt;
+        &lt;/View&gt;
+
+        {!item.poster &amp;&amp; (
+          &lt;View style={styles.placeholder}&gt;
+            &lt;RNImage
+              source={NO_POSTER_IMAGE}
+              style={{ width: &#x27;100%&#x27;, height: &#x27;100%&#x27; }}
+              resizeMode=&quot;cover&quot;
+            /&gt;
+          &lt;/View&gt;
+        )}
+      &lt;/Pressable&gt;
+
+      {/* Title below poster */}
+      &lt;View style={styles.titleContainer}&gt;
+        &lt;Text style={[styles.cardTitle, isTV &amp;&amp; styles.cardTitleTV]} numberOfLines={2}&gt;
+          {item.name || item.title}
+        &lt;/Text&gt;
+      &lt;/View&gt;
+    &lt;/View&gt;
+  );
+}
+
+export default function LibraryScreen() {
+  const router = useRouter();
+  const { width, height } = useWindowDimensions();
+  const isTV = width &gt; height || width &gt; 800;
+  const library = useContentStore(s =&gt; s.library);
+  const isLoadingLibrary = useContentStore(s =&gt; s.isLoadingLibrary);
+  const fetchLibrary = useContentStore(s =&gt; s.fetchLibrary);
+  const removeFromLibrary = useContentStore(s =&gt; s.removeFromLibrary);
+  const [filter, setFilter] = useState&lt;FilterType&gt;(&#x27;movies&#x27;);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const cardWidth = getCardWidth(width, isTV, &#x27;medium&#x27;);
+  const cardHeight = cardWidth * 1.5;
+  const itemTotalWidth = cardWidth + 16;
+  const paddingLeft = isTV ? 48 : 16;
+
+  // Track horizontal nav for scroll behavior
+  const isNavigatingRef = useRef(false);
+  const blurTimerRef = useRef&lt;ReturnType&lt;typeof setTimeout&gt; | null&gt;(null);
+  const flatListRef = useRef&lt;FlatList&gt;(null);
+  const TV_SCROLL_ANCHOR = 4;
+
+  useEffect(() =&gt; {
+    fetchLibrary();
+  }, []);
+
+  const onRefresh = useCallback(async () =&gt; {
+    setRefreshing(true);
+    await fetchLibrary(true);
+    setRefreshing(false);
+  }, []);
+
+  const handleItemPress = useCallback((item: ContentItem) =&gt; {
+    const id = item.imdb_id || item.id;
+    const encodedId = encodeURIComponent(id);
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || &#x27;&#x27;,
+        poster: item.poster || &#x27;&#x27;,
+      },
+    });
+  }, [router]);
+
+  const handleRemoveItem = useCallback(async (item: ContentItem) =&gt; {
+    const contentId = item.imdb_id || item.id;
+    const contentType = item.type || &#x27;movie&#x27;;
+    try {
+      await removeFromLibrary(contentType, contentId);
+    } catch (error) {
+      console.log(&#x27;Remove error:&#x27;, error);
+    }
+  }, [removeFromLibrary]);
+
+  const getFilteredContent = (): ContentItem[] =&gt; {
+    if (!library) return [];
+    switch (filter) {
+      case &#x27;movies&#x27;: return library.movies || [];
+      case &#x27;series&#x27;: return library.series || [];
+      case &#x27;tv&#x27;: return library.channels || [];
+      default: return library.movies || [];
+    }
+  };
+
+  const filteredContent = getFilteredContent();
+
+  const handleCardFocus = useCallback((index: number) =&gt; {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    if (isTV &amp;&amp; flatListRef.current &amp;&amp; isNavigatingRef.current) {
+      const targetOffset = Math.max(0, (index - TV_SCROLL_ANCHOR) * itemTotalWidth);
+      flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
+    }
+    isNavigatingRef.current = true;
+  }, [itemTotalWidth, isTV]);
+
+  const handleCardBlur = useCallback(() =&gt; {
+    blurTimerRef.current = setTimeout(() =&gt; {
+      isNavigatingRef.current = false;
+    }, 150);
+  }, []);
+
+  const getItemLayout = useCallback((_data: any, index: number) =&gt; ({
+    length: itemTotalWidth,
+    offset: paddingLeft + (index * itemTotalWidth),
+    index,
+  }), [itemTotalWidth, paddingLeft]);
+
+  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) =&gt; (
+    &lt;LibraryCard
+      item={item}
+      onPress={() =&gt; { handleCardFocus(index); handleItemPress(item); }}
+      onRemove={() =&gt; handleRemoveItem(item)}
+      cardWidth={cardWidth}
+      cardHeight={cardHeight}
+      isTV={isTV}
+      onCardBlur={handleCardBlur}
+    /&gt;
+  ), [handleItemPress, handleRemoveItem, cardWidth, cardHeight, isTV, handleCardBlur, handleCardFocus]);
+
+  const FilterButton = ({ type, label }: { type: FilterType; label: string }) =&gt; {
+    const isActive = filter === type;
+    const [btnFocused, setBtnFocused] = useState(false);
+    return (
+      &lt;Pressable
+        onPress={() =&gt; setFilter(type)}
+        onFocus={() =&gt; setBtnFocused(true)}
+        onBlur={() =&gt; setBtnFocused(false)}
+        style={[
+          styles.filterButton,
+          isActive &amp;&amp; styles.filterButtonActive,
+          btnFocused &amp;&amp; styles.filterButtonFocused,
+        ]}
+      &gt;
+        &lt;Text style={[styles.filterText, isActive &amp;&amp; styles.filterTextActive, btnFocused &amp;&amp; styles.filterTextFocused]}&gt;
+          {label}
+        &lt;/Text&gt;
+      &lt;/Pressable&gt;
+    );
+  };
+
+  if (isLoadingLibrary &amp;&amp; !library) {
+    return (
+      &lt;SafeAreaView style={styles.container}&gt;
+        &lt;View style={styles.loadingContainer}&gt;
+          &lt;ActivityIndicator size=&quot;large&quot; color={colors.primary} /&gt;
+        &lt;/View&gt;
+      &lt;/SafeAreaView&gt;
+    );
+  }
+
+  return (
+    &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+      &lt;View style={[styles.header, isTV &amp;&amp; styles.headerTV]}&gt;
+        &lt;Text style={[styles.headerTitle, isTV &amp;&amp; styles.headerTitleTV]}&gt;Library&lt;/Text&gt;
+      &lt;/View&gt;
+
+      &lt;View style={[styles.filterContainer, isTV &amp;&amp; styles.filterContainerTV]}&gt;
+        &lt;FilterButton type=&quot;movies&quot; label=&quot;Movies&quot; /&gt;
+        &lt;FilterButton type=&quot;series&quot; label=&quot;Series&quot; /&gt;
+        &lt;FilterButton type=&quot;tv&quot; label=&quot;TV Channels&quot; /&gt;
+      &lt;/View&gt;
+
+      {filteredContent.length === 0 ? (
+        &lt;View style={styles.emptyContainer}&gt;
+          &lt;Ionicons name=&quot;bookmark-outline&quot; size={64} color={colors.primaryDark} /&gt;
+          &lt;Text style={styles.emptyText}&gt;Your library is empty&lt;/Text&gt;
+        &lt;/View&gt;
+      ) : (
+        &lt;FlatList
+          ref={flatListRef}
+          horizontal
+          data={filteredContent}
+          renderItem={renderItem}
+          keyExtractor={(item) =&gt; item.imdb_id || item.id || item.name || &#x27;&#x27;}
+          getItemLayout={getItemLayout}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.listContent, isTV &amp;&amp; styles.listContentTV]}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          removeClippedSubviews={true}
+          refreshControl={
+            &lt;RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            /&gt;
+          }
+        /&gt;
+      )}
+    &lt;/SafeAreaView&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: &#x27;#000000&#x27;,
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: &#x27;#1a1a1a&#x27;,
+  },
+  headerTV: {
+    paddingHorizontal: 48,
+    paddingVertical: 16,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: &#x27;800&#x27;,
+    color: colors.primary,
+  },
+  headerTitleTV: {
+    fontSize: 32,
+  },
+  filterContainer: {
+    flexDirection: &#x27;row&#x27;,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  filterContainerTV: {
+    paddingHorizontal: 48,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: &#x27;#1a1a1a&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  filterButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  filterButtonFocused: {
+    borderColor: colors.primary,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.3)&#x27;,
+    transform: [{ scale: 1.1 }],
+  },
+  filterText: {
+    color: &#x27;#888888&#x27;,
+    fontSize: 14,
+    fontWeight: &#x27;600&#x27;,
+  },
+  filterTextActive: {
+    color: &#x27;#FFFFFF&#x27;,
+  },
+  filterTextFocused: {
+    color: &#x27;#FFFFFF&#x27;,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: &#x27;600&#x27;,
+    marginTop: 16,
+    textAlign: &#x27;center&#x27;,
+  },
+  emptySubtext: {
+    color: colors.primaryDark,
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: &#x27;center&#x27;,
+  },
+  listContent: {
+    paddingLeft: 16,
+    paddingRight: 48,
+    paddingTop: 8,
+  },
+  listContentTV: {
+    paddingLeft: 48,
+    paddingRight: 128,
+  },
+  // X button row - sits above poster, right-aligned (matches discover.tsx)
+  xButtonRow: {
+    alignItems: &#x27;flex-end&#x27;,
+    zIndex: 10,
+    paddingRight: 8,
+  },
+  removeButtonOverlay: {
+    backgroundColor: &#x27;rgba(0, 0, 0, 0.7)&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  removeButtonOverlayFocused: {
+    borderColor: colors.primary,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.5)&#x27;,
+    transform: [{ scale: 1.2 }],
+  },
+  // Poster
+  posterContainer: {
+    borderRadius: 6,
+    overflow: &#x27;visible&#x27;,
+    backgroundColor: &#x27;#1a1a1a&#x27;,
+    position: &#x27;relative&#x27;,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  posterFocused: {
+    borderColor: colors.primary,
+  },
+  imageWrapper: {
+    width: &#x27;100%&#x27;,
+    height: &#x27;100%&#x27;,
+    borderRadius: 4,
+    overflow: &#x27;hidden&#x27;,
+  },
+  posterImage: {
+    width: &#x27;100%&#x27;,
+    height: &#x27;100%&#x27;,
+  },
+  placeholder: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    backgroundColor: &#x27;#1a1a1a&#x27;,
+  },
+  titleContainer: {
+    paddingTop: 6,
+    paddingHorizontal: 2,
+    height: 38,
+  },
+  cardTitle: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: &#x27;500&#x27;,
+    textAlign: &#x27;center&#x27;,
+    lineHeight: 16,
+  },
+  cardTitleTV: {
+    fontSize: 13,
+  },
+});
+</pre>
+
+<h2>File 6: discover.tsx</h2>
+<div class="path">Replace at: <strong>frontend/app/(tabs)/discover.tsx</strong></div>
+<button class="copy-btn" onclick="copyCode('file5')">Copy to Clipboard</button>
+<pre id="file5">import React, { useEffect, useCallback, useState, useMemo, useRef } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  RefreshControl,
+  ActivityIndicator,
+  Pressable,
+  FlatList,
+  useWindowDimensions,
+  findNodeHandle,
+} from &#x27;react-native&#x27;;
+import { SafeAreaView } from &#x27;react-native-safe-area-context&#x27;;
+import { useRouter, useFocusEffect } from &#x27;expo-router&#x27;;
+import { Image } from &#x27;expo-image&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { useContentStore } from &#x27;../../src/store/contentStore&#x27;;
+import { getMetaCache, setMetaCache } from &#x27;../../src/store/contentStore&#x27;;
+import { ServiceRow } from &#x27;../../src/components/ServiceRow&#x27;;
+import { ContentItem, api, WatchProgress } from &#x27;../../src/api/client&#x27;;
+import { getCardWidth } from &#x27;../../src/components/ContentCard&#x27;;
+import { colors } from &#x27;../../src/styles/colors&#x27;;
+import { Image as RNImage } from &#x27;react-native&#x27;;
+
+const NO_POSTER_IMAGE = require(&#x27;../../assets/images/no-poster.png&#x27;);
+
+export default function DiscoverScreen() {
+  const router = useRouter();
+  const { width, height } = useWindowDimensions();
+  const isTV = width &gt; height || width &gt; 800;
+  
+  // CRITICAL: Use zustand SELECTORS — only re-render when these specific fields change.
+  // Without selectors, the Discover page re-renders when ANY store field changes
+  // (e.g., when Details page loads streams), causing hundreds of poster images
+  // to re-render and blocking the JS thread for 3+ seconds.
+  const discoverData = useContentStore(s =&gt; s.discoverData);
+  const isLoadingDiscover = useContentStore(s =&gt; s.isLoadingDiscover);
+  const fetchDiscover = useContentStore(s =&gt; s.fetchDiscover);
+  const fetchAddons = useContentStore(s =&gt; s.fetchAddons);
+  const addons = useContentStore(s =&gt; s.addons);
+  const [refreshing, setRefreshing] = useState(false);
+  const [continueWatching, setContinueWatching] = useState&lt;WatchProgress[]&gt;([]);
+  const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+  const scrollViewRef = useRef&lt;ScrollView&gt;(null);
+  const sectionPositions = useRef&lt;Record&lt;string, number&gt;&gt;({});
+  const lastFocusedSection = useRef&lt;string&gt;(&#x27;&#x27;);
+  const lastCWFetchTime = useRef&lt;number&gt;(0);
+
+  // Use same card width calculation as ContentCard for consistency
+  const POSTER_WIDTH = getCardWidth(width, isTV, &#x27;medium&#x27;);
+  const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
+
+  // Fetch continue watching data
+  const fetchContinueWatching = useCallback(async () =&gt; {
+    try {
+      setIsLoadingProgress(true);
+      const response = await api.watchProgress.getAll();
+      setContinueWatching(response.continueWatching || []);
+      lastCWFetchTime.current = Date.now();
+    } catch (err) {
+      console.log(&#x27;[Discover] Error fetching continue watching:&#x27;, err);
+    } finally {
+      setIsLoadingProgress(false);
+    }
+  }, []);
+
+  useEffect(() =&gt; {
+    fetchAddons();
+    fetchDiscover();
+    fetchContinueWatching();
+  }, []);
+
+  // Re-fetch continue watching when screen comes into focus (with 30s cooldown)
+  useFocusEffect(
+    useCallback(() =&gt; {
+      // Skip re-fetch if data was loaded less than 30 seconds ago
+      // This prevents the delay when pressing back from Details page
+      const timeSinceLastFetch = Date.now() - lastCWFetchTime.current;
+      if (timeSinceLastFetch &lt; 30000 &amp;&amp; continueWatching.length &gt;= 0) {
+        return;
+      }
+      fetchContinueWatching();
+    }, [fetchContinueWatching, continueWatching.length])
+  );
+
+  // Check if there&#x27;s any content to display
+  const hasContent = useMemo(() =&gt; {
+    if (!discoverData?.services) return false;
+    return Object.values(discoverData.services).some(
+      (content: any) =&gt; 
+        (content?.movies?.length &gt; 0) || 
+        (content?.series?.length &gt; 0) || 
+        (content?.channels?.length &gt; 0)
+    );
+  }, [discoverData]);
+
+  const onRefresh = useCallback(async () =&gt; {
+    setRefreshing(true);
+    await Promise.all([
+      fetchAddons(),
+      fetchDiscover(),
+      fetchContinueWatching(),
+    ]);
+    setRefreshing(false);
+  }, [fetchContinueWatching]);
+
+  // Handle section focus - scroll parent to show category title
+  const handleSectionFocus = useCallback((sectionKey: string) =&gt; {
+    if (lastFocusedSection.current === sectionKey) return;
+    lastFocusedSection.current = sectionKey;
+    
+    const sectionY = sectionPositions.current[sectionKey];
+    if (sectionY !== undefined &amp;&amp; scrollViewRef.current) {
+      // Small delay to override Android TV&#x27;s auto-scroll (which only shows the card, not the title)
+      setTimeout(() =&gt; {
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, sectionY - 10), animated: true });
+      }, 50);
+    }
+  }, []);
+
+  // Row sync: keep all rows scrolled to the same horizontal offset
+  // (No longer needed — removed carousel anchor scrolling)
+
+  // Item width for snap scrolling
+  const itemWidth = POSTER_WIDTH + 16;
+
+  // PRE-FETCH meta on poster focus (D-pad hover) so backdrop is ready before click
+  const prefetchingRef = useRef&lt;Set&lt;string&gt;&gt;(new Set());
+  const handleItemFocus = useCallback((item: ContentItem) =&gt; {
+    const id = item.imdb_id || item.id;
+    if (!id || prefetchingRef.current.has(id) || getMetaCache(id)) return;
+    prefetchingRef.current.add(id);
+    // Fire-and-forget: fetch meta in background
+    api.content.getMeta(item.type, id).then((meta) =&gt; {
+      setMetaCache(id, meta);
+      // Also pre-download the backdrop image so it&#x27;s in expo-image disk cache
+      if (meta.background) {
+        Image.prefetch(meta.background);
+      }
+    }).catch(() =&gt; {});
+  }, []);
+
+  const handleItemPress = (item: ContentItem) =&gt; {
+    const id = item.imdb_id || item.id;
+    const encodedId = encodeURIComponent(id);
+    // Minimal params for instant first paint — just name + poster
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || &#x27;&#x27;,
+        poster: item.poster || &#x27;&#x27;,
+      },
+    });
+  };
+
+  // Handle continue watching item press
+  const handleContinueWatchingPress = (item: WatchProgress) =&gt; {
+    if (item.stream_info_hash || item.stream_url) {
+      router.push({
+        pathname: &#x27;/player&#x27;,
+        params: {
+          infoHash: item.stream_info_hash || &#x27;&#x27;,
+          directUrl: item.stream_url || &#x27;&#x27;,
+          fileIdx: item.stream_file_idx != null ? String(item.stream_file_idx) : &#x27;&#x27;,
+          filename: item.stream_filename || &#x27;&#x27;,
+          title: item.title || &#x27;&#x27;,
+          contentType: item.content_type,
+          contentId: item.content_id,
+          poster: item.poster || &#x27;&#x27;,
+          backdrop: item.backdrop || &#x27;&#x27;,
+          logo: item.logo || &#x27;&#x27;,
+          resumePosition: String(item.progress || 0),
+          season: item.season != null ? String(item.season) : &#x27;&#x27;,
+          episode: item.episode != null ? String(item.episode) : &#x27;&#x27;,
+          seriesId: item.series_id || &#x27;&#x27;,
+        },
+      });
+      return;
+    }
+    
+    let targetId = item.content_id;
+    let targetType = item.content_type;
+    
+    if (item.series_id) {
+      targetId = item.series_id;
+      targetType = &#x27;series&#x27;;
+    } else if (item.content_type === &#x27;series&#x27; &amp;&amp; item.content_id.includes(&#x27;:&#x27;)) {
+      const parts = item.content_id.split(&#x27;:&#x27;);
+      if (parts.length &gt;= 1) {
+        targetId = parts[0];
+      }
+    }
+    
+    const encodedId = encodeURIComponent(targetId);
+    router.push({
+      pathname: `/details/${targetType}/${encodedId}`,
+      params: {
+        name: item.title || &#x27;&#x27;,
+        poster: item.poster || &#x27;&#x27;,
+        resumeEpisodeId: item.content_type === &#x27;series&#x27; ? item.content_id : &#x27;&#x27;,
+        resumePosition: String(item.progress || 0),
+        resumeSeason: item.season !== undefined ? String(item.season) : &#x27;&#x27;,
+        resumeEpisode: item.episode !== undefined ? String(item.episode) : &#x27;&#x27;,
+      },
+    });
+  };
+
+  // Handle removing item from continue watching
+  const handleRemoveFromContinueWatching = async (item: WatchProgress) =&gt; {
+    try {
+      await api.watchProgress.delete(item.content_id);
+      setContinueWatching(prev =&gt; prev.filter(i =&gt; i.content_id !== item.content_id));
+    } catch (err) {
+      console.log(&#x27;[Discover] Error removing from continue watching:&#x27;, err);
+    }
+  };
+
+  // Render a continue watching item (Stremio style)
+  const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) =&gt; (
+    &lt;ContinueWatchingItem
+      item={item}
+      posterWidth={POSTER_WIDTH}
+      posterHeight={POSTER_HEIGHT}
+      isTV={isTV}
+      onPress={() =&gt; handleContinueWatchingPress(item)}
+      onRemove={() =&gt; handleRemoveFromContinueWatching(item)}
+      onSectionFocus={() =&gt; handleSectionFocus(&#x27;continue-watching&#x27;)}
+    /&gt;
+  );
+
+  // Show loading only on initial load
+  if (isLoadingDiscover &amp;&amp; !discoverData) {
+    return (
+      &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+        &lt;View style={styles.loadingContainer}&gt;
+          &lt;ActivityIndicator size=&quot;large&quot; color={colors.primary} /&gt;
+        &lt;/View&gt;
+      &lt;/SafeAreaView&gt;
+    );
+  }
+
+  return (
+    &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+      {/* Welcome Screen - No Addons and No Continue Watching */}
+      {!hasContent &amp;&amp; continueWatching.length === 0 &amp;&amp; !isLoadingDiscover ? (
+        &lt;View style={styles.welcomeContainer}&gt;
+          &lt;Image
+            source={require(&#x27;../../assets/images/logo_splash.png&#x27;)}
+            style={[styles.welcomeLogo, isTV &amp;&amp; styles.welcomeLogoTV]}
+            contentFit=&quot;contain&quot;
+          /&gt;
+          &lt;Text style={[styles.welcomeText, isTV &amp;&amp; styles.welcomeTextTV]}&gt;
+            Welcome to Privastream Cinema
+          &lt;/Text&gt;
+          &lt;Text style={[styles.welcomeSubtext, isTV &amp;&amp; styles.welcomeSubtextTV]}&gt;
+            Install addons to start streaming
+          &lt;/Text&gt;
+          &lt;GoToAddonsButton router={router} isTV={isTV} /&gt;
+        &lt;/View&gt;
+      ) : (
+        /* Content area with fixed header */
+        &lt;View style={{ flex: 1 }}&gt;
+          {/* Fixed Logo Header */}
+          &lt;View style={[styles.logoHeader, isTV &amp;&amp; styles.logoHeaderTV]}&gt;
+            &lt;Image
+              source={require(&#x27;../../assets/images/logo_header.png&#x27;)}
+              style={[styles.logoImage, isTV &amp;&amp; styles.logoImageTV]}
+              contentFit=&quot;contain&quot;
+            /&gt;
+            &lt;Text style={[styles.logoText, isTV &amp;&amp; styles.logoTextTV]}&gt;
+              Privastream Cinema
+            &lt;/Text&gt;
+          &lt;/View&gt;
+
+          {/* Scrollable Content */}
+          &lt;ScrollView
+            ref={scrollViewRef}
+            style={styles.scrollView}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              &lt;RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
+              /&gt;
+            }
+          &gt;
+          {/* Continue Watching Section - Stremio style */}
+          {continueWatching.length &gt; 0 &amp;&amp; (
+            &lt;View 
+              style={styles.section}
+              onLayout={(e) =&gt; { sectionPositions.current[&#x27;continue-watching&#x27;] = e.nativeEvent.layout.y; }}
+            &gt;
+              &lt;View style={[styles.sectionHeader, isTV &amp;&amp; styles.sectionHeaderTV]}&gt;
+                &lt;Text style={[styles.sectionTitle, isTV &amp;&amp; styles.sectionTitleTV]}&gt;
+                  Continue Watching
+                &lt;/Text&gt;
+              &lt;/View&gt;
+              &lt;FlatList
+                data={continueWatching}
+                renderItem={renderContinueWatchingItem}
+                keyExtractor={(item) =&gt; item.content_id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={[styles.rowContent, isTV &amp;&amp; styles.rowContentTV]}
+                removeClippedSubviews={false}
+                windowSize={21}
+                initialNumToRender={10}
+              /&gt;
+            &lt;/View&gt;
+          )}
+          
+          {/* Content Rows from Addons */}
+          {(() =&gt; {
+            let firstRowRendered = false;
+            return Object.entries(discoverData?.services || {}).map(([serviceName, content]) =&gt; {
+            // Avoid duplicate labels - service names like &quot;Popular Movies&quot; already contain the type
+            const hasMoviesInName = serviceName.toLowerCase().includes(&#x27;movie&#x27;);
+            const hasSeriesInName = serviceName.toLowerCase().includes(&#x27;series&#x27;);
+            const hasChannelsInName = serviceName.toLowerCase().includes(&#x27;channel&#x27;);
+            
+            return (
+            &lt;React.Fragment key={serviceName}&gt;
+              {content?.movies &amp;&amp; content.movies.length &gt; 0 &amp;&amp; (() =&gt; {
+                const isFirst = !firstRowRendered &amp;&amp; continueWatching.length === 0;
+                if (isFirst) firstRowRendered = true;
+                return (
+                &lt;View
+                  onLayout={(e) =&gt; { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}
+                &gt;
+                  &lt;ServiceRow
+                    title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
+                    serviceName={serviceName}
+                    contentType=&quot;movies&quot;
+                    items={content.movies}
+                    onItemPress={handleItemPress}
+                    onItemFocus={handleItemFocus}
+                    onSectionFocus={() =&gt; handleSectionFocus(`${serviceName}-movies`)}
+                    isFirstRow={isFirst}
+                  /&gt;
+                &lt;/View&gt;
+                );
+              })()}
+              {content?.series &amp;&amp; content.series.length &gt; 0 &amp;&amp; (() =&gt; {
+                const isFirst = !firstRowRendered &amp;&amp; continueWatching.length === 0;
+                if (isFirst) firstRowRendered = true;
+                return (
+                &lt;View
+                  onLayout={(e) =&gt; { sectionPositions.current[`${serviceName}-series`] = e.nativeEvent.layout.y; }}
+                &gt;
+                  &lt;ServiceRow
+                    title={hasSeriesInName ? serviceName : `${serviceName} Series`}
+                    serviceName={serviceName}
+                    contentType=&quot;series&quot;
+                    items={content.series}
+                    onItemPress={handleItemPress}
+                    onItemFocus={handleItemFocus}
+                    onSectionFocus={() =&gt; handleSectionFocus(`${serviceName}-series`)}
+                    isFirstRow={isFirst}
+                  /&gt;
+                &lt;/View&gt;
+                );
+              })()}
+              {content?.channels &amp;&amp; content.channels.length &gt; 0 &amp;&amp; (() =&gt; {
+                const isFirst = !firstRowRendered &amp;&amp; continueWatching.length === 0;
+                if (isFirst) firstRowRendered = true;
+                return (
+                &lt;View
+                  onLayout={(e) =&gt; { sectionPositions.current[`${serviceName}-channels`] = e.nativeEvent.layout.y; }}
+                &gt;
+                  &lt;ServiceRow
+                    title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
+                    serviceName={serviceName}
+                    contentType=&quot;channels&quot;
+                    items={content.channels.map((ch: any) =&gt; ({
+                      ...ch,
+                      type: &#x27;tv&#x27; as const,
+                    }))}
+                    onItemPress={handleItemPress}
+                    onSectionFocus={() =&gt; handleSectionFocus(`${serviceName}-channels`)}
+                    isFirstRow={isFirst}
+                  /&gt;
+                &lt;/View&gt;
+                );
+              })()}
+            &lt;/React.Fragment&gt;
+          );
+          });
+          })()}
+          &lt;View style={styles.bottomPadding} /&gt;
+        &lt;/ScrollView&gt;
+        &lt;/View&gt;
+      )}
+    &lt;/SafeAreaView&gt;
+  );
+}
+
+// Go To Addons Button (Stremio style)
+function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    &lt;Pressable 
+      onPress={() =&gt; router.push(&#x27;/(tabs)/addons&#x27;)}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+      style={[styles.addonsButton, isFocused &amp;&amp; styles.addonsButtonFocused]}
+    &gt;
+      &lt;Ionicons name=&quot;extension-puzzle&quot; size={20} color={colors.textPrimary} /&gt;
+      &lt;Text style={styles.addonsButtonText}&gt;Install Addons&lt;/Text&gt;
+    &lt;/Pressable&gt;
+  );
+}
+
+// Continue Watching Item (Stremio style with play overlay and X on poster)
+function ContinueWatchingItem({ 
+  item, 
+  posterWidth, 
+  posterHeight, 
+  isTV, 
+  onPress, 
+  onRemove,
+  onSectionFocus,
+}: { 
+  item: WatchProgress; 
+  posterWidth: number; 
+  posterHeight: number; 
+  isTV: boolean;
+  onPress: () =&gt; void;
+  onRemove: () =&gt; void;
+  onSectionFocus?: () =&gt; void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [xFocused, setXFocused] = useState(false);
+  const percentWatched = item.percent_watched || 0;
+
+  // Refs for explicit focus navigation between poster and X button
+  const posterRef = useRef&lt;View&gt;(null);
+  const xButtonRef = useRef&lt;View&gt;(null);
+  const [posterTag, setPosterTag] = useState&lt;number | undefined&gt;(undefined);
+  const [xButtonTag, setXButtonTag] = useState&lt;number | undefined&gt;(undefined);
+
+  useEffect(() =&gt; {
+    // Get native node handles after mount for nextFocusUp/Down wiring
+    const pTag = posterRef.current ? findNodeHandle(posterRef.current) : null;
+    const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
+    if (pTag) setPosterTag(pTag);
+    if (xTag) setXButtonTag(xTag);
+  }, []);
+
+  const handleFocus = () =&gt; {
+    setIsFocused(true);
+    onSectionFocus?.();
+  };
+
+  const handleXFocus = () =&gt; {
+    setXFocused(true);
+    onSectionFocus?.();
+  };
+
+  const xButtonSize = isTV ? 30 : 24;
+  // Total height of the X row = button size + top padding (8px)
+  const xRowHeight = xButtonSize + 8;
+  
+  return (
+    &lt;View style={[styles.continueItem, { width: posterWidth }]}&gt;
+      {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
+      &lt;View style={[styles.xButtonRow, { paddingTop: 8 }]}&gt;
+        &lt;Pressable
+          ref={xButtonRef}
+          onPress={onRemove}
+          onFocus={handleXFocus}
+          onBlur={() =&gt; setXFocused(false)}
+          accessible={true}
+          accessibilityRole=&quot;button&quot;
+          accessibilityLabel={`Remove ${item.title} from Continue Watching`}
+          android_ripple={null}
+          nextFocusDown={posterTag}
+          style={[
+            styles.removeButtonOverlay,
+            { width: xButtonSize, height: xButtonSize, borderRadius: xButtonSize / 2 },
+            xFocused &amp;&amp; styles.removeButtonOverlayFocused,
+          ]}
+        &gt;
+          &lt;Ionicons
+            name=&quot;close&quot;
+            size={isTV ? 16 : 12}
+            color={xFocused ? &#x27;#fff&#x27; : &#x27;rgba(255,255,255,0.9)&#x27;}
+          /&gt;
+        &lt;/Pressable&gt;
+      &lt;/View&gt;
+
+      {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
+      &lt;Pressable
+        ref={posterRef}
+        onPress={onPress}
+        onFocus={handleFocus}
+        onBlur={() =&gt; setIsFocused(false)}
+        android_ripple={null}
+        nextFocusUp={xButtonTag}
+        style={[
+          styles.continueImageWrapper,
+          { marginTop: -xRowHeight },
+          isFocused &amp;&amp; styles.continueImageWrapperFocused,
+        ]}
+      &gt;
+        &lt;View style={[styles.continueImageContainer, { height: posterHeight }]}&gt;
+          {(item.poster || item.backdrop) ? (
+            &lt;Image
+              source={{ uri: item.poster || item.backdrop || &#x27;&#x27; }}
+              style={styles.continueImage}
+              contentFit=&quot;cover&quot;
+            /&gt;
+          ) : (
+            &lt;RNImage
+              source={NO_POSTER_IMAGE}
+              style={styles.continueImage}
+              resizeMode=&quot;cover&quot;
+            /&gt;
+          )}
+          
+          {/* Play overlay */}
+          &lt;View style={styles.playOverlay}&gt;
+            &lt;View style={styles.playButton}&gt;
+              &lt;Ionicons name=&quot;play&quot; size={isTV ? 32 : 24} color={colors.textPrimary} /&gt;
+            &lt;/View&gt;
+          &lt;/View&gt;
+          
+          {/* Progress bar */}
+          &lt;View style={styles.progressContainer}&gt;
+            &lt;View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} /&gt;
+          &lt;/View&gt;
+        &lt;/View&gt;
+      &lt;/Pressable&gt;
+
+      {/* Title below poster */}
+      &lt;View style={styles.continueTitleContent}&gt;
+        &lt;Text style={styles.continueTitleText} numberOfLines={2}&gt;
+          {item.title}
+        &lt;/Text&gt;
+        {item.season != null &amp;&amp; item.episode != null &amp;&amp; item.season &gt; 0 &amp;&amp; item.episode &gt; 0 &amp;&amp; (
+          &lt;Text style={styles.continueEpisode}&gt;
+            S{item.season} E{item.episode}
+          &lt;/Text&gt;
+        )}
+      &lt;/View&gt;
+    &lt;/View&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  scrollView: {
+    flex: 1,
+    overflow: &#x27;visible&#x27;,
+  },
+  bottomPadding: {
+    height: 100,
+  },
+  // Welcome Screen
+  welcomeContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    paddingHorizontal: 40,
+  },
+  welcomeLogo: {
+    width: 200,
+    height: 100,
+    marginBottom: 24,
+  },
+  welcomeLogoTV: {
+    width: 280,
+    height: 140,
+  },
+  welcomeText: {
+    color: colors.primary,
+    fontSize: 22,
+    fontWeight: &#x27;600&#x27;,
+    marginBottom: 8,
+  },
+  welcomeTextTV: {
+    fontSize: 28,
+  },
+  welcomeSubtext: {
+    color: colors.primaryDark,
+    fontSize: 16,
+    marginBottom: 32,
+  },
+  welcomeSubtextTV: {
+    fontSize: 18,
+  },
+  addonsButton: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 8,
+    gap: 10,
+  },
+  addonsButtonFocused: {
+    transform: [{ scale: 1.05 }],
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  addonsButtonText: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: &#x27;600&#x27;,
+  },
+  // Section styles
+  section: {
+    marginBottom: 32,
+    overflow: &#x27;visible&#x27;,
+  },
+  sectionHeader: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  sectionHeaderTV: {
+    paddingHorizontal: 48,
+  },
+  sectionTitle: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: &#x27;600&#x27;,
+  },
+  sectionTitleTV: {
+    fontSize: 22,
+  },
+  rowContent: {
+    paddingHorizontal: 16,
+  },
+  rowContentTV: {
+    paddingLeft: 48,
+    paddingRight: 108,
+  },
+  // Continue watching item - Stremio style
+  continueItem: {
+    marginRight: 16,
+  },
+  // X button row - sits above poster, right-aligned
+  xButtonRow: {
+    alignItems: &#x27;flex-end&#x27;,
+    zIndex: 10,
+    paddingRight: 8,
+  },
+  continueImageWrapper: {
+    borderRadius: 6,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+    overflow: &#x27;hidden&#x27;,
+  },
+  continueImageWrapperFocused: {
+    borderColor: colors.primary,
+  },
+  continueImageContainer: {
+    backgroundColor: colors.backgroundLight,
+    position: &#x27;relative&#x27;,
+  },
+  continueImage: {
+    width: &#x27;100%&#x27;,
+    height: &#x27;100%&#x27;,
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  playButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: &#x27;rgba(0, 0, 0, 0.6)&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 2,
+    borderColor: colors.textPrimary,
+  },
+  progressContainer: {
+    position: &#x27;absolute&#x27;,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: &#x27;rgba(255, 255, 255, 0.3)&#x27;,
+  },
+  progressBar: {
+    height: &#x27;100%&#x27;,
+    backgroundColor: colors.textPrimary,
+  },
+  continueTitleText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: &#x27;500&#x27;,
+    textAlign: &#x27;center&#x27;,
+    paddingHorizontal: 4,
+  },
+  continueEpisode: {
+    color: colors.primaryDark,
+    fontSize: 11,
+    textAlign: &#x27;center&#x27;,
+    marginTop: 2,
+  },
+  continueTitleContent: {
+    paddingTop: 6,
+  },
+  // X button overlaid on top-right of poster
+  removeButtonOverlay: {
+    backgroundColor: &#x27;rgba(0, 0, 0, 0.7)&#x27;,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 2,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  removeButtonOverlayFocused: {
+    borderColor: colors.primary,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.5)&#x27;,
+    transform: [{ scale: 1.2 }],
+  },
+  // Logo header
+  logoHeader: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  logoHeaderTV: {
+    paddingHorizontal: 48,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  logoImage: {
+    width: 44,
+    height: 44,
+  },
+  logoImageTV: {
+    width: 64,
+    height: 64,
+  },
+  logoText: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: &#x27;700&#x27;,
+    marginLeft: 10,
+    letterSpacing: 0.5,
+  },
+  logoTextTV: {
+    fontSize: 24,
+    marginLeft: 14,
+  },
+});
+</pre>
+
+<h2>App Icons - Python Generation Script</h2>
+<div class="path">Run this script from your <strong>frontend/</strong> directory to regenerate icons from logo.png</div>
+<button class="copy-btn" onclick="copyCode('iconscript')">Copy to Clipboard</button>
+<pre id="iconscript">## Run with: python3 generate_icons.py
+## From the frontend/ directory
+
+from PIL import Image, ImageDraw
+
+logo = Image.open('assets/images/logo.png').convert('RGBA')
+
+adaptive_sizes = {'mdpi': 108, 'hdpi': 162, 'xhdpi': 216, 'xxhdpi': 324, 'xxxhdpi': 432}
+legacy_sizes = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
+base_path = 'android/app/src/main/res'
+
+for density, size in adaptive_sizes.items():
+    canvas = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    safe_zone = int(size * 0.66)
+    padding = (size - safe_zone) // 2
+    resized_logo = logo.resize((safe_zone, safe_zone), Image.LANCZOS)
+    canvas.paste(resized_logo, (padding, padding), resized_logo)
+    canvas.save(f'{base_path}/mipmap-{density}/ic_launcher_foreground.webp', 'WEBP', quality=90)
+    mono = canvas.convert('L').convert('RGBA')
+    mono.putalpha(canvas.split()[3])
+    mono.save(f'{base_path}/mipmap-{density}/ic_launcher_monochrome.webp', 'WEBP', quality=90)
+    print(f'Created foreground + mono for {density} ({size}x{size})')
+
+for density, size in legacy_sizes.items():
+    canvas = Image.new('RGBA', (size, size), (0, 0, 0, 255))
+    logo_size = int(size * 0.75)
+    pad = (size - logo_size) // 2
+    resized_logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
+    canvas.paste(resized_logo, (pad, pad), resized_logo)
+    canvas.save(f'{base_path}/mipmap-{density}/ic_launcher.webp', 'WEBP', quality=90)
+    mask = Image.new('L', (size, size), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, size-1, size-1), fill=255)
+    round_canvas = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    round_canvas.paste(canvas, (0, 0))
+    round_canvas.putalpha(mask)
+    round_canvas.save(f'{base_path}/mipmap-{density}/ic_launcher_round.webp', 'WEBP', quality=90)
+    print(f'Created launcher + round for {density} ({size}x{size})')
+
+print('\nAll icons generated!')</pre>
+
+</body></html>
