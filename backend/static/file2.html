@@ -20,15 +20,12 @@ function copyAll() {
   });
 }
 </script></head><body>
-<h1>File 2/6: details_id.tsx</h1>
+<h1>File 2: details_id.tsx</h1>
 <div class="path">Paste into: <strong>frontend/app/details/[type]/[id].tsx</strong></div>
 <div class="nav">
   <a href="/api/download/file1.html">1-ContentCard</a>
   <a href="/api/download/file2.html">2-details</a>
-  <a href="/api/download/file3.html">3-search</a>
-  <a href="/api/download/file4.html">4-category</a>
-  <a href="/api/download/file5.html">5-library</a>
-  <a href="/api/download/file6.html">6-discover</a>
+  <a href="/api/download/no-poster.png">Download no-poster.png</a>
 </div>
 <button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
 <pre id="code">import React, { useEffect, useState, useMemo, useCallback } from &#x27;react&#x27;;
@@ -172,21 +169,12 @@ function StreamCard({
 // Episode Card Component
 // Placeholder component for missing posters/thumbnails
 function ComingSoonPlaceholder({ width, height }: { width: number | string; height: number | string }) {
-  const w = typeof width === &#x27;number&#x27; ? width : 160;
-  const h = typeof height === &#x27;number&#x27; ? height : 240;
-  const iconSize = Math.min(w, h) * 0.45;
-  const fontSize = Math.max(Math.min(w, h) * 0.09, 10);
   return (
-    &lt;View style={{ width: width as any, height: height as any, backgroundColor: &#x27;#1a1a2e&#x27;, justifyContent: &#x27;center&#x27;, alignItems: &#x27;center&#x27; }}&gt;
-      &lt;RNImage
-        source={NO_POSTER_IMAGE}
-        style={{ width: iconSize, height: iconSize }}
-        resizeMode=&quot;contain&quot;
-      /&gt;
-      &lt;Text style={{ color: &#x27;#e6c47a&#x27;, fontSize: fontSize, fontWeight: &#x27;bold&#x27;, marginTop: h * 0.03, letterSpacing: 2, textAlign: &#x27;center&#x27; }}&gt;
-        COMING SOON
-      &lt;/Text&gt;
-    &lt;/View&gt;
+    &lt;RNImage
+      source={NO_POSTER_IMAGE}
+      style={{ width: width as any, height: height as any }}
+      resizeMode=&quot;cover&quot;
+    /&gt;
   );
 }
 

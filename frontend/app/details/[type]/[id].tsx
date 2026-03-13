@@ -139,21 +139,12 @@ function StreamCard({
 // Episode Card Component
 // Placeholder component for missing posters/thumbnails
 function ComingSoonPlaceholder({ width, height }: { width: number | string; height: number | string }) {
-  const w = typeof width === 'number' ? width : 160;
-  const h = typeof height === 'number' ? height : 240;
-  const iconSize = Math.min(w, h) * 0.45;
-  const fontSize = Math.max(Math.min(w, h) * 0.09, 10);
   return (
-    <View style={{ width: width as any, height: height as any, backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' }}>
-      <RNImage
-        source={NO_POSTER_IMAGE}
-        style={{ width: iconSize, height: iconSize }}
-        resizeMode="contain"
-      />
-      <Text style={{ color: '#e6c47a', fontSize: fontSize, fontWeight: 'bold', marginTop: h * 0.03, letterSpacing: 2, textAlign: 'center' }}>
-        COMING SOON
-      </Text>
-    </View>
+    <RNImage
+      source={NO_POSTER_IMAGE}
+      style={{ width: width as any, height: height as any }}
+      resizeMode="cover"
+    />
   );
 }
 
