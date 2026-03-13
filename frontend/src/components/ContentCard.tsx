@@ -7,6 +7,7 @@ import {
   Text,
   Alert,
   findNodeHandle,
+  Image as RNImage,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -210,10 +211,10 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
             />
           ) : (
             <View style={[styles.posterImage, { backgroundColor: '#1e1e22', justifyContent: 'center', alignItems: 'center' }]}>
-              <Image
+              <RNImage
                 source={{ uri: PLACEHOLDER_ICON_URI }}
                 style={{ width: cardWidth * 0.55, height: cardWidth * 0.55 }}
-                contentFit="contain"
+                resizeMode="contain"
               />
               <Text style={{ color: 'rgba(140,120,70,0.6)', fontSize: 10, marginTop: 8, fontWeight: '600', letterSpacing: 1 }}>COMING SOON</Text>
             </View>

@@ -141,10 +141,10 @@ function StreamCard({
 function ComingSoonPlaceholder({ width, height }: { width: number | string; height: number | string }) {
   return (
     <View style={{ width: width as any, height: height as any, backgroundColor: '#1e1e22', justifyContent: 'center', alignItems: 'center' }}>
-      <Image
+      <RNImage
         source={{ uri: PLACEHOLDER_ICON_URI }}
         style={{ width: 50, height: 50 }}
-        contentFit="contain"
+        resizeMode="contain"
       />
       <Text style={{ color: 'rgba(140,120,70,0.6)', fontSize: 9, marginTop: 6, fontWeight: '600', letterSpacing: 1 }}>COMING SOON</Text>
     </View>
