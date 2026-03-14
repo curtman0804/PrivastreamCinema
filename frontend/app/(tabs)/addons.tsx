@@ -231,7 +231,7 @@ export default function AddonsScreen() {
             style={styles.installButton}
             focusedStyle={styles.installButtonFocused}
           >
-            <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+            <Ionicons name="extension-puzzle" size={20} color={colors.primary} />
             <Text style={styles.installButtonText}>Install Addon</Text>
           </FocusButton>
         </View>
@@ -470,20 +470,21 @@ const styles = StyleSheet.create({
   installButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surface,
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 8,
     marginTop: 24,
     gap: 8,
     borderWidth: 3,
-    borderColor: colors.primary,
+    borderColor: 'transparent',
   },
   installButtonFocused: {
-    borderColor: '#FFFFFF',
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
   },
   installButtonText: {
-    color: '#FFFFFF',
+    color: colors.primary,
     fontSize: 16,
     fontWeight: '600',
   },

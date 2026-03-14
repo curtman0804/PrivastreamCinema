@@ -245,16 +245,10 @@ export default function DiscoverScreen() {
       {/* Welcome Screen - No Addons and No Continue Watching */}
       {!hasContent && continueWatching.length === 0 && !isLoadingDiscover ? (
         <View style={styles.welcomeContainer}>
-          <Image
-            source={require('../../assets/images/logo_splash.png')}
-            style={[styles.welcomeLogo, isTV && styles.welcomeLogoTV]}
-            contentFit="contain"
-          />
-          <Text style={[styles.welcomeText, isTV && styles.welcomeTextTV]}>
-            Welcome to Privastream Cinema
-          </Text>
+          <Ionicons name="extension-puzzle-outline" size={64} color={colors.textMuted} />
+          <Text style={[styles.welcomeTitle, isTV && styles.welcomeTitleTV]}>No Addons Installed</Text>
           <Text style={[styles.welcomeSubtext, isTV && styles.welcomeSubtextTV]}>
-            Install addons to start streaming
+            Add Stremio addons to start streaming
           </Text>
           <GoToAddonsButton router={router} isTV={isTV} />
         </View>
@@ -397,7 +391,7 @@ export default function DiscoverScreen() {
   );
 }
 
-// Go To Addons Button (Stremio style)
+// Go To Addons Button (matches Addons page style)
 function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
   const [isFocused, setIsFocused] = useState(false);
   
@@ -408,8 +402,8 @@ function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
       onBlur={() => setIsFocused(false)}
       style={[styles.addonsButton, isFocused && styles.addonsButtonFocused]}
     >
-      <Ionicons name="extension-puzzle" size={20} color={colors.textPrimary} />
-      <Text style={styles.addonsButtonText}>Install Addons</Text>
+      <Ionicons name="extension-puzzle" size={20} color={colors.primary} />
+      <Text style={styles.addonsButtonText}>Install Addon</Text>
     </Pressable>
   );
 }
@@ -592,30 +586,39 @@ const styles = StyleSheet.create({
   welcomeTextTV: {
     fontSize: 28,
   },
+  welcomeTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 16,
+  },
+  welcomeTitleTV: {
+    fontSize: 24,
+  },
   welcomeSubtext: {
-    color: colors.primaryDark,
-    fontSize: 16,
-    marginBottom: 32,
+    color: '#888888',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
   },
   welcomeSubtextTV: {
-    fontSize: 18,
+    fontSize: 16,
   },
   addonsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surface,
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 8,
-    gap: 10,
+    gap: 8,
+    borderWidth: 3,
+    borderColor: 'transparent',
+    marginTop: 24,
   },
   addonsButtonFocused: {
-    transform: [{ scale: 1.05 }],
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 16,
-    elevation: 8,
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
   },
   addonsButtonText: {
     color: colors.primary,
