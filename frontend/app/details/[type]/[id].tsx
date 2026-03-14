@@ -580,50 +580,48 @@ export default function DetailsScreen() {
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </FocusableButton>
 
-        {/* Main Content - Scrollable */}
+        {/* Fixed Title Area - never moves */}
+        <View style={styles.fixedTitleArea}>
+          <View style={styles.titleSection}>
+            {content?.logo ? (
+              <Image
+                source={{ uri: content.logo }}
+                style={styles.logoImage}
+                contentFit="contain"
+              />
+            ) : (
+              <Text style={styles.title}>{displayName}</Text>
+            )}
+            
+            {isEpisodePage && currentEpisode && (
+              <Text style={styles.episodeSubtitle}>
+                S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.metaRow}>
+            {rating && rating > 0 && (
+              <View style={styles.imdbBadge}>
+                <Text style={styles.imdbLabel}>IMDb</Text>
+                <Text style={styles.imdbRating}>{rating.toFixed(1)}</Text>
+              </View>
+            )}
+            {content?.year && (
+              <Text style={styles.metaText}>{content.year}</Text>
+            )}
+            {content?.runtime && (
+              <Text style={styles.metaText}>{content.runtime}</Text>
+            )}
+          </View>
+        </View>
+
+        {/* Scrollable Content - everything below the title */}
         <ScrollView 
           style={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContentContainer}
-          stickyHeaderIndices={[0]}
         >
-          {/* Sticky: Title + Year + Runtime - sticks when it reaches top */}
-          <View style={styles.stickyHeader}>
-            <View style={styles.titleSection}>
-              {content?.logo ? (
-                <Image
-                  source={{ uri: content.logo }}
-                  style={styles.logoImage}
-                  contentFit="contain"
-                />
-              ) : (
-                <Text style={styles.title}>{displayName}</Text>
-              )}
-              
-              {isEpisodePage && currentEpisode && (
-                <Text style={styles.episodeSubtitle}>
-                  S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
-                </Text>
-              )}
-            </View>
-
-            <View style={styles.metaRow}>
-              {rating && rating > 0 && (
-                <View style={styles.imdbBadge}>
-                  <Text style={styles.imdbLabel}>IMDb</Text>
-                  <Text style={styles.imdbRating}>{rating.toFixed(1)}</Text>
-                </View>
-              )}
-              {content?.year && (
-                <Text style={styles.metaText}>{content.year}</Text>
-              )}
-              {content?.runtime && (
-                <Text style={styles.metaText}>{content.runtime}</Text>
-              )}
-            </View>
-          </View>
-
-          {/* Everything below scrolls freely */}
           <View style={styles.actionRow}>
             <FocusableButton 
               style={styles.libraryButton}
@@ -827,13 +825,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
-  stickyHeader: {
-    paddingTop: 16,
+  fixedTitleArea: {
+    paddingTop: 60,
+    paddingHorizontal: 20,
     paddingBottom: 8,
   },
   titleSection: {
     marginBottom: 8,
-    marginTop: height * 0.25,
     alignItems: 'flex-start',
   },
   logoImage: {
