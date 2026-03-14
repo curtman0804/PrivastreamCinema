@@ -248,7 +248,6 @@ export default function DetailsScreen() {
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
-  const [showPinnedTitle, setShowPinnedTitle] = useState(false);
 
   const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
@@ -581,66 +580,50 @@ export default function DetailsScreen() {
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </FocusableButton>
 
-        {/* Pinned title+meta - shows when original scrolls past top */}
-        {showPinnedTitle && (
-          <View style={styles.pinnedHeader}>
-            <Text style={styles.pinnedTitleText} numberOfLines={1}>{displayName}</Text>
-            <View style={styles.pinnedMetaRow}>
-              {content?.year && <Text style={styles.pinnedMetaText}>{content.year}</Text>}
-              {content?.runtime && <Text style={styles.pinnedMetaText}>{content.runtime}</Text>}
-            </View>
-          </View>
-        )}
-
-        {/* Main Content - Scrollable, fills entire screen */}
+        {/* Main Content - Scrollable */}
         <ScrollView 
           style={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContentContainer}
-          onScroll={(e) => {
-            const y = e.nativeEvent.contentOffset.y;
-            const threshold = height * 0.25 + 60;
-            setShowPinnedTitle(y > threshold);
-          }}
-          scrollEventThrottle={16}
+          stickyHeaderIndices={[0]}
         >
-          {/* Title Section */}
-          <View style={styles.titleSection}>
-            {content?.logo ? (
-              <Image
-                source={{ uri: content.logo }}
-                style={styles.logoImage}
-                contentFit="contain"
-              />
-            ) : (
-              <Text style={styles.title}>{displayName}</Text>
-            )}
-            
-            {/* Episode info if applicable */}
-            {isEpisodePage && currentEpisode && (
-              <Text style={styles.episodeSubtitle}>
-                S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
-              </Text>
-            )}
+          {/* Sticky: Title + Year + Runtime - sticks when it reaches top */}
+          <View style={styles.stickyHeader}>
+            <View style={styles.titleSection}>
+              {content?.logo ? (
+                <Image
+                  source={{ uri: content.logo }}
+                  style={styles.logoImage}
+                  contentFit="contain"
+                />
+              ) : (
+                <Text style={styles.title}>{displayName}</Text>
+              )}
+              
+              {isEpisodePage && currentEpisode && (
+                <Text style={styles.episodeSubtitle}>
+                  S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.metaRow}>
+              {rating && rating > 0 && (
+                <View style={styles.imdbBadge}>
+                  <Text style={styles.imdbLabel}>IMDb</Text>
+                  <Text style={styles.imdbRating}>{rating.toFixed(1)}</Text>
+                </View>
+              )}
+              {content?.year && (
+                <Text style={styles.metaText}>{content.year}</Text>
+              )}
+              {content?.runtime && (
+                <Text style={styles.metaText}>{content.runtime}</Text>
+              )}
+            </View>
           </View>
 
-          {/* Meta Row */}
-          <View style={styles.metaRow}>
-            {rating && rating > 0 && (
-              <View style={styles.imdbBadge}>
-                <Text style={styles.imdbLabel}>IMDb</Text>
-                <Text style={styles.imdbRating}>{rating.toFixed(1)}</Text>
-              </View>
-            )}
-            {content?.year && (
-              <Text style={styles.metaText}>{content.year}</Text>
-            )}
-            {content?.runtime && (
-              <Text style={styles.metaText}>{content.runtime}</Text>
-            )}
-          </View>
-
-          {/* Action Buttons Row */}
+          {/* Everything below scrolls freely */}
           <View style={styles.actionRow}>
             <FocusableButton 
               style={styles.libraryButton}
@@ -842,34 +825,11 @@ const styles = StyleSheet.create({
   },
   scrollContentContainer: {
     paddingHorizontal: 20,
+    paddingBottom: 40,
   },
-  pinnedHeader: {
-    position: 'absolute',
-    top: 8,
-    left: 70,
-    right: 20,
-    zIndex: 20,
-  },
-  pinnedTitleText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#B8A05C',
-    textShadowColor: 'rgba(0,0,0,0.9)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
-    textAlign: 'left',
-  },
-  pinnedMetaRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 2,
-  },
-  pinnedMetaText: {
-    fontSize: 13,
-    color: '#CCCCCC',
-    textShadowColor: 'rgba(0,0,0,0.9)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+  stickyHeader: {
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   titleSection: {
     marginBottom: 8,
