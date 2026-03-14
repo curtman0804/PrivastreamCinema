@@ -209,7 +209,7 @@ export default function AddonsScreen() {
 
       {/* Disclaimer */}
       <View style={styles.disclaimer}>
-        <Ionicons name="alert-circle" size={18} color={colors.primary} style={{ marginRight: 8, marginTop: 1 }} />
+        <Ionicons name="alert-circle" size={22} color={colors.primary} style={{ marginRight: 8, marginTop: 2 }} />
         <Text style={styles.disclaimerText}>
           This app enables third-party addons. All content is provided externally; the app developer assumes no responsibility for its legality, accuracy, or availability.
         </Text>
@@ -375,7 +375,7 @@ function AddonCard({
           {isDeleting ? (
             <ActivityIndicator size="small" color={colors.error} />
           ) : (
-            <Ionicons name="trash-outline" size={22} color={trashFocused ? colors.primary : '#FF4444'} />
+            <Ionicons name="trash-outline" size={22} color="#FF4444" />
           )}
         </Pressable>
       </View>
@@ -434,10 +434,10 @@ const styles = StyleSheet.create({
   },
   disclaimerText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 17,
     color: colors.primary,
-    lineHeight: 18,
-    fontWeight: '700',
+    lineHeight: 24,
+    fontWeight: '800',
   },
   loadingContainer: {
     flex: 1,
@@ -611,21 +611,22 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: colors.primary,
+    borderColor: 'transparent',
   },
   modalButtonDisabled: {
     opacity: 0.6,
   },
   modalButtonFocused: {
-    borderColor: '#FFFFFF',
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
   },
   modalButtonText: {
-    color: '#FFFFFF',
+    color: colors.primary,
     fontSize: 16,
     fontWeight: '700',
   },
