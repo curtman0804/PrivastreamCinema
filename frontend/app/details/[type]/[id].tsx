@@ -14,6 +14,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import Constants from 'expo-constants';
 import { useContentStore, getMetaCache, setMetaCache } from '../../../src/store/contentStore';
 
 // Fallback image for missing posters
@@ -360,7 +361,7 @@ export default function DetailsScreen() {
     
     const buildFallbackUrls = async (): Promise<string[]> => {
       const authToken = await AsyncStorage.getItem('auth_token');
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
       
       return streams
         .filter(s => s !== stream)
@@ -409,7 +410,7 @@ export default function DetailsScreen() {
       const authToken = await AsyncStorage.getItem('auth_token');
       const separator = stream.url.includes('?') ? '&' : '?';
       const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
       
       // Build fallback URLs - include other proxy streams + direct URLs
@@ -466,7 +467,7 @@ export default function DetailsScreen() {
       
       // For live TV streams, also include proxy URLs as additional fallbacks
       if (type === 'tv') {
-        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
+        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
         const authToken = await AsyncStorage.getItem('auth_token');
         
         // Add proxy URLs for all streams as fallbacks

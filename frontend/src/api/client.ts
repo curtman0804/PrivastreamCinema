@@ -9,9 +9,10 @@ const getBaseUrl = () => {
   if (Platform.OS === 'web') {
     return '';
   }
-  // Production backend URL - hardcoded for standalone APK builds
-  // This ensures the app always connects to the correct backend
-  return 'https://fire-stick-remote.preview.emergentagent.com';
+  // Use environment variable for backend URL (works across preview and production)
+  const envUrl = process.env.EXPO_PUBLIC_BACKEND_URL 
+    || Constants.expoConfig?.extra?.backendUrl;
+  return envUrl || '';
 };
 
 const BASE_URL = getBaseUrl();
@@ -689,7 +690,7 @@ export const api = {
     getVideoUrl: (infoHash: string, fileIdx?: number): string => {
       // Return the full URL for the video stream with optional fileIdx
       // Use the hardcoded backend URL for mobile builds
-      const baseUrl = Platform.OS === 'web' ? '' : 'https://fire-stick-remote.preview.emergentagent.com';
+      const baseUrl = Platform.OS === 'web' ? '' : (process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '');
       const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
       return `${baseUrl}/api/stream/video/${infoHash}${params}`;
     },
