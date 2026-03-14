@@ -248,6 +248,7 @@ export default function DetailsScreen() {
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
+  const [showPinnedTitle, setShowPinnedTitle] = useState(false);
 
   const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
@@ -580,33 +581,43 @@ export default function DetailsScreen() {
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </FocusableButton>
 
+        {/* Pinned title - shows when original title scrolls past top */}
+        {showPinnedTitle && (
+          <View style={styles.pinnedTitle}>
+            <Text style={styles.pinnedTitleText} numberOfLines={1}>{displayName}</Text>
+          </View>
+        )}
+
         {/* Main Content - Scrollable */}
         <ScrollView 
           style={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContentContainer}
-          stickyHeaderIndices={[0]}
+          onScroll={(e) => {
+            const y = e.nativeEvent.contentOffset.y;
+            const threshold = height * 0.25 + 60;
+            setShowPinnedTitle(y > threshold);
+          }}
+          scrollEventThrottle={16}
         >
-          {/* Title Section - Sticky */}
-          <View style={styles.stickyTitleWrapper}>
-            <View style={styles.titleSection}>
-              {content?.logo ? (
-                <Image
-                  source={{ uri: content.logo }}
-                  style={styles.logoImage}
-                  contentFit="contain"
-                />
-              ) : (
-                <Text style={styles.title}>{displayName}</Text>
-              )}
-              
-              {/* Episode info if applicable */}
-              {isEpisodePage && currentEpisode && (
-                <Text style={styles.episodeSubtitle}>
-                  S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
-                </Text>
-              )}
-            </View>
+          {/* Title Section */}
+          <View style={styles.titleSection}>
+            {content?.logo ? (
+              <Image
+                source={{ uri: content.logo }}
+                style={styles.logoImage}
+                contentFit="contain"
+              />
+            ) : (
+              <Text style={styles.title}>{displayName}</Text>
+            )}
+            
+            {/* Episode info if applicable */}
+            {isEpisodePage && currentEpisode && (
+              <Text style={styles.episodeSubtitle}>
+                S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
+              </Text>
+            )}
           </View>
 
           {/* Meta Row */}
@@ -829,20 +840,33 @@ const styles = StyleSheet.create({
   scrollContentContainer: {
     paddingHorizontal: 20,
   },
-  stickyTitleWrapper: {
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+  pinnedTitle: {
+    position: 'absolute',
+    top: 0,
+    left: 20,
+    right: 20,
+    zIndex: 20,
+    paddingTop: 12,
     paddingBottom: 8,
-    zIndex: 10,
+  },
+  pinnedTitleText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#B8A05C',
+    textShadowColor: 'rgba(0,0,0,0.9)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+    textAlign: 'left',
   },
   titleSection: {
     marginBottom: 8,
     marginTop: height * 0.25,
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   logoImage: {
     width: width * 0.6,
     height: 80,
-    alignSelf: 'center',
+    alignSelf: 'flex-start',
   },
   title: {
     fontSize: 32,
@@ -851,7 +875,7 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   episodeSubtitle: {
     fontSize: 16,
