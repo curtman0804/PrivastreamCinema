@@ -620,14 +620,19 @@ export default function DetailsScreen() {
             {content?.runtime && (
               <Text style={styles.metaText}>{content.runtime}</Text>
             )}
-            {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
+          </View>
+
+          {/* Genre */}
+          {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
+            <View style={styles.chipSection}>
+              <Text style={styles.chipLabel}>Genre</Text>
               <View style={styles.chipRow}>
-                {content.genre.slice(0, 3).map((g: string, i: number) => (
+                {content.genre.slice(0, 4).map((g: string, i: number) => (
                   <ChipButton key={`genre-${i}`} label={g} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
                 ))}
               </View>
-            )}
-          </View>
+            </View>
+          )}
 
           {/* Action Buttons Row */}
           <View style={styles.actionRow}>
@@ -921,7 +926,7 @@ const styles = StyleSheet.create({
   },
   chipSection: {
     marginBottom: 16,
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   chipLabel: {
     fontSize: 13,
@@ -932,7 +937,7 @@ const styles = StyleSheet.create({
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: 8,
     marginBottom: 4,
   },
