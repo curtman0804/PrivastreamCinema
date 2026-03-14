@@ -185,10 +185,17 @@ export default function AdminUsersScreen() {
     return user.id !== currentUser?.id && user.username !== 'choyt';
   };
 
+  const canEditUser = (user: User) => {
+    // Only choyt can edit choyt's account; everyone can edit other users
+    if (user.username === 'choyt' && currentUser?.username !== 'choyt') return false;
+    return true;
+  };
+
   const renderUser = ({ item }: { item: User }) => (
     <UserCard
       user={item}
       canDelete={canDeleteUser(item)}
+      canEdit={canEditUser(item)}
       onEdit={() => handleEditUser(item)}
       onDelete={() => handleDeleteUser(item)}
     />
@@ -279,11 +286,13 @@ export default function AdminUsersScreen() {
 function UserCard({
   user,
   canDelete,
+  canEdit,
   onEdit,
   onDelete,
 }: {
   user: User;
   canDelete: boolean;
+  canEdit: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -313,15 +322,17 @@ function UserCard({
         </View>
       </View>
       <View style={styles.cardActions}>
-        {/* Edit button */}
-        <Pressable
-          style={[styles.actionButton, editFocused && styles.actionButtonFocused]}
-          onFocus={() => setEditFocused(true)}
-          onBlur={() => setEditFocused(false)}
-          onPress={onEdit}
-        >
-          <Ionicons name="create-outline" size={22} color={colors.primary} />
-        </Pressable>
+        {/* Edit button - only show if allowed */}
+        {canEdit && (
+          <Pressable
+            style={[styles.actionButton, editFocused && styles.actionButtonFocused]}
+            onFocus={() => setEditFocused(true)}
+            onBlur={() => setEditFocused(false)}
+            onPress={onEdit}
+          >
+            <Ionicons name="create-outline" size={22} color={colors.primary} />
+          </Pressable>
+        )}
         {/* Delete button - only show if allowed */}
         {canDelete && (
           <Pressable

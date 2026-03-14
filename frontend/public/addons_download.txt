@@ -223,9 +223,9 @@ export default function AddonsScreen() {
         </View>
       ) : addons.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="extension-puzzle-outline" size={64} color={colors.textMuted} />
+          <Ionicons name="extension-puzzle-outline" size={64} color={colors.primary} />
           <Text style={styles.emptyTitle}>No Addons Installed</Text>
-          <Text style={styles.emptySubtitle}>Add Stremio addons to start streaming</Text>
+          <Text style={styles.emptySubtitle}>Install addons to start streaming</Text>
           <FocusButton
             onPress={() => setShowModal(true)}
             style={styles.installButton}
@@ -458,12 +458,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: colors.primary,
     marginTop: 16,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#888888',
+    color: colors.primary,
     textAlign: 'center',
     marginTop: 8,
   },

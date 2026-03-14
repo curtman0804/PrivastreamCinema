@@ -244,13 +244,26 @@ export default function DiscoverScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Welcome Screen - No Addons and No Continue Watching */}
       {!hasContent && continueWatching.length === 0 && !isLoadingDiscover ? (
-        <View style={styles.welcomeContainer}>
-          <Ionicons name="extension-puzzle-outline" size={64} color={colors.textMuted} />
-          <Text style={[styles.welcomeTitle, isTV && styles.welcomeTitleTV]}>No Addons Installed</Text>
-          <Text style={[styles.welcomeSubtext, isTV && styles.welcomeSubtextTV]}>
-            Add Stremio addons to start streaming
-          </Text>
-          <GoToAddonsButton router={router} isTV={isTV} />
+        <View style={{ flex: 1 }}>
+          {/* Logo Header - always visible */}
+          <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
+            <Image
+              source={require('../../assets/images/logo_header.png')}
+              style={[styles.logoImage, isTV && styles.logoImageTV]}
+              contentFit="contain"
+            />
+            <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+              Privastream Cinema
+            </Text>
+          </View>
+          <View style={styles.welcomeContainer}>
+            <Ionicons name="extension-puzzle-outline" size={64} color={colors.primary} />
+            <Text style={[styles.welcomeTitle, isTV && styles.welcomeTitleTV]}>No Addons Installed</Text>
+            <Text style={[styles.welcomeSubtext, isTV && styles.welcomeSubtextTV]}>
+              Install addons to start streaming
+            </Text>
+            <GoToAddonsButton router={router} isTV={isTV} />
+          </View>
         </View>
       ) : (
         /* Content area with fixed header */
@@ -589,14 +602,14 @@ const styles = StyleSheet.create({
   welcomeTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: colors.primary,
     marginTop: 16,
   },
   welcomeTitleTV: {
     fontSize: 24,
   },
   welcomeSubtext: {
-    color: '#888888',
+    color: colors.primary,
     fontSize: 14,
     textAlign: 'center',
     marginTop: 8,

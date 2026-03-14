@@ -729,6 +729,10 @@ async def update_user(user_id: str, user_data: UserUpdate, admin: User = Depends
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Protect the master admin account 'choyt' from being modified by other admins
+    if existing.get("username") == "choyt" and admin.username != "choyt":
+        raise HTTPException(status_code=400, detail="Cannot modify the master admin account")
+    
     update_fields = {}
     if user_data.email is not None:
         update_fields["email"] = user_data.email
