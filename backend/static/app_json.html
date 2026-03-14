@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>app.json</title>
+<style>
+body { background:#1a1a2e; color:#e0e0e0; font-family:monospace; padding:20px; }
+h1 { color:#e6c47a; }
+.path { color:#aaa; font-size:14px; margin:8px 0 16px; }
+.btn { background:#e6c47a; color:#000; border:none; padding:12px 24px; cursor:pointer;
+  font-weight:bold; border-radius:6px; font-size:16px; margin-bottom:16px; }
+pre { background:#0d1117; border:1px solid #333; padding:16px; overflow:auto;
+  font-size:12px; line-height:1.4; white-space:pre; }
+</style>
+<script>
+function copyAll() {
+  var el = document.getElementById('code');
+  navigator.clipboard.writeText(el.textContent).then(function() {
+    document.getElementById('btn').textContent = 'COPIED!';
+    setTimeout(function() { document.getElementById('btn').textContent = 'Copy All Code'; }, 2000);
+  });
+}
+</script></head><body>
+<h1>app.json</h1>
+<div class="path">Paste into: <strong>frontend/app.json</strong></div>
+<button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
+<pre id="code">{
+  &quot;expo&quot;: {
+    &quot;name&quot;: &quot;Privastream Cinema&quot;,
+    &quot;slug&quot;: &quot;privastreamcinema&quot;,
+    &quot;version&quot;: &quot;1.0.0&quot;,
+    &quot;orientation&quot;: &quot;default&quot;,
+    &quot;icon&quot;: &quot;./assets/images/icon.png&quot;,
+    &quot;scheme&quot;: &quot;privastreamcinema&quot;,
+    &quot;userInterfaceStyle&quot;: &quot;automatic&quot;,
+    &quot;newArchEnabled&quot;: true,
+    &quot;ios&quot;: {
+      &quot;supportsTablet&quot;: true,
+      &quot;bundleIdentifier&quot;: &quot;com.privastream.cinema&quot;
+    },
+    &quot;android&quot;: {
+      &quot;adaptiveIcon&quot;: {
+        &quot;foregroundImage&quot;: &quot;./assets/images/adaptive-icon-foreground.png&quot;,
+        &quot;monochromeImage&quot;: &quot;./assets/images/adaptive-icon-monochrome.png&quot;,
+        &quot;backgroundColor&quot;: &quot;#000000&quot;
+      },
+      &quot;splash&quot;: {
+        &quot;image&quot;: &quot;./assets/images/logo.png&quot;,
+        &quot;resizeMode&quot;: &quot;contain&quot;,
+        &quot;backgroundColor&quot;: &quot;#000000&quot;
+      },
+      &quot;edgeToEdgeEnabled&quot;: false,
+      &quot;package&quot;: &quot;com.privastream.cinema&quot;,
+      &quot;allowBackup&quot;: false
+    },
+    &quot;web&quot;: {
+      &quot;bundler&quot;: &quot;metro&quot;,
+      &quot;output&quot;: &quot;static&quot;,
+      &quot;favicon&quot;: &quot;./assets/images/favicon.png&quot;
+    },
+    &quot;plugins&quot;: [
+      &quot;expo-router&quot;,
+      [
+        &quot;expo-splash-screen&quot;,
+        {
+          &quot;image&quot;: &quot;./assets/images/logo.png&quot;,
+          &quot;imageWidth&quot;: 300,
+          &quot;resizeMode&quot;: &quot;contain&quot;,
+          &quot;backgroundColor&quot;: &quot;#000000&quot;,
+          &quot;enableFullScreenImage_legacy&quot;: true
+        }
+      ],
+      [
+        &quot;react-native-google-cast&quot;,
+        {
+          &quot;receiverAppId&quot;: &quot;CC1AD845&quot;
+        }
+      ],
+      &quot;expo-font&quot;,
+      &quot;./plugins/withTVKeyEvents&quot;,
+      &quot;./plugins/withTVLauncher&quot;,
+      &quot;expo-video&quot;
+    ],
+    &quot;experiments&quot;: {
+      &quot;typedRoutes&quot;: true
+    },
+    &quot;extra&quot;: {
+      &quot;router&quot;: {},
+      &quot;eas&quot;: {
+        &quot;projectId&quot;: &quot;734879b5-3cae-4195-b064-cc0c7617b7ae&quot;
+      },
+      &quot;backendUrl&quot;: &quot;https://fire-stick-remote.preview.emergentagent.com&quot;
+    },
+    &quot;owner&quot;: &quot;choyt&quot;
+  }
+}
+</pre>
+</body></html>

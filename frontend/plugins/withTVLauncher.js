@@ -1,11 +1,15 @@
-const { withAndroidManifest } = require("expo/config-plugins");
+const { withAndroidManifest, withDangerousMod } = require("expo/config-plugins");
+const fs = require("fs");
+const path = require("path");
 
 /**
  * Makes the app appear in the TV app row on Google TV, Fire TV, etc.
- * Also explicitly sets the app label to ensure correct display name.
+ * Sets the app label, banner image, and LEANBACK_LAUNCHER category.
+ * Also copies the tv_banner.png into the Android drawable directory.
  */
 const withTVLauncher = (config) => {
-  return withAndroidManifest(config, (config) => {
+  // Step 1: Modify the manifest
+  config = withAndroidManifest(config, (config) => {
     const manifest = config.modResults.manifest;
 
     if (!manifest["uses-feature"]) {
@@ -25,18 +29,19 @@ const withTVLauncher = (config) => {
       });
     }
 
-    // Explicitly set application label to ensure correct name on TV launchers
+    // Explicitly set application label and banner for TV launchers
     const application = manifest.application?.[0];
     if (application) {
       application.$["android:label"] = "Privastream Cinema";
+      application.$["android:banner"] = "@drawable/tv_banner";
     }
 
-    // Add LEANBACK_LAUNCHER to main activity and set its label too
+    // Add LEANBACK_LAUNCHER to main activity and set its label + banner
     const activities = application?.activity || [];
     for (const activity of activities) {
-      // Set activity label explicitly
       if (activity.$?.["android:name"] === ".MainActivity") {
         activity.$["android:label"] = "Privastream Cinema";
+        activity.$["android:banner"] = "@drawable/tv_banner";
       }
       
       const intentFilters = activity["intent-filter"] || [];
@@ -59,6 +64,42 @@ const withTVLauncher = (config) => {
     config.modResults.manifest = manifest;
     return config;
   });
+
+  // Step 2: Copy tv_banner.png into drawable directory
+  config = withDangerousMod(config, [
+    "android",
+    async (config) => {
+      const projectRoot = config.modRequest.projectRoot;
+      const bannerSrc = path.join(projectRoot, "assets", "images", "tv_banner.png");
+      const drawableDir = path.join(
+        projectRoot,
+        "android",
+        "app",
+        "src",
+        "main",
+        "res",
+        "drawable"
+      );
+
+      // Ensure drawable directory exists
+      if (!fs.existsSync(drawableDir)) {
+        fs.mkdirSync(drawableDir, { recursive: true });
+      }
+
+      // Copy banner if source exists
+      if (fs.existsSync(bannerSrc)) {
+        const dest = path.join(drawableDir, "tv_banner.png");
+        fs.copyFileSync(bannerSrc, dest);
+        console.log(`  ✔ Copied tv_banner.png to drawable`);
+      } else {
+        console.warn(`  ⚠ tv_banner.png not found at ${bannerSrc}`);
+      }
+
+      return config;
+    },
+  ]);
+
+  return config;
 };
 
 module.exports = withTVLauncher;
