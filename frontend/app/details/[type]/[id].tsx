@@ -945,7 +945,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   chipButtonFocused: {
-    borderColor: colors.primary,
+    borderColor: '#B8A05C',
     backgroundColor: 'rgba(184, 160, 92, 0.3)',
     transform: [{ scale: 1.1 }],
   },
