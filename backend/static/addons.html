@@ -232,7 +232,7 @@ export default function AddonsScreen() {
 
       {/* Disclaimer */}
       &lt;View style={styles.disclaimer}&gt;
-        &lt;Ionicons name=&quot;alert-circle&quot; size={18} color=&quot;#888888&quot; style={{ marginRight: 8, marginTop: 1 }} /&gt;
+        &lt;Ionicons name=&quot;alert-circle&quot; size={18} color={colors.primary} style={{ marginRight: 8, marginTop: 1 }} /&gt;
         &lt;Text style={styles.disclaimerText}&gt;
           This app enables third-party addons. All content is provided externally; the app developer assumes no responsibility for its legality, accuracy, or availability.
         &lt;/Text&gt;
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: &#x27;700&#x27;,
-    color: &#x27;#FFFFFF&#x27;,
+    color: colors.primary,
   },
   headerTitleTV: {
     fontSize: 32,
@@ -457,9 +457,10 @@ const styles = StyleSheet.create({
   },
   disclaimerText: {
     flex: 1,
-    fontSize: 11,
-    color: &#x27;#888888&#x27;,
-    lineHeight: 16,
+    fontSize: 13,
+    color: colors.primary,
+    lineHeight: 18,
+    fontWeight: &#x27;700&#x27;,
   },
   loadingContainer: {
     flex: 1,

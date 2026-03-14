@@ -209,7 +209,7 @@ export default function AddonsScreen() {
 
       {/* Disclaimer */}
       <View style={styles.disclaimer}>
-        <Ionicons name="alert-circle" size={18} color="#888888" style={{ marginRight: 8, marginTop: 1 }} />
+        <Ionicons name="alert-circle" size={18} color={colors.primary} style={{ marginRight: 8, marginTop: 1 }} />
         <Text style={styles.disclaimerText}>
           This app enables third-party addons. All content is provided externally; the app developer assumes no responsibility for its legality, accuracy, or availability.
         </Text>
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.primary,
   },
   headerTitleTV: {
     fontSize: 32,
@@ -434,9 +434,10 @@ const styles = StyleSheet.create({
   },
   disclaimerText: {
     flex: 1,
-    fontSize: 11,
-    color: '#888888',
-    lineHeight: 16,
+    fontSize: 13,
+    color: colors.primary,
+    lineHeight: 18,
+    fontWeight: '700',
   },
   loadingContainer: {
     flex: 1,
