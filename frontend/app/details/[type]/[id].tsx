@@ -585,25 +585,28 @@ export default function DetailsScreen() {
           style={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContentContainer}
+          stickyHeaderIndices={[0]}
         >
-          {/* Title Section */}
-          <View style={styles.titleSection}>
-            {content?.logo ? (
-              <Image
-                source={{ uri: content.logo }}
-                style={styles.logoImage}
-                contentFit="contain"
-              />
-            ) : (
-              <Text style={styles.title}>{displayName}</Text>
-            )}
-            
-            {/* Episode info if applicable */}
-            {isEpisodePage && currentEpisode && (
-              <Text style={styles.episodeSubtitle}>
-                S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
-              </Text>
-            )}
+          {/* Title Section - Sticky */}
+          <View style={styles.stickyTitleWrapper}>
+            <View style={styles.titleSection}>
+              {content?.logo ? (
+                <Image
+                  source={{ uri: content.logo }}
+                  style={styles.logoImage}
+                  contentFit="contain"
+                />
+              ) : (
+                <Text style={styles.title}>{displayName}</Text>
+              )}
+              
+              {/* Episode info if applicable */}
+              {isEpisodePage && currentEpisode && (
+                <Text style={styles.episodeSubtitle}>
+                  S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
+                </Text>
+              )}
+            </View>
           </View>
 
           {/* Meta Row */}
@@ -621,18 +624,6 @@ export default function DetailsScreen() {
               <Text style={styles.metaText}>{content.runtime}</Text>
             )}
           </View>
-
-          {/* Genre */}
-          {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
-            <View style={styles.chipSection}>
-              <Text style={styles.chipLabel}>Genre</Text>
-              <View style={styles.chipRow}>
-                {content.genre.slice(0, 4).map((g: string, i: number) => (
-                  <ChipButton key={`genre-${i}`} label={g} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
-                ))}
-              </View>
-            </View>
-          )}
 
           {/* Action Buttons Row */}
           <View style={styles.actionRow}>
@@ -664,6 +655,18 @@ export default function DetailsScreen() {
             <Text style={styles.description} numberOfLines={3}>
               {currentEpisode.overview}
             </Text>
+          )}
+
+          {/* Genre */}
+          {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
+            <View style={styles.chipSection}>
+              <Text style={styles.chipLabel}>Genre</Text>
+              <View style={styles.chipRow}>
+                {content.genre.slice(0, 4).map((g: string, i: number) => (
+                  <ChipButton key={`genre-${i}`} label={g} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
+                ))}
+              </View>
+            </View>
           )}
 
           {/* Director */}
@@ -826,8 +829,13 @@ const styles = StyleSheet.create({
   scrollContentContainer: {
     paddingHorizontal: 20,
   },
+  stickyTitleWrapper: {
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    paddingBottom: 8,
+    zIndex: 10,
+  },
   titleSection: {
-    marginBottom: 16,
+    marginBottom: 8,
     marginTop: height * 0.25,
     alignItems: 'center',
   },
@@ -916,7 +924,7 @@ const styles = StyleSheet.create({
     color: '#D4BC78',
     lineHeight: 22,
     marginBottom: 16,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   castText: {
     fontSize: 13,
