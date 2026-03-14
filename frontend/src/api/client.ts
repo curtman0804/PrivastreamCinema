@@ -606,6 +606,10 @@ export const api = {
     uninstall: async (addonId: string): Promise<void> => {
       await apiClient.delete(`/api/addons/${addonId}`);
     },
+    resolveCode: async (code: string): Promise<{ url: string; code: string }> => {
+      const response = await apiClient.get(`/api/addons/resolve-code/${code}`);
+      return response.data;
+    },
   },
   library: {
     get: async (): Promise<LibraryResponse> => {

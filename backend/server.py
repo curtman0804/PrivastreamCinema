@@ -772,6 +772,33 @@ async def get_addons(current_user: User = Depends(get_current_user)):
         addon.pop('_id', None)
     return addons
 
+
+@api_router.get("/addons/resolve-code/{code}")
+async def resolve_shortener_code(code: str, current_user: User = Depends(get_current_user)):
+    """Resolve an AFTVnews short code to the actual URL"""
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0, headers=headers) as client:
+            resp = await client.get(f"https://go.aftvnews.com/{code}")
+            if resp.status_code == 200:
+                import re
+                html = resp.text
+                match = re.search(r'Redirecting.*?to:.*?<a href="([^"]+)"', html, re.DOTALL)
+                if match:
+                    resolved_url = match.group(1)
+                    return {"url": resolved_url, "code": code}
+            
+            raise HTTPException(status_code=400, detail="Could not resolve code. Make sure the code is valid.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Failed to resolve code {code}: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to resolve code: {str(e)}")
+
+
 @api_router.post("/addons/install")
 async def install_addon(addon_data: AddonInstall, current_user: User = Depends(get_current_user)):
     """Install an addon from manifest URL"""

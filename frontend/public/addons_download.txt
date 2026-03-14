@@ -57,10 +57,16 @@ export default function AddonsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [addonUrl, setAddonUrl] = useState('');
+  const [shortCode, setShortCode] = useState('');
   const [isInstalling, setIsInstalling] = useState(false);
+  const [isResolvingCode, setIsResolvingCode] = useState(false);
+  const [inputMode, setInputMode] = useState<'url' | 'code'>('code');
   const [deletingAddonId, setDeletingAddonId] = useState<string | null>(null);
   const [addBtnFocused, setAddBtnFocused] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
+  const [codeFocused, setCodeFocused] = useState(false);
+  const [urlTabFocused, setUrlTabFocused] = useState(false);
+  const [codeTabFocused, setCodeTabFocused] = useState(false);
   
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
@@ -75,6 +81,41 @@ export default function AddonsScreen() {
     setRefreshing(false);
   }, []);
 
+  const handleResolveAndInstall = async () => {
+    const code = shortCode.trim();
+    if (!code) {
+      Alert.alert('Error', 'Please enter a Downloader code');
+      return;
+    }
+
+    setIsResolvingCode(true);
+    try {
+      const response = await api.addons.resolveCode(code);
+      const resolvedUrl = response.url;
+      setIsResolvingCode(false);
+      
+      // Now install with the resolved URL
+      setIsInstalling(true);
+      try {
+        await api.addons.install(resolvedUrl);
+        setShowModal(false);
+        setShortCode('');
+        await fetchAddons(true);
+        fetchDiscover(true);
+        Alert.alert('Success', 'Addon installed!');
+      } catch (error: any) {
+        const msg = error?.response?.data?.detail || error.message || 'Failed to install addon';
+        Alert.alert('Install Failed', msg);
+      } finally {
+        setIsInstalling(false);
+      }
+    } catch (error: any) {
+      setIsResolvingCode(false);
+      const msg = error?.response?.data?.detail || error.message || 'Failed to resolve code';
+      Alert.alert('Invalid Code', msg);
+    }
+  };
+
   const handleInstallAddon = async () => {
     const urls = addonUrl.split(/[;\n]+/).map(u => u.trim()).filter(Boolean);
     if (urls.length === 0) {
@@ -88,7 +129,7 @@ export default function AddonsScreen() {
 
     for (const url of urls) {
       try {
-        await api.installAddon(url);
+        await api.addons.install(url);
         successCount++;
       } catch (error: any) {
         console.log(`Failed to install ${url}:`, error?.response?.data || error.message);
@@ -155,7 +196,7 @@ export default function AddonsScreen() {
           onPress: async () => {
             setDeletingAddonId(addon.id);
             try {
-              await api.deleteAddon(addon.id);
+              await api.addons.uninstall(addon.id);
               await fetchAddons(true);
               fetchDiscover(true);
             } catch (error: any) {
@@ -267,38 +308,109 @@ export default function AddonsScreen() {
                 <Ionicons name="close" size={24} color="#FFFFFF" />
               </FocusButton>
             </View>
-            
-            <Text style={styles.modalLabel}>Manifest URL</Text>
-            <TextInput
-              style={[styles.modalInput, inputFocused && styles.modalInputFocused]}
-              placeholder="https://example.com/manifest.json"
-              placeholderTextColor="#666666"
-              value={addonUrl}
-              onChangeText={setAddonUrl}
-              onFocus={() => setInputFocused(true)}
-              onBlur={() => setInputFocused(false)}
-              autoCapitalize="none"
-              autoCorrect={false}
-              multiline={true}
-              numberOfLines={3}
-            />
-            
-            <Text style={styles.modalHint}>
-              Paste addon manifest URLs (separate with semicolon or new line)
-            </Text>
-            
-            <FocusButton 
-              onPress={handleInstallAddon} 
-              disabled={isInstalling}
-              style={[styles.modalButton, isInstalling && styles.modalButtonDisabled]}
-              focusedStyle={styles.modalButtonFocused}
-            >
-              {isInstalling ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.modalButtonText}>Install</Text>
-              )}
-            </FocusButton>
+
+            {/* Tab switcher */}
+            <View style={styles.tabRow}>
+              <Pressable
+                style={[
+                  styles.tab,
+                  inputMode === 'code' && styles.tabActive,
+                  codeTabFocused && styles.tabFocused,
+                ]}
+                onFocus={() => setCodeTabFocused(true)}
+                onBlur={() => setCodeTabFocused(false)}
+                onPress={() => setInputMode('code')}
+              >
+                <Ionicons name="keypad-outline" size={18} color={inputMode === 'code' ? colors.primary : '#888888'} />
+                <Text style={[styles.tabText, inputMode === 'code' && styles.tabTextActive]}>Downloader Code</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.tab,
+                  inputMode === 'url' && styles.tabActive,
+                  urlTabFocused && styles.tabFocused,
+                ]}
+                onFocus={() => setUrlTabFocused(true)}
+                onBlur={() => setUrlTabFocused(false)}
+                onPress={() => setInputMode('url')}
+              >
+                <Ionicons name="link-outline" size={18} color={inputMode === 'url' ? colors.primary : '#888888'} />
+                <Text style={[styles.tabText, inputMode === 'url' && styles.tabTextActive]}>Manifest URL</Text>
+              </Pressable>
+            </View>
+
+            {inputMode === 'code' ? (
+              <>
+                <Text style={styles.modalLabel}>Downloader Code</Text>
+                <TextInput
+                  style={[styles.modalInput, codeFocused && styles.modalInputFocused]}
+                  placeholder="e.g. 970280"
+                  placeholderTextColor="#666666"
+                  value={shortCode}
+                  onChangeText={setShortCode}
+                  onFocus={() => setCodeFocused(true)}
+                  onBlur={() => setCodeFocused(false)}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="number-pad"
+                />
+                <Text style={styles.modalHint}>
+                  Enter the code from AFTVnews Downloader link shortener
+                </Text>
+                <FocusButton 
+                  onPress={handleResolveAndInstall} 
+                  disabled={isInstalling || isResolvingCode}
+                  style={[styles.modalButton, (isInstalling || isResolvingCode) && styles.modalButtonDisabled]}
+                  focusedStyle={styles.modalButtonFocused}
+                >
+                  {isResolvingCode ? (
+                    <View style={styles.buttonRow}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={styles.modalButtonText}>  Resolving code...</Text>
+                    </View>
+                  ) : isInstalling ? (
+                    <View style={styles.buttonRow}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={styles.modalButtonText}>  Installing...</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.modalButtonText}>Install</Text>
+                  )}
+                </FocusButton>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalLabel}>Manifest URL</Text>
+                <TextInput
+                  style={[styles.modalInput, inputFocused && styles.modalInputFocused]}
+                  placeholder="https://example.com/manifest.json"
+                  placeholderTextColor="#666666"
+                  value={addonUrl}
+                  onChangeText={setAddonUrl}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  multiline={true}
+                  numberOfLines={3}
+                />
+                <Text style={styles.modalHint}>
+                  Paste addon manifest URLs (separate with semicolon or new line)
+                </Text>
+                <FocusButton 
+                  onPress={handleInstallAddon} 
+                  disabled={isInstalling}
+                  style={[styles.modalButton, isInstalling && styles.modalButtonDisabled]}
+                  focusedStyle={styles.modalButtonFocused}
+                >
+                  {isInstalling ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Text style={styles.modalButtonText}>Install</Text>
+                  )}
+                </FocusButton>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -630,5 +742,42 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 16,
     fontWeight: '700',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    gap: 8,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#2A2A2E',
+    gap: 6,
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  tabActive: {
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
+    borderColor: colors.primary,
+  },
+  tabFocused: {
+    borderColor: colors.primary,
+  },
+  tabText: {
+    fontSize: 13,
+    color: '#888888',
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: colors.primary,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
