@@ -53,6 +53,22 @@ function FocusableButton({
   );
 }
 
+// Clickable chip for genre/cast/director - routes to search
+function ChipButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const [isFocused, setIsFocused] = useState(false);
+  return (
+    <Pressable
+      style={[styles.chipButton, isFocused && styles.chipButtonFocused]}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      onPress={onPress}
+    >
+      <Text style={[styles.chipText, isFocused && styles.chipTextFocused]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+
 // Stream Card Component - Stremio style horizontal card
 function StreamCard({ 
   stream, 
@@ -605,7 +621,11 @@ export default function DetailsScreen() {
               <Text style={styles.metaText}>{content.runtime}</Text>
             )}
             {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
-              <Text style={styles.metaText}>{content.genre.slice(0, 2).join(' • ')}</Text>
+              <View style={styles.chipRow}>
+                {content.genre.slice(0, 3).map((g: string, i: number) => (
+                  <ChipButton key={`genre-${i}`} label={g} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
+                ))}
+              </View>
             )}
           </View>
 
@@ -641,11 +661,28 @@ export default function DetailsScreen() {
             </Text>
           )}
 
-          {/* Cast & Crew */}
+          {/* Director */}
+          {content?.director && Array.isArray(content.director) && content.director.length > 0 && (
+            <View style={styles.chipSection}>
+              <Text style={styles.chipLabel}>Director</Text>
+              <View style={styles.chipRow}>
+                {content.director.slice(0, 3).map((d: string, i: number) => (
+                  <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d } })} />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Cast */}
           {content?.cast && Array.isArray(content.cast) && content.cast.length > 0 && (
-            <Text style={styles.castText}>
-              Cast: {content.cast.slice(0, 4).join(', ')}
-            </Text>
+            <View style={styles.chipSection}>
+              <Text style={styles.chipLabel}>Cast</Text>
+              <View style={styles.chipRow}>
+                {content.cast.slice(0, 6).map((c: string, i: number) => (
+                  <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c } })} />
+                ))}
+              </View>
+            </View>
           )}
 
           {/* Season Selector for Series */}
@@ -881,6 +918,44 @@ const styles = StyleSheet.create({
     color: '#888888',
     marginBottom: 24,
     textAlign: 'center',
+  },
+  chipSection: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  chipLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#888888',
+    marginBottom: 8,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  chipButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  chipButtonFocused: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
+    transform: [{ scale: 1.1 }],
+  },
+  chipText: {
+    color: '#AAAAAA',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  chipTextFocused: {
+    color: '#FFFFFF',
   },
   sectionTitle: {
     fontSize: 18,
