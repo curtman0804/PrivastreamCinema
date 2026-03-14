@@ -4,7 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   Alert,
   TextInput,
   Modal,
@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api, User } from '../../src/api/client';
 import { useAuthStore } from '../../src/store/authStore';
+import { colors } from '../../src/styles/colors';
 
 interface UserFormData {
   username: string;
@@ -83,61 +84,42 @@ export default function AdminUsersScreen() {
 
   const handleDeleteUser = (user: User) => {
     if (user.id === currentUser?.id) {
-      if (Platform.OS === 'web') {
-        window.alert('You cannot delete your own account');
-      } else {
-        Alert.alert('Error', 'You cannot delete your own account');
-      }
+      Alert.alert('Error', 'You cannot delete your own account');
       return;
     }
 
-    const doDelete = async () => {
-      try {
-        await api.admin.deleteUser(user.id);
-        await fetchUsers();
-        if (Platform.OS === 'web') {
-          window.alert('User deleted');
-        } else {
-          Alert.alert('Success', 'User deleted');
-        }
-      } catch (error: any) {
-        const errorMsg = error.response?.data?.detail || 'Failed to delete user';
-        if (Platform.OS === 'web') {
-          window.alert(`Error: ${errorMsg}`);
-        } else {
-          Alert.alert('Error', errorMsg);
-        }
-      }
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Are you sure you want to delete "${user.username}"?`)) {
-        doDelete();
-      }
-    } else {
-      Alert.alert(
-        'Delete User',
-        `Are you sure you want to delete "${user.username}"?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: doDelete,
+    Alert.alert(
+      'Delete User',
+      `Are you sure you want to delete "${user.username}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.admin.deleteUser(user.id);
+              await fetchUsers();
+              Alert.alert('Success', 'User deleted');
+            } catch (error: any) {
+              Alert.alert('Error', error.response?.data?.detail || 'Failed to delete user');
+            }
           },
-        ]
-      );
-    }
+        },
+      ]
+    );
   };
 
   const renderUser = ({ item }: { item: User }) => (
-    <View style={styles.userCard}>
+    <Pressable
+      style={({ focused }) => [styles.userCard, focused && styles.userCardFocused]}
+    >
       <View style={styles.userInfo}>
         <View style={styles.avatarContainer}>
           <Ionicons 
             name={item.is_admin ? 'shield' : 'person'} 
             size={24} 
-            color={item.is_admin ? '#B8A05C' : '#888888'} 
+            color={item.is_admin ? colors.primary : '#888888'} 
           />
         </View>
         <View style={styles.userDetails}>
@@ -153,21 +135,21 @@ export default function AdminUsersScreen() {
         </View>
       </View>
       {item.id !== currentUser?.id && (
-        <TouchableOpacity
-          style={styles.deleteButton}
+        <Pressable
+          style={({ focused }) => [styles.deleteButton, focused && styles.deleteButtonFocused]}
           onPress={() => handleDeleteUser(item)}
         >
           <Ionicons name="trash-outline" size={22} color="#FF4444" />
-        </TouchableOpacity>
+        </Pressable>
       )}
-    </View>
+    </Pressable>
   );
 
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#B8A05C" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </SafeAreaView>
     );
@@ -176,13 +158,19 @@ export default function AdminUsersScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <Pressable 
+          style={({ focused }) => [styles.backButton, focused && styles.headerButtonFocused]} 
+          onPress={() => router.back()}
+        >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        </Pressable>
         <Text style={styles.headerTitle}>User Management</Text>
-        <TouchableOpacity style={styles.addButton} onPress={() => setShowModal(true)}>
-          <Ionicons name="add" size={28} color="#B8A05C" />
-        </TouchableOpacity>
+        <Pressable 
+          style={({ focused }) => [styles.addButton, focused && styles.headerButtonFocused]} 
+          onPress={() => setShowModal(true)}
+        >
+          <Ionicons name="add" size={28} color={colors.primary} />
+        </Pressable>
       </View>
 
       <FlatList
@@ -194,8 +182,8 @@ export default function AdminUsersScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#B8A05C"
-            colors={['#B8A05C']}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
           />
         }
         ListEmptyComponent={
@@ -217,9 +205,12 @@ export default function AdminUsersScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add New User</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}>
+              <Pressable 
+                style={({ focused }) => [styles.modalCloseBtn, focused && styles.modalCloseFocused]}
+                onPress={() => setShowModal(false)}
+              >
                 <Ionicons name="close" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
+              </Pressable>
             </View>
 
             <View style={styles.inputContainer}>
@@ -259,18 +250,22 @@ export default function AdminUsersScreen() {
               />
             </View>
 
-            <TouchableOpacity
-              style={styles.adminToggle}
+            <Pressable
+              style={({ focused }) => [styles.adminToggle, focused && styles.adminToggleFocused]}
               onPress={() => setFormData({ ...formData, is_admin: !formData.is_admin })}
             >
               <View style={[styles.checkbox, formData.is_admin && styles.checkboxChecked]}>
                 {formData.is_admin && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
               </View>
               <Text style={styles.adminToggleText}>Admin privileges</Text>
-            </TouchableOpacity>
+            </Pressable>
 
-            <TouchableOpacity
-              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+            <Pressable
+              style={({ focused }) => [
+                styles.submitButton, 
+                isSubmitting && styles.submitButtonDisabled,
+                focused && styles.submitButtonFocused,
+              ]}
               onPress={handleAddUser}
               disabled={isSubmitting}
             >
@@ -279,7 +274,7 @@ export default function AdminUsersScreen() {
               ) : (
                 <Text style={styles.submitButtonText}>Create User</Text>
               )}
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -290,7 +285,7 @@ export default function AdminUsersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
@@ -304,24 +299,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+    borderBottomColor: colors.border,
   },
   backButton: {
     width: 44,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: 'transparent',
+    borderRadius: 8,
   },
   addButton: {
     width: 44,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'transparent',
+    borderRadius: 8,
+  },
+  headerButtonFocused: {
+    borderColor: colors.primary,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   listContent: {
     padding: 16,
@@ -329,10 +333,15 @@ const styles = StyleSheet.create({
   userCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: colors.backgroundLight,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  userCardFocused: {
+    borderColor: colors.primary,
   },
   userInfo: {
     flex: 1,
@@ -343,7 +352,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#2a2a2a',
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -362,7 +371,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   adminBadge: {
-    backgroundColor: '#B8A05C',
+    backgroundColor: colors.primary,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
@@ -379,6 +388,12 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     padding: 8,
+    borderWidth: 3,
+    borderColor: 'transparent',
+    borderRadius: 8,
+  },
+  deleteButtonFocused: {
+    borderColor: '#FF4444',
   },
   emptyContainer: {
     flex: 1,
@@ -396,7 +411,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: colors.backgroundLight,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
@@ -413,6 +428,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
+  modalCloseBtn: {
+    padding: 4,
+    borderWidth: 3,
+    borderColor: 'transparent',
+    borderRadius: 8,
+  },
+  modalCloseFocused: {
+    borderColor: colors.primary,
+  },
   inputContainer: {
     marginBottom: 16,
   },
@@ -423,17 +447,26 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: colors.surface,
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
     color: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: 'transparent',
   },
   adminToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 24,
+    padding: 8,
+    borderWidth: 3,
+    borderColor: 'transparent',
+    borderRadius: 8,
+  },
+  adminToggleFocused: {
+    borderColor: colors.primary,
   },
   checkbox: {
     width: 24,
@@ -446,22 +479,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#B8A05C',
-    borderColor: '#B8A05C',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   adminToggleText: {
     fontSize: 15,
     color: '#FFFFFF',
   },
   submitButton: {
-    backgroundColor: '#B8A05C',
+    backgroundColor: colors.primary,
     borderRadius: 12,
     height: 52,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: colors.primary,
   },
   submitButtonDisabled: {
     opacity: 0.7,
+  },
+  submitButtonFocused: {
+    borderColor: '#FFFFFF',
   },
   submitButtonText: {
     color: '#FFFFFF',

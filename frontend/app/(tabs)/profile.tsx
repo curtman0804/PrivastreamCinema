@@ -232,12 +232,12 @@ const styles = StyleSheet.create({
     padding: 16,
     minHeight: 72,
     maxHeight: 72,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: 'transparent',
   },
   menuItemFocused: {
-    borderColor: '#B8A05C',
-    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
   },
   menuIcon: {
     width: 40,

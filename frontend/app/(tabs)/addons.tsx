@@ -93,14 +93,23 @@ export default function AddonsScreen() {
       return;
     }
     
-    try {
-      await Share.share({
-        message: `Check out this Stremio addon: ${addonName}\n\n${addonUrl}`,
-        title: `Share ${addonName} Addon`,
-      });
-    } catch (error) {
-      console.log('Share error:', error);
-    }
+    Alert.alert(
+      `Share ${addonName}`,
+      `${addonUrl}`,
+      [
+        { text: 'Copy & Share', onPress: async () => {
+          try {
+            await Share.share({
+              message: `Check out this Stremio addon: ${addonName}\n\n${addonUrl}`,
+              title: `Share ${addonName} Addon`,
+            });
+          } catch (error) {
+            console.log('Share error:', error);
+          }
+        }},
+        { text: 'OK', style: 'cancel' },
+      ]
+    );
   };
   
   const handleUninstall = async (addon: Addon) => {
@@ -311,10 +320,17 @@ function AddonCard({
         </View>
       </View>
       <View style={styles.addonActions}>
-        <Pressable style={styles.actionButton} onPress={onShare}>
+        <Pressable 
+          style={({ focused }) => [styles.actionButton, focused && styles.actionButtonFocused]} 
+          onPress={onShare}
+        >
           <Ionicons name="share-outline" size={20} color={colors.textSecondary} />
         </Pressable>
-        <Pressable style={styles.actionButton} onPress={onUninstall} disabled={isDeleting}>
+        <Pressable 
+          style={({ focused }) => [styles.actionButton, focused && styles.actionButtonFocused, focused && styles.actionButtonDeleteFocused]} 
+          onPress={onUninstall} 
+          disabled={isDeleting}
+        >
           {isDeleting ? (
             <ActivityIndicator size="small" color={colors.error} />
           ) : (
@@ -426,14 +442,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 3,
+    borderColor: 'transparent',
   },
   addonCardFocused: {
+    borderColor: colors.primary,
     backgroundColor: colors.surface,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 4,
   },
   addonIconContainer: {
     width: 48,
@@ -491,6 +505,15 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 8,
+    borderWidth: 3,
+    borderColor: 'transparent',
+    borderRadius: 8,
+  },
+  actionButtonFocused: {
+    borderColor: colors.primary,
+  },
+  actionButtonDeleteFocused: {
+    borderColor: colors.error,
   },
   modalOverlay: {
     flex: 1,

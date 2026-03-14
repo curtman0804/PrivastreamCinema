@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>users.tsx</title>
+<style>
+body { background:#1a1a2e; color:#e0e0e0; font-family:monospace; padding:20px; }
+h1 { color:#e6c47a; }
+.path { color:#aaa; font-size:14px; margin:8px 0 16px; }
+.btn { background:#e6c47a; color:#000; border:none; padding:12px 24px; cursor:pointer;
+  font-weight:bold; border-radius:6px; font-size:16px; margin-bottom:16px; }
+pre { background:#0d1117; border:1px solid #333; padding:16px; overflow:auto;
+  font-size:12px; line-height:1.4; white-space:pre; }
+.nav { margin:20px 0; }
+.nav a { color:#4ea8de; margin-right:16px; text-decoration:none; font-size:14px; }
+</style>
+<script>
+function copyAll() {
+  var el = document.getElementById('code');
+  navigator.clipboard.writeText(el.textContent).then(function() {
+    document.getElementById('btn').textContent = 'COPIED!';
+    setTimeout(function() { document.getElementById('btn').textContent = 'Copy All Code'; }, 2000);
+  });
+}
+</script></head><body>
+<h1>users.tsx</h1>
+<div class="path">Paste into: <strong>frontend/app/admin/users.tsx</strong></div>
+<div class="nav">
+  <a href="/api/download/addons.html">1-addons.tsx</a>
+  <a href="/api/download/profile.html">2-profile.tsx</a>
+  <a href="/api/download/users.html">3-users.tsx</a>
+</div>
+<button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
+<pre id="code">import React, { useEffect, useState, useCallback } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  Alert,
+  TextInput,
+  Modal,
+  ActivityIndicator,
+  RefreshControl,
+  Platform,
+} from &#x27;react-native&#x27;;
+import { SafeAreaView } from &#x27;react-native-safe-area-context&#x27;;
+import { useRouter } from &#x27;expo-router&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { api, User } from &#x27;../../src/api/client&#x27;;
+import { useAuthStore } from &#x27;../../src/store/authStore&#x27;;
+import { colors } from &#x27;../../src/styles/colors&#x27;;
+
+interface UserFormData {
+  username: string;
+  password: string;
+  email: string;
+  is_admin: boolean;
+}
+
+export default function AdminUsersScreen() {
+  const router = useRouter();
+  const { user: currentUser } = useAuthStore();
+  const [users, setUsers] = useState&lt;User[]&gt;([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState&lt;UserFormData&gt;({
+    username: &#x27;&#x27;,
+    password: &#x27;&#x27;,
+    email: &#x27;&#x27;,
+    is_admin: false,
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchUsers = async () =&gt; {
+    try {
+      const response = await api.admin.getUsers();
+      setUsers(response);
+    } catch (error: any) {
+      Alert.alert(&#x27;Error&#x27;, error.response?.data?.detail || &#x27;Failed to load users&#x27;);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() =&gt; {
+    fetchUsers();
+  }, []);
+
+  const onRefresh = useCallback(async () =&gt; {
+    setRefreshing(true);
+    await fetchUsers();
+    setRefreshing(false);
+  }, []);
+
+  const handleAddUser = async () =&gt; {
+    if (!formData.username.trim() || !formData.password.trim()) {
+      Alert.alert(&#x27;Error&#x27;, &#x27;Username and password are required&#x27;);
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await api.admin.createUser(formData);
+      Alert.alert(&#x27;Success&#x27;, &#x27;User created successfully&#x27;);
+      setShowModal(false);
+      setFormData({ username: &#x27;&#x27;, password: &#x27;&#x27;, email: &#x27;&#x27;, is_admin: false });
+      await fetchUsers();
+    } catch (error: any) {
+      Alert.alert(&#x27;Error&#x27;, error.response?.data?.detail || &#x27;Failed to create user&#x27;);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteUser = (user: User) =&gt; {
+    if (user.id === currentUser?.id) {
+      Alert.alert(&#x27;Error&#x27;, &#x27;You cannot delete your own account&#x27;);
+      return;
+    }
+
+    Alert.alert(
+      &#x27;Delete User&#x27;,
+      `Are you sure you want to delete &quot;${user.username}&quot;?`,
+      [
+        { text: &#x27;Cancel&#x27;, style: &#x27;cancel&#x27; },
+        {
+          text: &#x27;Delete&#x27;,
+          style: &#x27;destructive&#x27;,
+          onPress: async () =&gt; {
+            try {
+              await api.admin.deleteUser(user.id);
+              await fetchUsers();
+              Alert.alert(&#x27;Success&#x27;, &#x27;User deleted&#x27;);
+            } catch (error: any) {
+              Alert.alert(&#x27;Error&#x27;, error.response?.data?.detail || &#x27;Failed to delete user&#x27;);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const renderUser = ({ item }: { item: User }) =&gt; (
+    &lt;Pressable
+      style={({ focused }) =&gt; [styles.userCard, focused &amp;&amp; styles.userCardFocused]}
+    &gt;
+      &lt;View style={styles.userInfo}&gt;
+        &lt;View style={styles.avatarContainer}&gt;
+          &lt;Ionicons 
+            name={item.is_admin ? &#x27;shield&#x27; : &#x27;person&#x27;} 
+            size={24} 
+            color={item.is_admin ? colors.primary : &#x27;#888888&#x27;} 
+          /&gt;
+        &lt;/View&gt;
+        &lt;View style={styles.userDetails}&gt;
+          &lt;View style={styles.usernameRow}&gt;
+            &lt;Text style={styles.username}&gt;{item.username}&lt;/Text&gt;
+            {item.is_admin &amp;&amp; (
+              &lt;View style={styles.adminBadge}&gt;
+                &lt;Text style={styles.adminBadgeText}&gt;Admin&lt;/Text&gt;
+              &lt;/View&gt;
+            )}
+          &lt;/View&gt;
+          &lt;Text style={styles.email}&gt;{item.email || &#x27;No email&#x27;}&lt;/Text&gt;
+        &lt;/View&gt;
+      &lt;/View&gt;
+      {item.id !== currentUser?.id &amp;&amp; (
+        &lt;Pressable
+          style={({ focused }) =&gt; [styles.deleteButton, focused &amp;&amp; styles.deleteButtonFocused]}
+          onPress={() =&gt; handleDeleteUser(item)}
+        &gt;
+          &lt;Ionicons name=&quot;trash-outline&quot; size={22} color=&quot;#FF4444&quot; /&gt;
+        &lt;/Pressable&gt;
+      )}
+    &lt;/Pressable&gt;
+  );
+
+  if (isLoading) {
+    return (
+      &lt;SafeAreaView style={styles.container}&gt;
+        &lt;View style={styles.loadingContainer}&gt;
+          &lt;ActivityIndicator size=&quot;large&quot; color={colors.primary} /&gt;
+        &lt;/View&gt;
+      &lt;/SafeAreaView&gt;
+    );
+  }
+
+  return (
+    &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+      &lt;View style={styles.header}&gt;
+        &lt;Pressable 
+          style={({ focused }) =&gt; [styles.backButton, focused &amp;&amp; styles.headerButtonFocused]} 
+          onPress={() =&gt; router.back()}
+        &gt;
+          &lt;Ionicons name=&quot;arrow-back&quot; size={24} color=&quot;#FFFFFF&quot; /&gt;
+        &lt;/Pressable&gt;
+        &lt;Text style={styles.headerTitle}&gt;User Management&lt;/Text&gt;
+        &lt;Pressable 
+          style={({ focused }) =&gt; [styles.addButton, focused &amp;&amp; styles.headerButtonFocused]} 
+          onPress={() =&gt; setShowModal(true)}
+        &gt;
+          &lt;Ionicons name=&quot;add&quot; size={28} color={colors.primary} /&gt;
+        &lt;/Pressable&gt;
+      &lt;/View&gt;
+
+      &lt;FlatList
+        data={users}
+        renderItem={renderUser}
+        keyExtractor={(item) =&gt; item.id}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          &lt;RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          /&gt;
+        }
+        ListEmptyComponent={
+          &lt;View style={styles.emptyContainer}&gt;
+            &lt;Ionicons name=&quot;people-outline&quot; size={64} color=&quot;#444444&quot; /&gt;
+            &lt;Text style={styles.emptyText}&gt;No users found&lt;/Text&gt;
+          &lt;/View&gt;
+        }
+      /&gt;
+
+      {/* Add User Modal */}
+      &lt;Modal
+        visible={showModal}
+        animationType=&quot;slide&quot;
+        transparent={true}
+        onRequestClose={() =&gt; setShowModal(false)}
+      &gt;
+        &lt;View style={styles.modalOverlay}&gt;
+          &lt;View style={styles.modalContent}&gt;
+            &lt;View style={styles.modalHeader}&gt;
+              &lt;Text style={styles.modalTitle}&gt;Add New User&lt;/Text&gt;
+              &lt;Pressable 
+                style={({ focused }) =&gt; [styles.modalCloseBtn, focused &amp;&amp; styles.modalCloseFocused]}
+                onPress={() =&gt; setShowModal(false)}
+              &gt;
+                &lt;Ionicons name=&quot;close&quot; size={24} color=&quot;#FFFFFF&quot; /&gt;
+              &lt;/Pressable&gt;
+            &lt;/View&gt;
+
+            &lt;View style={styles.inputContainer}&gt;
+              &lt;Text style={styles.inputLabel}&gt;Username *&lt;/Text&gt;
+              &lt;TextInput
+                style={styles.input}
+                placeholder=&quot;Enter username&quot;
+                placeholderTextColor=&quot;#666666&quot;
+                value={formData.username}
+                onChangeText={(text) =&gt; setFormData({ ...formData, username: text })}
+                autoCapitalize=&quot;none&quot;
+              /&gt;
+            &lt;/View&gt;
+
+            &lt;View style={styles.inputContainer}&gt;
+              &lt;Text style={styles.inputLabel}&gt;Password *&lt;/Text&gt;
+              &lt;TextInput
+                style={styles.input}
+                placeholder=&quot;Enter password&quot;
+                placeholderTextColor=&quot;#666666&quot;
+                value={formData.password}
+                onChangeText={(text) =&gt; setFormData({ ...formData, password: text })}
+                secureTextEntry
+              /&gt;
+            &lt;/View&gt;
+
+            &lt;View style={styles.inputContainer}&gt;
+              &lt;Text style={styles.inputLabel}&gt;Email&lt;/Text&gt;
+              &lt;TextInput
+                style={styles.input}
+                placeholder=&quot;Enter email (optional)&quot;
+                placeholderTextColor=&quot;#666666&quot;
+                value={formData.email}
+                onChangeText={(text) =&gt; setFormData({ ...formData, email: text })}
+                keyboardType=&quot;email-address&quot;
+                autoCapitalize=&quot;none&quot;
+              /&gt;
+            &lt;/View&gt;
+
+            &lt;Pressable
+              style={({ focused }) =&gt; [styles.adminToggle, focused &amp;&amp; styles.adminToggleFocused]}
+              onPress={() =&gt; setFormData({ ...formData, is_admin: !formData.is_admin })}
+            &gt;
+              &lt;View style={[styles.checkbox, formData.is_admin &amp;&amp; styles.checkboxChecked]}&gt;
+                {formData.is_admin &amp;&amp; &lt;Ionicons name=&quot;checkmark&quot; size={16} color=&quot;#FFFFFF&quot; /&gt;}
+              &lt;/View&gt;
+              &lt;Text style={styles.adminToggleText}&gt;Admin privileges&lt;/Text&gt;
+            &lt;/Pressable&gt;
+
+            &lt;Pressable
+              style={({ focused }) =&gt; [
+                styles.submitButton, 
+                isSubmitting &amp;&amp; styles.submitButtonDisabled,
+                focused &amp;&amp; styles.submitButtonFocused,
+              ]}
+              onPress={handleAddUser}
+              disabled={isSubmitting}
+            &gt;
+              {isSubmitting ? (
+                &lt;ActivityIndicator color=&quot;#FFFFFF&quot; /&gt;
+              ) : (
+                &lt;Text style={styles.submitButtonText}&gt;Create User&lt;/Text&gt;
+              )}
+            &lt;/Pressable&gt;
+          &lt;/View&gt;
+        &lt;/View&gt;
+      &lt;/Modal&gt;
+    &lt;/SafeAreaView&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  header: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    justifyContent: &#x27;space-between&#x27;,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+    borderRadius: 8,
+  },
+  addButton: {
+    width: 44,
+    height: 44,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+    borderRadius: 8,
+  },
+  headerButtonFocused: {
+    borderColor: colors.primary,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: &#x27;700&#x27;,
+    color: &#x27;#FFFFFF&#x27;,
+  },
+  listContent: {
+    padding: 16,
+  },
+  userCard: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  userCardFocused: {
+    borderColor: colors.primary,
+  },
+  userInfo: {
+    flex: 1,
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  avatarContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.surface,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    marginRight: 12,
+  },
+  userDetails: {
+    flex: 1,
+  },
+  usernameRow: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    gap: 8,
+  },
+  username: {
+    fontSize: 16,
+    fontWeight: &#x27;600&#x27;,
+    color: &#x27;#FFFFFF&#x27;,
+  },
+  adminBadge: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  adminBadgeText: {
+    fontSize: 10,
+    fontWeight: &#x27;700&#x27;,
+    color: &#x27;#FFFFFF&#x27;,
+  },
+  email: {
+    fontSize: 13,
+    color: &#x27;#888888&#x27;,
+    marginTop: 2,
+  },
+  deleteButton: {
+    padding: 8,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+    borderRadius: 8,
+  },
+  deleteButtonFocused: {
+    borderColor: &#x27;#FF4444&#x27;,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: &#x27;center&#x27;,
+    paddingTop: 60,
+  },
+  emptyText: {
+    color: &#x27;#888888&#x27;,
+    fontSize: 16,
+    marginTop: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: &#x27;rgba(0, 0, 0, 0.8)&#x27;,
+    justifyContent: &#x27;flex-end&#x27;,
+  },
+  modalContent: {
+    backgroundColor: colors.backgroundLight,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: &#x27;row&#x27;,
+    justifyContent: &#x27;space-between&#x27;,
+    alignItems: &#x27;center&#x27;,
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: &#x27;700&#x27;,
+    color: &#x27;#FFFFFF&#x27;,
+  },
+  modalCloseBtn: {
+    padding: 4,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+    borderRadius: 8,
+  },
+  modalCloseFocused: {
+    borderColor: colors.primary,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: &#x27;600&#x27;,
+    color: &#x27;#888888&#x27;,
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: &#x27;#FFFFFF&#x27;,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  adminToggle: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    marginBottom: 24,
+    padding: 8,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+    borderRadius: 8,
+  },
+  adminToggleFocused: {
+    borderColor: colors.primary,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: &#x27;#666666&#x27;,
+    marginRight: 12,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  adminToggleText: {
+    fontSize: 15,
+    color: &#x27;#FFFFFF&#x27;,
+  },
+  submitButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    height: 52,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+    borderWidth: 3,
+    borderColor: colors.primary,
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
+  },
+  submitButtonFocused: {
+    borderColor: &#x27;#FFFFFF&#x27;,
+  },
+  submitButtonText: {
+    color: &#x27;#FFFFFF&#x27;,
+    fontSize: 16,
+    fontWeight: &#x27;700&#x27;,
+  },
+});
+</pre>
+</body></html>

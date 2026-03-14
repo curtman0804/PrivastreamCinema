@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>profile.tsx</title>
+<style>
+body { background:#1a1a2e; color:#e0e0e0; font-family:monospace; padding:20px; }
+h1 { color:#e6c47a; }
+.path { color:#aaa; font-size:14px; margin:8px 0 16px; }
+.btn { background:#e6c47a; color:#000; border:none; padding:12px 24px; cursor:pointer;
+  font-weight:bold; border-radius:6px; font-size:16px; margin-bottom:16px; }
+pre { background:#0d1117; border:1px solid #333; padding:16px; overflow:auto;
+  font-size:12px; line-height:1.4; white-space:pre; }
+.nav { margin:20px 0; }
+.nav a { color:#4ea8de; margin-right:16px; text-decoration:none; font-size:14px; }
+</style>
+<script>
+function copyAll() {
+  var el = document.getElementById('code');
+  navigator.clipboard.writeText(el.textContent).then(function() {
+    document.getElementById('btn').textContent = 'COPIED!';
+    setTimeout(function() { document.getElementById('btn').textContent = 'Copy All Code'; }, 2000);
+  });
+}
+</script></head><body>
+<h1>profile.tsx</h1>
+<div class="path">Paste into: <strong>frontend/app/(tabs)/profile.tsx</strong></div>
+<div class="nav">
+  <a href="/api/download/addons.html">1-addons.tsx</a>
+  <a href="/api/download/profile.html">2-profile.tsx</a>
+  <a href="/api/download/users.html">3-users.tsx</a>
+</div>
+<button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
+<pre id="code">import React, { useState } from &#x27;react&#x27;;
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Alert,
+  ScrollView,
+  Platform,
+  useWindowDimensions,
+} from &#x27;react-native&#x27;;
+import { SafeAreaView } from &#x27;react-native-safe-area-context&#x27;;
+import { useRouter } from &#x27;expo-router&#x27;;
+import { Ionicons } from &#x27;@expo/vector-icons&#x27;;
+import { useAuthStore } from &#x27;../../src/store/authStore&#x27;;
+import { colors } from &#x27;../../src/styles/colors&#x27;;
+
+export default function ProfileScreen() {
+  const router = useRouter();
+  const { user, logout } = useAuthStore();
+  const { width, height } = useWindowDimensions();
+  const isTV = width &gt; height || width &gt; 800;
+
+  const handleLogout = () =&gt; {
+    const doLogout = async () =&gt; {
+      await logout();
+      router.replace(&#x27;/(auth)/login&#x27;);
+    };
+
+    if (Platform.OS === &#x27;web&#x27;) {
+      if (window.confirm(&#x27;Are you sure you want to logout?&#x27;)) {
+        doLogout();
+      }
+    } else {
+      Alert.alert(
+        &#x27;Logout&#x27;,
+        &#x27;Are you sure you want to logout?&#x27;,
+        [
+          { text: &#x27;Cancel&#x27;, style: &#x27;cancel&#x27; },
+          { text: &#x27;Logout&#x27;, style: &#x27;destructive&#x27;, onPress: doLogout },
+        ]
+      );
+    }
+  };
+
+  return (
+    &lt;SafeAreaView style={styles.container} edges={[&#x27;top&#x27;]}&gt;
+      &lt;View style={[styles.header, isTV &amp;&amp; styles.headerTV]}&gt;
+        &lt;Text style={[styles.headerTitle, isTV &amp;&amp; styles.headerTitleTV]}&gt;Settings&lt;/Text&gt;
+      &lt;/View&gt;
+
+      &lt;ScrollView showsVerticalScrollIndicator={false}&gt;
+        {/* Profile Section */}
+        &lt;View style={styles.profileSection}&gt;
+          &lt;View style={styles.avatar}&gt;
+            &lt;Ionicons name=&quot;person&quot; size={40} color={colors.primary} /&gt;
+          &lt;/View&gt;
+          &lt;View style={styles.profileInfo}&gt;
+            &lt;Text style={styles.username}&gt;{user?.username || &#x27;User&#x27;}&lt;/Text&gt;
+            &lt;Text style={styles.email}&gt;{user?.email || &#x27;&#x27;}&lt;/Text&gt;
+          &lt;/View&gt;
+        &lt;/View&gt;
+
+        {/* Admin Section */}
+        {user?.is_admin &amp;&amp; (
+          &lt;View style={styles.section}&gt;
+            &lt;Text style={styles.sectionTitle}&gt;ADMIN&lt;/Text&gt;
+            &lt;View style={styles.menuCard}&gt;
+              &lt;MenuItem
+                icon=&quot;people-outline&quot;
+                title=&quot;User Management&quot;
+                subtitle=&quot;Add or remove users&quot;
+                onPress={() =&gt; router.push(&#x27;/admin/users&#x27;)}
+                isTV={isTV}
+              /&gt;
+            &lt;/View&gt;
+          &lt;/View&gt;
+        )}
+
+        {/* General Section */}
+        &lt;View style={styles.section}&gt;
+          &lt;Text style={styles.sectionTitle}&gt;GENERAL&lt;/Text&gt;
+          &lt;View style={styles.menuCard}&gt;
+            &lt;MenuItem
+              icon=&quot;information-circle-outline&quot;
+              title=&quot;About&quot;
+              subtitle=&quot;Version 1.0.0&quot;
+              isTV={isTV}
+            /&gt;
+          &lt;/View&gt;
+        &lt;/View&gt;
+
+        {/* Account Section */}
+        &lt;View style={styles.section}&gt;
+          &lt;View style={styles.menuCard}&gt;
+            &lt;MenuItem
+              icon=&quot;log-out-outline&quot;
+              title=&quot;Logout&quot;
+              onPress={handleLogout}
+              showArrow={false}
+              danger
+              isTV={isTV}
+            /&gt;
+          &lt;/View&gt;
+        &lt;/View&gt;
+
+        &lt;View style={styles.bottomPadding} /&gt;
+      &lt;/ScrollView&gt;
+    &lt;/SafeAreaView&gt;
+  );
+}
+
+// Menu Item Component
+function MenuItem({
+  icon,
+  title,
+  subtitle,
+  onPress,
+  showArrow = true,
+  danger = false,
+  isTV = false,
+}: {
+  icon: string;
+  title: string;
+  subtitle?: string;
+  onPress?: () =&gt; void;
+  showArrow?: boolean;
+  danger?: boolean;
+  isTV?: boolean;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+
+  return (
+    &lt;Pressable
+      style={[styles.menuItem, isFocused &amp;&amp; styles.menuItemFocused]}
+      onPress={onPress}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+      disabled={!onPress}
+    &gt;
+      &lt;View style={[styles.menuIcon, danger &amp;&amp; styles.menuIconDanger]}&gt;
+        &lt;Ionicons
+          name={icon as any}
+          size={22}
+          color={danger ? colors.error : colors.primary}
+        /&gt;
+      &lt;/View&gt;
+      &lt;View style={styles.menuTextContainer}&gt;
+        &lt;Text style={[styles.menuTitle, danger &amp;&amp; styles.menuTitleDanger]}&gt;
+          {title}
+        &lt;/Text&gt;
+        {subtitle &amp;&amp; &lt;Text style={styles.menuSubtitle}&gt;{subtitle}&lt;/Text&gt;}
+      &lt;/View&gt;
+      {showArrow &amp;&amp; (
+        &lt;Ionicons name=&quot;chevron-forward&quot; size={20} color={colors.textMuted} /&gt;
+      )}
+    &lt;/Pressable&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerTV: {
+    paddingHorizontal: 32,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: &#x27;600&#x27;,
+    color: colors.primary,
+  },
+  headerTitleTV: {
+    fontSize: 28,
+  },
+  profileSection: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  avatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.backgroundLight,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  profileInfo: {
+    marginLeft: 16,
+  },
+  username: {
+    fontSize: 20,
+    fontWeight: &#x27;600&#x27;,
+    color: colors.primary,
+  },
+  email: {
+    fontSize: 14,
+    color: colors.primaryDark,
+    marginTop: 4,
+  },
+  section: {
+    marginTop: 24,
+    paddingHorizontal: 16,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: &#x27;600&#x27;,
+    color: colors.textMuted,
+    marginBottom: 8,
+    marginLeft: 4,
+    letterSpacing: 1,
+  },
+  menuCard: {
+    backgroundColor: colors.backgroundLight,
+    borderRadius: 12,
+    overflow: &#x27;hidden&#x27;,
+    alignSelf: &#x27;stretch&#x27;,
+  },
+  menuItem: {
+    flexDirection: &#x27;row&#x27;,
+    alignItems: &#x27;center&#x27;,
+    padding: 16,
+    minHeight: 72,
+    maxHeight: 72,
+    borderWidth: 3,
+    borderColor: &#x27;transparent&#x27;,
+  },
+  menuItemFocused: {
+    borderColor: colors.primary,
+    backgroundColor: &#x27;rgba(184, 160, 92, 0.15)&#x27;,
+  },
+  menuIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    justifyContent: &#x27;center&#x27;,
+    alignItems: &#x27;center&#x27;,
+  },
+  menuIconDanger: {
+    backgroundColor: &#x27;rgba(244, 67, 54, 0.1)&#x27;,
+  },
+  menuTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  menuTitle: {
+    fontSize: 16,
+    fontWeight: &#x27;500&#x27;,
+    color: colors.primary,
+  },
+  menuTitleDanger: {
+    color: colors.error,
+  },
+  menuSubtitle: {
+    fontSize: 13,
+    color: colors.primaryDark,
+    marginTop: 2,
+  },
+  bottomPadding: {
+    height: 40,
+  },
+});
+</pre>
+</body></html>
