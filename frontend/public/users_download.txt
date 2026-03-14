@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -384,6 +384,10 @@ function UserFormModal({
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
 
+  const usernameRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+
   return (
     <Modal
       visible={visible}
@@ -410,6 +414,7 @@ function UserFormModal({
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Username {passwordRequired ? '*' : ''}</Text>
                 <TextInput
+                  ref={usernameRef}
                   style={[styles.input, usernameFocused && styles.inputFocused]}
                   placeholder="Enter username"
                   placeholderTextColor="#666666"
@@ -418,6 +423,9 @@ function UserFormModal({
                   onFocus={() => setUsernameFocused(true)}
                   onBlur={() => setUsernameFocused(false)}
                   autoCapitalize="none"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  blurOnSubmit={false}
                 />
               </View>
             )}
@@ -428,6 +436,7 @@ function UserFormModal({
                   Password {passwordRequired ? '*' : '(leave blank to keep current)'}
                 </Text>
                 <TextInput
+                  ref={passwordRef}
                   style={[styles.input, passwordFocused && styles.inputFocused]}
                   placeholder={passwordRequired ? 'Enter password' : 'New password (optional)'}
                   placeholderTextColor="#666666"
@@ -436,6 +445,9 @@ function UserFormModal({
                   onFocus={() => setPasswordFocused(true)}
                   onBlur={() => setPasswordFocused(false)}
                   secureTextEntry
+                  returnKeyType="next"
+                  onSubmitEditing={() => emailRef.current?.focus()}
+                  blurOnSubmit={false}
                 />
               </View>
             )}
@@ -443,6 +455,7 @@ function UserFormModal({
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Email</Text>
               <TextInput
+                ref={emailRef}
                 style={[styles.input, emailFocused && styles.inputFocused]}
                 placeholder="Enter email (optional)"
                 placeholderTextColor="#666666"
@@ -452,6 +465,8 @@ function UserFormModal({
                 onBlur={() => setEmailFocused(false)}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                returnKeyType="done"
+                onSubmitEditing={onSubmit}
               />
             </View>
 
