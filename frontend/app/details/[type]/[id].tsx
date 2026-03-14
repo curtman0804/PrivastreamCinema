@@ -572,7 +572,7 @@ export default function DetailsScreen() {
       
       {/* Content Overlay */}
       <View style={styles.contentOverlay}>
-        {/* Back Button */}
+        {/* Back Button - floats over everything */}
         <FocusableButton 
           style={styles.backButton}
           focusedStyle={styles.backButtonFocused}
@@ -581,14 +581,18 @@ export default function DetailsScreen() {
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </FocusableButton>
 
-        {/* Pinned title - shows when original title scrolls past top */}
+        {/* Pinned title+meta - shows when original scrolls past top */}
         {showPinnedTitle && (
-          <View style={styles.pinnedTitle}>
+          <View style={styles.pinnedHeader}>
             <Text style={styles.pinnedTitleText} numberOfLines={1}>{displayName}</Text>
+            <View style={styles.pinnedMetaRow}>
+              {content?.year && <Text style={styles.pinnedMetaText}>{content.year}</Text>}
+              {content?.runtime && <Text style={styles.pinnedMetaText}>{content.runtime}</Text>}
+            </View>
           </View>
         )}
 
-        {/* Main Content - Scrollable */}
+        {/* Main Content - Scrollable, fills entire screen */}
         <ScrollView 
           style={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -817,7 +821,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: 'absolute',
-    top: 50,
+    top: 16,
     left: 16,
     width: 44,
     height: 44,
@@ -825,7 +829,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
+    zIndex: 30,
     borderWidth: 2,
     borderColor: 'transparent',
   },
@@ -835,28 +839,37 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flex: 1,
-    marginTop: 100,
   },
   scrollContentContainer: {
     paddingHorizontal: 20,
   },
-  pinnedTitle: {
+  pinnedHeader: {
     position: 'absolute',
-    top: 0,
-    left: 20,
+    top: 8,
+    left: 70,
     right: 20,
     zIndex: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
   },
   pinnedTitleText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#B8A05C',
     textShadowColor: 'rgba(0,0,0,0.9)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,
     textAlign: 'left',
+  },
+  pinnedMetaRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 2,
+  },
+  pinnedMetaText: {
+    fontSize: 13,
+    color: '#CCCCCC',
+    textShadowColor: 'rgba(0,0,0,0.9)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   titleSection: {
     marginBottom: 8,
