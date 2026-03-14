@@ -461,6 +461,7 @@ class AuthResponse(BaseModel):
     token: str
 
 class UserUpdate(BaseModel):
+    username: Optional[str] = None
     email: Optional[str] = None
     password: Optional[str] = None
     is_admin: Optional[bool] = None
@@ -711,11 +712,50 @@ async def delete_user(user_id: str, admin: User = Depends(get_admin_user)):
     if user_id == admin.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     
+    # Protect the master admin account 'choyt' from deletion
+    target_user = await db.users.find_one({"id": user_id})
+    if target_user and target_user.get("username") == "choyt":
+        raise HTTPException(status_code=400, detail="Cannot delete the master admin account")
+    
     result = await db.users.delete_one({"id": user_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     
     return {"message": "User deleted successfully"}
+
+@api_router.put("/admin/users/{user_id}", response_model=UserResponse)
+async def update_user(user_id: str, user_data: UserUpdate, admin: User = Depends(get_admin_user)):
+    existing = await db.users.find_one({"id": user_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    update_fields = {}
+    if user_data.email is not None:
+        update_fields["email"] = user_data.email
+    if user_data.password is not None:
+        update_fields["password_hash"] = hash_password(user_data.password)
+    if user_data.is_admin is not None:
+        update_fields["is_admin"] = user_data.is_admin
+    if user_data.username is not None:
+        # Check username not taken by another user
+        name_check = await db.users.find_one({"username": user_data.username, "id": {"$ne": user_id}})
+        if name_check:
+            raise HTTPException(status_code=400, detail="Username already taken")
+        update_fields["username"] = user_data.username
+    
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    
+    await db.users.update_one({"id": user_id}, {"$set": update_fields})
+    updated = await db.users.find_one({"id": user_id})
+    
+    return UserResponse(
+        id=updated["id"],
+        username=updated["username"],
+        email=updated.get("email"),
+        is_admin=updated.get("is_admin", False),
+        created_at=updated.get("created_at", datetime.utcnow())
+    )
 
 
 # ==================== ADDON ROUTES ====================

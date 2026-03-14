@@ -628,7 +628,7 @@ export const api = {
       const response = await apiClient.post('/api/admin/users', userData);
       return response.data;
     },
-    updateUser: async (userId: string, userData: { email?: string; password?: string; is_admin?: boolean }): Promise<User> => {
+    updateUser: async (userId: string, userData: { username?: string; email?: string; password?: string; is_admin?: boolean }): Promise<User> => {
       const response = await apiClient.put(`/api/admin/users/${userId}`, userData);
       return response.data;
     },

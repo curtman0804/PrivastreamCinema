@@ -10,7 +10,7 @@ import {
   Modal,
   ActivityIndicator,
   RefreshControl,
-  Platform,
+  ScrollView,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,17 +27,32 @@ interface UserFormData {
   is_admin: boolean;
 }
 
+interface EditFormData {
+  username: string;
+  email: string;
+  password: string;
+  is_admin: boolean;
+}
+
 export default function AdminUsersScreen() {
   const router = useRouter();
   const { user: currentUser } = useAuthStore();
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showModal, setShowModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState<UserFormData>({
     username: '',
     password: '',
     email: '',
+    is_admin: false,
+  });
+  const [editFormData, setEditFormData] = useState<EditFormData>({
+    username: '',
+    email: '',
+    password: '',
     is_admin: false,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,7 +92,7 @@ export default function AdminUsersScreen() {
     try {
       await api.admin.createUser(formData);
       Alert.alert('Success', 'User created successfully');
-      setShowModal(false);
+      setShowAddModal(false);
       setFormData({ username: '', password: '', email: '', is_admin: false });
       await fetchUsers();
     } catch (error: any) {
@@ -87,9 +102,60 @@ export default function AdminUsersScreen() {
     }
   };
 
+  const handleEditUser = (user: User) => {
+    setEditingUser(user);
+    setEditFormData({
+      username: user.username,
+      email: user.email || '',
+      password: '',
+      is_admin: user.is_admin,
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingUser) return;
+
+    const updateData: any = {};
+    if (editFormData.username.trim() && editFormData.username !== editingUser.username) {
+      updateData.username = editFormData.username.trim();
+    }
+    if (editFormData.email.trim() !== (editingUser.email || '')) {
+      updateData.email = editFormData.email.trim();
+    }
+    if (editFormData.password.trim()) {
+      updateData.password = editFormData.password.trim();
+    }
+    if (editFormData.is_admin !== editingUser.is_admin) {
+      updateData.is_admin = editFormData.is_admin;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      Alert.alert('No Changes', 'No fields were modified.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await api.admin.updateUser(editingUser.id, updateData);
+      Alert.alert('Success', 'User updated successfully');
+      setShowEditModal(false);
+      setEditingUser(null);
+      await fetchUsers();
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to update user');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleDeleteUser = (user: User) => {
     if (user.id === currentUser?.id) {
       Alert.alert('Error', 'You cannot delete your own account');
+      return;
+    }
+    if (user.username === 'choyt') {
+      Alert.alert('Error', 'Cannot delete the master admin account');
       return;
     }
 
@@ -115,10 +181,15 @@ export default function AdminUsersScreen() {
     );
   };
 
+  const canDeleteUser = (user: User) => {
+    return user.id !== currentUser?.id && user.username !== 'choyt';
+  };
+
   const renderUser = ({ item }: { item: User }) => (
     <UserCard
       user={item}
-      currentUserId={currentUser?.id}
+      canDelete={canDeleteUser(item)}
+      onEdit={() => handleEditUser(item)}
       onDelete={() => handleDeleteUser(item)}
     />
   );
@@ -135,14 +206,14 @@ export default function AdminUsersScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header - matches Addons page style */}
+      {/* Header */}
       <View style={[styles.header, isTV && styles.headerTV]}>
         <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>User Management</Text>
         <Pressable
           style={[styles.addButton, addBtnFocused && styles.addButtonFocused]}
           onFocus={() => setAddBtnFocused(true)}
           onBlur={() => setAddBtnFocused(false)}
-          onPress={() => setShowModal(true)}
+          onPress={() => setShowAddModal(true)}
         >
           <Ionicons name="add" size={24} color="#FFFFFF" />
         </Pressable>
@@ -170,29 +241,53 @@ export default function AdminUsersScreen() {
       />
 
       {/* Add User Modal */}
-      <AddUserModal
-        visible={showModal}
-        onClose={() => setShowModal(false)}
+      <UserFormModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title="Add New User"
+        submitLabel="Create User"
         formData={formData}
-        setFormData={setFormData}
+        setFormData={(data: any) => setFormData(data)}
         onSubmit={handleAddUser}
         isSubmitting={isSubmitting}
         isTV={isTV}
+        showUsername={true}
+        showPassword={true}
+        passwordRequired={true}
+      />
+
+      {/* Edit User Modal */}
+      <UserFormModal
+        visible={showEditModal}
+        onClose={() => { setShowEditModal(false); setEditingUser(null); }}
+        title={`Edit ${editingUser?.username || 'User'}`}
+        submitLabel="Save Changes"
+        formData={editFormData}
+        setFormData={(data: any) => setEditFormData(data)}
+        onSubmit={handleSaveEdit}
+        isSubmitting={isSubmitting}
+        isTV={isTV}
+        showUsername={true}
+        showPassword={true}
+        passwordRequired={false}
       />
     </SafeAreaView>
   );
 }
 
-// User Card Component - with proper focus handling for TV
+// User Card Component
 function UserCard({
   user,
-  currentUserId,
+  canDelete,
+  onEdit,
   onDelete,
 }: {
   user: User;
-  currentUserId?: string;
+  canDelete: boolean;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
+  const [editFocused, setEditFocused] = useState(false);
   const [trashFocused, setTrashFocused] = useState(false);
 
   return (
@@ -217,37 +312,59 @@ function UserCard({
           <Text style={styles.email}>{user.email || 'No email'}</Text>
         </View>
       </View>
-      {user.id !== currentUserId && (
+      <View style={styles.cardActions}>
+        {/* Edit button */}
         <Pressable
-          style={[styles.deleteButton, trashFocused && styles.deleteButtonFocused]}
-          onFocus={() => setTrashFocused(true)}
-          onBlur={() => setTrashFocused(false)}
-          onPress={onDelete}
+          style={[styles.actionButton, editFocused && styles.actionButtonFocused]}
+          onFocus={() => setEditFocused(true)}
+          onBlur={() => setEditFocused(false)}
+          onPress={onEdit}
         >
-          <Ionicons name="trash-outline" size={22} color="#FF4444" />
+          <Ionicons name="create-outline" size={22} color={colors.primary} />
         </Pressable>
-      )}
+        {/* Delete button - only show if allowed */}
+        {canDelete && (
+          <Pressable
+            style={[styles.actionButton, trashFocused && styles.actionButtonFocused]}
+            onFocus={() => setTrashFocused(true)}
+            onBlur={() => setTrashFocused(false)}
+            onPress={onDelete}
+          >
+            <Ionicons name="trash-outline" size={22} color="#FF4444" />
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
 
-// Add User Modal Component
-function AddUserModal({
+// Shared User Form Modal (used for both Add and Edit)
+function UserFormModal({
   visible,
   onClose,
+  title,
+  submitLabel,
   formData,
   setFormData,
   onSubmit,
   isSubmitting,
   isTV,
+  showUsername,
+  showPassword,
+  passwordRequired,
 }: {
   visible: boolean;
   onClose: () => void;
-  formData: UserFormData;
-  setFormData: (data: UserFormData) => void;
+  title: string;
+  submitLabel: string;
+  formData: any;
+  setFormData: (data: any) => void;
   onSubmit: () => void;
   isSubmitting: boolean;
   isTV: boolean;
+  showUsername: boolean;
+  showPassword: boolean;
+  passwordRequired: boolean;
 }) {
   const [closeFocused, setCloseFocused] = useState(false);
   const [adminToggleFocused, setAdminToggleFocused] = useState(false);
@@ -265,90 +382,98 @@ function AddUserModal({
     >
       <View style={styles.modalOverlay}>
         <View style={[styles.modalContent, isTV && styles.modalContentTV]}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add New User</Text>
-            <Pressable
-              style={[styles.modalCloseBtn, closeFocused && styles.modalCloseFocused]}
-              onFocus={() => setCloseFocused(true)}
-              onBlur={() => setCloseFocused(false)}
-              onPress={onClose}
-            >
-              <Ionicons name="close" size={24} color="#FFFFFF" />
-            </Pressable>
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Username *</Text>
-            <TextInput
-              style={[styles.input, usernameFocused && styles.inputFocused]}
-              placeholder="Enter username"
-              placeholderTextColor="#666666"
-              value={formData.username}
-              onChangeText={(text) => setFormData({ ...formData, username: text })}
-              onFocus={() => setUsernameFocused(true)}
-              onBlur={() => setUsernameFocused(false)}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Password *</Text>
-            <TextInput
-              style={[styles.input, passwordFocused && styles.inputFocused]}
-              placeholder="Enter password"
-              placeholderTextColor="#666666"
-              value={formData.password}
-              onChangeText={(text) => setFormData({ ...formData, password: text })}
-              onFocus={() => setPasswordFocused(true)}
-              onBlur={() => setPasswordFocused(false)}
-              secureTextEntry
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Email</Text>
-            <TextInput
-              style={[styles.input, emailFocused && styles.inputFocused]}
-              placeholder="Enter email (optional)"
-              placeholderTextColor="#666666"
-              value={formData.email}
-              onChangeText={(text) => setFormData({ ...formData, email: text })}
-              onFocus={() => setEmailFocused(true)}
-              onBlur={() => setEmailFocused(false)}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-
-          <Pressable
-            style={[styles.adminToggle, adminToggleFocused && styles.adminToggleFocused]}
-            onFocus={() => setAdminToggleFocused(true)}
-            onBlur={() => setAdminToggleFocused(false)}
-            onPress={() => setFormData({ ...formData, is_admin: !formData.is_admin })}
-          >
-            <View style={[styles.checkbox, formData.is_admin && styles.checkboxChecked]}>
-              {formData.is_admin && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{title}</Text>
+              <Pressable
+                style={[styles.modalCloseBtn, closeFocused && styles.modalCloseFocused]}
+                onFocus={() => setCloseFocused(true)}
+                onBlur={() => setCloseFocused(false)}
+                onPress={onClose}
+              >
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </Pressable>
             </View>
-            <Text style={styles.adminToggleText}>Admin privileges</Text>
-          </Pressable>
 
-          <Pressable
-            style={[
-              styles.submitButton,
-              isSubmitting && styles.submitButtonDisabled,
-              submitFocused && styles.submitButtonFocused,
-            ]}
-            onFocus={() => setSubmitFocused(true)}
-            onBlur={() => setSubmitFocused(false)}
-            onPress={onSubmit}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              <Text style={styles.submitButtonText}>Create User</Text>
+            {showUsername && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Username {passwordRequired ? '*' : ''}</Text>
+                <TextInput
+                  style={[styles.input, usernameFocused && styles.inputFocused]}
+                  placeholder="Enter username"
+                  placeholderTextColor="#666666"
+                  value={formData.username}
+                  onChangeText={(text) => setFormData({ ...formData, username: text })}
+                  onFocus={() => setUsernameFocused(true)}
+                  onBlur={() => setUsernameFocused(false)}
+                  autoCapitalize="none"
+                />
+              </View>
             )}
-          </Pressable>
+
+            {showPassword && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>
+                  Password {passwordRequired ? '*' : '(leave blank to keep current)'}
+                </Text>
+                <TextInput
+                  style={[styles.input, passwordFocused && styles.inputFocused]}
+                  placeholder={passwordRequired ? 'Enter password' : 'New password (optional)'}
+                  placeholderTextColor="#666666"
+                  value={formData.password}
+                  onChangeText={(text) => setFormData({ ...formData, password: text })}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
+                  secureTextEntry
+                />
+              </View>
+            )}
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Email</Text>
+              <TextInput
+                style={[styles.input, emailFocused && styles.inputFocused]}
+                placeholder="Enter email (optional)"
+                placeholderTextColor="#666666"
+                value={formData.email}
+                onChangeText={(text) => setFormData({ ...formData, email: text })}
+                onFocus={() => setEmailFocused(true)}
+                onBlur={() => setEmailFocused(false)}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <Pressable
+              style={[styles.adminToggle, adminToggleFocused && styles.adminToggleFocused]}
+              onFocus={() => setAdminToggleFocused(true)}
+              onBlur={() => setAdminToggleFocused(false)}
+              onPress={() => setFormData({ ...formData, is_admin: !formData.is_admin })}
+            >
+              <View style={[styles.checkbox, formData.is_admin && styles.checkboxChecked]}>
+                {formData.is_admin && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
+              </View>
+              <Text style={styles.adminToggleText}>Admin privileges</Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.submitButton,
+                isSubmitting && styles.submitButtonDisabled,
+                submitFocused && styles.submitButtonFocused,
+              ]}
+              onFocus={() => setSubmitFocused(true)}
+              onBlur={() => setSubmitFocused(false)}
+              onPress={onSubmit}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : (
+                <Text style={styles.submitButtonText}>{submitLabel}</Text>
+              )}
+            </Pressable>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -365,7 +490,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Header - matching Addons page
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -387,7 +511,6 @@ const styles = StyleSheet.create({
   headerTitleTV: {
     fontSize: 32,
   },
-  // + button - matching Addons page exactly
   addButton: {
     width: 44,
     height: 44,
@@ -405,7 +528,6 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 16,
   },
-  // User card - no card-level focus, just the trash can gets focus
   userCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -457,14 +579,18 @@ const styles = StyleSheet.create({
     color: '#888888',
     marginTop: 2,
   },
-  // Trash button - red icon, gold border on focus
-  deleteButton: {
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionButton: {
     padding: 10,
     borderWidth: 3,
     borderColor: 'transparent',
     borderRadius: 10,
   },
-  deleteButtonFocused: {
+  actionButtonFocused: {
     borderColor: colors.primary,
   },
   emptyContainer: {
@@ -477,7 +603,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 12,
   },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.85)',
@@ -488,6 +613,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 24,
     marginHorizontal: 20,
+    maxHeight: '85%',
   },
   modalContentTV: {
     marginHorizontal: 150,
@@ -564,7 +690,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#FFFFFF',
   },
-  // Submit button - gray bg, gold text, gold border on focus (matches addons Install button)
   submitButton: {
     backgroundColor: colors.surface,
     borderRadius: 8,
