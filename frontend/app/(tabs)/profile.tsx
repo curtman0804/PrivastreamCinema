@@ -234,6 +234,7 @@ const styles = StyleSheet.create({
     maxHeight: 72,
     borderWidth: 3,
     borderColor: 'transparent',
+    borderRadius: 12,
   },
   menuItemFocused: {
     borderColor: colors.primary,

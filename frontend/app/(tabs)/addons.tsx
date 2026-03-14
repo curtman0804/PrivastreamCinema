@@ -282,13 +282,10 @@ function AddonCard({
   isDeleting: boolean;
   getAddonIcon: (types?: string[]) => string;
 }) {
-  const [isFocused, setIsFocused] = useState(false);
 
   return (
-    <Pressable
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
-      style={[styles.addonCard, isFocused && styles.addonCardFocused]}
+    <View
+      style={styles.addonCard}
     >
       <View style={styles.addonIconContainer}>
         {addon.manifest.logo ? (
@@ -327,7 +324,7 @@ function AddonCard({
           <Ionicons name="share-outline" size={20} color={colors.textSecondary} />
         </Pressable>
         <Pressable 
-          style={({ focused }) => [styles.actionButton, focused && styles.actionButtonFocused, focused && styles.actionButtonDeleteFocused]} 
+          style={({ focused }) => [styles.actionButton, focused && styles.actionButtonDeleteFocused]} 
           onPress={onUninstall} 
           disabled={isDeleting}
         >
@@ -338,7 +335,7 @@ function AddonCard({
           )}
         </Pressable>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -369,19 +366,16 @@ const styles = StyleSheet.create({
   },
   addButton: {
     backgroundColor: colors.primary,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: colors.primary,
   },
   addButtonFocused: {
-    transform: [{ scale: 1.1 }],
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 12,
-    elevation: 8,
+    borderColor: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,

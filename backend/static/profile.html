@@ -23,9 +23,9 @@ function copyAll() {
 <h1>profile.tsx</h1>
 <div class="path">Paste into: <strong>frontend/app/(tabs)/profile.tsx</strong></div>
 <div class="nav">
-  <a href="/api/download/addons.html">1-addons.tsx</a>
-  <a href="/api/download/profile.html">2-profile.tsx</a>
-  <a href="/api/download/users.html">3-users.tsx</a>
+  <a href="/api/download/addons.html">1-addons</a>
+  <a href="/api/download/profile.html">2-profile</a>
+  <a href="/api/download/users.html">3-users</a>
 </div>
 <button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
 <pre id="code">import React, { useState } from &#x27;react&#x27;;
@@ -264,6 +264,7 @@ const styles = StyleSheet.create({
     maxHeight: 72,
     borderWidth: 3,
     borderColor: &#x27;transparent&#x27;,
+    borderRadius: 12,
   },
   menuItemFocused: {
     borderColor: colors.primary,
