@@ -8,8 +8,6 @@ h1 { color:#e6c47a; }
   font-weight:bold; border-radius:6px; font-size:16px; margin-bottom:16px; }
 pre { background:#0d1117; border:1px solid #333; padding:16px; overflow:auto;
   font-size:12px; line-height:1.4; white-space:pre; }
-.nav { margin:20px 0; }
-.nav a { color:#4ea8de; margin-right:16px; text-decoration:none; font-size:14px; }
 </style>
 <script>
 function copyAll() {
@@ -22,11 +20,6 @@ function copyAll() {
 </script></head><body>
 <h1>addons.tsx</h1>
 <div class="path">Paste into: <strong>frontend/app/(tabs)/addons.tsx</strong></div>
-<div class="nav">
-  <a href="/api/download/addons.html">1-addons</a>
-  <a href="/api/download/profile.html">2-profile</a>
-  <a href="/api/download/users.html">3-users</a>
-</div>
 <button class="btn" id="btn" onclick="copyAll()">Copy All Code</button>
 <pre id="code">import React, { useEffect, useCallback, useState } from &#x27;react&#x27;;
 import {
@@ -179,6 +172,8 @@ export default function AddonsScreen() {
     return &#x27;extension-puzzle-outline&#x27;;
   };
 
+  const [addBtnFocused, setAddBtnFocused] = useState(false);
+
   const renderAddon = ({ item }: { item: Addon }) =&gt; {
     if (!item || !item.manifest) return null;
     
@@ -199,7 +194,9 @@ export default function AddonsScreen() {
       &lt;View style={[styles.header, isTV &amp;&amp; styles.headerTV]}&gt;
         &lt;Text style={[styles.headerTitle, isTV &amp;&amp; styles.headerTitleTV]}&gt;Addons&lt;/Text&gt;
         &lt;Pressable
-          style={({ focused }) =&gt; [styles.addButton, focused &amp;&amp; styles.addButtonFocused]}
+          style={[styles.addButton, addBtnFocused &amp;&amp; styles.addButtonFocused]}
+          onFocus={() =&gt; setAddBtnFocused(true)}
+          onBlur={() =&gt; setAddBtnFocused(false)}
           onPress={() =&gt; setShowModal(true)}
         &gt;
           &lt;Ionicons name=&quot;add&quot; size={24} color={colors.textPrimary} /&gt;
@@ -252,9 +249,9 @@ export default function AddonsScreen() {
           &lt;View style={[styles.modalContent, isTV &amp;&amp; styles.modalContentTV]}&gt;
             &lt;View style={styles.modalHeader}&gt;
               &lt;Text style={styles.modalTitle}&gt;Install Addon&lt;/Text&gt;
-              &lt;Pressable onPress={() =&gt; setShowModal(false)} style={styles.modalClose}&gt;
+              &lt;ModalFocusButton onPress={() =&gt; setShowModal(false)}&gt;
                 &lt;Ionicons name=&quot;close&quot; size={24} color={colors.textPrimary} /&gt;
-              &lt;/Pressable&gt;
+              &lt;/ModalFocusButton&gt;
             &lt;/View&gt;
             
             &lt;Text style={styles.modalLabel}&gt;Manifest URL&lt;/Text&gt;
@@ -274,21 +271,18 @@ export default function AddonsScreen() {
               Paste addon manifest URLs (separate with semicolon or new line)
             &lt;/Text&gt;
             
-            &lt;Pressable
-              style={({ focused }) =&gt; [
-                styles.modalButton,
-                isInstalling &amp;&amp; styles.modalButtonDisabled,
-                focused &amp;&amp; styles.modalButtonFocused,
-              ]}
-              onPress={handleInstallAddon}
+            &lt;ModalFocusButton 
+              onPress={handleInstallAddon} 
               disabled={isInstalling}
+              style={[styles.modalButton, isInstalling &amp;&amp; styles.modalButtonDisabled]}
+              focusedStyle={styles.modalButtonFocused}
             &gt;
               {isInstalling ? (
                 &lt;ActivityIndicator size=&quot;small&quot; color={colors.textPrimary} /&gt;
               ) : (
                 &lt;Text style={styles.modalButtonText}&gt;Install&lt;/Text&gt;
               )}
-            &lt;/Pressable&gt;
+            &lt;/ModalFocusButton&gt;
           &lt;/View&gt;
         &lt;/View&gt;
       &lt;/Modal&gt;
@@ -297,6 +291,37 @@ export default function AddonsScreen() {
 }
 
 // Addon Card Component
+// Reusable focus button for modals and other contexts
+function ModalFocusButton({ 
+  onPress, 
+  children, 
+  disabled, 
+  style, 
+  focusedStyle 
+}: { 
+  onPress: () =&gt; void; 
+  children: React.ReactNode; 
+  disabled?: boolean;
+  style?: any;
+  focusedStyle?: any;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  return (
+    &lt;Pressable
+      style={[
+        style || { padding: 4, borderWidth: 3, borderColor: &#x27;transparent&#x27;, borderRadius: 8 },
+        isFocused &amp;&amp; (focusedStyle || { borderColor: colors.primary }),
+      ]}
+      onFocus={() =&gt; setIsFocused(true)}
+      onBlur={() =&gt; setIsFocused(false)}
+      onPress={onPress}
+      disabled={disabled}
+    &gt;
+      {children}
+    &lt;/Pressable&gt;
+  );
+}
+
 function AddonCard({ 
   addon, 
   isTV, 
@@ -312,11 +337,11 @@ function AddonCard({
   isDeleting: boolean;
   getAddonIcon: (types?: string[]) =&gt; string;
 }) {
+  const [shareFocused, setShareFocused] = useState(false);
+  const [trashFocused, setTrashFocused] = useState(false);
 
   return (
-    &lt;View
-      style={styles.addonCard}
-    &gt;
+    &lt;View style={styles.addonCard}&gt;
       &lt;View style={styles.addonIconContainer}&gt;
         {addon.manifest.logo ? (
           &lt;Image
@@ -348,20 +373,24 @@ function AddonCard({
       &lt;/View&gt;
       &lt;View style={styles.addonActions}&gt;
         &lt;Pressable 
-          style={({ focused }) =&gt; [styles.actionButton, focused &amp;&amp; styles.actionButtonFocused]} 
+          style={[styles.actionButton, shareFocused &amp;&amp; styles.actionButtonFocused]}
+          onFocus={() =&gt; setShareFocused(true)}
+          onBlur={() =&gt; setShareFocused(false)}
           onPress={onShare}
         &gt;
-          &lt;Ionicons name=&quot;share-outline&quot; size={20} color={colors.textSecondary} /&gt;
+          &lt;Ionicons name=&quot;share-outline&quot; size={22} color={shareFocused ? colors.primary : colors.textSecondary} /&gt;
         &lt;/Pressable&gt;
         &lt;Pressable 
-          style={({ focused }) =&gt; [styles.actionButton, focused &amp;&amp; styles.actionButtonDeleteFocused]} 
+          style={[styles.actionButton, trashFocused &amp;&amp; styles.actionButtonDeleteFocused]}
+          onFocus={() =&gt; setTrashFocused(true)}
+          onBlur={() =&gt; setTrashFocused(false)}
           onPress={onUninstall} 
           disabled={isDeleting}
         &gt;
           {isDeleting ? (
             &lt;ActivityIndicator size=&quot;small&quot; color={colors.error} /&gt;
           ) : (
-            &lt;Ionicons name=&quot;trash-outline&quot; size={20} color={colors.error} /&gt;
+            &lt;Ionicons name=&quot;trash-outline&quot; size={22} color={trashFocused ? &#x27;#FF6666&#x27; : colors.error} /&gt;
           )}
         &lt;/Pressable&gt;
       &lt;/View&gt;
