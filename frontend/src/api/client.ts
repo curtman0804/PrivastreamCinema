@@ -328,13 +328,9 @@ export const api = {
       // Fire all 3 fetches simultaneously - DON'T WAIT for all to finish
       const backendPromise = apiClient.get(`/api/streams/${type}/${encodedId}`)
         .then(r => {
-          const streams = r.data.streams || [];
-          streams.forEach((s: Stream) => {
-            if (s.infoHash) existingHashes.add(s.infoHash.toLowerCase());
-          });
-          allStreams = filterForEpisode(streams);
-          if (allStreams.length > 0 && onProgress) onProgress([...allStreams]);
-          console.log(`[STREAMS] Backend: ${allStreams.length} streams in ${Date.now() - startTime}ms`);
+          const streams = filterForEpisode(r.data.streams || []);
+          // MERGE backend streams instead of overwriting (fixes streams disappearing)
+          mergeAndNotify(streams, 'Backend');
         })
         .catch(e => console.log(`[STREAMS] Backend failed:`, e));
       
@@ -350,6 +346,9 @@ export const api = {
       await Promise.allSettled([backendPromise, torrentioPromise, tpbPromise]);
       
       console.log(`[STREAMS] All sources done: ${allStreams.length} total streams in ${Date.now() - startTime}ms`);
+      
+      // Final sort by seeders (highest first) to ensure best streams are on top
+      allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
       
       // Cache the result
       if (!((api as any)._streamCache)) (api as any)._streamCache = new Map();
