@@ -96,6 +96,15 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="always"
         >
           <View style={[styles.formWrapper, isTV && styles.formWrapperTV]}>
+            {/* Logo */}
+            <View style={styles.header}>
+              <Image
+                source={require('../../assets/images/logo_splash.png')}
+                style={[styles.logo, isTV && styles.logoTV]}
+                contentFit="contain"
+              />
+            </View>
+
             {/* Form */}
             <View style={styles.form}>
               {/* Username Field - TV Optimized */}
@@ -206,15 +215,6 @@ export default function LoginScreen() {
                   <Text style={styles.loginButtonText}>Sign In</Text>
                 )}
               </Pressable>
-            </View>
-
-            {/* Logo at bottom */}
-            <View style={styles.footer}>
-              <Image
-                source={require('../../assets/images/logo_splash.png')}
-                style={[styles.logo, isTV && styles.logoTV]}
-                contentFit="contain"
-              />
             </View>
           </View>
         </ScrollView>
