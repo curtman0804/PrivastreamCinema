@@ -63,7 +63,7 @@ export default function RegisterScreen() {
           </TouchableOpacity>
 
           <View style={styles.header}>
-            <Ionicons name="tv" size={48} color="#8B5CF6" />
+            <Ionicons name="tv" size={48} color="#B8A05C" />
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Join PrivastreamCinema</Text>
           </View>
@@ -178,12 +178,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#B8A05C',
     marginTop: 16,
   },
   subtitle: {
     fontSize: 16,
-    color: '#888888',
+    color: '#9A8540',
     marginTop: 8,
   },
   form: {
@@ -203,14 +203,14 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: '#FFFFFF',
+    color: '#B8A05C',
     fontSize: 16,
   },
   eyeButton: {
     padding: 8,
   },
   registerButton: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#B8A05C',
     borderRadius: 12,
     height: 56,
     justifyContent: 'center',
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   registerButtonText: {
-    color: '#FFFFFF',
+    color: '#B8A05C',
     fontSize: 18,
     fontWeight: '700',
   },
@@ -232,11 +232,11 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   loginText: {
-    color: '#888888',
+    color: '#9A8540',
     fontSize: 14,
   },
   loginLink: {
-    color: '#8B5CF6',
+    color: '#B8A05C',
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 6,

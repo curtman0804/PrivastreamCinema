@@ -265,7 +265,7 @@ export default function PlayerScreen() {
   
   // Fallback streams for auto-retry
   const [fallbackUrls, setFallbackUrls] = useState<string[]>([]);
-  const [currentStreamIndex, setCurrentStreamIndex] = useState(0);
+  const [currentStreamIndex, setCurrentStreamIndex] = useState(-1);
   const [playbackStarted, setPlaybackStarted] = useState(false);
   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -1166,8 +1166,14 @@ export default function PlayerScreen() {
     
     if (directUrl) {
       setStreamUrl(directUrl);
-      setIsLoading(false);
-      setLoadingStatus('');
+      if (isLive === 'true') {
+        // For live TV, keep loading state until video actually starts playing
+        setIsLoading(true);
+        setLoadingStatus('Loading live stream...');
+      } else {
+        setIsLoading(false);
+        setLoadingStatus('');
+      }
     } else if (url) {
       setStreamUrl(url);
       setIsLoading(false);
@@ -1352,9 +1358,10 @@ export default function PlayerScreen() {
                 <View style={styles.logoWrapper}>
                   <Image
                     source={{ uri: logo }}
-                    style={styles.logoUnfilled}
+                    style={[styles.logoUnfilled, !infoHash && { opacity: 1 }]}
                     resizeMode="contain"
                   />
+                  {infoHash && (
                   <View style={[styles.logoFillClip, { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }]}>
                     <Image
                       source={{ uri: logo }}
@@ -1362,6 +1369,7 @@ export default function PlayerScreen() {
                       resizeMode="contain"
                     />
                   </View>
+                  )}
                 </View>
               )
             ) : (
@@ -1389,9 +1397,10 @@ export default function PlayerScreen() {
                 </div>
               ) : (
                 <View style={styles.titleWrapper}>
-                  <Text style={styles.titleUnfilled} numberOfLines={1} adjustsFontSizeToFit>
+                  <Text style={[styles.titleUnfilled, !infoHash && { opacity: 1 }]} numberOfLines={1} adjustsFontSizeToFit>
                     {title || 'Loading...'}
                   </Text>
+                  {infoHash && (
                   <View style={styles.titleFillContainer}>
                     <View 
                       style={[
@@ -1404,6 +1413,7 @@ export default function PlayerScreen() {
                       </Text>
                     </View>
                   </View>
+                  )}
                 </View>
               )
             )}
@@ -1423,6 +1433,16 @@ export default function PlayerScreen() {
                   <Ionicons name="disc-outline" size={14} color="rgba(255,255,255,0.6)" />
                   <Text style={styles.loadingStatText}>{downloadProgress.toFixed(0)}%</Text>
                 </View>
+              </View>
+            )}
+            
+            {/* Live TV / Direct URL Loading Indicator */}
+            {!infoHash && (
+              <View style={{ marginTop: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#B8A05C" />
+                <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 16, marginTop: 16, fontWeight: '500' }}>
+                  {isLiveTV ? 'Connecting to live stream...' : 'Loading stream...'}
+                </Text>
               </View>
             )}
           </View>
@@ -1565,7 +1585,15 @@ export default function PlayerScreen() {
             >
               <Video
                 ref={videoRef}
-                source={{ uri: streamUrl }}
+                source={{ 
+                  uri: streamUrl,
+                  // CRITICAL: Forces ExoPlayer to use HLS media source for redirect URLs
+                  // Without this, URLs without .m3u8 extension (like redirects) fail
+                  overrideFileExtensionAndroid: (isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true') ? 'm3u8' : undefined,
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  },
+                }}
                 style={styles.videoPlayer}
                 resizeMode={ResizeMode.CONTAIN}
                 shouldPlay

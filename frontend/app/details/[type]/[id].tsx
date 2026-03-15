@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,16 @@ import {
   Dimensions,
   Linking,
   FlatList,
+  Image as RNImage,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useContentStore } from '../../../src/store/contentStore';
+import { useContentStore, getMetaCache, setMetaCache } from '../../../src/store/contentStore';
+
+// Fallback image for missing posters
+const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
+
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -49,6 +53,22 @@ function FocusableButton({
   );
 }
 
+// Clickable chip for genre/cast/director - routes to search
+function ChipButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const [isFocused, setIsFocused] = useState(false);
+  return (
+    <Pressable
+      style={[styles.chipButton, isFocused && styles.chipButtonFocused]}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      onPress={onPress}
+    >
+      <Text style={[styles.chipText, isFocused && styles.chipTextFocused]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+
 // Stream Card Component - Stremio style horizontal card
 function StreamCard({ 
   stream, 
@@ -63,20 +83,28 @@ function StreamCard({
     const name = stream.name || '';
     const title = stream.title || '';
     
+    // Extract quality
     let quality = 'SD';
     if (name.includes('4K') || name.includes('2160')) quality = '4K';
     else if (name.includes('1080')) quality = '1080p';
     else if (name.includes('720')) quality = '720p';
+    else if (name.toUpperCase().includes('HD') && !name.toUpperCase().includes('SD')) quality = 'HD';
     
+    // Extract source - use provider code for USAATV, otherwise addon name
     let source = stream.addon || 'Unknown';
-    if (name.includes('TPB') || name.includes('🏴‍☠️')) source = 'TPB';
+    if (stream.provider) {
+      // USAATV streams have provider abbreviation (AX, CV, MJ, TP, etc.)
+      source = stream.provider;
+    } else if (name.includes('TPB') || name.includes('🏴‍☠️')) source = 'TPB';
     else if (name.includes('⚡') || name.includes('Torrentio')) source = 'Torrentio';
     else if (name.includes('EZTV')) source = 'EZTV';
     
+    // Extract size from title
     let size = '';
     const sizeMatch = title.match(/💾\s*([\d.]+\s*[GM]B)/);
     if (sizeMatch) size = sizeMatch[1];
     
+    // Extract seeders
     let seeders = stream.seeders || 0;
     if (!seeders) {
       const seederMatch = title.match(/🌱\s*(\d+)/);
@@ -86,7 +114,7 @@ function StreamCard({
     return { quality, source, size, seeders, title };
   };
   
-  const { quality, source, size, seeders } = parseStreamInfo(stream);
+  const { quality, source, size, seeders, title } = parseStreamInfo(stream);
   
   return (
     <Pressable
@@ -125,6 +153,17 @@ function StreamCard({
 }
 
 // Episode Card Component
+// Placeholder component for missing posters/thumbnails
+function ComingSoonPlaceholder({ width, height }: { width: number | string; height: number | string }) {
+  return (
+    <RNImage
+      source={NO_POSTER_IMAGE}
+      style={{ width: width as any, height: height as any }}
+      resizeMode="cover"
+    />
+  );
+}
+
 function EpisodeCard({ 
   episode, 
   fallbackPoster, 
@@ -135,6 +174,8 @@ function EpisodeCard({
   onPress: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
+  const [thumbError, setThumbError] = useState(false);
+  const thumbUri = episode.thumbnail || fallbackPoster;
   
   return (
     <Pressable
@@ -143,11 +184,16 @@ function EpisodeCard({
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
     >
-      <Image
-        source={{ uri: episode.thumbnail || fallbackPoster }}
-        style={styles.episodeThumbnail}
-        contentFit="cover"
-      />
+      {thumbUri && !thumbError ? (
+        <Image
+          source={{ uri: thumbUri }}
+          style={styles.episodeThumbnail}
+          contentFit="cover"
+          onError={() => setThumbError(true)}
+        />
+      ) : (
+        <ComingSoonPlaceholder width="100%" height={90} />
+      )}
       <View style={styles.episodeInfo}>
         <Text style={styles.episodeTitle} numberOfLines={2}>
           E{episode.episode}: {episode.name || `Episode ${episode.episode}`}
@@ -161,35 +207,49 @@ export default function DetailsScreen() {
   const { 
     type, 
     id: rawId, 
-    name: passedName, 
-    poster: passedPoster,
     resumeEpisodeId,
     resumePosition,
+    resumeSeason,
+    resumeEpisode,
+    // Display data passed via route params for INSTANT rendering
+    name: paramName, poster: paramPoster,
   } = useLocalSearchParams<{ 
     type: string; 
     id: string;
-    name?: string;
-    poster?: string;
     resumeEpisodeId?: string;
     resumePosition?: string;
+    resumeSeason?: string;
+    resumeEpisode?: string;
+    name?: string; poster?: string;
   }>();
   const router = useRouter();
-  const { 
-    streams, 
-    isLoadingStreams, 
-    fetchStreams, 
-    library,
-    fetchLibrary,
-  } = useContentStore();
+  
+  // Use zustand SELECTORS — only re-render when these specific fields change
+  // This prevents re-renders from unrelated store changes (discover data, addons, etc.)
+  const streams = useContentStore(s => s.streams);
+  const isLoadingStreams = useContentStore(s => s.isLoadingStreams);
+  const fetchStreams = useContentStore(s => s.fetchStreams);
+  const library = useContentStore(s => s.library);
+  const fetchLibrary = useContentStore(s => s.fetchLibrary);
   
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   
-  const [content, setContent] = useState<ContentItem | null>(null);
-  const [isLoadingContent, setIsLoadingContent] = useState(true);
+  // Try meta cache first (instant), then route params, then bare minimum
+  const cachedMeta = id ? getMetaCache(id) : null;
+  const initialContent: ContentItem = cachedMeta || {
+    id: id!,
+    imdb_id: id,
+    name: paramName || '',
+    type: type as 'movie' | 'series',
+    poster: paramPoster || '',
+  };
+  
+  const [content, setContent] = useState<ContentItem | null>(initialContent);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
 
-  const isEpisodePage = id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
+  const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
   const episodeSeason = isEpisodePage ? parseInt(id?.split(':')[1] || '1') : null;
   const episodeNumber = isEpisodePage ? parseInt(id?.split(':')[2] || '1') : null;
@@ -203,10 +263,12 @@ export default function DetailsScreen() {
 
   const nextEpisode = useMemo(() => {
     if (!isEpisodePage || !content?.videos || !episodeSeason || !episodeNumber) return null;
+    
     const sameSeasonNext = content.videos.find(
       ep => ep.season === episodeSeason && ep.episode === episodeNumber + 1
     );
     if (sameSeasonNext) return sameSeasonNext;
+    
     const nextSeasonFirst = content.videos.find(
       ep => ep.season === episodeSeason + 1 && ep.episode === 1
     );
@@ -227,8 +289,17 @@ export default function DetailsScreen() {
   }, [content?.videos, selectedSeason]);
 
   useEffect(() => {
-    loadContent();
+    // If we have cached meta with background, skip the meta fetch entirely
+    const hasCachedMeta = cachedMeta && cachedMeta.background;
+    if (!hasCachedMeta) {
+      // Only fetch meta for series (need episodes) or if missing background
+      const needsMeta = type === 'series' || !content?.background;
+      if (needsMeta) {
+        loadContent();
+      }
+    }
     fetchLibrary();
+    
     if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
       fetchStreams(type, id);
     }
@@ -251,20 +322,15 @@ export default function DetailsScreen() {
   }, [content, library]);
 
   const loadContent = async () => {
-    setIsLoadingContent(true);
     try {
       const contentId = isEpisodePage ? baseId : id;
       const data = await api.content.getMeta(type!, contentId!);
+      // Cache the meta data for instant re-access
+      if (contentId) setMetaCache(contentId, data);
       setContent(data);
     } catch (error) {
       console.log('Failed to fetch meta:', error);
-      setContent({
-        id: id!,
-        imdb_id: id,
-        name: passedName || 'Unknown Title',
-        type: type as 'movie' | 'series',
-        poster: passedPoster || '',
-      });
+      // Keep using the initial content from params — already set
     }
     setIsLoadingContent(false);
   };
@@ -294,7 +360,8 @@ export default function DetailsScreen() {
     
     const buildFallbackUrls = async (): Promise<string[]> => {
       const authToken = await AsyncStorage.getItem('auth_token');
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://vidflow-95.preview.emergentagent.com';
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
+      
       return streams
         .filter(s => s !== stream)
         .filter(s => s.url && s.url.startsWith('/api/proxy/'))
@@ -316,8 +383,10 @@ export default function DetailsScreen() {
       console.log('[DETAILS] Error saving to AsyncStorage:', e);
     }
     
-    if ((stream as any).externalUrl || (stream as any).requiresWebView) {
-      const streamUrl = (stream as any).externalUrl || stream.url;
+    // Handle external URLs - route them to the internal player
+    if (stream.externalUrl || stream.requiresWebView) {
+      const streamUrl = stream.externalUrl || stream.url;
+      console.log('[DETAILS] Playing external URL in internal player:', streamUrl);
       router.push({
         pathname: '/player',
         params: { 
@@ -340,18 +409,27 @@ export default function DetailsScreen() {
       const authToken = await AsyncStorage.getItem('auth_token');
       const separator = stream.url.includes('?') ? '&' : '?';
       const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://vidflow-95.preview.emergentagent.com';
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
+      
+      // Build fallback URLs - include other proxy streams + direct URLs
       const fallbacks = await buildFallbackUrls();
+      
+      // Also include direct URLs from USAATV streams as fallbacks
+      const directFallbacks = streams
+        .filter(s => s !== stream && (s.directUrl || (s.url && !s.url.startsWith('/api/proxy/'))))
+        .map(s => s.directUrl || s.url)
+        .filter(Boolean);
+      
       router.push({
         pathname: '/player',
         params: { 
           directUrl: absoluteUrl,
           title: contentTitle,
-          isLive: 'false',
+          isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
           contentId: subtitleContentId,
-          fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks]),
+          fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks, ...directFallbacks]),
           backdrop: content?.background || '',
           poster: content?.poster || '',
           logo: content?.logo || '',
@@ -380,6 +458,29 @@ export default function DetailsScreen() {
         },
       });
     } else if (stream.url) {
+      // Build fallback URLs from all available streams with direct URLs
+      const allStreamUrls = streams
+        .filter(s => s.url && !s.infoHash && s.url !== stream.url)
+        .map(s => s.url)
+        .filter(Boolean);
+      
+      // For live TV streams, also include proxy URLs as additional fallbacks
+      if (type === 'tv') {
+        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://fire-stick-remote.preview.emergentagent.com';
+        const authToken = await AsyncStorage.getItem('auth_token');
+        
+        // Add proxy URLs for all streams as fallbacks
+        const proxyFallbacks = streams
+          .filter(s => s.proxyUrl)
+          .map(s => {
+            const tokenParam = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
+            return `${backendUrl}${s!.proxyUrl}${tokenParam}`;
+          })
+          .filter(Boolean);
+        
+        allStreamUrls.push(...proxyFallbacks);
+      }
+      
       router.push({
         pathname: '/player',
         params: { 
@@ -388,6 +489,7 @@ export default function DetailsScreen() {
           isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
           contentId: subtitleContentId,
+          fallbackStreams: allStreamUrls.length > 0 ? JSON.stringify(allStreamUrls) : '',
           backdrop: content?.background || '',
           poster: content?.poster || '',
           logo: content?.logo || '',
@@ -400,7 +502,9 @@ export default function DetailsScreen() {
 
   const handleEpisodePress = (episode: Episode) => {
     const episodeId = `${baseId || id}:${episode.season}:${episode.episode}`;
-    router.push(`/details/${type}/${episodeId}` as any);
+    router.push({
+      pathname: `/details/${type}/${episodeId}`,
+    });
   };
 
   const toggleLibrary = async () => {
@@ -421,27 +525,28 @@ export default function DetailsScreen() {
         });
         setInLibrary(true);
       }
+      // Refresh library immediately so the Library tab updates in real-time
+      fetchLibrary(true);
     } catch (error) {
       console.log('Failed to toggle library:', error);
     }
   };
 
-  if (isLoadingContent) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#B8A05C" />
-      </View>
-    );
-  }
+  // Use content data for display - available immediately from store
+  const displayName = content?.name || 'Loading...';
+  // ONLY use backdrop image, no poster fallback — prevents the jarring poster→backdrop switch
+  const displayPoster = content?.background || '';
 
   const rating = typeof content?.imdbRating === 'string' 
     ? parseFloat(content.imdbRating) 
     : content?.imdbRating;
 
+  // Render stream item for FlatList
   const renderStreamItem = ({ item }: { item: Stream }) => (
     <StreamCard stream={item} onPress={() => handleStreamSelect(item)} />
   );
 
+  // Render episode item for FlatList
   const renderEpisodeItem = ({ item }: { item: Episode }) => (
     <EpisodeCard 
       episode={item} 
@@ -452,19 +557,21 @@ export default function DetailsScreen() {
 
   return (
     <View style={styles.container}>
-      <Image
-        source={{ uri: content?.background || content?.poster }}
-        style={styles.backgroundImage}
-        contentFit="contain"
-      />
+      {/* Background Image — lightweight RN Image, no expo-image overhead */}
+      {displayPoster ? (
+        <RNImage
+          source={{ uri: displayPoster }}
+          style={styles.backgroundImage}
+          resizeMode="cover"
+        />
+      ) : null}
       
-      <LinearGradient
-        colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)', 'rgba(15,15,17,0.95)', '#0f0f11']}
-        locations={[0, 0.4, 0.7, 1]}
-        style={styles.gradientOverlay}
-      />
+      {/* Dark overlay — simple View, no LinearGradient overhead */}
+      <View style={styles.gradientOverlay} />
       
+      {/* Content Overlay */}
       <View style={styles.contentOverlay}>
+        {/* Back Button - floats over everything */}
         <FocusableButton 
           style={styles.backButton}
           focusedStyle={styles.backButtonFocused}
@@ -473,11 +580,8 @@ export default function DetailsScreen() {
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </FocusableButton>
 
-        <ScrollView 
-          style={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContentContainer}
-        >
+        {/* Fixed Title Area - never moves */}
+        <View style={styles.fixedTitleArea}>
           <View style={styles.titleSection}>
             {content?.logo ? (
               <Image
@@ -486,7 +590,7 @@ export default function DetailsScreen() {
                 contentFit="contain"
               />
             ) : (
-              <Text style={styles.title}>{content?.name}</Text>
+              <Text style={styles.title}>{displayName}</Text>
             )}
             
             {isEpisodePage && currentEpisode && (
@@ -503,54 +607,117 @@ export default function DetailsScreen() {
                 <Text style={styles.imdbRating}>{rating.toFixed(1)}</Text>
               </View>
             )}
-            {content?.year && <Text style={styles.metaText}>{content.year}</Text>}
-            {content?.runtime && <Text style={styles.metaText}>{content.runtime}</Text>}
-            {content?.genre && content.genre.length > 0 && (
-              <Text style={styles.metaText}>{content.genre.slice(0, 2).join(' • ')}</Text>
+            {content?.year && (
+              <Text style={styles.metaText}>{content.year}</Text>
+            )}
+            {content?.runtime && (
+              <Text style={styles.metaText}>{content.runtime}</Text>
             )}
           </View>
+        </View>
 
+        {/* Scrollable Content - everything below the title */}
+        <ScrollView 
+          style={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContentContainer}
+        >
           <View style={styles.actionRow}>
             <FocusableButton 
               style={styles.libraryButton}
               focusedStyle={styles.libraryButtonFocused}
               onPress={toggleLibrary}
             >
-              <Ionicons name={inLibrary ? "checkmark" : "add"} size={20} color="#FFFFFF" />
+              <Ionicons 
+                name={inLibrary ? "checkmark" : "add"} 
+                size={20} 
+                color="#FFFFFF" 
+              />
               <Text style={styles.libraryButtonText}>
                 {inLibrary ? 'In Library' : 'Add to Library'}
               </Text>
             </FocusableButton>
           </View>
 
+          {/* Description */}
           {content?.description && (
-            <Text style={styles.description} numberOfLines={4}>{content.description}</Text>
+            <Text style={styles.description} numberOfLines={4}>
+              {content.description}
+            </Text>
           )}
 
+          {/* Episode Description if applicable */}
           {isEpisodePage && currentEpisode?.overview && (
-            <Text style={styles.description} numberOfLines={3}>{currentEpisode.overview}</Text>
+            <Text style={styles.description} numberOfLines={3}>
+              {currentEpisode.overview}
+            </Text>
           )}
 
-          {content?.cast && content.cast.length > 0 && (
-            <Text style={styles.castText}>Cast: {content.cast.slice(0, 4).join(', ')}</Text>
+          {/* Genre */}
+          {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
+            <View style={styles.chipSection}>
+              <Text style={styles.chipLabel}>Genre</Text>
+              <View style={styles.chipRow}>
+                {content.genre.slice(0, 4).map((g: string, i: number) => (
+                  <ChipButton key={`genre-${i}`} label={g} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
+                ))}
+              </View>
+            </View>
           )}
 
+          {/* Director */}
+          {content?.director && Array.isArray(content.director) && content.director.length > 0 && (
+            <View style={styles.chipSection}>
+              <Text style={styles.chipLabel}>Director</Text>
+              <View style={styles.chipRow}>
+                {content.director.slice(0, 3).map((d: string, i: number) => (
+                  <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d } })} />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Cast */}
+          {content?.cast && Array.isArray(content.cast) && content.cast.length > 0 && (
+            <View style={styles.chipSection}>
+              <Text style={styles.chipLabel}>Cast</Text>
+              <View style={styles.chipRow}>
+                {content.cast.slice(0, 6).map((c: string, i: number) => (
+                  <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c } })} />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Season Selector for Series */}
           {type === 'series' && !isEpisodePage && seasons.length > 0 && (
             <View style={styles.seasonSection}>
               <Text style={styles.sectionTitle}>Episodes</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.seasonSelector}>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.seasonSelector}
+              >
                 {seasons.map((season) => (
                   <Pressable
                     key={season}
-                    style={[styles.seasonButton, selectedSeason === season && styles.seasonButtonActive]}
+                    style={[
+                      styles.seasonButton,
+                      selectedSeason === season && styles.seasonButtonActive,
+                    ]}
                     onPress={() => setSelectedSeason(season)}
                   >
-                    <Text style={[styles.seasonButtonText, selectedSeason === season && styles.seasonButtonTextActive]}>
+                    <Text style={[
+                      styles.seasonButtonText,
+                      selectedSeason === season && styles.seasonButtonTextActive,
+                    ]}>
                       Season {season}
                     </Text>
                   </Pressable>
                 ))}
               </ScrollView>
+              
+              {/* Episodes List */}
               <FlatList
                 data={episodesForSeason}
                 renderItem={renderEpisodeItem}
@@ -562,16 +729,19 @@ export default function DetailsScreen() {
             </View>
           )}
 
+          {/* Streams Section - Stremio Style */}
           {(type === 'movie' || type === 'tv' || isEpisodePage) && (
             <View style={styles.streamsSection}>
               <Text style={styles.sectionTitle}>
-                {isLoadingStreams ? 'Finding Streams...' : `${streams.length} Streams Available`}
+                {isLoadingStreams ? (type === 'tv' ? 'Verifying Live Streams...' : 'Finding Streams...') : `${streams.length} Stream${streams.length !== 1 ? 's' : ''} Available`}
               </Text>
               
               {isLoadingStreams ? (
                 <View style={styles.streamLoading}>
                   <ActivityIndicator size="small" color="#B8A05C" />
-                  <Text style={styles.streamLoadingText}>Searching sources...</Text>
+                  <Text style={styles.streamLoadingText}>
+                    {type === 'tv' ? 'Checking available channels...' : 'Searching sources...'}
+                  </Text>
                 </View>
               ) : streams.length === 0 ? (
                 <View style={styles.noStreams}>
@@ -591,6 +761,7 @@ export default function DetailsScreen() {
             </View>
           )}
           
+          {/* Bottom padding */}
           <View style={{ height: 100 }} />
         </ScrollView>
       </View>
@@ -599,59 +770,343 @@ export default function DetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f11' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f0f11' },
-  backgroundImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: width, height: height },
-  gradientOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  contentOverlay: { flex: 1 },
-  backButton: { position: 'absolute', top: 50, left: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 10, borderWidth: 2, borderColor: 'transparent' },
-  backButtonFocused: { borderColor: '#B8A05C', backgroundColor: 'rgba(184, 160, 92, 0.3)' },
-  scrollContent: { flex: 1, marginTop: 100 },
-  scrollContentContainer: { paddingHorizontal: 20 },
-  titleSection: { marginBottom: 16, marginTop: height * 0.25 },
-  logoImage: { width: width * 0.6, height: 80, alignSelf: 'flex-start' },
-  title: { fontSize: 32, fontWeight: 'bold', color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
-  episodeSubtitle: { fontSize: 16, color: '#B8A05C', marginTop: 8 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
-  imdbBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(245, 197, 24, 0.2)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
-  imdbLabel: { backgroundColor: '#F5C518', color: '#000000', fontSize: 10, fontWeight: 'bold', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 2 },
-  imdbRating: { color: '#F5C518', fontSize: 14, fontWeight: '600' },
-  metaText: { color: '#AAAAAA', fontSize: 14 },
-  actionRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  libraryButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)' },
-  libraryButtonFocused: { borderColor: '#B8A05C', backgroundColor: 'rgba(184, 160, 92, 0.3)' },
-  libraryButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  description: { fontSize: 14, color: '#CCCCCC', lineHeight: 22, marginBottom: 16 },
-  castText: { fontSize: 13, color: '#888888', marginBottom: 24 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 12 },
-  seasonSection: { marginBottom: 24 },
-  seasonSelector: { marginBottom: 16 },
-  seasonButton: { paddingHorizontal: 16, paddingVertical: 8, marginRight: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
-  seasonButtonActive: { backgroundColor: '#B8A05C' },
-  seasonButtonText: { color: '#AAAAAA', fontSize: 13, fontWeight: '600' },
-  seasonButtonTextActive: { color: '#000000' },
-  episodesList: { gap: 12 },
-  episodeCard: { width: 160, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
-  episodeCardFocused: { borderColor: '#B8A05C' },
-  episodeThumbnail: { width: '100%', height: 90, backgroundColor: '#333' },
-  episodeInfo: { padding: 8 },
-  episodeTitle: { fontSize: 12, color: '#FFFFFF', fontWeight: '500' },
-  streamsSection: { marginBottom: 24 },
-  streamLoading: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 20 },
-  streamLoadingText: { color: '#AAAAAA', fontSize: 14 },
-  noStreams: { alignItems: 'center', paddingVertical: 30 },
-  noStreamsText: { color: '#666666', fontSize: 14, marginTop: 8 },
-  streamsList: { gap: 12, paddingVertical: 8 },
-  streamCard: { width: 140, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 12, borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)' },
-  streamCardFocused: { borderColor: '#B8A05C', backgroundColor: 'rgba(184, 160, 92, 0.2)' },
-  streamCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  streamSource: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
-  qualityBadge: { backgroundColor: 'rgba(184, 160, 92, 0.3)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  qualityBadge4K: { backgroundColor: 'rgba(184, 160, 92, 0.6)' },
-  qualityText: { fontSize: 10, fontWeight: 'bold', color: '#B8A05C' },
-  streamCardBody: { flexDirection: 'row', gap: 12, marginBottom: 8 },
-  streamStat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  streamStatText: { fontSize: 11, color: '#888888' },
-  streamCardFooter: { alignItems: 'center', paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' },
-  defaultFocused: { borderColor: '#B8A05C', borderWidth: 2 },
+  container: {
+    flex: 1,
+    backgroundColor: '#0f0f11',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0f0f11',
+  },
+  backgroundImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: width,
+    height: height,
+  },
+  gradientOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 15, 17, 0.75)',
+  },
+  contentOverlay: {
+    flex: 1,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 30,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  backButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+  },
+  fixedTitleArea: {
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  titleSection: {
+    marginBottom: 8,
+    alignItems: 'flex-start',
+  },
+  logoImage: {
+    width: width * 0.6,
+    height: 80,
+    alignSelf: 'flex-start',
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#B8A05C',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+    textAlign: 'left',
+  },
+  episodeSubtitle: {
+    fontSize: 16,
+    color: '#B8A05C',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 16,
+  },
+  imdbBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(245, 197, 24, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  imdbLabel: {
+    backgroundColor: '#F5C518',
+    color: '#000000',
+    fontSize: 10,
+    fontWeight: 'bold',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 2,
+  },
+  imdbRating: {
+    color: '#F5C518',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  metaText: {
+    color: '#AAAAAA',
+    fontSize: 14,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  libraryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  libraryButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
+  },
+  libraryButtonText: {
+    color: '#B8A05C',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  description: {
+    fontSize: 14,
+    color: '#D4BC78',
+    lineHeight: 22,
+    marginBottom: 16,
+    textAlign: 'left',
+  },
+  castText: {
+    fontSize: 13,
+    color: '#888888',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  chipSection: {
+    marginBottom: 16,
+    alignItems: 'flex-start',
+  },
+  chipLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#888888',
+    marginBottom: 8,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    gap: 8,
+    marginBottom: 4,
+  },
+  chipButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  chipButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
+    transform: [{ scale: 1.1 }],
+  },
+  chipText: {
+    color: '#AAAAAA',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  chipTextFocused: {
+    color: '#FFFFFF',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#B8A05C',
+    marginBottom: 12,
+  },
+  seasonSection: {
+    marginBottom: 24,
+  },
+  seasonSelector: {
+    marginBottom: 16,
+  },
+  seasonButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+  },
+  seasonButtonActive: {
+    backgroundColor: '#B8A05C',
+  },
+  seasonButtonText: {
+    color: '#AAAAAA',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  seasonButtonTextActive: {
+    color: '#000000',
+  },
+  episodesList: {
+    gap: 12,
+  },
+  episodeCard: {
+    width: 160,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  episodeCardFocused: {
+    borderColor: '#B8A05C',
+  },
+  episodeThumbnail: {
+    width: '100%',
+    height: 90,
+    backgroundColor: '#333',
+  },
+  episodeInfo: {
+    padding: 8,
+  },
+  episodeTitle: {
+    fontSize: 12,
+    color: '#B8A05C',
+    fontWeight: '500',
+  },
+  streamsSection: {
+    marginBottom: 24,
+  },
+  streamLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 20,
+  },
+  streamLoadingText: {
+    color: '#AAAAAA',
+    fontSize: 14,
+  },
+  noStreams: {
+    alignItems: 'center',
+    paddingVertical: 30,
+  },
+  noStreamsText: {
+    color: '#666666',
+    fontSize: 14,
+    marginTop: 8,
+  },
+  streamsList: {
+    gap: 12,
+    paddingVertical: 8,
+  },
+  streamCard: {
+    width: 140,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  streamCardFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+  },
+  streamCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  streamSource: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#B8A05C',
+  },
+  qualityBadge: {
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  qualityBadge4K: {
+    backgroundColor: 'rgba(184, 160, 92, 0.6)',
+  },
+  qualityText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#B8A05C',
+  },
+  streamCardBody: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 8,
+  },
+  streamStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  streamStatText: {
+    fontSize: 11,
+    color: '#888888',
+  },
+  streamCardFooter: {
+    alignItems: 'center',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  defaultFocused: {
+    borderColor: '#B8A05C',
+    borderWidth: 2,
+  },
 });

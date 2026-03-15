@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback } from 'react';
+import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,11 +6,17 @@ import {
   useWindowDimensions,
   Text,
   Alert,
+  findNodeHandle,
+  Image as RNImage,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentItem, SearchResult, api } from '../api/client';
 import { colors, posterShapes } from '../styles/colors';
+
+// Fallback image for missing posters
+const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
+
 
 interface ContentCardProps {
   item: ContentItem | SearchResult;
@@ -22,6 +28,10 @@ interface ContentCardProps {
   showProgress?: number;
   inLibrary?: boolean;
   onLibraryChange?: () => void;
+  hasTVPreferredFocus?: boolean;
+  isFirstInRow?: boolean;
+  isLastInRow?: boolean;
+  onCardBlur?: () => void;
 }
 
 export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 'medium') => {
@@ -38,6 +48,21 @@ export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 
   }
 };
 
+// Helper to get native tag from a ref — works on both old and new RN architectures
+const getNativeTag = (ref: any): number | null => {
+  if (!ref) return null;
+  // Try findNodeHandle (works on old architecture)
+  try {
+    const tag = findNodeHandle(ref);
+    if (tag && tag > 0) return tag;
+  } catch (_e) {}
+  // Try _nativeTag (works on both architectures)
+  if (ref._nativeTag && ref._nativeTag > 0) return ref._nativeTag;
+  // Try __nativeTag
+  if (ref.__nativeTag && ref.__nativeTag > 0) return ref.__nativeTag;
+  return null;
+};
+
 const ContentCardComponent: React.FC<ContentCardProps> = ({
   item,
   onPress,
@@ -48,20 +73,56 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   showProgress,
   inLibrary = false,
   onLibraryChange,
+  hasTVPreferredFocus = false,
+  isFirstInRow = false,
+  isLastInRow = false,
+  onCardBlur,
 }) => {
   const { width, height } = useWindowDimensions();
   const [isFocused, setIsFocused] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
+  const [posterError, setPosterError] = useState(false);
+  const pressableRef = useRef<View>(null);
+  const [selfTag, setSelfTag] = useState<number>(0);
   
   const isTV = width > height || width > 800;
   const cardWidth = getCardWidth(width, isTV, size);
   const aspectRatio = posterShapes[posterShape];
   const cardHeight = cardWidth * aspectRatio;
 
+  // Get native tag via onLayout (fires after native view is fully laid out)
+  const handleLayout = useCallback(() => {
+    if ((isFirstInRow || isLastInRow) && pressableRef.current) {
+      const tag = getNativeTag(pressableRef.current);
+      if (tag && tag !== selfTag) {
+        setSelfTag(tag);
+      }
+    }
+  }, [isFirstInRow, isLastInRow, selfTag]);
+
+  // Also try on mount and when isFirst/isLast changes
+  useEffect(() => {
+    if ((isFirstInRow || isLastInRow) && pressableRef.current) {
+      // Small delay to ensure native view is ready
+      const timer = setTimeout(() => {
+        if (pressableRef.current) {
+          const tag = getNativeTag(pressableRef.current);
+          if (tag && tag > 0) setSelfTag(tag);
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isFirstInRow, isLastInRow]);
+
   const handleFocus = useCallback(() => {
     setIsFocused(true);
     onCardFocus?.();
   }, [onCardFocus]);
+
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+    onCardBlur?.();
+  }, [onCardBlur]);
 
   const handleLongPress = useCallback(async () => {
     const contentId = item.imdb_id || item.id;
@@ -104,13 +165,27 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   if (!item) return null;
 
+  // Build focus trapping props
+  const focusTrapProps: any = {};
+  if (isLastInRow && selfTag > 0) {
+    focusTrapProps.nextFocusRight = selfTag;
+  }
+  if (isFirstInRow && selfTag > 0) {
+    focusTrapProps.nextFocusLeft = selfTag;
+  }
+
   return (
     <Pressable
+      ref={pressableRef}
       onPress={onPress}
       onLongPress={handleLongPress}
       delayLongPress={500}
       onFocus={handleFocus}
-      onBlur={() => setIsFocused(false)}
+      onBlur={handleBlur}
+      onLayout={handleLayout}
+      android_ripple={null}
+      hasTVPreferredFocus={hasTVPreferredFocus}
+      {...focusTrapProps}
       style={[styles.container, { width: cardWidth }]}
       accessible={true}
       accessibilityRole="button"
@@ -123,31 +198,25 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         { height: cardHeight },
         isFocused && styles.posterFocused,
       ]}>
-        {/* Image wrapper */}
-        <View style={[
-          styles.imageWrapper,
-          isFocused && styles.imageWrapperFocused,
-        ]}>
-          <Image
-            source={{ uri: item.poster }}
-            style={styles.posterImage}
-            contentFit="cover"
-            transition={150}
-            recyclingKey={item.id || item.imdb_id}
-            cachePolicy="memory-disk"
-          />
-        </View>
-        
-        {/* Placeholder when no poster */}
-        {!item.poster && (
-          <View style={styles.placeholder}>
-            <Ionicons 
-              name={item.type === 'series' ? 'tv-outline' : 'film-outline'} 
-              size={cardWidth * 0.4} 
-              color={colors.textMuted} 
+        {/* Image or Placeholder */}
+        <View style={styles.imageWrapper}>
+          {item.poster && !posterError ? (
+            <Image
+              source={{ uri: item.poster }}
+              style={styles.posterImage}
+              contentFit="cover"
+              recyclingKey={item.id || item.imdb_id}
+              cachePolicy="memory-disk"
+              onError={() => setPosterError(true)}
             />
-          </View>
-        )}
+          ) : (
+            <RNImage
+              source={NO_POSTER_IMAGE}
+              style={styles.posterImage}
+              resizeMode="cover"
+            />
+          )}
+        </View>
         
         {/* Library indicator */}
         {isInLibrary && (
@@ -156,7 +225,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           </View>
         )}
         
-        {/* Progress bar (Stremio style - inside poster at bottom) */}
+        {/* Progress bar */}
         {showProgress !== undefined && showProgress > 0 && (
           <View style={styles.progressContainer}>
             <View style={styles.progressBackground} />
@@ -165,7 +234,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         )}
       </View>
       
-      {/* Title bar - OUTSIDE poster, no focus styling */}
+      {/* Title bar - OUTSIDE poster */}
       {showTitle && (item.name || item.title) && (
         <View style={styles.titleContainer}>
           <Text style={[styles.title, isTV && styles.titleTV]} numberOfLines={2}>
@@ -182,27 +251,24 @@ export const ContentCard = memo(ContentCardComponent);
 const styles = StyleSheet.create({
   container: {
     marginRight: 16,
-    marginBottom: 8,
+    marginBottom: 2,
   },
   posterContainer: {
-    borderRadius: 4,
+    borderRadius: 6,
     overflow: 'visible',
     backgroundColor: colors.backgroundLight,
     position: 'relative',
+    borderWidth: 3,
+    borderColor: 'transparent',
   },
   posterFocused: {
-    borderWidth: 3,
     borderColor: colors.primary,
-    borderRadius: 6,
   },
   imageWrapper: {
     width: '100%',
     height: '100%',
     borderRadius: 4,
     overflow: 'hidden',
-  },
-  imageWrapperFocused: {
-    // No transform - causes rendering issues on Fire Stick
   },
   posterImage: {
     width: '100%',
@@ -247,12 +313,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   titleContainer: {
-    paddingTop: 8,
+    paddingTop: 6,
     paddingHorizontal: 4,
-    height: 48,
+    height: 38,
   },
   title: {
-    color: colors.textPrimary,
+    color: colors.primary,
     fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',

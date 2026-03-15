@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "PrivastreamCinema",
+    "name": "Privastream Cinema",
     "slug": "privastreamcinema",
     "version": "1.0.0",
     "orientation": "default",
@@ -14,14 +14,14 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "monochromeImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#0F0F0F"
+        "foregroundImage": "./assets/images/adaptive-icon-foreground.png",
+        "monochromeImage": "./assets/images/adaptive-icon-monochrome.png",
+        "backgroundColor": "#000000"
       },
       "splash": {
-        "image": "./assets/images/logo_splash.png",
+        "image": "./assets/images/logo.png",
         "resizeMode": "contain",
-        "backgroundColor": "#0F0F0F"
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": false,
       "package": "com.privastream.cinema",
@@ -37,11 +37,11 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo_splash.png",
+          "image": "./assets/images/logo.png",
           "imageWidth": 300,
           "resizeMode": "contain",
-          "backgroundColor": "#0F0F0F",
-          "enableFullScreenImage_legacy": false
+          "backgroundColor": "#000000",
+          "enableFullScreenImage_legacy": true
         }
       ],
       [
@@ -51,7 +51,9 @@
         }
       ],
       "expo-font",
-      "./plugins/withTVKeyEvents"
+      "./plugins/withTVKeyEvents",
+      "./plugins/withTVLauncher",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

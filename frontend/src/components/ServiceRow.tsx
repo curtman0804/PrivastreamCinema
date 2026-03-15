@@ -4,167 +4,212 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  Pressable,
   useWindowDimensions,
-  Platform,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
+import apiClient from '../api/client';
 import { colors } from '../styles/colors';
+
+const ITEM_GAP = 16;
+const TV_PADDING_LEFT = 48;
+const TV_PADDING_RIGHT = 48;
+const MOBILE_PADDING = 16;
+
+// Anchor position: the row starts scrolling once focus reaches this card index.
+// 4 means: posters 1-5 free movement, poster 6 triggers first scroll.
+const TV_SCROLL_ANCHOR = 4;
 
 interface ServiceRowProps {
   title: string;
-  serviceName?: string;
+  serviceName: string;
+  contentType: 'movies' | 'series' | 'channels';
   items: ContentItem[];
   onItemPress: (item: ContentItem) => void;
-  onSeeAll?: () => void;
+  onItemFocus?: (item: ContentItem) => void;
+  onSectionFocus?: () => void;
+  isFirstRow?: boolean;
 }
-
-// Memoized content card to prevent re-renders
-const MemoizedContentCard = memo(ContentCard, (prev, next) => {
-  // Only re-render if item id changes
-  return prev.item?.id === next.item?.id && 
-         prev.item?.imdb_id === next.item?.imdb_id;
-});
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   title,
   serviceName,
-  items,
+  contentType,
+  items: initialItems,
   onItemPress,
-  onSeeAll,
+  onItemFocus,
+  onSectionFocus,
+  isFirstRow = false,
 }) => {
-  const { width, height } = useWindowDimensions();
-  const isTV = width > height || width > 800;
-  const [seeAllFocused, setSeeAllFocused] = useState(false);
+  const { width: screenWidth, height } = useWindowDimensions();
+  const isTV = screenWidth > height || screenWidth > 800;
+
+  const cardWidth = getCardWidth(screenWidth, isTV, 'medium');
+  const itemTotalWidth = cardWidth + ITEM_GAP;
+  const paddingLeft = isTV ? TV_PADDING_LEFT : MOBILE_PADDING;
+
+  const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
+
+  const skipRef = useRef(initialItems?.length || 0);
+  const hasMoreRef = useRef(true);
+  const isFetchingRef = useRef(false);
+  const lastFetchTime = useRef(0);
+  const totalRef = useRef(initialItems?.length || 0);
+  const itemCountRef = useRef(initialItems?.length || 0);
   const flatListRef = useRef<FlatList>(null);
-  const [currentFocusIndex, setCurrentFocusIndex] = useState(0);
-  
-  // Memoize valid items to prevent recalculation
+
+  // Track whether user is navigating horizontally within this row
+  const isNavigatingInRowRef = useRef(false);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const validItems = useMemo(() => 
-    (items || []).filter(Boolean), [items]);
+    (allItems || []).filter(Boolean), [allItems]);
+  
+  itemCountRef.current = validItems.length;
   
   if (validItems.length === 0) return null;
 
-  // Use shared card width calculation - memoized
-  const cardWidth = useMemo(() => 
-    getCardWidth(width, isTV, 'medium'), [width, isTV]);
-  const itemWidth = cardWidth + 16; // card width + marginRight
+  const fetchMore = useCallback(async () => {
+    const now = Date.now();
+    if (isFetchingRef.current || !hasMoreRef.current) return;
+    if (now - lastFetchTime.current < 2000) return;
 
-  // Handle card focus - scroll to keep focused item visible
+    isFetchingRef.current = true;
+    lastFetchTime.current = now;
+    try {
+      const resp = await apiClient.get(
+        `/api/content/category/${encodeURIComponent(serviceName)}/${contentType}?skip=${skipRef.current}&limit=100`
+      );
+      const newItems: ContentItem[] = resp.data.items || [];
+      if (newItems.length > 0) {
+        setAllItems(prev => {
+          const ids = new Set(prev.map(i => i.id || i.imdb_id));
+          const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
+          const updated = [...prev, ...unique];
+          totalRef.current = updated.length;
+          return updated;
+        });
+        skipRef.current += newItems.length;
+      }
+      hasMoreRef.current = resp.data.hasMore !== undefined 
+        ? resp.data.hasMore 
+        : newItems.length >= 20;
+    } catch {
+      hasMoreRef.current = false;
+    } finally {
+      isFetchingRef.current = false;
+    }
+  }, [serviceName, contentType]);
+
+  // Card focus handler
   const handleCardFocus = useCallback((index: number) => {
-    setCurrentFocusIndex(index);
+    // Cancel any pending blur timer — user is still in this row
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+
+    onSectionFocus?.();
     
-    // Scroll so focused item is visible (not at the edge)
-    const targetPosition = Math.max(0, index - 1);
-    
-    flatListRef.current?.scrollToIndex({
-      index: targetPosition,
-      animated: true,
-      viewPosition: 0,
-    });
+    // Pre-fetch meta data for the focused item
+    const focusedItem = validItems[index];
+    if (focusedItem && onItemFocus) {
+      onItemFocus(focusedItem);
+    }
+
+    if (isTV && flatListRef.current && isNavigatingInRowRef.current) {
+      // HORIZONTAL NAVIGATION — apply smooth 1-card scroll
+      const targetOffset = Math.max(0, (index - TV_SCROLL_ANCHOR) * itemTotalWidth);
+      flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
+    }
+    // If isNavigatingInRowRef is false, user entered from another row via up/down
+    // → DON'T scroll, just let the selector land where Android TV placed it
+
+    // Mark this row as active for horizontal navigation
+    isNavigatingInRowRef.current = true;
+
+    // Pre-fetch when near end
+    if (index >= totalRef.current - 15 && hasMoreRef.current) {
+      fetchMore();
+    }
+  }, [onSectionFocus, onItemFocus, validItems, fetchMore, itemTotalWidth, isTV]);
+
+  // Card blur handler — detect when user leaves this row
+  const handleCardBlur = useCallback(() => {
+    // Set timer: if no card in this row gets focus within 150ms,
+    // user has left this row (pressed up/down)
+    blurTimerRef.current = setTimeout(() => {
+      isNavigatingInRowRef.current = false;
+    }, 150);
   }, []);
 
-  // Memoized render item function
+  const handleEndReached = useCallback(() => {
+    if (!isFetchingRef.current && hasMoreRef.current) {
+      fetchMore();
+    }
+  }, [fetchMore]);
+
+  const getItemLayout = useCallback((_data: any, index: number) => ({
+    length: itemTotalWidth,
+    offset: paddingLeft + (index * itemTotalWidth),
+    index,
+  }), [itemTotalWidth, paddingLeft]);
+
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
-    <MemoizedContentCard
+    <ContentCard
       item={item}
       onPress={() => onItemPress(item)}
       onCardFocus={() => handleCardFocus(index)}
+      onCardBlur={handleCardBlur}
       showTitle={true}
+      hasTVPreferredFocus={isFirstRow && index === 0}
+      isFirstInRow={index === 0}
+      isLastInRow={index === itemCountRef.current - 1}
     />
-  ), [onItemPress, handleCardFocus]);
+  ), [onItemPress, handleCardFocus, handleCardBlur, isFirstRow]);
 
-  // Stable key extractor
-  const keyExtractor = useCallback((item: ContentItem, index: number) => 
-    item.id || item.imdb_id || `item-${index}`, []);
-
-  // Display title - use serviceName or title
-  const displayTitle = title || serviceName || 'Content';
-
-  // Memoized getItemLayout for performance
-  const getItemLayout = useCallback((data: any, index: number) => ({
-    length: itemWidth,
-    offset: itemWidth * index,
-    index,
-  }), [itemWidth]);
-
-  // Handle scroll failure gracefully
-  const onScrollToIndexFailed = useCallback((info: {
-    index: number;
-    highestMeasuredFrameIndex: number;
-    averageItemLength: number;
-  }) => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToIndex({ 
-        index: Math.min(info.index, info.highestMeasuredFrameIndex),
-        animated: true 
-      });
-    }, 50);
-  }, []);
+  const keyExtractor = useCallback((item: ContentItem) => 
+    item.id || item.imdb_id || `${item.name}`, []);
 
   return (
     <View style={styles.container}>
-      {/* Row Header - Stremio style */}
       <View style={[styles.header, isTV && styles.headerTV]}>
-        <Text style={[styles.title, isTV && styles.titleTV]}>{displayTitle}</Text>
-        {onSeeAll && (
-          <Pressable 
-            onPress={onSeeAll} 
-            onFocus={() => setSeeAllFocused(true)}
-            onBlur={() => setSeeAllFocused(false)}
-            style={({ focused }) => [
-              styles.seeAllButton,
-              (focused || seeAllFocused) && styles.seeAllButtonFocused,
-            ]}
-          >
-            <Text style={[
-              styles.seeAllText,
-              (seeAllFocused) && styles.seeAllTextFocused,
-            ]}>SEE ALL</Text>
-            <Ionicons 
-              name="chevron-forward" 
-              size={16} 
-              color={seeAllFocused ? colors.textPrimary : colors.textSecondary} 
-            />
-          </Pressable>
-        )}
+        <Text style={[styles.title, isTV && styles.titleTV]}>
+          {title || serviceName || 'Content'}
+        </Text>
       </View>
       
-      {/* Content Row - Optimized FlatList */}
       <FlatList
         ref={flatListRef}
         horizontal
         data={validItems}
+        extraData={validItems.length}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, isTV && styles.scrollContentTV]}
-        style={styles.flatListStyle}
-        // Performance optimizations
-        initialNumToRender={isTV ? 7 : 4}
-        maxToRenderPerBatch={3}
-        updateCellsBatchingPeriod={30}
-        windowSize={5}
-        removeClippedSubviews={Platform.OS === 'android'}
-        decelerationRate="fast"
-        scrollEventThrottle={16}
-        onScrollToIndexFailed={onScrollToIndexFailed}
         getItemLayout={getItemLayout}
-        // Disable automatic scroll adjustments
-        maintainVisibleContentPosition={null}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isTV && styles.scrollContentTV,
+        ]}
+        style={styles.flatListStyle}
+        initialNumToRender={10}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={50}
+        windowSize={5}
+        removeClippedSubviews={true}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={3}
       />
     </View>
   );
 });
 
-// Also export with serviceName prop for backwards compatibility
 export const MetaRow = ServiceRow;
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 32,
+    marginBottom: 8,
     overflow: 'visible',
   },
   header: {
@@ -172,14 +217,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   headerTV: {
-    paddingHorizontal: 24,
-    marginBottom: 20,
+    paddingHorizontal: TV_PADDING_LEFT,
+    marginBottom: 6,
   },
   title: {
-    color: colors.textPrimary,
+    color: colors.primary,
     fontSize: 18,
     fontWeight: '600',
     letterSpacing: 0.5,
@@ -187,33 +232,15 @@ const styles = StyleSheet.create({
   titleTV: {
     fontSize: 22,
   },
-  seeAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 4,
-  },
-  seeAllButtonFocused: {
-    backgroundColor: colors.primary,
-  },
-  seeAllText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1,
-    marginRight: 4,
-  },
-  seeAllTextFocused: {
-    color: colors.textPrimary,
-  },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingLeft: MOBILE_PADDING,
+    paddingRight: MOBILE_PADDING + 32,
+    paddingVertical: 4,
   },
   scrollContentTV: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingLeft: TV_PADDING_LEFT,
+    paddingRight: TV_PADDING_RIGHT + 80,
+    paddingVertical: 4,
   },
   flatListStyle: {
     overflow: 'visible',

@@ -9,9 +9,10 @@ const getBaseUrl = () => {
   if (Platform.OS === 'web') {
     return '';
   }
-  // Production backend URL - hardcoded for standalone APK builds
-  // This ensures the app always connects to the correct backend
-  return 'https://fire-stick-remote.preview.emergentagent.com';
+  // Use environment variable for backend URL (works across preview and production)
+  const envUrl = process.env.EXPO_PUBLIC_BACKEND_URL 
+    || Constants.expoConfig?.extra?.backendUrl;
+  return envUrl || '';
 };
 
 const BASE_URL = getBaseUrl();
@@ -121,6 +122,9 @@ export interface Stream {
   name: string;
   title?: string;
   url?: string;
+  directUrl?: string;
+  proxyUrl?: string;
+  provider?: string;
   infoHash?: string;
   sources?: string[];
   behaviorHints?: {
@@ -133,6 +137,9 @@ export interface Stream {
   addon?: string;
   seeders?: number;
   quality?: string;
+  externalUrl?: string;
+  requiresWebView?: boolean;
+  isLive?: boolean;
 }
 
 export interface LibraryResponse {
@@ -185,7 +192,7 @@ export const api = {
   },
   content: {
     getDiscover: async (): Promise<DiscoverResponse> => {
-      const response = await apiClient.get('/api/content/discover-organized');
+      const response = await apiClient.get('/api/content/discover-organized', { timeout: 120000 });
       return response.data;
     },
     search: async (query: string, skip: number = 0, limit: number = 30): Promise<{ movies: SearchResult[]; series: SearchResult[]; hasMore: boolean; total: number }> => {
@@ -193,8 +200,20 @@ export const api = {
       return response.data;
     },
     getMeta: async (type: string, id: string): Promise<ContentItem> => {
+      // Frontend meta cache (10 min TTL)
+      const cacheKey = `meta:${type}:${id}`;
+      if (!((api as any)._metaCache)) (api as any)._metaCache = new Map();
+      const cached = (api as any)._metaCache.get(cacheKey);
+      if (cached && Date.now() - cached.time < 600000) {
+        console.log(`[META] CACHE HIT for ${type}/${id}`);
+        return cached.data;
+      }
+      
       const encodedId = encodeURIComponent(id);
       const response = await apiClient.get(`/api/content/meta/${type}/${encodedId}`);
+      
+      // Cache the result
+      (api as any)._metaCache.set(cacheKey, { data: response.data, time: Date.now() });
       return response.data;
     },
   },
@@ -207,331 +226,182 @@ export const api = {
       const response = await apiClient.get(`/api/addons/${addonId}/stream/${type}/${id}`);
       return response.data;
     },
-    getAllStreams: async (type: string, id: string): Promise<{ streams: Stream[] }> => {
+    getAllStreams: async (type: string, id: string, onProgress?: (streams: Stream[]) => void): Promise<{ streams: Stream[] }> => {
       console.log(`[STREAMS] ========== Fetching streams for ${type}/${id} ==========`);
       const startTime = Date.now();
+      
+      // Frontend stream cache (2 min TTL)
+      const cacheKey = `streams:${type}:${id}`;
+      const cached = (api as any)._streamCache?.get(cacheKey);
+      if (cached && Date.now() - cached.time < 120000) {
+        console.log(`[STREAMS] CACHE HIT: ${cached.streams.length} streams`);
+        if (onProgress) onProgress(cached.streams);
+        return { streams: cached.streams };
+      }
       
       // Encode ID to handle URLs and special characters
       const encodedId = encodeURIComponent(id);
       
-      // PARALLEL FETCHING: Fetch from all sources simultaneously for speed
-      // Using Promise.allSettled so one failure doesn't block others
-      const [backendResult, torrentioResult, tpbResult] = await Promise.allSettled([
-        // Backend fetch
-        apiClient.get(`/api/streams/${type}/${encodedId}`).then(r => r.data.streams || []),
-        // Torrentio client-side fetch
-        api.addons.fetchTorrentioStreams(type, id),
-        // TPB+ client-side fetch
-        api.addons.fetchTPBStreams(type, id),
-      ]);
-      
-      console.log(`[STREAMS] Parallel fetch completed in ${Date.now() - startTime}ms`);
-      
-      // Collect all streams from successful fetches
-      let allStreams: Stream[] = [];
-      const existingHashes = new Set<string>();
-      
-      // Add backend streams
-      if (backendResult.status === 'fulfilled' && backendResult.value.length > 0) {
-        console.log(`[STREAMS] Backend: ${backendResult.value.length} streams`);
-        allStreams = backendResult.value;
-        backendResult.value.forEach((s: Stream) => {
-          if (s.infoHash) existingHashes.add(s.infoHash.toLowerCase());
-        });
-      } else {
-        console.log(`[STREAMS] Backend: failed or empty`);
-      }
-      
-      // Add Torrentio streams (deduplicated)
-      if (torrentioResult.status === 'fulfilled' && torrentioResult.value.length > 0) {
-        const newStreams = torrentioResult.value.filter((s: Stream) => 
-          s.infoHash && !existingHashes.has(s.infoHash.toLowerCase())
-        );
-        console.log(`[STREAMS] Torrentio: ${torrentioResult.value.length} total, ${newStreams.length} new`);
-        newStreams.forEach((s: Stream) => {
-          if (s.infoHash) existingHashes.add(s.infoHash.toLowerCase());
-        });
-        allStreams = [...allStreams, ...newStreams];
-      } else {
-        console.log(`[STREAMS] Torrentio: failed or empty`);
-      }
-      
-      // Add TPB+ streams (deduplicated)
-      if (tpbResult.status === 'fulfilled' && tpbResult.value.length > 0) {
-        const newStreams = tpbResult.value.filter((s: Stream) => 
-          s.infoHash && !existingHashes.has(s.infoHash.toLowerCase())
-        );
-        console.log(`[STREAMS] TPB+: ${tpbResult.value.length} total, ${newStreams.length} new`);
-        allStreams = [...allStreams, ...newStreams];
-      } else {
-        console.log(`[STREAMS] TPB+: failed or empty`);
-      }
-      
-      // Filter for correct episode if this is a series episode (id format: tt1234567:1:5)
-      if (type === 'series' && id.includes(':')) {
-        const parts = id.split(':');
-        if (parts.length >= 3) {
-          const targetSeason = parts[1].padStart(2, '0');
-          const targetEpisode = parts[2].padStart(2, '0');
-          const sInt = parseInt(parts[1], 10);
-          const eInt = parseInt(parts[2], 10);
-          
-          // Function to check if a stream matches the EXACT target episode
-          const isCorrectEpisode = (title: string): boolean => {
-            const upper = title.toUpperCase();
-            
-            // Reject season packs and complete series immediately
-            if (/COMPLETE|ALL\s*SEASONS|FULL\s*SERIES|SEASONS?\s*\d+\s*[-–]\s*\d+/i.test(upper)) {
-              return false;
-            }
-            
-            // Reject multi-season packs (e.g., "S01-S04" or "S01 S02 S03")
-            if (/S\d{1,2}\s*[-–]\s*S\d{1,2}/i.test(upper) || /S\d{1,2}\s+S\d{1,2}/i.test(upper)) {
-              return false;
-            }
-            
-            // Look for episode ranges like S01E01-E03 or S01E01-03
-            const rangePattern = /S(\d{1,2})E(\d{1,2})\s*[-–]\s*E?(\d{1,2})/gi;
-            let rangeMatch;
-            while ((rangeMatch = rangePattern.exec(upper)) !== null) {
-              const s = parseInt(rangeMatch[1], 10);
-              const startE = parseInt(rangeMatch[2], 10);
-              const endE = parseInt(rangeMatch[3], 10);
-              // If this is a range that includes our episode but also others, reject
-              if (s === sInt && startE <= eInt && endE >= eInt && (startE !== eInt || endE !== eInt)) {
-                return false; // This is a multi-episode file
-              }
-            }
-            
-            // Find ALL SxxEyy patterns in the title
-            const allEpisodes: Array<{s: number, e: number}> = [];
-            const sxePattern = /S(\d{1,2})E(\d{1,2})/gi;
-            let match;
-            while ((match = sxePattern.exec(upper)) !== null) {
-              allEpisodes.push({ s: parseInt(match[1], 10), e: parseInt(match[2], 10) });
-            }
-            
-            // Also check 1x05 format
-            const xPattern = /(\d{1,2})X(\d{1,2})/gi;
-            while ((match = xPattern.exec(upper)) !== null) {
-              allEpisodes.push({ s: parseInt(match[1], 10), e: parseInt(match[2], 10) });
-            }
-            
-            // If we found episode markers, check if ANY match our target
-            if (allEpisodes.length > 0) {
-              // Check if target episode is in the list
-              const hasTarget = allEpisodes.some(ep => ep.s === sInt && ep.e === eInt);
-              if (!hasTarget) {
-                return false; // Target episode not found
-              }
-              
-              // If there are multiple different episodes, reject (it's a pack)
-              const uniqueEpisodes = allEpisodes.filter((ep, idx, arr) => 
-                arr.findIndex(e => e.s === ep.s && e.e === ep.e) === idx
-              );
-              if (uniqueEpisodes.length > 1) {
-                // Multiple episodes in title - could be a pack
-                // Only allow if ALL episodes are the same as target
-                const allSame = uniqueEpisodes.every(ep => ep.s === sInt && ep.e === eInt);
-                if (!allSame) {
-                  return false;
-                }
-              }
-              
-              return true; // Found exact target episode
-            }
-            
-            // No episode marker found - could be a season pack or single episode
-            // Check if it mentions just the season
-            if (/\bS(\d{1,2})\b(?!E)/i.test(upper)) {
-              // Has season but no episode - likely a season pack
-              return false;
-            }
-            
-            // No clear episode marker - let it through but with low confidence
-            // (these are usually less accurate streams anyway)
-            return true;
-          };
-          
-          const beforeFilter = allStreams.length;
-          allStreams = allStreams.filter((s: Stream) => {
-            const titleAndName = `${s.title || ''} ${s.name || ''}`.toUpperCase();
-            
-            // FIRST: Check if title clearly indicates WRONG season
-            // Look for patterns like "Season 4", "S04", "Сезон: 4", etc.
-            const wrongSeasonPatterns = [
-              // English patterns
-              /SEASON\s*(\d+)/gi,
-              /\bS(\d{1,2})\b(?!E)/gi,  // S04 without E (season pack indicator)
-              // Russian patterns
-              /СЕЗОН[:\s]*(\d+)/gi,
-              /СЕЗОНЫ?[:\s]*(\d+)/gi,
-            ];
-            
-            for (const pattern of wrongSeasonPatterns) {
-              let match;
-              pattern.lastIndex = 0; // Reset regex
-              while ((match = pattern.exec(titleAndName)) !== null) {
-                const foundSeason = parseInt(match[1], 10);
-                if (foundSeason !== sInt) {
-                  console.log(`[FILTER] Rejected (wrong season ${foundSeason} in title): ${titleAndName.substring(0, 60)}`);
-                  return false;
-                }
-              }
-            }
-            
-            // Check for multi-season packs in title (e.g., "S01-S04", "Seasons 1 to 3", "S01-03")
-            const multiSeasonPatterns = [
-              /S(\d{1,2})\s*[-–]\s*S?(\d{1,2})(?!E)/gi,  // S01-S04 or S01-04 (without E)
-              /SEASONS?\s*(\d+)\s*(?:TO|[-–])\s*(\d+)/gi,  // Seasons 1 to 3
-              /СЕЗОНЫ?\s*(\d+)\s*[-–]\s*(\d+)/gi,  // Russian season ranges
-            ];
-            
-            for (const pattern of multiSeasonPatterns) {
-              let match;
-              pattern.lastIndex = 0;
-              while ((match = pattern.exec(titleAndName)) !== null) {
-                const startS = parseInt(match[1], 10);
-                const endS = parseInt(match[2], 10);
-                // If our target season is in this range but it's a multi-season pack, reject
-                if (startS !== endS) {
-                  console.log(`[FILTER] Rejected (multi-season pack S${startS}-S${endS}): ${titleAndName.substring(0, 60)}`);
-                  return false;
-                }
-              }
-            }
-            
-            // If Torrentio/TPB+ provided a specific filename, check that STRICTLY
-            if (s.filename) {
-              const filenameUpper = s.filename.toUpperCase();
-              
-              // Check if filename contains the EXACT target episode marker
-              const targetPattern = new RegExp(`S0?${sInt}E0?${eInt}\\b`, 'i');
-              if (!targetPattern.test(s.filename)) {
-                console.log(`[FILTER] Rejected (filename no match): ${s.filename.substring(0, 60)}`);
-                return false;
-              }
-              
-              // Now check that the filename doesn't contain OTHER episodes
-              const allEpisodesInFilename: Array<{s: number, e: number}> = [];
-              const sxePattern = /S(\d{1,2})E(\d{1,2})/gi;
-              let match;
-              while ((match = sxePattern.exec(filenameUpper)) !== null) {
-                allEpisodesInFilename.push({ s: parseInt(match[1], 10), e: parseInt(match[2], 10) });
-              }
-              
-              // Check for episode ranges in filename (S01E01-E03 or S01E01-03)
-              const rangeInFilename = /S(\d{1,2})E(\d{1,2})\s*[-–]\s*E?(\d{1,2})/gi;
-              let rangeMatch;
-              while ((rangeMatch = rangeInFilename.exec(filenameUpper)) !== null) {
-                const s = parseInt(rangeMatch[1], 10);
-                const startE = parseInt(rangeMatch[2], 10);
-                const endE = parseInt(rangeMatch[3], 10);
-                // Add all episodes in the range
-                for (let e = startE; e <= endE; e++) {
-                  if (!allEpisodesInFilename.some(ep => ep.s === s && ep.e === e)) {
-                    allEpisodesInFilename.push({ s, e });
-                  }
-                }
-              }
-              
-              // If multiple different episodes found in filename, reject
-              const uniqueEps = allEpisodesInFilename.filter((ep, idx, arr) => 
-                arr.findIndex(e => e.s === ep.s && e.e === ep.e) === idx
-              );
-              
-              if (uniqueEps.length > 1) {
-                // Check if ALL episodes match our target
-                const hasOtherEpisodes = uniqueEps.some(ep => ep.s !== sInt || ep.e !== eInt);
-                if (hasOtherEpisodes) {
-                  console.log(`[FILTER] Rejected (multi-ep filename): ${s.filename.substring(0, 60)}`);
-                  return false;
-                }
-              }
-              
-              console.log(`[FILTER] Approved via filename: ${s.filename.substring(0, 60)}`);
-              return true;
-            }
-            
-            // No filename - check title strictly
-            const combined = `${s.title || ''} ${s.name || ''}`;
-            const result = isCorrectEpisode(combined);
-            if (!result) {
-              console.log(`[FILTER] Rejected: ${combined.substring(0, 80)}`);
-            }
-            return result;
-          });
-          console.log(`[STREAMS] Episode filter: ${beforeFilter} -> ${allStreams.length} streams for S${String(sInt).padStart(2,'0')}E${String(eInt).padStart(2,'0')}`);
+      // For TV channels, only fetch from backend (USAATV addon)
+      // Torrentio/TPB don't have TV streams and always return 403, wasting time
+      if (type === 'tv') {
+        try {
+          const result = await apiClient.get(`/api/streams/${type}/${encodedId}`);
+          const streams = result.data.streams || [];
+          console.log(`[STREAMS] TV: ${streams.length} streams in ${Date.now() - startTime}ms`);
+          if (onProgress) onProgress(streams);
+          return { streams };
+        } catch (e) {
+          console.log(`[STREAMS] TV backend fetch failed:`, e);
+          return { streams: [] };
         }
       }
       
-      // Sort by seeders (highest first)
-      allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
+      // PROGRESSIVE LOADING: Fire all fetches simultaneously,
+      // display results as each source responds (no waiting for slowest)
+      let allStreams: Stream[] = [];
+      const existingHashes = new Set<string>();
       
-      console.log(`[STREAMS] Total streams after filter: ${allStreams.length}`);
+      // Helper to merge new streams and notify
+      const mergeAndNotify = (newStreams: Stream[], sourceName: string) => {
+        const deduplicated = newStreams.filter((s: Stream) => {
+          if (s.infoHash) {
+            const hash = s.infoHash.toLowerCase();
+            if (existingHashes.has(hash)) return false;
+            existingHashes.add(hash);
+          }
+          return true;
+        });
+        if (deduplicated.length > 0) {
+          allStreams = [...allStreams, ...deduplicated];
+          // Sort by seeders
+          allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
+          console.log(`[STREAMS] ${sourceName}: +${deduplicated.length} streams (total: ${allStreams.length}) in ${Date.now() - startTime}ms`);
+          if (onProgress) onProgress([...allStreams]);
+        } else {
+          console.log(`[STREAMS] ${sourceName}: 0 new streams in ${Date.now() - startTime}ms`);
+        }
+      };
+      
+      // Episode filter function (used for series)
+      const filterForEpisode = (streams: Stream[]): Stream[] => {
+        if (type !== 'series' || !id.includes(':')) return streams;
+        
+        const parts = id.split(':');
+        if (parts.length < 3) return streams;
+        
+        const sInt = parseInt(parts[1], 10);
+        const eInt = parseInt(parts[2], 10);
+        
+        return streams.filter((s: Stream) => {
+          const titleAndName = `${s.title || ''} ${s.name || ''} ${s.filename || ''}`.toUpperCase();
+          
+          // Reject season packs
+          if (/COMPLETE|ALL\s*SEASONS|FULL\s*SERIES/i.test(titleAndName)) return false;
+          if (/S\d{1,2}\s*[-–]\s*S\d{1,2}/i.test(titleAndName)) return false;
+          
+          // Check for wrong season
+          const seasonMatch = titleAndName.match(/\bS(\d{1,2})(?=E)/i);
+          if (seasonMatch && parseInt(seasonMatch[1], 10) !== sInt) return false;
+          
+          // Check for specific episode match
+          const targetPattern = new RegExp(`S0?${sInt}E0?${eInt}\\b`, 'i');
+          if (s.filename && targetPattern.test(s.filename)) return true;
+          if (targetPattern.test(titleAndName)) return true;
+          
+          // Check for episode ranges
+          const rangePattern = /S(\d{1,2})E(\d{1,2})\s*[-–]\s*E?(\d{1,2})/gi;
+          let rangeMatch;
+          while ((rangeMatch = rangePattern.exec(titleAndName)) !== null) {
+            const startE = parseInt(rangeMatch[2], 10);
+            const endE = parseInt(rangeMatch[3], 10);
+            if (parseInt(rangeMatch[1], 10) === sInt && startE <= eInt && endE >= eInt) {
+              if (startE !== eInt || endE !== eInt) return false; // Multi-episode pack
+            }
+          }
+          
+          // No clear marker - let through
+          return true;
+        });
+      };
+      
+      // Fire all 3 fetches simultaneously - DON'T WAIT for all to finish
+      const backendPromise = apiClient.get(`/api/streams/${type}/${encodedId}`)
+        .then(r => {
+          const streams = r.data.streams || [];
+          streams.forEach((s: Stream) => {
+            if (s.infoHash) existingHashes.add(s.infoHash.toLowerCase());
+          });
+          allStreams = filterForEpisode(streams);
+          if (allStreams.length > 0 && onProgress) onProgress([...allStreams]);
+          console.log(`[STREAMS] Backend: ${allStreams.length} streams in ${Date.now() - startTime}ms`);
+        })
+        .catch(e => console.log(`[STREAMS] Backend failed:`, e));
+      
+      const torrentioPromise = api.addons.fetchTorrentioStreams(type, id)
+        .then(streams => mergeAndNotify(filterForEpisode(streams), 'Torrentio'))
+        .catch(e => console.log(`[STREAMS] Torrentio failed:`, e));
+      
+      const tpbPromise = api.addons.fetchTPBStreams(type, id)
+        .then(streams => mergeAndNotify(filterForEpisode(streams), 'TPB+'))
+        .catch(e => console.log(`[STREAMS] TPB+ failed:`, e));
+      
+      // Wait for all to complete
+      await Promise.allSettled([backendPromise, torrentioPromise, tpbPromise]);
+      
+      console.log(`[STREAMS] All sources done: ${allStreams.length} total streams in ${Date.now() - startTime}ms`);
+      
+      // Cache the result
+      if (!((api as any)._streamCache)) (api as any)._streamCache = new Map();
+      (api as any)._streamCache.set(cacheKey, { streams: allStreams, time: Date.now() });
+      
       return { streams: allStreams };
     },
     
     fetchTorrentioStreams: async (type: string, id: string): Promise<Stream[]> => {
-      // Use allorigins proxy for ALL platforms - direct fetch is blocked by Cloudflare
       const TORRENTIO_BASE = 'https://torrentio.strem.fun';
       const CONFIG = 'sort=seeders|qualityfilter=480p,scr,cam';
       const torrentioUrl = `${TORRENTIO_BASE}/${CONFIG}/stream/${type}/${id}.json`;
       
+      // 3-second timeout wrapper
+      const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
+        Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+      
       try {
         let data: any;
         
-        // Approach 1: Try allorigins (works for both web and mobile)
+        // RACE all 3 approaches with 3s timeout each
+        const racePromises = [
+          withTimeout(fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(torrentioUrl)}`, {
+            method: 'GET', headers: { 'Accept': 'application/json' },
+          }).then(async r => {
+            if (!r.ok) throw new Error(`Status ${r.status}`);
+            const result = await r.json();
+            if (!result?.streams?.length) throw new Error('No streams');
+            console.log(`[TORRENTIO] allorigins: ${result.streams.length} streams`);
+            return result;
+          }), 3000),
+          withTimeout(fetch(torrentioUrl, {
+            method: 'GET', headers: { 'Accept': 'application/json' },
+          }).then(async r => {
+            if (!r.ok) throw new Error(`Status ${r.status}`);
+            const result = await r.json();
+            if (!result?.streams?.length) throw new Error('No streams');
+            console.log(`[TORRENTIO] direct: ${result.streams.length} streams`);
+            return result;
+          }), 3000),
+          withTimeout(apiClient.get(`/api/addon-proxy/torrentio/${type}/${id}`).then(r => {
+            if (!r.data?.streams?.length) throw new Error('No streams');
+            console.log(`[TORRENTIO] backend proxy: ${r.data.streams.length} streams`);
+            return r.data;
+          }), 3000),
+        ];
+        
         try {
-          console.log(`[TORRENTIO] Trying allorigins proxy...`);
-          const allOriginsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(torrentioUrl)}`;
-          const response = await fetch(allOriginsUrl, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
-          });
-          if (response.ok) {
-            const result = await response.json();
-            if (result?.streams?.length > 0) {
-              console.log(`[TORRENTIO] allorigins success: ${result.streams.length} streams`);
-              data = result;
-            }
-          }
-        } catch (e: any) {
-          console.log(`[TORRENTIO] allorigins failed: ${e.message || e}`);
-        }
-        
-        // Approach 2: Try direct fetch as fallback (may work on some mobile networks)
-        if (!data?.streams?.length) {
-          try {
-            console.log(`[TORRENTIO] Trying direct fetch...`);
-            const response = await fetch(torrentioUrl, {
-              method: 'GET',
-              headers: { 'Accept': 'application/json' },
-            });
-            if (response.ok) {
-              const result = await response.json();
-              if (result?.streams?.length > 0) {
-                console.log(`[TORRENTIO] Direct fetch success: ${result.streams.length} streams`);
-                data = result;
-              }
-            }
-          } catch (e: any) {
-            console.log(`[TORRENTIO] Direct fetch failed: ${e.message || e}`);
-          }
-        }
-        
-        // Approach 3: Try backend proxy as last resort
-        if (!data?.streams?.length) {
-          try {
-            console.log(`[TORRENTIO] Trying backend proxy...`);
-            const response = await apiClient.get(`/api/addon-proxy/torrentio/${type}/${id}`);
-            if (response.data?.streams?.length > 0) {
-              console.log(`[TORRENTIO] Backend proxy success: ${response.data.streams.length} streams`);
-              data = response.data;
-            }
-          } catch (e: any) {
-            console.log(`[TORRENTIO] Backend proxy failed: ${e.message || e}`);
-          }
+          data = await Promise.any(racePromises);
+        } catch (e) {
+          console.log(`[TORRENTIO] All approaches failed`);
+          return [];
         }
         
         const rawStreams = data?.streams || [];
@@ -570,7 +440,7 @@ export const api = {
             name: `⚡ ${name}`,
             title: title,
             infoHash: infoHash?.toLowerCase(),
-            sources: stream.sources || ['tracker:udp://tracker.opentrackr.org:1337/announce'],
+            sources: stream.sources || ['tracker:http://tracker.opentrackr.org:1337/announce'],
             addon: 'Torrentio',
             seeders: seeders,
             quality: quality,
@@ -602,64 +472,48 @@ export const api = {
     },
     
     fetchTPBStreams: async (type: string, id: string): Promise<Stream[]> => {
-      // Use allorigins proxy for ALL platforms - direct fetch is blocked by Cloudflare
       const TPB_BASE = 'https://thepiratebay-plus.strem.fun';
       const tpbUrl = `${TPB_BASE}/stream/${type}/${id}.json`;
+      
+      // 3-second timeout wrapper
+      const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
+        Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
       
       try {
         let data: any;
         
-        // Approach 1: Try allorigins (works for both web and mobile)
+        // RACE all 3 approaches with 3s timeout each
+        const racePromises = [
+          withTimeout(fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(tpbUrl)}`, {
+            method: 'GET', headers: { 'Accept': 'application/json' },
+          }).then(async r => {
+            if (!r.ok) throw new Error(`Status ${r.status}`);
+            const result = await r.json();
+            if (!result?.streams?.length) throw new Error('No streams');
+            console.log(`[TPB+] allorigins: ${result.streams.length} streams`);
+            return result;
+          }), 3000),
+          withTimeout(fetch(tpbUrl, {
+            method: 'GET', headers: { 'Accept': 'application/json' },
+          }).then(async r => {
+            if (!r.ok) throw new Error(`Status ${r.status}`);
+            const result = await r.json();
+            if (!result?.streams?.length) throw new Error('No streams');
+            console.log(`[TPB+] direct: ${result.streams.length} streams`);
+            return result;
+          }), 3000),
+          withTimeout(apiClient.get(`/api/addon-proxy/tpb/${type}/${id}`).then(r => {
+            if (!r.data?.streams?.length) throw new Error('No streams');
+            console.log(`[TPB+] backend proxy: ${r.data.streams.length} streams`);
+            return r.data;
+          }), 3000),
+        ];
+        
         try {
-          console.log(`[TPB+] Trying allorigins proxy...`);
-          const allOriginsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(tpbUrl)}`;
-          const response = await fetch(allOriginsUrl, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
-          });
-          if (response.ok) {
-            const result = await response.json();
-            if (result?.streams?.length > 0) {
-              console.log(`[TPB+] allorigins success: ${result.streams.length} streams`);
-              data = result;
-            }
-          }
-        } catch (e: any) {
-          console.log(`[TPB+] allorigins failed: ${e.message || e}`);
-        }
-        
-        // Approach 2: Try direct fetch as fallback (may work on some mobile networks)
-        if (!data?.streams?.length) {
-          try {
-            console.log(`[TPB+] Trying direct fetch...`);
-            const response = await fetch(tpbUrl, {
-              method: 'GET',
-              headers: { 'Accept': 'application/json' },
-            });
-            if (response.ok) {
-              const result = await response.json();
-              if (result?.streams?.length > 0) {
-                console.log(`[TPB+] Direct fetch success: ${result.streams.length} streams`);
-                data = result;
-              }
-            }
-          } catch (e: any) {
-            console.log(`[TPB+] Direct fetch failed: ${e.message || e}`);
-          }
-        }
-        
-        // Approach 3: Try backend proxy as last resort
-        if (!data?.streams?.length) {
-          try {
-            console.log(`[TPB+] Trying backend proxy...`);
-            const response = await apiClient.get(`/api/addon-proxy/tpb/${type}/${id}`);
-            if (response.data?.streams?.length > 0) {
-              console.log(`[TPB+] Backend proxy success: ${response.data.streams.length} streams`);
-              data = response.data;
-            }
-          } catch (e: any) {
-            console.log(`[TPB+] Backend proxy failed: ${e.message || e}`);
-          }
+          data = await Promise.any(racePromises);
+        } catch (e) {
+          console.log(`[TPB+] All approaches failed`);
+          return [];
         }
         
         const rawStreams = data?.streams || [];
@@ -698,7 +552,7 @@ export const api = {
             name: `🏴‍☠️ ${name}`,
             title: title,
             infoHash: infoHash?.toLowerCase(),
-            sources: stream.sources || ['tracker:udp://tracker.opentrackr.org:1337/announce'],
+            sources: stream.sources || ['tracker:http://tracker.opentrackr.org:1337/announce'],
             addon: 'ThePirateBay+',
             seeders: seeders,
             quality: quality,
@@ -753,6 +607,10 @@ export const api = {
     uninstall: async (addonId: string): Promise<void> => {
       await apiClient.delete(`/api/addons/${addonId}`);
     },
+    resolveCode: async (code: string): Promise<{ url: string; code: string }> => {
+      const response = await apiClient.get(`/api/addons/resolve-code/${code}`);
+      return response.data;
+    },
   },
   library: {
     get: async (): Promise<LibraryResponse> => {
@@ -775,7 +633,7 @@ export const api = {
       const response = await apiClient.post('/api/admin/users', userData);
       return response.data;
     },
-    updateUser: async (userId: string, userData: { email?: string; password?: string; is_admin?: boolean }): Promise<User> => {
+    updateUser: async (userId: string, userData: { username?: string; email?: string; password?: string; is_admin?: boolean }): Promise<User> => {
       const response = await apiClient.put(`/api/admin/users/${userId}`, userData);
       return response.data;
     },
@@ -832,7 +690,7 @@ export const api = {
     getVideoUrl: (infoHash: string, fileIdx?: number): string => {
       // Return the full URL for the video stream with optional fileIdx
       // Use the hardcoded backend URL for mobile builds
-      const baseUrl = Platform.OS === 'web' ? '' : 'https://fire-stick-remote.preview.emergentagent.com';
+      const baseUrl = Platform.OS === 'web' ? '' : (process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '');
       const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
       return `${baseUrl}/api/stream/video/${infoHash}${params}`;
     },

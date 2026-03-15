@@ -1,6 +1,17 @@
 import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
+
+// ============================================================
+// MODULE-LEVEL CACHES — persist across screen mounts/unmounts
+// These are NOT in zustand to avoid triggering re-renders
+// ============================================================
+const _metaCache: Record<string, ContentItem> = {};
+const _streamsCache: Record<string, Stream[]> = {};
+
+export const getMetaCache = (key: string) => _metaCache[key] || null;
+export const setMetaCache = (key: string, data: ContentItem) => { _metaCache[key] = data; };
+export const getStreamsCache = (key: string) => _streamsCache[key] || null;
+export const setStreamsCache = (key: string, data: Stream[]) => { _streamsCache[key] = data; };
 
 interface CurrentPlaying {
   contentType: string;
@@ -19,6 +30,7 @@ interface ContentState {
   searchSkip: number;
   currentSearchQuery: string;
   streams: Stream[];
+  selectedItem: ContentItem | null;
   currentPlaying: CurrentPlaying | null;
   isLoadingDiscover: boolean;
   isLoadingAddons: boolean;
@@ -27,7 +39,7 @@ interface ContentState {
   isLoadingMoreSearch: boolean;
   isLoadingStreams: boolean;
   error: string | null;
-  lastFetchTime: { [key: string]: number };
+  setSelectedItem: (item: ContentItem | null) => void;
   fetchDiscover: (forceRefresh?: boolean) => Promise<void>;
   fetchAddons: (forceRefresh?: boolean) => Promise<void>;
   fetchLibrary: (forceRefresh?: boolean) => Promise<void>;
@@ -39,17 +51,7 @@ interface ContentState {
   clearSearch: () => void;
   setCurrentPlaying: (info: CurrentPlaying | null) => void;
   resetStore: () => void;
-  loadCachedData: () => Promise<void>;
 }
-
-const CACHE_KEYS = {
-  discover: 'cache_discover',
-  addons: 'cache_addons',
-  library: 'cache_library',
-};
-
-// Cache duration in milliseconds (5 minutes)
-const CACHE_DURATION = 5 * 60 * 1000;
 
 const initialState = {
   discoverData: null,
@@ -62,6 +64,7 @@ const initialState = {
   searchSkip: 0,
   currentSearchQuery: '',
   currentPlaying: null,
+  selectedItem: null,
   streams: [],
   isLoadingDiscover: false,
   isLoadingAddons: false,
@@ -70,145 +73,46 @@ const initialState = {
   isLoadingMoreSearch: false,
   isLoadingStreams: false,
   error: null,
-  lastFetchTime: {},
-};
-
-// Helper to save to cache
-const saveToCache = async (key: string, data: any) => {
-  try {
-    const cacheData = {
-      data,
-      timestamp: Date.now(),
-    };
-    await AsyncStorage.setItem(key, JSON.stringify(cacheData));
-  } catch (e) {
-    console.log('[Cache] Error saving:', e);
-  }
-};
-
-// Helper to load from cache
-const loadFromCache = async (key: string): Promise<{ data: any; isValid: boolean } | null> => {
-  try {
-    const cached = await AsyncStorage.getItem(key);
-    if (cached) {
-      const { data, timestamp } = JSON.parse(cached);
-      const isValid = Date.now() - timestamp < CACHE_DURATION;
-      return { data, isValid };
-    }
-  } catch (e) {
-    console.log('[Cache] Error loading:', e);
-  }
-  return null;
 };
 
 export const useContentStore = create<ContentState>((set, get) => ({
   ...initialState,
 
+  setSelectedItem: (item: ContentItem | null) => {
+    set({ selectedItem: item });
+  },
+
   resetStore: () => {
     set(initialState);
   },
 
-  // Load all cached data on app start
-  loadCachedData: async () => {
-    try {
-      // Load discover cache
-      const discoverCache = await loadFromCache(CACHE_KEYS.discover);
-      if (discoverCache?.data) {
-        set({ discoverData: discoverCache.data });
-      }
-
-      // Load addons cache
-      const addonsCache = await loadFromCache(CACHE_KEYS.addons);
-      if (addonsCache?.data) {
-        set({ addons: addonsCache.data });
-      }
-
-      // Load library cache
-      const libraryCache = await loadFromCache(CACHE_KEYS.library);
-      if (libraryCache?.data) {
-        set({ library: libraryCache.data });
-      }
-
-      console.log('[Cache] Loaded cached data');
-    } catch (e) {
-      console.log('[Cache] Error loading cached data:', e);
-    }
-  },
-
   fetchDiscover: async (forceRefresh = false) => {
-    const { discoverData, lastFetchTime } = get();
-    
-    // Check if we have cached data and it's still valid
-    if (!forceRefresh && discoverData) {
-      const lastFetch = lastFetchTime['discover'] || 0;
-      if (Date.now() - lastFetch < CACHE_DURATION) {
-        console.log('[ContentStore] Using cached discover data');
-        return;
-      }
+    const currentData = get().discoverData;
+    // Show cached data immediately (stale-while-revalidate)
+    if (currentData && !forceRefresh) {
+      // Still refresh in background, but don't show loading spinner
+      api.content.getDiscover().then(data => {
+        set({ discoverData: data });
+      }).catch(err => {
+        console.log('[ContentStore] Background refresh error:', err);
+      });
+      return;
     }
-
-    // Try to load from AsyncStorage cache first if no data in memory
-    if (!discoverData) {
-      const cached = await loadFromCache(CACHE_KEYS.discover);
-      if (cached?.data) {
-        set({ discoverData: cached.data });
-        if (cached.isValid && !forceRefresh) {
-          console.log('[ContentStore] Using AsyncStorage cached discover data');
-          return;
-        }
-      }
-    }
-
     set({ isLoadingDiscover: true, error: null });
     try {
       const data = await api.content.getDiscover();
-      set({ 
-        discoverData: data, 
-        isLoadingDiscover: false,
-        lastFetchTime: { ...get().lastFetchTime, discover: Date.now() }
-      });
-      // Save to cache
-      await saveToCache(CACHE_KEYS.discover, data);
+      set({ discoverData: data, isLoadingDiscover: false });
     } catch (error: any) {
       console.log('[ContentStore] fetchDiscover error:', error);
-      set({ error: error.message, isLoadingDiscover: false });
+      set({ error: error.message, isLoadingDiscover: false, discoverData: currentData || null });
     }
   },
 
   fetchAddons: async (forceRefresh = false) => {
-    const { addons, lastFetchTime } = get();
-    
-    // Check if we have cached data and it's still valid
-    if (!forceRefresh && addons.length > 0) {
-      const lastFetch = lastFetchTime['addons'] || 0;
-      if (Date.now() - lastFetch < CACHE_DURATION) {
-        console.log('[ContentStore] Using cached addons data');
-        return;
-      }
-    }
-
-    // Try to load from AsyncStorage cache first if no data in memory
-    if (addons.length === 0) {
-      const cached = await loadFromCache(CACHE_KEYS.addons);
-      if (cached?.data) {
-        set({ addons: cached.data });
-        if (cached.isValid && !forceRefresh) {
-          console.log('[ContentStore] Using AsyncStorage cached addons data');
-          return;
-        }
-      }
-    }
-
     set({ isLoadingAddons: true, error: null });
     try {
       const data = await api.addons.getAll();
-      set({ 
-        addons: data || [], 
-        isLoadingAddons: false,
-        lastFetchTime: { ...get().lastFetchTime, addons: Date.now() }
-      });
-      // Save to cache
-      await saveToCache(CACHE_KEYS.addons, data);
+      set({ addons: data || [], isLoadingAddons: false });
     } catch (error: any) {
       console.log('[ContentStore] fetchAddons error:', error);
       set({ error: error.message, isLoadingAddons: false, addons: [] });
@@ -216,39 +120,10 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   fetchLibrary: async (forceRefresh = false) => {
-    const { library, lastFetchTime } = get();
-    
-    // Check if we have cached data and it's still valid
-    if (!forceRefresh && library) {
-      const lastFetch = lastFetchTime['library'] || 0;
-      if (Date.now() - lastFetch < CACHE_DURATION) {
-        console.log('[ContentStore] Using cached library data');
-        return;
-      }
-    }
-
-    // Try to load from AsyncStorage cache first if no data in memory
-    if (!library) {
-      const cached = await loadFromCache(CACHE_KEYS.library);
-      if (cached?.data) {
-        set({ library: cached.data });
-        if (cached.isValid && !forceRefresh) {
-          console.log('[ContentStore] Using AsyncStorage cached library data');
-          return;
-        }
-      }
-    }
-
     set({ isLoadingLibrary: true, error: null });
     try {
       const data = await api.library.get();
-      set({ 
-        library: data, 
-        isLoadingLibrary: false,
-        lastFetchTime: { ...get().lastFetchTime, library: Date.now() }
-      });
-      // Save to cache
-      await saveToCache(CACHE_KEYS.library, data);
+      set({ library: data, isLoadingLibrary: false });
     } catch (error: any) {
       console.log('[ContentStore] fetchLibrary error:', error);
       set({ error: error.message, isLoadingLibrary: false });
@@ -304,11 +179,28 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   fetchStreams: async (type: string, id: string) => {
+    const cacheKey = `${type}/${id}`;
+    
+    // CHECK CACHE FIRST — instant return if we have data
+    const cached = getStreamsCache(cacheKey);
+    if (cached && cached.length > 0) {
+      set({ streams: cached, isLoadingStreams: false, error: null });
+      return cached;
+    }
+    
     set({ isLoadingStreams: true, streams: [], error: null });
     
     try {
-      const result = await api.addons.getAllStreams(type, id);
+      // Progressive loading: show streams as each source responds
+      const result = await api.addons.getAllStreams(type, id, (partialStreams: Stream[]) => {
+        set({ streams: partialStreams });
+        if (partialStreams.length > 0) {
+          set({ isLoadingStreams: false });
+        }
+      });
       const allStreams = result.streams || [];
+      // Cache the result for instant re-access
+      setStreamsCache(cacheKey, allStreams);
       set({ streams: allStreams, isLoadingStreams: false });
       return allStreams;
     } catch (error: any) {
@@ -321,7 +213,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
   addToLibrary: async (item: ContentItem) => {
     try {
       await api.library.add(item);
-      await get().fetchLibrary(true); // Force refresh
+      await get().fetchLibrary();
     } catch (error: any) {
       console.log('[ContentStore] addToLibrary error:', error);
       set({ error: error.message });
@@ -331,7 +223,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
   removeFromLibrary: async (type: string, id: string) => {
     try {
       await api.library.remove(type, id);
-      await get().fetchLibrary(true); // Force refresh
+      await get().fetchLibrary();
     } catch (error: any) {
       console.log('[ContentStore] removeFromLibrary error:', error);
       set({ error: error.message });

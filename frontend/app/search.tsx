@@ -50,8 +50,8 @@ function FocusableResultItem({
         source={{ uri: item.poster }}
         style={[styles.poster, isFocused && styles.posterFocused]}
         contentFit="cover"
-        placeholder={require('../assets/images/icon.png')}
-        placeholderContentFit="contain"
+        placeholder={require('../assets/images/no-poster.png')}
+        placeholderContentFit="cover"
       />
       <Text style={styles.itemTitle} numberOfLines={2}>{item.name}</Text>
     </Pressable>
@@ -87,7 +87,10 @@ function FocusableButton({
 export default function SearchScreen() {
   const { q } = useLocalSearchParams<{ q?: string }>();
   const router = useRouter();
-  const { searchResults, isLoadingSearch, search, clearSearch } = useContentStore();
+  const searchResults = useContentStore(s => s.searchResults);
+  const isLoadingSearch = useContentStore(s => s.isLoadingSearch);
+  const search = useContentStore(s => s.search);
+  const clearSearch = useContentStore(s => s.clearSearch);
   const [searchQuery, setSearchQuery] = useState(q || '');
   const flatListRef = useRef<FlatList>(null);
 
@@ -116,6 +119,11 @@ export default function SearchScreen() {
       params: {
         name: item.name || '',
         poster: item.poster || '',
+        background: item.background || '',
+        logo: item.logo || '',
+        year: item.year ? String(item.year) : '',
+        imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+        description: item.description || '',
       }
     });
   };

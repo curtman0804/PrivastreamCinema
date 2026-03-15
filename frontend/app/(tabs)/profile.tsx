@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: colors.primary,
   },
   headerTitleTV: {
     fontSize: 28,
@@ -201,11 +201,11 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 20,
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: colors.primary,
   },
   email: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: colors.primaryDark,
     marginTop: 4,
   },
   section: {
@@ -232,12 +232,13 @@ const styles = StyleSheet.create({
     padding: 16,
     minHeight: 72,
     maxHeight: 72,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: 'transparent',
+    borderRadius: 12,
   },
   menuItemFocused: {
-    borderColor: '#B8A05C',
-    backgroundColor: 'rgba(184, 160, 92, 0.2)',
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.15)',
   },
   menuIcon: {
     width: 40,
@@ -257,14 +258,14 @@ const styles = StyleSheet.create({
   menuTitle: {
     fontSize: 16,
     fontWeight: '500',
-    color: colors.textPrimary,
+    color: colors.primary,
   },
   menuTitleDanger: {
     color: colors.error,
   },
   menuSubtitle: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.primaryDark,
     marginTop: 2,
   },
   bottomPadding: {

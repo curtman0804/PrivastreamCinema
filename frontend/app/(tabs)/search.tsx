@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -18,14 +17,12 @@ import { SearchResult } from '../../src/api/client';
 export default function SearchScreen() {
   const router = useRouter();
   const { q: queryParam } = useLocalSearchParams<{ q?: string }>();
-  const { 
-    searchResults, 
-    searchMovies,
-    searchSeries,
-    isLoadingSearch, 
-    search, 
-    clearSearch 
-  } = useContentStore();
+  const searchResults = useContentStore(s => s.searchResults);
+  const searchMovies = useContentStore(s => s.searchMovies);
+  const searchSeries = useContentStore(s => s.searchSeries);
+  const isLoadingSearch = useContentStore(s => s.isLoadingSearch);
+  const search = useContentStore(s => s.search);
+  const clearSearch = useContentStore(s => s.clearSearch);
   const [hasSearched, setHasSearched] = useState(false);
   const [currentQuery, setCurrentQuery] = useState<string>('');
   const hasTriggeredInitialSearch = useRef(false);
@@ -64,22 +61,13 @@ export default function SearchScreen() {
     router.push({
       pathname: `/details/${item.type}/${encodeURIComponent(item.id)}`,
       params: {
-        name: item.name,
-        poster: item.poster,
+        name: item.name || '',
+        poster: item.poster || '',
+        year: item.year ? String(item.year) : '',
+        imdbRating: item.imdbRating ? String(item.imdbRating) : '',
       },
     });
   };
-
-  const handleClearSearch = () => {
-    clearSearch();
-    setHasSearched(false);
-    setCurrentQuery('');
-    hasTriggeredInitialSearch.current = false;
-    router.replace('/search');
-  };
-
-  // Focusable clear button
-  const [clearFocused, setClearFocused] = useState(false);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -88,23 +76,6 @@ export default function SearchScreen() {
       </View>
 
       <SearchBar onSearch={handleSearch} initialValue={currentQuery} />
-
-      {/* Show current search query tag */}
-      {currentQuery && hasSearched && (
-        <View style={styles.searchTagContainer}>
-          <View style={styles.searchTag}>
-            <Text style={styles.searchTagText}>Results for "{currentQuery}"</Text>
-            <Pressable 
-              onPress={handleClearSearch} 
-              style={[styles.clearButton, clearFocused && styles.clearButtonFocused]}
-              onFocus={() => setClearFocused(true)}
-              onBlur={() => setClearFocused(false)}
-            >
-              <Ionicons name="close-circle" size={18} color={clearFocused ? "#B8A05C" : "#888"} />
-            </Pressable>
-          </View>
-        </View>
-      )}
 
       {isLoadingSearch ? (
         <View style={styles.centerContainer}>
@@ -146,6 +117,15 @@ export default function SearchScreen() {
               onItemPress={handleItemPress}
             />
           )}
+
+          {/* Show summary at bottom if both exist */}
+          {searchMovies.length > 0 && searchSeries.length > 0 && (
+            <View style={styles.resultsSummary}>
+              <Text style={styles.resultsSummaryText}>
+                {searchMovies.length} Movies  •  {searchSeries.length} Series
+              </Text>
+            </View>
+          )}
           
           <View style={styles.bottomPadding} />
         </ScrollView>
@@ -168,35 +148,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  searchTagContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  searchTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(184, 160, 92, 0.2)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: 'rgba(184, 160, 92, 0.3)',
-  },
-  searchTagText: {
-    color: '#D4C78A',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  clearButton: {
-    marginLeft: 8,
-    padding: 4,
-    borderRadius: 12,
-  },
-  clearButtonFocused: {
-    backgroundColor: 'rgba(184, 160, 92, 0.3)',
+    color: '#B8A05C',
   },
   centerContainer: {
     flex: 1,
@@ -205,19 +157,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   loadingText: {
-    color: '#FFFFFF',
+    color: '#B8A05C',
     marginTop: 12,
     fontSize: 16,
   },
   emptyText: {
-    color: '#FFFFFF',
+    color: '#B8A05C',
     fontSize: 18,
     fontWeight: '600',
     marginTop: 16,
     textAlign: 'center',
   },
   emptySubtext: {
-    color: '#888888',
+    color: '#9A8540',
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
@@ -226,7 +178,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 16,
+    paddingTop: 8,
+  },
+  resultsSummary: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  resultsSummaryText: {
+    color: '#888888',
+    fontSize: 13,
+    fontWeight: '500',
   },
   bottomPadding: {
     height: 40,

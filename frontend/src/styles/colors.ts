@@ -8,7 +8,7 @@ export const colors = {
   primaryDark: '#9A8540',
   
   // Background colors
-  background: '#0F0F0F',        // Main app background
+  background: '#000000',        // Main app background
   backgroundLight: '#161616',   // Cards, elevated surfaces
   backgroundLighter: '#1E1E1E', // Hover states
   surface: '#242424',           // Input fields, modals
@@ -48,7 +48,7 @@ export const posterShapes = {
   square: 1,        // 1:1 aspect ratio
 };
 
-// Focus ring style (thin glow)
+// Focus ring style (Stremio uses thin glow, not thick border)
 export const focusStyle = {
   shadowColor: colors.focusGlow,
   shadowOffset: { width: 0, height: 0 },
