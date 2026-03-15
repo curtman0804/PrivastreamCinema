@@ -323,7 +323,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-const PORT = 8002;
+const PORT = process.env.PORT || 8002;
 app.listen(PORT, () => {
   console.log(`🚀 WebTorrent streaming server running on port ${PORT}`);
 });
