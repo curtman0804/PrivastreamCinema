@@ -1,0 +1,19 @@
+# Ignore large/unnecessary files for EAS Build
+node_modules/
+.expo/
+dist/
+web-build/
+android/
+ios/
+.git/
+*.log
+*.tsbuildinfo
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+public/sync-files/
+__tests__/
+coverage/
+.ruff_cache/
