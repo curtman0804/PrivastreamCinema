@@ -4,37 +4,36 @@ import cors from 'cors';
 
 const app = express();
 
-// Create WebTorrent client with VPN-optimized settings
+// Create WebTorrent client optimized for container/K8s environments (no UDP)
 const client = new WebTorrent({
-  maxConns: 100,        // More connections per torrent
-  dht: true,            // Enable DHT for peer discovery
-  lsd: true,            // Local Service Discovery  
-  webSeeds: true,       // Enable web seeds
-  utp: true,            // Enable uTP (better for NAT traversal)
+  maxConns: 100,
+  dht: false,            // Disabled - UDP blocked in K8s
+  lsd: false,            // Disabled - not useful in containers
+  webSeeds: true,
+  utp: false,            // Disabled - UDP blocked in K8s
   tracker: {
     announce: [
-      // Tier 1 - High reliability trackers
-      'udp://tracker.opentrackr.org:1337/announce',
-      'udp://open.stealth.si:80/announce',
-      'udp://tracker.torrent.eu.org:451/announce',
-      'udp://exodus.desync.com:6969/announce',
-      'udp://tracker.openbittorrent.com:6969/announce',
-      // Tier 2 - Good reliability
-      'udp://open.demonii.com:1337/announce',
-      'udp://tracker.moeking.me:6969/announce',
-      'udp://explodie.org:6969/announce',
-      'udp://tracker.coppersurfer.tk:6969/announce',
-      'udp://tracker.leechers-paradise.org:6969/announce',
-      'udp://p4p.arenabg.com:1337/announce',
-      // Tier 3 - Backup trackers
-      'udp://tracker.internetwarriors.net:1337/announce',
-      'udp://tracker.cyberia.is:6969/announce',
-      'udp://tracker.tiny-vps.com:6969/announce',
-      'udp://tracker.sbsub.com:2710/announce',
-      // HTTP trackers (better for some VPNs)
+      // WebSocket trackers (work over HTTPS - best for containers)
+      'wss://tracker.openwebtorrent.com',
+      'wss://tracker.btorrent.xyz',
+      'wss://tracker.files.fm:7073/announce',
+      'wss://spacetradersapi-chatbox.herokuapp.com:443/announce',
+      // HTTP trackers (work through standard ports - K8s friendly)
       'http://tracker.openbittorrent.com:80/announce',
       'http://tracker3.itzmx.com:6961/announce',
       'http://tracker.bt4g.com:2095/announce',
+      'http://tracker.files.fm:6969/announce',
+      'http://t.nyaatracker.com:80/announce',
+      'http://tracker.gbitt.info:80/announce',
+      'http://tracker.ccp.ovh:6969/announce',
+      'http://open.acgnxtracker.com:80/announce',
+      'http://tracker.dler.org:6969/announce',
+      'http://opentracker.i2p.rocks:6969/announce',
+      'http://tracker.opentrackr.org:1337/announce',
+      'https://tracker.lilithraws.org:443/announce',
+      'https://tr.burnabyhighstar.com:443/announce',
+      'https://tracker.tamersunion.org:443/announce',
+      'https://tracker.imgoingto.icu:443/announce',
     ]
   }
 });
@@ -88,33 +87,29 @@ app.get('/stream/:infoHash', (req, res) => {
   const { infoHash } = req.params;
   const infoHashLower = infoHash.toLowerCase();
   
-  // Extensive tracker list for VPN users - more trackers = faster peer discovery
+  // HTTP/WSS-only trackers (UDP is blocked in K8s/container production environments)
   const trackers = [
-    // Tier 1 - High reliability
-    'udp://tracker.opentrackr.org:1337/announce',
-    'udp://open.stealth.si:80/announce',
-    'udp://tracker.torrent.eu.org:451/announce',
-    'udp://exodus.desync.com:6969/announce',
-    'udp://tracker.openbittorrent.com:6969/announce',
-    // Tier 2 - Good reliability
-    'udp://open.demonii.com:1337/announce',
-    'udp://tracker.moeking.me:6969/announce',
-    'udp://explodie.org:6969/announce',
-    'udp://tracker.coppersurfer.tk:6969/announce',
-    'udp://tracker.leechers-paradise.org:6969/announce',
-    'udp://p4p.arenabg.com:1337/announce',
-    // Tier 3 - Additional trackers for VPN scenarios
-    'udp://tracker.internetwarriors.net:1337/announce',
-    'udp://tracker.cyberia.is:6969/announce',
-    'udp://tracker.tiny-vps.com:6969/announce',
-    'udp://tracker.sbsub.com:2710/announce',
-    'udp://tracker.pirateparty.gr:6969/announce',
-    'udp://retracker.lanta-net.ru:2710/announce',
-    // HTTP trackers (sometimes work better through VPNs)
+    // WebSocket trackers (work over HTTPS - best for containers)
+    'wss://tracker.openwebtorrent.com',
+    'wss://tracker.btorrent.xyz',
+    'wss://tracker.files.fm:7073/announce',
+    'wss://spacetradersapi-chatbox.herokuapp.com:443/announce',
+    // HTTP/HTTPS trackers (K8s friendly - no UDP required)
     'http://tracker.openbittorrent.com:80/announce',
     'http://tracker3.itzmx.com:6961/announce',
-    'http://tracker2.itzmx.com:6961/announce',
     'http://tracker.bt4g.com:2095/announce',
+    'http://tracker.files.fm:6969/announce',
+    'http://t.nyaatracker.com:80/announce',
+    'http://tracker.gbitt.info:80/announce',
+    'http://tracker.ccp.ovh:6969/announce',
+    'http://open.acgnxtracker.com:80/announce',
+    'http://tracker.dler.org:6969/announce',
+    'http://opentracker.i2p.rocks:6969/announce',
+    'http://tracker.opentrackr.org:1337/announce',
+    'https://tracker.lilithraws.org:443/announce',
+    'https://tr.burnabyhighstar.com:443/announce',
+    'https://tracker.tamersunion.org:443/announce',
+    'https://tracker.imgoingto.icu:443/announce',
   ];
   
   let magnetURI = `magnet:?xt=urn:btih:${infoHash}`;

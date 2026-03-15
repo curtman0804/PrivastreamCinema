@@ -147,31 +147,22 @@ class TorrentStreamer:
         self.download_dir = tempfile.mkdtemp(prefix="privastream_")
         # Extensive tracker list for maximum peer discovery (critical for VPN users)
         self.trackers = [
-            # Tier 1 - Fastest/Most reliable
-            "udp://tracker.opentrackr.org:1337/announce",
-            "udp://open.stealth.si:80/announce",
-            "udp://tracker.torrent.eu.org:451/announce",
-            "udp://exodus.desync.com:6969/announce",
-            "udp://tracker.openbittorrent.com:6969/announce",
-            "udp://open.demonii.com:1337/announce",
-            "udp://tracker.moeking.me:6969/announce",
-            "udp://explodie.org:6969/announce",
-            # Tier 2 - Good reliability
-            "udp://tracker.coppersurfer.tk:6969/announce",
-            "udp://tracker.leechers-paradise.org:6969/announce",
-            "udp://p4p.arenabg.com:1337/announce",
-            "udp://tracker.internetwarriors.net:1337/announce",
-            "udp://9.rarbg.to:2710/announce",
-            "udp://tracker.pirateparty.gr:6969/announce",
-            "udp://tracker.cyberia.is:6969/announce",
-            "udp://tracker.tiny-vps.com:6969/announce",
-            "udp://tracker.sbsub.com:2710/announce",
-            "udp://retracker.lanta-net.ru:2710/announce",
-            # HTTP trackers (backup)
+            # HTTP/HTTPS trackers only (UDP blocked in K8s/container environments)
             "http://tracker.openbittorrent.com:80/announce",
             "http://tracker3.itzmx.com:6961/announce",
-            "http://tracker2.itzmx.com:6961/announce",
             "http://tracker.bt4g.com:2095/announce",
+            "http://tracker.files.fm:6969/announce",
+            "http://t.nyaatracker.com:80/announce",
+            "http://tracker.gbitt.info:80/announce",
+            "http://tracker.ccp.ovh:6969/announce",
+            "http://open.acgnxtracker.com:80/announce",
+            "http://tracker.dler.org:6969/announce",
+            "http://opentracker.i2p.rocks:6969/announce",
+            "http://tracker.opentrackr.org:1337/announce",
+            "https://tracker.lilithraws.org:443/announce",
+            "https://tr.burnabyhighstar.com:443/announce",
+            "https://tracker.tamersunion.org:443/announce",
+            "https://tracker.imgoingto.icu:443/announce",
         ]
         logger.info(f"TorrentStreamer initialized. Download dir: {self.download_dir}")
     
@@ -186,38 +177,38 @@ class TorrentStreamer:
         # Key optimizations: Fast peer connection, aggressive piece requests, high cache
         settings = {
             'listen_interfaces': '0.0.0.0:6881,[::]:6881',
-            'enable_dht': True,
-            'enable_lsd': True,
-            'enable_upnp': True,
-            'enable_natpmp': True,
+            'enable_dht': False,            # Disabled - UDP blocked in K8s
+            'enable_lsd': False,            # Disabled - not useful in containers
+            'enable_upnp': False,           # Disabled - not useful in containers
+            'enable_natpmp': False,         # Disabled - not useful in containers
             'announce_to_all_trackers': True,
             'announce_to_all_tiers': True,
             
-            # ===== AGGRESSIVE CONNECTION SETTINGS (Critical for VPN) =====
-            'connection_speed': 500,              # Connections per second to attempt
-            'connections_limit': 800,             # Max total connections
-            'download_rate_limit': 0,             # Unlimited download
-            'upload_rate_limit': 500000,          # 500 KB/s upload (helps reciprocation)
-            'unchoke_slots_limit': 20,            # More upload slots = more download reciprocity
+            # ===== CONNECTION SETTINGS (TCP only) =====
+            'connection_speed': 500,
+            'connections_limit': 800,
+            'download_rate_limit': 0,
+            'upload_rate_limit': 500000,
+            'unchoke_slots_limit': 20,
             
-            # ===== PEER DISCOVERY (Critical for fast startup) =====
+            # ===== PEER DISCOVERY (HTTP trackers only) =====
             'max_peerlist_size': 8000,
             'max_paused_peerlist_size': 8000,
-            'peer_connect_timeout': 7,            # Faster peer timeout (default 15)
-            'handshake_timeout': 7,               # Faster handshake timeout
-            'torrent_connect_boost': 50,          # Extra connections for new torrents
-            'peer_timeout': 60,                   # Keep peers longer
+            'peer_connect_timeout': 7,
+            'handshake_timeout': 7,
+            'torrent_connect_boost': 50,
+            'peer_timeout': 60,
             'inactivity_timeout': 60,
             
             # ===== DISK I/O OPTIMIZATION =====
-            'cache_size': 8192,                   # 128MB cache (8192 * 16KB blocks)
-            'disk_io_read_mode': 0,               # Enable OS cache
-            'disk_io_write_mode': 0,              # Enable OS cache
-            'aio_threads': 8,                     # More async IO threads
+            'cache_size': 8192,
+            'disk_io_read_mode': 0,
+            'disk_io_write_mode': 0,
+            'aio_threads': 8,
             
             # ===== STREAMING-SPECIFIC SETTINGS =====
-            'request_queue_time': 1,              # Reduced - request only 1 sec ahead (faster starts)
-            'max_out_request_queue': 1000,        # Large request queue
+            'request_queue_time': 1,
+            'max_out_request_queue': 1000,
             'whole_pieces_threshold': 2,          # Smaller threshold for faster piece completion
             'max_allowed_in_request_queue': 2000, # Allow more incoming requests
             'send_buffer_watermark': 512 * 1024,  # 512KB send buffer
@@ -1526,7 +1517,7 @@ async def get_all_streams(
                                         "name": f"🎬 YTS {torrent['quality']}",
                                         "title": f"YTS • {movie['title']} ({movie.get('year', '')})\n💾 {torrent['size']} | 🌱 {torrent['seeds']} | ⚡ {torrent['quality']}",
                                         "infoHash": torrent['hash'].lower(),
-                                        "sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"],
+                                        "sources": ["tracker:http://tracker.opentrackr.org:1337/announce"],
                                         "addon": "YTS",
                                         "seeders": torrent['seeds']
                                     })
@@ -1584,7 +1575,7 @@ async def get_all_streams(
                                 "name": f"📺 EZTV {quality}",
                                 "title": f"EZTV • {title}\n💾 {size_str} | 🌱 {seeds} | ⚡ {quality}",
                                 "infoHash": info_hash,
-                                "sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"],
+                                "sources": ["tracker:http://tracker.opentrackr.org:1337/announce"],
                                 "addon": "EZTV",
                                 "seeders": seeds
                             })
@@ -1637,7 +1628,7 @@ async def get_all_streams(
                                         "name": f"🏴‍☠️ TPB {quality}",
                                         "title": f"ThePirateBay • {name[:60]}\n💾 {size_str} | 🌱 {seeds} | ⚡ {quality}",
                                         "infoHash": info_hash,
-                                        "sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"],
+                                        "sources": ["tracker:http://tracker.opentrackr.org:1337/announce"],
                                         "addon": "ThePirateBay",
                                         "seeders": seeds
                                     })
@@ -1741,7 +1732,7 @@ async def get_all_streams(
                                 "name": f"⚡ {name}",
                                 "title": title,
                                 "infoHash": info_hash,
-                                "sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"],
+                                "sources": ["tracker:http://tracker.opentrackr.org:1337/announce"],
                                 "addon": "Torrentio",
                                 "seeders": seeders,
                                 "quality": quality

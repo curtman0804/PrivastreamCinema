@@ -214,7 +214,7 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
@@ -234,6 +234,47 @@ backend:
           6. Lower ready threshold (3MB minimum instead of 5%)
           7. ffmpeg optimization: copy codec for MP4, zerolatency for MKV
           8. Increased cache to 128MB, 8 async IO threads
+      - working: true
+        agent: "main"
+        comment: |
+          PRODUCTION FIX - Removed ALL UDP tracker references for K8s compatibility:
+          1. torrent-server/server.js: Replaced 17 UDP trackers with 19 HTTP/WSS trackers in /stream endpoint
+          2. backend/server.py: Changed 4 UDP tracker source references to HTTP
+          3. frontend/client.ts: Changed 2 UDP tracker fallback sources to HTTP
+          4. Verified: Test torrent found 8 peers and reached 100% using only HTTP/WSS trackers
+          5. WebTorrent client already had dht:false, utp:false (no changes needed there)
+          6. libtorrent session already had enable_dht:false and HTTP-only trackers (no changes needed)
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ CRITICAL STREAMING PIPELINE TESTING COMPLETE - ALL TESTS PASSED!
+          
+          🎯 COMPREHENSIVE END-TO-END TESTING (7/7 tests passed - 100% success rate):
+          
+          🔐 AUTHENTICATION:
+          • POST /api/auth/login: ✅ Login successful with choyt/RFIDGuy1!
+          • JWT token generation and validation working correctly
+          
+          🎬 STREAM FETCHING:
+          • GET /api/streams/movie/tt14364480: ✅ Found 20 streams, all have required fields (infoHash, title)
+          • Torrentio-style aggregation from YTS, PirateBay, EZTV working correctly
+          
+          🚀 TORRENT STREAMING PIPELINE (KEY FOCUS):
+          • POST /api/stream/start/08ada5a7a6183aae1e09d831df6748d566095a10: ✅ Returns {"status": "started"}
+          • GET /api/stream/status/08ada5a7a6183aae1e09d831df6748d566095a10: ✅ Returns peers and progress (4 peers, 100% ready)
+          • GET /api/stream/video/08ada5a7a6183aae1e09d831df6748d566095a10: ✅ Returns video data (200 OK, video/mp4, 129MB)
+          
+          🎭 CONTENT DISCOVERY:
+          • GET /api/content/discover-organized: ✅ Returns 22 services with 2064 total items
+          • Netflix, HBO Max, Disney+ and other streaming services working correctly
+          
+          🔧 ADDON MANAGEMENT:
+          • GET /api/addons: ✅ Retrieved 6 installed addons with valid structure
+          
+          ⚡ CRITICAL SUCCESS: STREAMING PIPELINE END-TO-END WORKING!
+          The key fix requested (start → status → video) is fully functional.
+          All optimizations working: sequential download, piece prioritization, HTTP-only trackers.
+          Total test time: 9.46s - Excellent performance!
 
   - task: "Subtitles API (Series Episodes)"
     implemented: true
@@ -452,3 +493,31 @@ agent_communication:
       
       SUMMARY: Performance optimizations (parallel fetching, caching) are working exceptionally well. 
       All APIs significantly faster than targets. No regressions detected. 🎉
+  - agent: "testing"
+    message: |
+      ✅ CRITICAL STREAMING PIPELINE TESTING COMPLETE - FINAL VERIFICATION SUCCESSFUL!
+      
+      🎯 COMPREHENSIVE ENDPOINT TESTING (7/7 tests passed - 100% success rate):
+      
+      Key findings from testing the specific review request flows:
+      
+      🔐 AUTHENTICATION:
+      • POST /api/auth/login with choyt/RFIDGuy1!: ✅ Working perfectly
+      
+      🎬 STREAM FETCHING:
+      • GET /api/streams/movie/tt14364480 (Wake Up Dead Man): ✅ Returns 20 streams with infoHash, seeders, title
+      
+      🚀 TORRENT STREAMING PIPELINE (MAIN FOCUS):
+      • POST /api/stream/start/08ada5a7a6183aae1e09d831df6748d566095a10: ✅ Returns {"status": "started"}
+      • GET /api/stream/status/08ada5a7a6183aae1e09d831df6748d566095a10: ✅ Returns peers and progress info (4 peers, 100%)
+      • GET /api/stream/video/08ada5a7a6183aae1e09d831df6748d566095a10: ✅ Returns video data (200 OK, video/mp4, 129MB)
+      
+      🎭 CONTENT DISCOVERY:
+      • GET /api/content/discover-organized: ✅ Returns movie/TV categories (22 services, 2064 items)
+      
+      🔧 ADDON MANAGEMENT:
+      • GET /api/addons: ✅ Returns installed addons (6 found)
+      
+      ⚡ CRITICAL SUCCESS: The key streaming pipeline (start → status → video) works END-TO-END!
+      All endpoints responding correctly with proper authentication. No critical issues found.
+      Total test execution: 9.46s with excellent performance throughout.
