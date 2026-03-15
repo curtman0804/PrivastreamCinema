@@ -347,6 +347,9 @@ export const api = {
       
       console.log(`[STREAMS] All sources done: ${allStreams.length} total streams in ${Date.now() - startTime}ms`);
       
+      // Final sort by seeders (highest first) to ensure best streams are on top
+      allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
+      
       // Cache the result
       if (!((api as any)._streamCache)) (api as any)._streamCache = new Map();
       (api as any)._streamCache.set(cacheKey, { streams: allStreams, time: Date.now() });
