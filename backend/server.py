@@ -1425,14 +1425,45 @@ async def get_all_streams(
     try:
         client = await get_shared_http_client()
         base_id = content_id.split(':')[0]
+        
+        # Try primary Cinemeta endpoint
         meta_url = f"https://v3-cinemeta.strem.io/meta/{content_type}/{base_id}.json"
-        meta_resp = await client.get(meta_url)
+        meta_resp = await client.get(meta_url, follow_redirects=True)
         if meta_resp.status_code == 200:
             meta = meta_resp.json().get('meta', {})
             content_title = meta.get('name', '')
             content_year = str(meta.get('year', ''))
             if '–' in content_year:
                 content_year = content_year.split('–')[0]
+        
+        # Fallback: try live Cinemeta if no title
+        if not content_title:
+            logger.info(f"Cinemeta v3 had no title for {base_id}, trying live endpoint")
+            live_url = f"https://cinemeta-live.strem.io/meta/{content_type}/{base_id}.json"
+            live_resp = await client.get(live_url)
+            if live_resp.status_code == 200:
+                live_meta = live_resp.json().get('meta', {})
+                content_title = live_meta.get('name', '')
+                content_year = str(live_meta.get('releaseInfo', live_meta.get('year', '')))
+                if '–' in content_year:
+                    content_year = content_year.split('–')[0]
+        
+        # Fallback 2: try OMDB if still no title
+        if not content_title and base_id.startswith('tt'):
+            logger.info(f"No title from Cinemeta for {base_id}, trying OMDB")
+            omdb_url = f"https://www.omdbapi.com/?i={base_id}&apikey=aa53a1e5"
+            try:
+                omdb_resp = await client.get(omdb_url)
+                if omdb_resp.status_code == 200:
+                    omdb_data = omdb_resp.json()
+                    if omdb_data.get('Response') == 'True':
+                        content_title = omdb_data.get('Title', '')
+                        content_year = omdb_data.get('Year', '')
+                        if '–' in content_year:
+                            content_year = content_year.split('–')[0]
+                        logger.info(f"OMDB fallback: '{content_title}' ({content_year})")
+            except Exception:
+                pass
     except Exception as e:
         logger.warning(f"Failed to fetch meta for streams: {e}")
     
@@ -1591,11 +1622,31 @@ async def get_all_streams(
         async def do_search(search_query: str) -> list:
             try:
                 url = f"https://apibay.org/q.php?q={search_query}"
-                async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                    response = await client.get(url)
-                    if response.status_code == 200:
-                        torrents = response.json()
-                        if isinstance(torrents, list) and len(torrents) > 0 and torrents[0].get('id') != '0':
+                # Use cloudscraper to bypass ApiBay's bot detection
+                response = None
+                try:
+                    import cloudscraper
+                    scraper = cloudscraper.create_scraper(
+                        browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+                    )
+                    response = await asyncio.to_thread(
+                        lambda: scraper.get(url, timeout=15)
+                    )
+                except Exception as cs_err:
+                    logger.warning(f"ApiBay cloudscraper failed: {cs_err}, trying httpx")
+                    # Fallback to httpx with browser UA
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                        "Accept": "application/json, text/javascript, */*; q=0.01",
+                        "Referer": "https://thepiratebay.org/"
+                    }
+                    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=headers) as hclient:
+                        response = await hclient.get(url)
+                
+                if response and response.status_code == 200:
+                    torrents = response.json()
+                    logger.info(f"ApiBay got {len(torrents)} items, first id: {torrents[0].get('id', '?') if isinstance(torrents, list) and len(torrents) > 0 else 'empty'}")
+                    if isinstance(torrents, list) and len(torrents) > 0 and torrents[0].get('id') != '0':
                             streams = []
                             
                             # Adult content keywords to filter out
