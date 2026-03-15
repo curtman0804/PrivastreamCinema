@@ -3055,6 +3055,33 @@ async def stream_video(
             req = client.build_request("GET", torrent_url, headers=headers)
             response = await client.send(req, stream=True)
             
+            # AUTO-RETRY: If torrent-server returns 404 (torrent not loaded), restart it
+            if response.status_code == 404:
+                await response.aclose()
+                logger.info(f"Torrent {info_hash} not loaded, auto-restarting...")
+                
+                # Restart the torrent
+                restart_url = f"{TORRENT_SERVER_URL}/stream/{info_hash}"
+                restart_resp = await client.get(restart_url)
+                logger.info(f"Torrent restart response: {restart_resp.status_code}")
+                
+                # Wait for torrent to be ready (poll status up to 30 seconds)
+                for attempt in range(15):
+                    await asyncio.sleep(2)
+                    status_resp = await client.get(f"{TORRENT_SERVER_URL}/status/{info_hash}")
+                    if status_resp.status_code == 200:
+                        status_data = status_resp.json()
+                        peers = status_data.get('peers', 0)
+                        progress = status_data.get('progress', 0)
+                        logger.info(f"Torrent restart status: peers={peers}, progress={progress}%")
+                        if status_data.get('status') == 'ready' or peers > 0:
+                            break
+                
+                # Retry the stream request
+                req = client.build_request("GET", torrent_url, headers=headers)
+                response = await client.send(req, stream=True)
+                logger.info(f"Retry stream response: {response.status_code}")
+            
             if response.status_code not in [200, 206]:
                 await response.aclose()
                 await client.aclose()
