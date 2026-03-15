@@ -9,7 +9,9 @@ dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# Native (EAS builds regenerate these via expo prebuild)
+android/
+ios/
 .kotlin/
 *.orig.*
 *.jks
