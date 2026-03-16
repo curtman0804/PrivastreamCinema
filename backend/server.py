@@ -3818,8 +3818,24 @@ async def download_file(filename: str):
     if os.path.exists(file_path):
         # Detect media type from extension
         ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-        media_types = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'html': 'text/html'}
-        media_type = media_types.get(ext, 'text/plain')
+        media_types = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'html': 'text/html', 'tsx': 'text/plain', 'ts': 'text/plain'}
+        media_type = media_types.get(ext, 'application/octet-stream')
+        
+        # For non-HTML files, add Content-Disposition to force download
+        if ext != 'html':
+            # Map download filenames to target names
+            download_names = {
+                'new_icon.png': 'icon.png',
+                'new_adaptive_foreground.png': 'adaptive-icon-foreground.png',
+                'new_adaptive_monochrome.png': 'adaptive-icon-monochrome.png',
+                'player_v2.tsx': 'player.tsx',
+            }
+            download_name = download_names.get(filename, filename)
+            return FileResponse(
+                file_path, 
+                media_type=media_type,
+                headers={"Content-Disposition": f'attachment; filename="{download_name}"'}
+            )
         return FileResponse(file_path, media_type=media_type)
     raise HTTPException(status_code=404, detail=f"File not found: {filename}")
 
