@@ -797,9 +797,6 @@ export default function PlayerScreen() {
     return '-' + formatTime(remaining);
   };
 
-  // Track progress bar focus state via ref (accessible from TV event handler)
-  const progressBarFocusedRef = useRef(false);
-  
   // TV remote events are handled by the useEffect below with try-catch safety
 
   // Handle TV remote / hardware button events via native dispatchKeyEvent
