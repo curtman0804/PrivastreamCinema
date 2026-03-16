@@ -165,6 +165,43 @@ class TorrentStreamer:
             "https://tracker.imgoingto.icu:443/announce",
         ]
         logger.info(f"TorrentStreamer initialized. Download dir: {self.download_dir}")
+        
+        # Create ONE shared libtorrent session - DHT stays warm across all torrents
+        settings = {
+            'listen_interfaces': '0.0.0.0:6881,[::]:6881',
+            'enable_dht': True,
+            'enable_lsd': True,
+            'enable_upnp': False,
+            'enable_natpmp': False,
+            'announce_to_all_trackers': True,
+            'announce_to_all_tiers': True,
+            'connection_speed': 500,
+            'connections_limit': 800,
+            'download_rate_limit': 5 * 1024 * 1024,
+            'upload_rate_limit': 100000,
+            'unchoke_slots_limit': 20,
+            'max_peerlist_size': 8000,
+            'peer_connect_timeout': 7,
+            'handshake_timeout': 7,
+            'torrent_connect_boost': 50,
+            'peer_timeout': 60,
+            'inactivity_timeout': 60,
+            'cache_size': 2048,
+            'disk_io_read_mode': 0,
+            'disk_io_write_mode': 0,
+            'aio_threads': 4,
+            'request_queue_time': 1,
+            'max_out_request_queue': 1000,
+            'whole_pieces_threshold': 2,
+            'max_allowed_in_request_queue': 2000,
+            'send_buffer_watermark': 512 * 1024,
+            'send_buffer_watermark_factor': 150,
+            'mixed_mode_algorithm': 0,
+            'rate_limit_ip_overhead': False,
+            'allow_multiple_connections_per_ip': True,
+        }
+        self.lt_session = lt.session(settings)
+        logger.info(f"Shared libtorrent session started")
     
     def _evict_oldest(self):
         """Remove the oldest session to make room for new ones"""
@@ -176,7 +213,7 @@ class TorrentStreamer:
             self._cleanup_disk()
     
     def get_session(self, info_hash: str):
-        """Get or create a libtorrent session for a torrent - OPTIMIZED FOR STREAMING"""
+        """Get or create a torrent handle using the shared session"""
         info_hash = info_hash.lower()
         
         if info_hash in self.sessions:
@@ -185,79 +222,29 @@ class TorrentStreamer:
         # Evict oldest if at max capacity
         self._evict_oldest()
         
-        # Create new session with STREAMING-OPTIMIZED settings
-        settings = {
-            'listen_interfaces': '0.0.0.0:6881,[::]:6881',
-            'enable_dht': True,             # DHT enabled - libtorrent handles this natively over TCP
-            'enable_lsd': True,             # Local service discovery
-            'enable_upnp': False,
-            'enable_natpmp': False,
-            'announce_to_all_trackers': True,
-            'announce_to_all_tiers': True,
-            
-            # ===== CONNECTION SETTINGS (TCP only) =====
-            'connection_speed': 500,
-            'connections_limit': 800,
-            'download_rate_limit': 5 * 1024 * 1024,  # 5 MB/s limit to prevent disk overflow
-            'upload_rate_limit': 100000,     # Minimal upload (100KB/s) to stay in swarm
-            'unchoke_slots_limit': 20,
-            
-            # ===== PEER DISCOVERY (HTTP trackers only) =====
-            'max_peerlist_size': 8000,
-            'max_paused_peerlist_size': 8000,
-            'peer_connect_timeout': 7,
-            'handshake_timeout': 7,
-            'torrent_connect_boost': 50,
-            'peer_timeout': 60,
-            'inactivity_timeout': 60,
-            
-            # ===== DISK I/O OPTIMIZATION =====
-            'cache_size': 2048,             # 128MB cache (reduced from 512MB to save memory)
-            'disk_io_read_mode': 0,
-            'disk_io_write_mode': 0,
-            'aio_threads': 4,
-            
-            # ===== STREAMING-SPECIFIC SETTINGS =====
-            'request_queue_time': 1,
-            'max_out_request_queue': 1000,
-            'whole_pieces_threshold': 2,          # Smaller threshold for faster piece completion
-            'max_allowed_in_request_queue': 2000, # Allow more incoming requests
-            'send_buffer_watermark': 512 * 1024,  # 512KB send buffer
-            'send_buffer_watermark_factor': 150,  # Aggressive sending
-            
-            # ===== PROTOCOL SETTINGS =====
-            'mixed_mode_algorithm': 0,            # Prefer TCP (more reliable)
-            'rate_limit_ip_overhead': False,      # Don't count protocol overhead in limits
-            'allow_multiple_connections_per_ip': True,  # Important for some seedboxes
-        }
-        
-        ses = lt.session(settings)
-        
-        # Build magnet link with all trackers for faster peer discovery
+        # Build magnet URI with trackers
         magnet = f"magnet:?xt=urn:btih:{info_hash}"
         for tracker in self.trackers:
             magnet += f"&tr={tracker}"
         
-        params = {
-            'save_path': self.download_dir,
-            'storage_mode': lt.storage_mode_t.storage_mode_sparse,
-        }
+        # Use the modern API (parse_magnet_uri + add_torrent)
+        params = lt.parse_magnet_uri(magnet)
+        params.save_path = self.download_dir
         
-        handle = lt.add_magnet_uri(ses, magnet, params)
-        
-        # CRITICAL: Enable sequential download for streaming
-        handle.set_sequential_download(True)
+        handle = self.lt_session.add_torrent(params)
+        # Sequential download for streaming
+        handle.set_flags(lt.torrent_flags.sequential_download)
         
         self.sessions[info_hash] = {
-            'session': ses,
+            'session': self.lt_session,
             'handle': handle,
             'created': time.time(),
             'video_file': None,
             'video_path': None,
-            'save_path': self.download_dir,  # Track for cleanup
+            'save_path': self.download_dir,
         }
         
-        logger.info(f"Started STREAMING-OPTIMIZED session for {info_hash}")
+        logger.info(f"Added torrent {info_hash} to shared session")
         return self.sessions[info_hash]
     
     def get_status(self, info_hash: str) -> dict:
@@ -330,7 +317,7 @@ class TorrentStreamer:
                 # PRIORITY STRATEGY FOR STREAMING:
                 # 1. First ~5MB (header/moov atom): CRITICAL (priority 7)
                 # 2. Next ~10MB: HIGH (priority 6) - for buffer
-                # 3. Last 2MB: MEDIUM (priority 4) - for duration/seeking
+                # 3. Last 2MB: CRITICAL (priority 7) - ExoPlayer reads end for moov atom!
                 # 4. Rest of video: NORMAL (priority 1) - sequential download handles this
                 
                 # Set base priority for all video pieces
@@ -346,10 +333,10 @@ class TorrentStreamer:
                 for i in range(start_piece + header_pieces, min(start_piece + header_pieces + buffer_pieces, end_piece + 1)):
                     priorities[i] = 6
                 
-                # MEDIUM: Last few pieces (for seeking/duration detection)
-                last_piece_count = max(5, 2 * 1024 * 1024 // piece_length)  # ~2MB
+                # CRITICAL: Last pieces - ExoPlayer reads the end for moov atom / mkv seekhead
+                last_piece_count = max(10, 2 * 1024 * 1024 // piece_length)  # ~2MB from end
                 for i in range(max(start_piece, end_piece - last_piece_count), end_piece + 1):
-                    priorities[i] = 4
+                    priorities[i] = 7  # Same as header - MUST download these early
                 
                 handle.prioritize_pieces(priorities)
                 
@@ -3172,14 +3159,41 @@ async def stream_video(
             range_header = "bytes=0-"
         
         parts = range_header.replace("bytes=", "").split("-")
-        start = int(parts[0])
-        end = int(parts[1]) if parts[1] else min(start + 2 * 1024 * 1024, file_size - 1)  # 2MB chunks max
+        start = int(parts[0]) if parts[0] else 0
+        end = int(parts[1]) if len(parts) > 1 and parts[1] else min(start + 2 * 1024 * 1024, file_size - 1)  # 2MB chunks max
         
         # Clamp to file size
         end = min(end, file_size - 1)
         chunk_size = end - start + 1
         
         logger.info(f"Streaming range {start}-{end}/{file_size} from {os.path.basename(video_path)}")
+        
+        # ON-DEMAND PIECE PRIORITIZATION: When player requests a specific range,
+        # bump those pieces to highest priority so libtorrent downloads them ASAP
+        try:
+            session_data = torrent_streamer.sessions.get(info_hash.lower())
+            if session_data and session_data.get('video_file'):
+                handle = session_data['handle']
+                ti = handle.get_torrent_info()
+                piece_length = ti.piece_length()
+                file_offset = ti.files().file_offset(session_data['video_file']['index'])
+                
+                # Calculate which pieces cover the requested range
+                range_start_piece = (file_offset + start) // piece_length
+                range_end_piece = (file_offset + end) // piece_length
+                
+                # Set those pieces to highest priority
+                priorities = handle.get_piece_priorities()
+                changed = False
+                for p in range(range_start_piece, min(range_end_piece + 1, len(priorities))):
+                    if priorities[p] < 7:
+                        priorities[p] = 7
+                        changed = True
+                if changed:
+                    handle.prioritize_pieces(priorities)
+                    logger.info(f"Boosted pieces {range_start_piece}-{range_end_piece} to priority 7 for range request")
+        except Exception as e:
+            logger.warning(f"Could not boost piece priority: {e}")
         
         async def range_generator():
             try:
