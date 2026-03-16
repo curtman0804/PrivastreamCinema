@@ -177,8 +177,8 @@ class TorrentStreamer:
         # Key optimizations: Fast peer connection, aggressive piece requests, high cache
         settings = {
             'listen_interfaces': '0.0.0.0:6881,[::]:6881',
-            'enable_dht': False,            # Disabled - UDP blocked in K8s
-            'enable_lsd': False,            # Disabled - not useful in containers
+            'enable_dht': True,             # DHT enabled - libtorrent handles this natively over TCP
+            'enable_lsd': True,             # Local service discovery
             'enable_upnp': False,           # Disabled - not useful in containers
             'enable_natpmp': False,         # Disabled - not useful in containers
             'announce_to_all_trackers': True,
@@ -201,10 +201,10 @@ class TorrentStreamer:
             'inactivity_timeout': 60,
             
             # ===== DISK I/O OPTIMIZATION =====
-            'cache_size': 8192,
+            'cache_size': 2048,             # 128MB cache (reduced from 512MB to save memory)
             'disk_io_read_mode': 0,
             'disk_io_write_mode': 0,
-            'aio_threads': 8,
+            'aio_threads': 4,
             
             # ===== STREAMING-SPECIFIC SETTINGS =====
             'request_queue_time': 1,
@@ -398,8 +398,8 @@ class TorrentStreamer:
             return self.sessions[info_hash].get('video_path')
         return None
     
-    def cleanup_old_sessions(self, max_age_hours=2):
-        """Remove old torrent sessions"""
+    def cleanup_old_sessions(self, max_age_hours=1):
+        """Remove old torrent sessions and their downloaded files"""
         current_time = time.time()
         to_remove = []
         
@@ -411,6 +411,43 @@ class TorrentStreamer:
             try:
                 data = self.sessions[info_hash]
                 data['session'].remove_torrent(data['handle'])
+                # Clean up downloaded files
+                video_path = data.get('video_path')
+                if video_path and os.path.exists(video_path):
+                    os.remove(video_path)
+                    logger.info(f"Removed file: {video_path}")
+                del self.sessions[info_hash]
+                logger.info(f"Cleaned up session for {info_hash}")
+            except Exception as e:
+                logger.error(f"Error cleaning up session {info_hash}: {e}")
+        
+        # Also clean up any orphaned files in the download directory
+        try:
+            if os.path.exists(self.download_dir):
+                total_size = sum(
+                    os.path.getsize(os.path.join(dp, f))
+                    for dp, dn, fns in os.walk(self.download_dir)
+                    for f in fns
+                )
+                if total_size > 5 * 1024 * 1024 * 1024:  # Over 5GB
+                    logger.warning(f"Download dir is {total_size / (1024**3):.1f}GB, cleaning up...")
+                    # Remove oldest session's files
+                    if self.sessions:
+                        oldest = min(self.sessions.keys(), key=lambda k: self.sessions[k]['created'])
+                        self.cleanup_session(oldest)
+        except Exception as e:
+            logger.error(f"Error checking disk usage: {e}")
+    
+    def cleanup_session(self, info_hash):
+        """Clean up a specific torrent session"""
+        info_hash = info_hash.lower()
+        if info_hash in self.sessions:
+            try:
+                data = self.sessions[info_hash]
+                data['session'].remove_torrent(data['handle'])
+                video_path = data.get('video_path')
+                if video_path and os.path.exists(video_path):
+                    os.remove(video_path)
                 del self.sessions[info_hash]
                 logger.info(f"Cleaned up session for {info_hash}")
             except Exception as e:
@@ -418,6 +455,16 @@ class TorrentStreamer:
 
 # Global torrent streamer instance
 torrent_streamer = TorrentStreamer()
+
+# Background cleanup task
+async def periodic_cleanup():
+    """Run cleanup every 10 minutes"""
+    while True:
+        await asyncio.sleep(600)
+        try:
+            torrent_streamer.cleanup_old_sessions(max_age_hours=1)
+        except Exception as e:
+            logger.error(f"Periodic cleanup error: {e}")
 
 
 # ==================== MODELS ====================
@@ -561,6 +608,9 @@ async def create_default_admin():
                 {"$set": {"is_admin": True}}
             )
             logger.info("Updated choyt to admin status")
+    
+    # Start periodic cleanup for torrent downloads
+    asyncio.create_task(periodic_cleanup())
 
 
 
@@ -2969,36 +3019,12 @@ async def start_stream(
     filename: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Start downloading a torrent via WebTorrent server"""
+    """Start downloading a torrent via libtorrent (native peer discovery)"""
     try:
         logger.info(f"Starting torrent download for {info_hash}, fileIdx={fileIdx}, filename={filename}")
         
-        # Record start time
-        _torrent_start_times[info_hash.lower()] = datetime.utcnow()
-        
-        # Trigger the WebTorrent server to start downloading
-        async def trigger_torrent():
-            try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-                    params = {}
-                    if fileIdx is not None:
-                        params['fileIdx'] = fileIdx
-                    if filename:
-                        params['filename'] = filename
-                    
-                    url = f"{TORRENT_SERVER_URL}/stream/{info_hash}"
-                    if params:
-                        url += '?' + '&'.join(f"{k}={v}" for k, v in params.items())
-                    
-                    response = await client.get(
-                        url,
-                        headers={"Range": "bytes=0-1024"}
-                    )
-                    logger.info(f"Torrent trigger response: {response.status_code}")
-            except Exception as e:
-                logger.info(f"Torrent {info_hash} triggered (exception: {type(e).__name__})")
-        
-        asyncio.create_task(trigger_torrent())
+        # Use libtorrent-based TorrentStreamer (much better peer discovery than WebTorrent)
+        session_data = torrent_streamer.get_session(info_hash)
         
         return {"status": "started", "info_hash": info_hash}
     except Exception as e:
@@ -3007,60 +3033,43 @@ async def start_stream(
 
 @api_router.get("/stream/status/{info_hash}")
 async def stream_status(info_hash: str, current_user: User = Depends(get_current_user)):
-    """Get the status of a torrent download from WebTorrent server - with auto-restart"""
+    """Get the status of a torrent download from libtorrent"""
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{TORRENT_SERVER_URL}/status/{info_hash}")
-            if response.status_code == 200:
-                data = response.json()
-                
-                ts_status = data.get("status", "")
-                is_ready = data.get("ready", False)
-                peers = data.get("peers", 0)
-                progress = data.get("progress", 0)
-                name = data.get("name", "")
-                
-                # If torrent-server says not_found, auto-restart the torrent
-                if ts_status == "not_found" or (not is_ready and peers == 0 and progress == 0 and not name):
-                    start_time = _torrent_start_times.get(info_hash.lower())
-                    elapsed = (datetime.utcnow() - start_time).total_seconds() if start_time else 999
-                    
-                    # If it's been more than 10 seconds since start and still nothing, restart
-                    if elapsed > 10:
-                        logger.info(f"Torrent {info_hash} appears lost (elapsed={elapsed:.0f}s), auto-restarting...")
-                        _torrent_start_times[info_hash.lower()] = datetime.utcnow()
-                        
-                        # Restart the torrent in background
-                        async def restart():
-                            try:
-                                async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as rc:
-                                    await rc.get(
-                                        f"{TORRENT_SERVER_URL}/stream/{info_hash}",
-                                        headers={"Range": "bytes=0-1024"}
-                                    )
-                            except Exception:
-                                pass
-                        asyncio.create_task(restart())
-                        
-                        return {
-                            "status": "buffering",
-                            "progress": 0,
-                            "peers": 0,
-                            "download_rate": 0,
-                            "downloaded": 0,
-                            "name": "Restarting torrent...",
-                        }
-                
-                return {
-                    "status": "ready" if is_ready else "buffering",
-                    "progress": progress,
-                    "peers": peers,
-                    "download_rate": data.get("downloadSpeed", 0),
-                    "downloaded": data.get("downloaded", 0),
-                    "name": name,
-                    "video_filename": data.get("videoFileName", ""),
-                }
-            return {"status": "buffering", "progress": 0, "peers": 0}
+        status = torrent_streamer.get_status(info_hash)
+        
+        lt_status = status.get("status", "not_found")
+        
+        if lt_status == "not_found":
+            # Auto-restart: create a new session
+            logger.info(f"Torrent {info_hash} not found, auto-starting...")
+            torrent_streamer.get_session(info_hash)
+            return {
+                "status": "buffering",
+                "progress": 0,
+                "peers": 0,
+                "download_rate": 0,
+                "downloaded": 0,
+                "name": "Starting torrent...",
+            }
+        
+        # Map libtorrent status to our format
+        peers = status.get("peers", 0)
+        download_rate = status.get("download_rate", 0)
+        downloaded = status.get("downloaded", 0)
+        video_file = status.get("video_file", "")
+        video_size = status.get("video_size", 0)
+        
+        return {
+            "status": lt_status,  # "ready", "buffering", "downloading_metadata"
+            "progress": status.get("progress", 0),
+            "peers": peers,
+            "download_rate": download_rate,
+            "downloaded": downloaded,
+            "name": video_file or "",
+            "video_filename": video_file or "",
+            "video_size": video_size,
+            "ready_threshold_mb": status.get("ready_threshold_mb", 3),
+        }
     except Exception as e:
         logger.error(f"Error getting stream status: {e}")
         return {"status": "buffering", "progress": 0, "peers": 0, "error": str(e)}
@@ -3071,105 +3080,139 @@ async def stream_video(
     request: Request,
     fileIdx: Optional[int] = None
 ):
-    """Proxy video stream from WebTorrent server"""
+    """Stream video file from libtorrent download"""
     try:
-        # Forward range headers for video seeking
-        headers = {}
-        if "range" in request.headers:
-            headers["range"] = request.headers["range"]
+        # Make sure the torrent session exists
+        session_data = torrent_streamer.get_session(info_hash)
+        handle = session_data['handle']
         
-        logger.info(f"Streaming request for {info_hash}, range: {headers.get('range', 'none')}, fileIdx={fileIdx}")
+        # Wait for metadata and video file discovery (up to 30 seconds)
+        max_wait = 30
+        waited = 0
+        while waited < max_wait:
+            status = torrent_streamer.get_status(info_hash)
+            if status.get("status") in ["ready", "buffering"] and status.get("video_file"):
+                break
+            await asyncio.sleep(1)
+            waited += 1
         
-        # Create persistent client for streaming
-        client = httpx.AsyncClient(
-            timeout=httpx.Timeout(None, connect=30.0),  # No read timeout for streaming
-            follow_redirects=True
-        )
+        video_path = torrent_streamer.get_video_path(info_hash)
+        if not video_path:
+            raise HTTPException(status_code=404, detail="Video file not found in torrent")
         
-        try:
-            # Request stream from WebTorrent server with fileIdx if provided
-            torrent_url = f"{TORRENT_SERVER_URL}/stream/{info_hash}"
-            if fileIdx is not None:
-                torrent_url += f"?fileIdx={fileIdx}"
-            req = client.build_request("GET", torrent_url, headers=headers)
-            response = await client.send(req, stream=True)
+        # Wait for the file to exist on disk (libtorrent might still be writing)
+        waited = 0
+        while waited < 30 and (not os.path.exists(video_path) or os.path.getsize(video_path) < 1024 * 1024):
+            await asyncio.sleep(1)
+            waited += 1
+            s = handle.status()
+            logger.info(f"Waiting for file: exists={os.path.exists(video_path)}, peers={s.num_peers}, progress={s.progress*100:.1f}%")
+        
+        if not os.path.exists(video_path):
+            raise HTTPException(status_code=404, detail="Video file not yet available")
+        
+        file_size = session_data['video_file']['size']  # Use torrent's reported size, not disk size (might be partial)
+        
+        # Determine content type from file extension
+        ext = os.path.splitext(video_path)[1].lower()
+        content_types = {
+            '.mp4': 'video/mp4',
+            '.mkv': 'video/x-matroska',
+            '.avi': 'video/x-msvideo',
+            '.webm': 'video/webm',
+            '.mov': 'video/quicktime',
+            '.m4v': 'video/mp4',
+            '.ts': 'video/mp2t',
+        }
+        content_type = content_types.get(ext, 'video/mp4')
+        
+        # Handle range requests for video seeking
+        range_header = request.headers.get("range")
+        
+        if range_header:
+            parts = range_header.replace("bytes=", "").split("-")
+            start = int(parts[0])
+            end = int(parts[1]) if parts[1] else min(start + 2 * 1024 * 1024, file_size - 1)  # 2MB chunks
             
-            # AUTO-RETRY: If torrent-server returns 404 (torrent not loaded), restart it
-            if response.status_code == 404:
-                await response.aclose()
-                logger.info(f"Torrent {info_hash} not loaded, auto-restarting...")
-                
-                # Restart the torrent
-                restart_url = f"{TORRENT_SERVER_URL}/stream/{info_hash}"
-                restart_resp = await client.get(restart_url)
-                logger.info(f"Torrent restart response: {restart_resp.status_code}")
-                
-                # Wait for torrent to be ready (poll status up to 30 seconds)
-                for attempt in range(15):
-                    await asyncio.sleep(2)
-                    status_resp = await client.get(f"{TORRENT_SERVER_URL}/status/{info_hash}")
-                    if status_resp.status_code == 200:
-                        status_data = status_resp.json()
-                        peers = status_data.get('peers', 0)
-                        progress = status_data.get('progress', 0)
-                        logger.info(f"Torrent restart status: peers={peers}, progress={progress}%")
-                        if status_data.get('status') == 'ready' or peers > 0:
-                            break
-                
-                # Retry the stream request
-                req = client.build_request("GET", torrent_url, headers=headers)
-                response = await client.send(req, stream=True)
-                logger.info(f"Retry stream response: {response.status_code}")
+            # Clamp to file size
+            end = min(end, file_size - 1)
+            chunk_size = end - start + 1
             
-            if response.status_code not in [200, 206]:
-                await response.aclose()
-                await client.aclose()
-                logger.error(f"WebTorrent server returned {response.status_code}")
-                raise HTTPException(status_code=response.status_code, detail="Stream unavailable")
+            logger.info(f"Streaming range {start}-{end}/{file_size} from {os.path.basename(video_path)}")
             
-            logger.info(f"Stream response: status={response.status_code}, content-length={response.headers.get('content-length', 'unknown')}")
-            
-            # Forward headers from WebTorrent server
-            response_headers = {
-                k: v for k, v in response.headers.items()
-                if k.lower() not in ['transfer-encoding', 'content-encoding', 'connection']
-            }
-            
-            # Stream the response
-            async def stream_generator():
+            async def range_generator():
                 try:
-                    chunk_count = 0
-                    total_bytes = 0
-                    async for chunk in response.aiter_bytes(chunk_size=2 * 1024 * 1024):  # 2MB chunks
-                        chunk_count += 1
-                        total_bytes += len(chunk)
-                        if chunk_count == 1:
-                            logger.info(f"First chunk: {len(chunk)} bytes")
-                        yield chunk
-                    logger.info(f"Stream complete: {total_bytes / (1024*1024):.1f} MB")
-                except asyncio.CancelledError:
-                    logger.info("Stream cancelled")
+                    # Wait for the requested range to be available on disk
+                    disk_wait = 0
+                    while disk_wait < 30:
+                        current_disk_size = os.path.getsize(video_path) if os.path.exists(video_path) else 0
+                        if current_disk_size > end:
+                            break
+                        await asyncio.sleep(0.5)
+                        disk_wait += 1
+                    
+                    with open(video_path, 'rb') as f:
+                        f.seek(start)
+                        remaining = chunk_size
+                        while remaining > 0:
+                            read_size = min(remaining, 64 * 1024)  # 64KB reads
+                            data = f.read(read_size)
+                            if not data:
+                                break
+                            remaining -= len(data)
+                            yield data
                 except Exception as e:
-                    logger.error(f"Stream error: {e}")
-                finally:
-                    try:
-                        await response.aclose()
-                        await client.aclose()
-                    except:
-                        pass
+                    logger.error(f"Range stream error: {e}")
             
             return StreamingResponse(
-                stream_generator(),
-                status_code=response.status_code,
-                headers=response_headers,
-                media_type=response.headers.get("content-type", "video/mp4")
+                range_generator(),
+                status_code=206,
+                headers={
+                    "Content-Range": f"bytes {start}-{end}/{file_size}",
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": str(chunk_size),
+                    "Content-Type": content_type,
+                    "Access-Control-Allow-Origin": "*",
+                },
+                media_type=content_type,
             )
-        except HTTPException:
-            await client.aclose()
-            raise
-        except Exception as e:
-            await client.aclose()
-            raise
+        else:
+            # Full file request
+            logger.info(f"Streaming full file: {os.path.basename(video_path)} ({file_size} bytes)")
+            
+            async def full_generator():
+                try:
+                    bytes_sent = 0
+                    while bytes_sent < file_size:
+                        current_disk_size = os.path.getsize(video_path) if os.path.exists(video_path) else 0
+                        if current_disk_size <= bytes_sent:
+                            await asyncio.sleep(0.5)
+                            continue
+                        
+                        with open(video_path, 'rb') as f:
+                            f.seek(bytes_sent)
+                            readable = min(current_disk_size - bytes_sent, 2 * 1024 * 1024)
+                            while readable > 0:
+                                chunk = f.read(min(readable, 64 * 1024))
+                                if not chunk:
+                                    break
+                                bytes_sent += len(chunk)
+                                readable -= len(chunk)
+                                yield chunk
+                except Exception as e:
+                    logger.error(f"Full stream error: {e}")
+            
+            return StreamingResponse(
+                full_generator(),
+                status_code=200,
+                headers={
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": str(file_size),
+                    "Content-Type": content_type,
+                    "Access-Control-Allow-Origin": "*",
+                },
+                media_type=content_type,
+            )
             
     except HTTPException:
         raise
