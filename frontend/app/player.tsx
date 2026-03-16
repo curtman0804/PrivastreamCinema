@@ -132,7 +132,7 @@ function SeekableProgressBar({
       <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
       {isFocused && (
         <View style={styles.seekHint}>
-          <Text style={styles.seekHintText}>◀ ▶ Seek  •  ▲ ▼ Controls</Text>
+          <Text style={styles.seekHintText}>{'<< >> Seek  |  Controls'}</Text>
         </View>
       )}
     </Pressable>
