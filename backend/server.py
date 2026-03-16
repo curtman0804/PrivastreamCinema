@@ -201,7 +201,7 @@ class TorrentStreamer:
             'allow_multiple_connections_per_ip': True,
         }
         self.lt_session = lt.session(settings)
-        logger.info(f"Shared libtorrent session started")
+        logger.info("Shared libtorrent session started")
     
     def _evict_oldest(self):
         """Remove the oldest session to make room for new ones"""
@@ -1163,7 +1163,7 @@ async def extract_xhamster_video(video_url: str) -> list:
                     logger.info(f"Extracted {len(streams)} streams from xHamster")
                     return streams
                 else:
-                    logger.warning(f"No streams found in xHamster page")
+                    logger.warning("No streams found in xHamster page")
                     
     except Exception as e:
         logger.warning(f"Error extracting xHamster video: {e}")
@@ -1463,7 +1463,7 @@ async def get_all_streams(
                                 if not is_ok:
                                     logger.info(f"Stream health FAIL ({resp.status_code}): {provider} {url[:50]}")
                                 return is_ok
-                        except Exception as check_err:
+                        except Exception:
                             _stream_health_cache[cache_key] = (False, _time.time())
                             logger.info(f"Stream health FAIL (timeout): {provider} {url[:50]}")
                             return False
@@ -3099,6 +3099,7 @@ async def stream_status(info_hash: str, current_user: User = Depends(get_current
         return {"status": "buffering", "progress": 0, "peers": 0, "error": str(e)}
 
 @api_router.get("/stream/video/{info_hash}")
+@api_router.head("/stream/video/{info_hash}")
 async def stream_video(
     info_hash: str,
     request: Request,
