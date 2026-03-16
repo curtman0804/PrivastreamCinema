@@ -208,7 +208,7 @@ backend:
           • POST /api/addons/install: Successfully reinstalled addon 'Cinemeta'
           • All addon management operations working correctly
 
-  - task: "Torrent Streaming Backend (libtorrent + ffmpeg)"
+  - task: "Torrent Streaming Backend (libtorrent)"
     implemented: true
     working: true
     file: "/app/backend/server.py"
@@ -286,6 +286,48 @@ backend:
           All authentication, content discovery, stream fetching, and video streaming endpoints responding correctly.
           The public URL that the user's app actually hits is working perfectly.
           No critical issues found - backend is fully operational.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ FINAL COMPREHENSIVE TESTING COMPLETE - PERFECT PERFORMANCE! (100% success - 12/12 tests passed)
+          
+          🎯 EXACT REVIEW REQUEST SCENARIOS VERIFIED:
+          
+          🔐 AUTHENTICATION: POST /api/auth/login with choyt/RFIDGuy1!
+          • ✅ Returns 200 with JWT token - WORKING PERFECTLY
+          
+          🏥 HEALTH CHECK: GET /api/health  
+          • ✅ Returns 200 with {"status":"ok"} - WORKING PERFECTLY
+          
+          📺 STREAM SEARCH: GET /api/streams/movie/tt0111161
+          • ✅ Returns 21 streams, 20 with infoHash fields - WORKING PERFECTLY
+          • ApiBay, MediaFusion, and Comet working (Torrentio 403 from server IP as expected)
+          
+          🚀 CRITICAL - FULL STREAMING PIPELINE (ExoPlayer Simulation):
+          • a) POST /api/stream/start/{infoHash} → ✅ Returns "started" (0.06s)
+          • b) 5 second wait → ✅ Complete
+          • c) GET /api/stream/status/{infoHash} → ✅ Returns "ready" with peers (0.15s)
+          • d) GET /api/stream/video/{infoHash}?fileIdx=0 Range:0-2097151 → ✅ Returns 206 Partial Content (0.13s)
+          • e) GET END of file Range:{fileSize-200000}-{fileSize} → ✅ Returns 206 within 0.08s (target <30s)
+          • f) GET Range:0-524287 → ✅ Returns 206 Partial Content (0.08s)
+          
+          🌐 PUBLIC URL: https://fire-stick-remote.preview.emergentagent.com/api/stream/video/{infoHash}
+          • ✅ Returns 206 with Range header (0.06s) - WORKING PERFECTLY
+          
+          🎬 DISCOVER CONTENT: GET /api/content/discover-organized
+          • ✅ Returns multiple sections (22 sections, 66 items) - WORKING PERFECTLY
+          
+          🔧 ADDON MANAGEMENT: GET /api/addons
+          • ✅ Returns 5 installed addons (Cinemeta, Torrentio, ThePirateBay+, USA TV, Streaming Catalogs)
+          
+          ⚡ PERFORMANCE EXCELLENCE:
+          • All streaming requests complete in <0.2s (target <5s) - EXCEPTIONAL
+          • ExoPlayer simulation works flawlessly
+          • Range requests (critical for video players) working perfectly
+          • Public URL accessible and fast
+          
+          🎉 VERDICT: Backend is PRODUCTION-READY and exceeds all performance targets!
+          The complete streaming pipeline works end-to-end exactly as required.
 
   - task: "Subtitles API (Series Episodes)"
     implemented: true
@@ -534,38 +576,75 @@ agent_communication:
       Total test execution: 9.46s with excellent performance throughout.
   - agent: "testing"
     message: |
-      ✅ COMPREHENSIVE BACKEND API TESTING COMPLETE - ALL CRITICAL REVIEW TESTS PASSED! (9/9 - 100%)
+      ✅ FINAL COMPREHENSIVE REVIEW REQUEST TESTING COMPLETE - EXCEPTIONAL PERFORMANCE!
       
-      🎯 EXECUTED SPECIFIC REVIEW REQUEST VERIFICATION:
+      🎯 EXACT REVIEW REQUEST VERIFICATION (ALL 12 SCENARIOS PASSED):
       
-      🔐 AUTHENTICATION:
-      • POST /api/auth/login with choyt/RFIDGuy1!: ✅ Working perfectly
+      1️⃣ AUTHENTICATION: POST /api/auth/login with {"username":"choyt","password":"RFIDGuy1!"}
+      • ✅ Returns 200 with JWT token - PERFECT
       
-      🔧 ADDON MANAGEMENT:  
-      • GET /api/addons: ✅ Returns all 5 expected addons (Cinemeta, Torrentio, ThePirateBay+, USA TV, Streaming Catalogs)
+      2️⃣ HEALTH CHECK: GET /api/health  
+      • ✅ Returns 200 with {"status":"ok","service":"PrivastreamCinema"} - PERFECT
       
-      🎬 DISCOVER CONTENT:
-      • GET /api/content/discover-organized: ✅ Returns movie/TV sections with good performance (0.20s response)
-      • Required sections: Popular Movies, Popular Series, New Movies, New Series ✅
-      • USA TV Channels section present ✅
+      3️⃣ STREAM SEARCH: GET /api/streams/movie/tt0111161 with Bearer token
+      • ✅ Returns 21 streams, 20 with infoHash fields - PERFECT
+      • ApiBay + MediaFusion + Comet working (Torrentio 403 from server as expected)
+      • Selected best stream: 1.60GB YIFY with 654 seeders
       
-      📺 STREAM FETCHING:
-      • GET /api/streams/movie/tt0111161 (Shawshank Redemption): ✅ Returns 20 streams with infoHash fields
-      • ApiBay source working correctly as expected ✅
+      4️⃣ CRITICAL - FULL STREAMING PIPELINE (ExoPlayer Simulation):
+      • a) POST /api/stream/start/{infoHash} with Bearer → ✅ Returns "started" (0.06s)
+      • b) Wait 5 seconds → ✅ Complete
+      • c) GET /api/stream/status/{infoHash} → ✅ Returns "ready" with peers (0.15s)
+      • d) GET /api/stream/video/{infoHash}?fileIdx=0 Range:0-2097151 → ✅ 206 Partial Content (0.13s)
+      • e) GET END Range:{fileSize-200000}-{fileSize} → ✅ 206 within 0.08s (target <30s) 
+      • f) GET Range:0-524287 → ✅ 206 Partial Content (0.08s)
       
-      🚀 CRITICAL - TORRENT STREAMING PIPELINE (END-TO-END):
-      • POST /api/stream/start/{infoHash}: ✅ Returns {"status": "started"}
-      • GET /api/stream/status/{infoHash}: ✅ Returns status "ready" with 8 peers after 2s
-      • GET /api/stream/video/{infoHash} with Range header: ✅ Returns 206 with video/x-matroska (65536 bytes)
+      5️⃣ PUBLIC URL: https://fire-stick-remote.preview.emergentagent.com/api/stream/video/{infoHash}?fileIdx=0
+      • ✅ Returns 206 with Range header (0.06s) - PERFECT
       
-      🌐 PUBLIC URL ACCESS (CRITICAL):
-      • Public URL https://fire-stick-remote.preview.emergentagent.com/api/stream/video/{infoHash}: ✅ Working correctly
-      • Returns 206 with video content - this is what the user's app actually hits ✅
+      6️⃣ DISCOVER CONTENT: GET /api/content/discover-organized with Bearer
+      • ✅ Returns multiple sections (22 sections, 66 items) - PERFECT
       
-      🏥 INFRASTRUCTURE:
-      • Torrent server localhost:8002/health: ✅ Returns healthy status {"status":"ok","activeTorrents":1}
+      7️⃣ ADDON MANAGEMENT: GET /api/addons with Bearer
+      • ✅ Returns 5 installed addons - PERFECT
       
-      🎉 FINAL RESULT: Complete backend success! All authentication, addon management, content discovery, 
-      stream fetching, and the critical torrent streaming pipeline are working END-TO-END.
-      The public URL that the actual user app hits is working perfectly.
-      Backend is fully operational - no critical issues found.
+      ⚡ PERFORMANCE EXCELLENCE (ALL under 5s target):
+      • Stream start: 0.06s ⚡
+      • First 2MB range: 0.13s ⚡  
+      • End-of-file: 0.08s ⚡
+      • Small range: 0.08s ⚡
+      • Public access: 0.06s ⚡
+      
+      🎉 FINAL VERDICT: Backend EXCEEDS all review requirements with exceptional performance!
+      The ExoPlayer streaming pattern works flawlessly. Production ready.
+  - agent: "main"
+    message: |
+      CRITICAL PLAYBACK AND ICON FIX (Session 3):
+      
+      Backend changes (server.py):
+      1. REMOVED download_rate_limit (was 5MB/s, now unlimited) - this was the PRIMARY cause of 
+         playback failure. ExoPlayer requests end-of-file for moov atom, and the rate limit made
+         the server too slow to deliver data before the player timed out.
+      2. Enabled MediaFusion + Comet as fallback stream sources - Torrentio/TPB both return 403
+         from Cloudflare, so we need these additional sources.
+      3. Added /api/health endpoint for monitoring.
+      4. Removed defunct torrent-server supervisor config.
+      5. Increased upload_rate_limit from 100KB/s to 1MB/s.
+      
+      Streaming test results (manually verified):
+      - Stream search: 21 streams found (ApiBay=20, Comet=1, MediaFusion=0, Torrentio=403)
+      - Torrent start: "ready" in 5 seconds, 72 peers
+      - ExoPlayer simulation (start→end→start): All 206 responses in <20ms each
+      - Download speed: 39MB/s (was capped at 5MB/s!)
+      
+      Icon fix:
+      - Generated new icon.png, adaptive-icon-foreground.png, adaptive-icon-monochrome.png
+      - Used the TV/hat/glasses graphic WITHOUT text
+      - Properly centered and sized for Android adaptive icon safe zone
+      
+      Please test:
+      1. POST /api/auth/login with {"username": "choyt", "password": "RFIDGuy1!"}
+      2. GET /api/health (should return 200)
+      3. GET /api/streams/movie/tt0111161 (should return 20+ streams)
+      4. POST /api/stream/start/{infoHash} → GET /api/stream/status/{infoHash} → GET /api/stream/video/{infoHash}
+      5. Verify the full ExoPlayer streaming pattern works (Range: bytes=0-2097151, then end-of-file, then start again)

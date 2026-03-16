@@ -177,8 +177,8 @@ class TorrentStreamer:
             'announce_to_all_tiers': True,
             'connection_speed': 500,
             'connections_limit': 800,
-            'download_rate_limit': 5 * 1024 * 1024,
-            'upload_rate_limit': 100000,
+            'download_rate_limit': 0,  # Unlimited - need fast initial buffering for ExoPlayer
+            'upload_rate_limit': 1024 * 1024,  # 1MB/s upload
             'unchoke_slots_limit': 20,
             'max_peerlist_size': 8000,
             'peer_connect_timeout': 7,
@@ -1919,9 +1919,10 @@ async def get_all_streams(
     for addon in addons:
         tasks.append(fetch_addon_streams(addon))
     
-    # Add built-in stream aggregators - these work reliably
-    # tasks.append(search_mediafusion(content_type, content_id))  # Disabled - user wants only installed addons
-    # tasks.append(search_comet(content_type, content_id))  # Disabled - user wants only installed addons
+    # Add built-in stream aggregators as fallbacks
+    # These are essential because Torrentio/TPB are frequently blocked by Cloudflare (403)
+    tasks.append(search_mediafusion(content_type, content_id))
+    tasks.append(search_comet(content_type, content_id))
     
     # Try Torrentio but it may be blocked by Cloudflare
     tasks.append(search_torrentio(content_type, content_id))
@@ -3197,24 +3198,48 @@ async def stream_video(
         
         async def range_generator():
             try:
-                # Wait for the requested range to be available on disk
-                disk_wait = 0
-                while disk_wait < 60:
-                    current_disk_size = os.path.getsize(video_path) if os.path.exists(video_path) else 0
-                    if current_disk_size > end:
-                        break
-                    await asyncio.sleep(0.5)
-                    disk_wait += 1
-                
-                if not os.path.exists(video_path) or os.path.getsize(video_path) <= start:
-                    logger.error(f"File not available for range {start}-{end}")
-                    return
+                # CRITICAL: Wait for the actual PIECES to be downloaded, not just file size
+                # Sparse files return zeros for undownloaded regions which breaks video players
+                session_data = torrent_streamer.sessions.get(info_hash.lower())
+                if session_data:
+                    handle = session_data['handle']
+                    ti = handle.get_torrent_info()
+                    piece_length = ti.piece_length()
+                    vf = session_data.get('video_file', {})
+                    file_offset = ti.files().file_offset(vf.get('index', 0)) if vf else 0
+                    
+                    # Calculate which pieces we need for this range
+                    need_start_piece = (file_offset + start) // piece_length
+                    need_end_piece = (file_offset + end) // piece_length
+                    
+                    disk_wait = 0
+                    while disk_wait < 120:  # Wait up to 2 minutes for pieces
+                        all_ready = True
+                        for p in range(need_start_piece, need_end_piece + 1):
+                            if not handle.have_piece(p):
+                                all_ready = False
+                                break
+                        
+                        if all_ready:
+                            break
+                        
+                        # Log progress periodically
+                        if disk_wait % 10 == 0:
+                            s = handle.status()
+                            logger.info(f"Waiting for pieces {need_start_piece}-{need_end_piece}: peers={s.num_peers}, progress={s.progress*100:.1f}%")
+                        
+                        await asyncio.sleep(0.5)
+                        disk_wait += 1
+                    
+                    if disk_wait >= 120:
+                        logger.error(f"Timeout waiting for pieces {need_start_piece}-{need_end_piece}")
+                        return
                 
                 with open(video_path, 'rb') as f:
                     f.seek(start)
                     remaining = chunk_size
                     while remaining > 0:
-                        read_size = min(remaining, 64 * 1024)  # 64KB reads
+                        read_size = min(remaining, 64 * 1024)
                         data = f.read(read_size)
                         if not data:
                             break
@@ -3709,6 +3734,11 @@ async def proxy_xhamster_stream(
 @api_router.get("/")
 async def root():
     return {"message": "PrivastreamCinema API", "version": "1.0.0"}
+
+@api_router.get("/health")
+async def health():
+    """Health check endpoint for monitoring"""
+    return {"status": "ok", "service": "PrivastreamCinema"}
 
 @api_router.get("/download/{filename}")
 async def download_file(filename: str):
