@@ -1179,7 +1179,7 @@ async def proxy_addon_streams(
     content_id: str,
     current_user: User = Depends(get_current_user)
 ):
-    """Proxy requests to Stremio addons to bypass CORS on web - uses cloudscraper for Cloudflare"""
+    """Proxy requests to Stremio addons to bypass CORS on web - uses allorigins.win for Cloudflare"""
     logger.info(f"Addon proxy: {addon}/{content_type}/{content_id}")
     
     addon_urls = {
@@ -1192,7 +1192,25 @@ async def proxy_addon_streams(
     
     url = addon_urls[addon]
     
-    # Try cloudscraper first (can bypass Cloudflare)
+    # Try allorigins.win proxy first (bypasses Cloudflare via proxy IP)
+    try:
+        import urllib.parse
+        encoded_url = urllib.parse.quote(url, safe='')
+        proxy_url = f"https://api.allorigins.win/raw?url={encoded_url}"
+        
+        client = await get_shared_http_client()
+        response = await client.get(proxy_url, timeout=15)
+        
+        if response.status_code == 200:
+            data = response.json()
+            logger.info(f"Addon proxy {addon} success via allorigins: {len(data.get('streams', []))} streams")
+            return data
+        else:
+            logger.warning(f"Addon proxy {addon} allorigins status {response.status_code}")
+    except Exception as e:
+        logger.warning(f"Addon proxy {addon} allorigins error: {e}")
+    
+    # Fallback to cloudscraper (may work if Cloudflare protection changes)
     try:
         import cloudscraper
         scraper = cloudscraper.create_scraper(
@@ -1209,23 +1227,7 @@ async def proxy_addon_streams(
     except Exception as e:
         logger.warning(f"Addon proxy {addon} cloudscraper error: {e}")
     
-    # Fallback to regular httpx
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-            response = await client.get(url, headers={
-                'Accept': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36'
-            })
-            
-            if response.status_code == 200:
-                data = response.json()
-                return data
-            else:
-                logger.warning(f"Addon proxy {addon} returned status {response.status_code}")
-                return {"streams": []}
-    except Exception as e:
-        logger.warning(f"Addon proxy {addon} error: {e}")
-        return {"streams": []}
+    return {"streams": []}
 
 
 @api_router.get("/streams/{content_type}/{content_id:path}")
@@ -1563,21 +1565,48 @@ async def get_all_streams(
             needs_bypass = any(domain in base_url for domain in cf_protected_domains)
             
             if needs_bypass:
-                # Use cloudscraper for Cloudflare bypass
+                # Use allorigins.win proxy for Cloudflare bypass (server IP is blocked)
+                try:
+                    import urllib.parse
+                    encoded_url = urllib.parse.quote(stream_url, safe='')
+                    proxy_url = f"https://api.allorigins.win/raw?url={encoded_url}"
+                    
+                    client = await get_shared_http_client()
+                    response = await client.get(proxy_url, timeout=20)
+                    if response.status_code == 200:
+                        data = response.json()
+                        streams = data.get('streams', [])
+                        for stream in streams:
+                            stream['addon'] = manifest.get('name', 'Torrentio')
+                            # Parse seeders from Torrentio title format (👤 123)
+                            title = stream.get('title', '')
+                            if '👤' in title and not stream.get('seeders'):
+                                import re
+                                m = re.search(r'👤\s*(\d+)', title)
+                                if m:
+                                    stream['seeders'] = int(m.group(1))
+                        logger.info(f"Got {len(streams)} streams from {manifest.get('name')} via allorigins proxy")
+                        return streams
+                    else:
+                        logger.warning(f"Allorigins proxy got status {response.status_code} for {stream_url}")
+                except Exception as e:
+                    logger.warning(f"Allorigins proxy failed for {manifest.get('name')}: {e}")
+                
+                # Fallback to cloudscraper
                 try:
                     import cloudscraper
                     scraper = cloudscraper.create_scraper(
                         browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
                     )
                     response = await asyncio.to_thread(
-                        lambda: scraper.get(stream_url, timeout=30)
+                        lambda: scraper.get(stream_url, timeout=15)
                     )
                     if response.status_code == 200:
                         data = response.json()
                         streams = data.get('streams', [])
                         for stream in streams:
                             stream['addon'] = manifest.get('name', 'Torrentio')
-                        logger.info(f"Got {len(streams)} streams from {manifest.get('name')} via cloudscraper")
+                        logger.info(f"Got {len(streams)} streams from {manifest.get('name')} via cloudscraper fallback")
                         return streams
                     else:
                         logger.warning(f"Cloudscraper got status {response.status_code} for {stream_url}")
@@ -1796,17 +1825,16 @@ async def get_all_streams(
             # qualityfilter=480p,scr,cam - filter out low quality
             torrentio_config = "sort=seeders|qualityfilter=480p,scr,cam"
             base_url = f"https://torrentio.strem.fun/{torrentio_config}"
-            url = f"{base_url}/stream/{content_type}/{content_id}.json"
+            target_url = f"{base_url}/stream/{content_type}/{content_id}.json"
             
-            # Use cloudscraper for Cloudflare bypass
+            # Use allorigins.win proxy to bypass Cloudflare (server IP is blocked)
+            import urllib.parse
+            encoded_url = urllib.parse.quote(target_url, safe='')
+            proxy_url = f"https://api.allorigins.win/raw?url={encoded_url}"
+            
             try:
-                import cloudscraper
-                scraper = cloudscraper.create_scraper(
-                    browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
-                )
-                response = await asyncio.to_thread(
-                    lambda: scraper.get(url, timeout=30)
-                )
+                client = await get_shared_http_client()
+                response = await client.get(proxy_url, timeout=20)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -1825,7 +1853,6 @@ async def get_all_streams(
                         if 'infoHash' in stream:
                             info_hash = stream['infoHash'].lower()
                         elif behavior_hints.get('bingeGroup'):
-                            # Try to extract from bingeGroup
                             binge = behavior_hints.get('bingeGroup', '')
                             if len(binge) == 40:
                                 info_hash = binge.lower()
@@ -1865,9 +1892,51 @@ async def get_all_streams(
                     logger.info(f"Torrentio found {len(streams)} streams for {content_type}/{content_id}")
                     return streams
                 else:
-                    logger.warning(f"Torrentio returned status {response.status_code}")
+                    logger.warning(f"Torrentio proxy returned status {response.status_code}")
             except Exception as e:
-                logger.warning(f"Torrentio cloudscraper error: {e}")
+                logger.warning(f"Torrentio proxy error: {e}")
+            
+            # Fallback: try cloudscraper directly (in case proxy is down)
+            try:
+                import cloudscraper
+                scraper = cloudscraper.create_scraper(
+                    browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+                )
+                response = await asyncio.to_thread(
+                    lambda: scraper.get(target_url, timeout=15)
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    raw_streams = data.get('streams', [])
+                    streams = []
+                    for stream in raw_streams:
+                        name = stream.get('name', '')
+                        title = stream.get('title', '')
+                        info_hash = stream.get('infoHash', '').lower() if stream.get('infoHash') else None
+                        if not info_hash:
+                            behavior_hints = stream.get('behaviorHints', {})
+                            if behavior_hints.get('bingeGroup') and len(behavior_hints['bingeGroup']) == 40:
+                                info_hash = behavior_hints['bingeGroup'].lower()
+                        seeders = 0
+                        if '👤' in title:
+                            import re
+                            m = re.search(r'👤\s*(\d+)', title)
+                            if m: seeders = int(m.group(1))
+                        if info_hash:
+                            quality = '4K' if any(q in name.upper() for q in ['2160P', '4K', 'UHD']) else \
+                                     '1080p' if '1080P' in name.upper() else \
+                                     '720p' if '720P' in name.upper() else 'SD'
+                            streams.append({
+                                "name": f"⚡ {name}", "title": title, "infoHash": info_hash,
+                                "sources": ["tracker:http://tracker.opentrackr.org:1337/announce"],
+                                "addon": "Torrentio", "seeders": seeders, "quality": quality
+                            })
+                    logger.info(f"Torrentio (cloudscraper fallback) found {len(streams)} streams")
+                    return streams
+                else:
+                    logger.warning(f"Torrentio cloudscraper returned status {response.status_code}")
+            except Exception as e:
+                logger.warning(f"Torrentio cloudscraper fallback error: {e}")
         except Exception as e:
             logger.warning(f"Torrentio search error: {e}")
         return []
