@@ -615,15 +615,23 @@ export default function DetailsScreen() {
               <Text style={styles.metaText}>{content.runtime}</Text>
             )}
           </View>
-        </View>
 
-        {/* Scrollable Content - everything below the title */}
-        <ScrollView 
-          style={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContentContainer}
-        >
-          <View style={styles.actionRow}>
+          {/* Description - pinned under metadata */}
+          {content?.description && (
+            <Text style={styles.fixedDescription} numberOfLines={3}>
+              {content.description}
+            </Text>
+          )}
+
+          {/* Episode Description if applicable */}
+          {isEpisodePage && currentEpisode?.overview && (
+            <Text style={styles.fixedDescription} numberOfLines={2}>
+              {currentEpisode.overview}
+            </Text>
+          )}
+
+          {/* Add to Library - under description */}
+          <View style={styles.fixedActionRow}>
             <FocusableButton 
               style={styles.libraryButton}
               focusedStyle={styles.libraryButtonFocused}
@@ -639,21 +647,14 @@ export default function DetailsScreen() {
               </Text>
             </FocusableButton>
           </View>
+        </View>
 
-          {/* Description */}
-          {content?.description && (
-            <Text style={styles.description} numberOfLines={4}>
-              {content.description}
-            </Text>
-          )}
-
-          {/* Episode Description if applicable */}
-          {isEpisodePage && currentEpisode?.overview && (
-            <Text style={styles.description} numberOfLines={3}>
-              {currentEpisode.overview}
-            </Text>
-          )}
-
+        {/* Scrollable Content - everything below the pinned area */}
+        <ScrollView 
+          style={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContentContainer}
+        >
           {/* Genre */}
           {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
             <View style={styles.chipSection}>
@@ -829,7 +830,18 @@ const styles = StyleSheet.create({
   fixedTitleArea: {
     paddingTop: 60,
     paddingHorizontal: 20,
-    paddingBottom: 8,
+    paddingBottom: 4,
+  },
+  fixedDescription: {
+    fontSize: 13,
+    color: '#D4BC78',
+    lineHeight: 19,
+    marginBottom: 8,
+  },
+  fixedActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 4,
   },
   titleSection: {
     marginBottom: 8,
@@ -858,10 +870,10 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   imdbBadge: {
     flexDirection: 'row',
