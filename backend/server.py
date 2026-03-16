@@ -3163,92 +3163,64 @@ async def stream_video(
         content_type = content_types.get(ext, 'video/mp4')
         
         # Handle range requests for video seeking
+        # ALWAYS use range-based streaming - ExoPlayer needs this for proper playback
         range_header = request.headers.get("range")
         
-        if range_header:
-            parts = range_header.replace("bytes=", "").split("-")
-            start = int(parts[0])
-            end = int(parts[1]) if parts[1] else min(start + 2 * 1024 * 1024, file_size - 1)  # 2MB chunks
-            
-            # Clamp to file size
-            end = min(end, file_size - 1)
-            chunk_size = end - start + 1
-            
-            logger.info(f"Streaming range {start}-{end}/{file_size} from {os.path.basename(video_path)}")
-            
-            async def range_generator():
-                try:
-                    # Wait for the requested range to be available on disk
-                    disk_wait = 0
-                    while disk_wait < 30:
-                        current_disk_size = os.path.getsize(video_path) if os.path.exists(video_path) else 0
-                        if current_disk_size > end:
+        if not range_header:
+            # No Range header = first request from player. Return first 2MB chunk as 206
+            # This tells ExoPlayer to use Range requests for all subsequent calls
+            range_header = "bytes=0-"
+        
+        parts = range_header.replace("bytes=", "").split("-")
+        start = int(parts[0])
+        end = int(parts[1]) if parts[1] else min(start + 2 * 1024 * 1024, file_size - 1)  # 2MB chunks max
+        
+        # Clamp to file size
+        end = min(end, file_size - 1)
+        chunk_size = end - start + 1
+        
+        logger.info(f"Streaming range {start}-{end}/{file_size} from {os.path.basename(video_path)}")
+        
+        async def range_generator():
+            try:
+                # Wait for the requested range to be available on disk
+                disk_wait = 0
+                while disk_wait < 60:
+                    current_disk_size = os.path.getsize(video_path) if os.path.exists(video_path) else 0
+                    if current_disk_size > end:
+                        break
+                    await asyncio.sleep(0.5)
+                    disk_wait += 1
+                
+                if not os.path.exists(video_path) or os.path.getsize(video_path) <= start:
+                    logger.error(f"File not available for range {start}-{end}")
+                    return
+                
+                with open(video_path, 'rb') as f:
+                    f.seek(start)
+                    remaining = chunk_size
+                    while remaining > 0:
+                        read_size = min(remaining, 64 * 1024)  # 64KB reads
+                        data = f.read(read_size)
+                        if not data:
                             break
-                        await asyncio.sleep(0.5)
-                        disk_wait += 1
-                    
-                    with open(video_path, 'rb') as f:
-                        f.seek(start)
-                        remaining = chunk_size
-                        while remaining > 0:
-                            read_size = min(remaining, 64 * 1024)  # 64KB reads
-                            data = f.read(read_size)
-                            if not data:
-                                break
-                            remaining -= len(data)
-                            yield data
-                except Exception as e:
-                    logger.error(f"Range stream error: {e}")
-            
-            return StreamingResponse(
-                range_generator(),
-                status_code=206,
-                headers={
-                    "Content-Range": f"bytes {start}-{end}/{file_size}",
-                    "Accept-Ranges": "bytes",
-                    "Content-Length": str(chunk_size),
-                    "Content-Type": content_type,
-                    "Access-Control-Allow-Origin": "*",
-                },
-                media_type=content_type,
-            )
-        else:
-            # Full file request
-            logger.info(f"Streaming full file: {os.path.basename(video_path)} ({file_size} bytes)")
-            
-            async def full_generator():
-                try:
-                    bytes_sent = 0
-                    while bytes_sent < file_size:
-                        current_disk_size = os.path.getsize(video_path) if os.path.exists(video_path) else 0
-                        if current_disk_size <= bytes_sent:
-                            await asyncio.sleep(0.5)
-                            continue
-                        
-                        with open(video_path, 'rb') as f:
-                            f.seek(bytes_sent)
-                            readable = min(current_disk_size - bytes_sent, 2 * 1024 * 1024)
-                            while readable > 0:
-                                chunk = f.read(min(readable, 64 * 1024))
-                                if not chunk:
-                                    break
-                                bytes_sent += len(chunk)
-                                readable -= len(chunk)
-                                yield chunk
-                except Exception as e:
-                    logger.error(f"Full stream error: {e}")
-            
-            return StreamingResponse(
-                full_generator(),
-                status_code=200,
-                headers={
-                    "Accept-Ranges": "bytes",
-                    "Content-Length": str(file_size),
-                    "Content-Type": content_type,
-                    "Access-Control-Allow-Origin": "*",
-                },
-                media_type=content_type,
-            )
+                        remaining -= len(data)
+                        yield data
+            except Exception as e:
+                logger.error(f"Range stream error: {e}")
+        
+        return StreamingResponse(
+            range_generator(),
+            status_code=206,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(chunk_size),
+                "Content-Type": content_type,
+                "Access-Control-Allow-Origin": "*",
+            },
+            media_type=content_type,
+        )
             
     except HTTPException:
         raise
