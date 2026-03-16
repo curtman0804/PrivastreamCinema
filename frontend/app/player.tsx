@@ -1256,7 +1256,7 @@ export default function PlayerScreen() {
       
       let pollInterval = 500;
       let pollCount = 0;
-      const MAX_POLL_BEFORE_FORCE = 40; // ~20 seconds of polling, then force playback
+      const MAX_POLL_BEFORE_FORCE = 20; // ~10 seconds of polling, then force playback
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
@@ -1291,9 +1291,9 @@ export default function PlayerScreen() {
             const downloaded = status.downloaded ? (status.downloaded / (1024 * 1024)).toFixed(1) : '0';
             
             if (peerCount === 0) {
-              setLoadingStatus(`Searching for peers... (${pollCount})`);
+              setLoadingStatus('Searching for peers...');
             } else {
-              setLoadingStatus(`Buffering ${downloaded}MB (${speedMB} MB/s) • ${peerCount} peers`);
+              setLoadingStatus('Buffering...');
             }
             
             if (pollInterval < 1000) pollInterval = 1000;
@@ -1487,23 +1487,10 @@ export default function PlayerScreen() {
               )
             )}
             
-            {/* Stats Row - Only show for torrents */}
-            {infoHash && downloadProgress < 100 && (
-              <View style={[styles.loadingStatsRow, { marginTop: 40 }]}>
-                <View style={styles.loadingStat}>
-                  <Ionicons name="people-outline" size={14} color="rgba(255,255,255,0.6)" />
-                  <Text style={styles.loadingStatText}>{peers}</Text>
-                </View>
-                <View style={styles.loadingStat}>
-                  <Ionicons name="arrow-down-outline" size={14} color="rgba(255,255,255,0.6)" />
-                  <Text style={styles.loadingStatText}>{formatSpeed(downloadSpeed)}</Text>
-                </View>
-                <View style={styles.loadingStat}>
-                  <Ionicons name="disc-outline" size={14} color="rgba(255,255,255,0.6)" />
-                  <Text style={styles.loadingStatText}>{downloadProgress.toFixed(0)}%</Text>
-                </View>
-              </View>
-            )}
+            {/* Loading status text - clean and minimal like Stremio */}
+            {loadingStatus ? (
+              <Text style={[styles.loadingStatusText, { marginTop: 30 }]}>{loadingStatus}</Text>
+            ) : null}
             
             {/* Live TV / Direct URL Loading Indicator */}
             {!infoHash && (

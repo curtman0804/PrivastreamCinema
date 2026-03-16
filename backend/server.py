@@ -146,62 +146,84 @@ class TorrentStreamer:
     def __init__(self):
         self.sessions = {}  # infoHash -> session data
         self.download_dir = tempfile.mkdtemp(prefix="privastream_")
-        # Extensive tracker list for maximum peer discovery
+        # Extensive tracker list for maximum peer discovery - fastest first
         self.trackers = [
+            "udp://tracker.opentrackr.org:1337/announce",
+            "udp://open.stealth.si:80/announce",
+            "udp://tracker.torrent.eu.org:451/announce",
+            "udp://tracker.bittor.pw:1337/announce",
+            "udp://public.popcorn-tracker.org:6969/announce",
+            "udp://tracker.dler.org:6969/announce",
+            "udp://exodus.desync.com:6969/announce",
+            "udp://open.demonii.com:1337/announce",
+            "udp://tracker.openbittorrent.com:6969/announce",
+            "udp://explodie.org:6969/announce",
+            "udp://tracker.tiny-vps.com:6969/announce",
+            "udp://tracker.moeking.me:6969/announce",
+            "udp://tracker1.bt.moack.co.kr:80/announce",
+            "udp://tracker.theoks.net:6969/announce",
+            "udp://tracker-udp.gbitt.info:80/announce",
+            "udp://tracker.dump.cl:6969/announce",
             "http://tracker.openbittorrent.com:80/announce",
-            "http://tracker3.itzmx.com:6961/announce",
-            "http://tracker.bt4g.com:2095/announce",
-            "http://tracker.files.fm:6969/announce",
-            "http://t.nyaatracker.com:80/announce",
-            "http://tracker.gbitt.info:80/announce",
-            "http://tracker.ccp.ovh:6969/announce",
-            "http://open.acgnxtracker.com:80/announce",
-            "http://tracker.dler.org:6969/announce",
-            "http://opentracker.i2p.rocks:6969/announce",
             "http://tracker.opentrackr.org:1337/announce",
+            "http://tracker.bt4g.com:2095/announce",
+            "http://open.acgnxtracker.com:80/announce",
             "https://tracker.lilithraws.org:443/announce",
-            "https://tr.burnabyhighstar.com:443/announce",
             "https://tracker.tamersunion.org:443/announce",
-            "https://tracker.imgoingto.icu:443/announce",
         ]
         logger.info(f"TorrentStreamer initialized. Download dir: {self.download_dir}")
         
         # Create ONE shared libtorrent session - DHT stays warm across all torrents
         settings = {
-            'listen_interfaces': '0.0.0.0:6881,[::]:6881',
+            'listen_interfaces': '0.0.0.0:6881,[::]:6881,0.0.0.0:6891,[::]:6891',
             'enable_dht': True,
             'enable_lsd': True,
-            'enable_upnp': False,
-            'enable_natpmp': False,
+            'enable_upnp': True,
+            'enable_natpmp': True,
             'announce_to_all_trackers': True,
             'announce_to_all_tiers': True,
-            'connection_speed': 500,
-            'connections_limit': 800,
-            'download_rate_limit': 0,  # Unlimited - need fast initial buffering for ExoPlayer
-            'upload_rate_limit': 1024 * 1024,  # 1MB/s upload
-            'unchoke_slots_limit': 20,
-            'max_peerlist_size': 8000,
-            'peer_connect_timeout': 7,
-            'handshake_timeout': 7,
-            'torrent_connect_boost': 50,
-            'peer_timeout': 60,
-            'inactivity_timeout': 60,
-            'cache_size': 2048,
+            'connection_speed': 1000,        # Faster connection attempts
+            'connections_limit': 2000,       # More connections
+            'download_rate_limit': 0,        # Unlimited
+            'upload_rate_limit': 2 * 1024 * 1024,  # 2MB/s upload
+            'unchoke_slots_limit': 64,       # More upload slots = more reciprocal downloads
+            'max_peerlist_size': 10000,
+            'peer_connect_timeout': 5,       # Faster timeout on bad peers
+            'handshake_timeout': 5,
+            'torrent_connect_boost': 200,    # More initial connections per torrent
+            'peer_timeout': 30,              # Drop slow peers faster
+            'inactivity_timeout': 30,
+            'cache_size': 4096,              # Larger cache (16MB)
             'disk_io_read_mode': 0,
             'disk_io_write_mode': 0,
-            'aio_threads': 4,
-            'request_queue_time': 1,
-            'max_out_request_queue': 1000,
-            'whole_pieces_threshold': 2,
-            'max_allowed_in_request_queue': 2000,
-            'send_buffer_watermark': 512 * 1024,
-            'send_buffer_watermark_factor': 150,
+            'aio_threads': 8,               # More IO threads
+            'request_queue_time': 3,
+            'max_out_request_queue': 2000,
+            'whole_pieces_threshold': 5,
+            'max_allowed_in_request_queue': 4000,
+            'send_buffer_watermark': 1024 * 1024,   # 1MB send buffer
+            'send_buffer_watermark_factor': 200,
             'mixed_mode_algorithm': 0,
             'rate_limit_ip_overhead': False,
             'allow_multiple_connections_per_ip': True,
+            'seed_choking_algorithm': 1,     # Fastest upload
+            'choking_algorithm': 1,          # Optimize for downloading
+            'max_rejects': 10,
+            'recv_socket_buffer_size': 2 * 1024 * 1024,  # 2MB receive buffer
+            'send_socket_buffer_size': 2 * 1024 * 1024,
+            'smooth_connects': False,        # Connect as fast as possible
+            'always_send_user_agent': True,
+            'no_connect_privileged_ports': False,
+            'dht_bootstrap_nodes': 'router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,dht.aelitis.com:6881',
         }
         self.lt_session = lt.session(settings)
-        logger.info("Shared libtorrent session started")
+        
+        # Bootstrap DHT with known nodes
+        self.lt_session.add_dht_node(("router.bittorrent.com", 6881))
+        self.lt_session.add_dht_node(("router.utorrent.com", 6881))
+        self.lt_session.add_dht_node(("dht.transmissionbt.com", 6881))
+        
+        logger.info("Shared libtorrent session started with optimized settings")
     
     def _evict_oldest(self):
         """Remove the oldest session to make room for new ones"""
@@ -354,9 +376,8 @@ class TorrentStreamer:
             video_size = video_file['size']
             downloaded_bytes = int(s.progress * video_size) if s.progress > 0 else 0
             
-            # FAST START: Need only ~3MB downloaded to start playback
-            # This is enough for ffmpeg to parse headers and begin streaming
-            min_bytes_for_playback = 3 * 1024 * 1024  # 3MB minimum
+            # FAST START: Need only ~2MB downloaded to start playback
+            min_bytes_for_playback = 2 * 1024 * 1024  # 2MB minimum - start ASAP
             
             # For very small files, use percentage instead
             min_for_small_files = int(video_size * 0.02)  # 2% for small files
@@ -2102,7 +2123,39 @@ async def get_all_streams(
             # Streams without hash (direct URLs)
             unique_streams.append(stream)
     
-    # Sort by quality tier + seeders (best streams first)
+    # Sort by: 1) Language (English first), 2) Quality tier, 3) Seeders
+    # Non-English language indicators to detect foreign streams
+    FOREIGN_INDICATORS = [
+        # Language flags
+        '\U0001F1E7\U0001F1F7',  # 🇧🇷 Brazil
+        '\U0001F1F2\U0001F1FD',  # 🇲🇽 Mexico
+        '\U0001F1EB\U0001F1F7',  # 🇫🇷 France
+        '\U0001F1EA\U0001F1F8',  # 🇪🇸 Spain
+        '\U0001F1EE\U0001F1F9',  # 🇮🇹 Italy
+        '\U0001F1E9\U0001F1EA',  # 🇩🇪 Germany
+        '\U0001F1F7\U0001F1FA',  # 🇷🇺 Russia
+        '\U0001F1F5\U0001F1F9',  # 🇵🇹 Portugal
+        '\U0001F1F5\U0001F1F1',  # 🇵🇱 Poland
+        '\U0001F1F3\U0001F1F1',  # 🇳🇱 Netherlands
+        '\U0001F1E8\U0001F1F3',  # 🇨🇳 China
+        '\U0001F1EF\U0001F1F5',  # 🇯🇵 Japan
+        '\U0001F1F0\U0001F1F7',  # 🇰🇷 Korea
+        '\U0001F1EE\U0001F1F3',  # 🇮🇳 India
+        '\U0001F1F9\U0001F1F7',  # 🇹🇷 Turkey
+    ]
+    FOREIGN_KEYWORDS = [
+        'FRENCH', 'TRUEFRENCH', 'VF2', 'VFF', 'VOSTFR',
+        'SPANISH', 'LATINO', 'CASTELLANO', 'LAT.DUB', 'LATIN',
+        'GERMAN', 'DEUTSCH',
+        'ITALIAN', 'ITALIANO',
+        'RUSSIAN', 'DUBBED', 'DUB.', 'DUBLADO',
+        'PORTUGUESE', 'HINDI', 'TAMIL', 'TELUGU',
+        'KOREAN', 'JAPANESE', 'CHINESE', 'MANDARIN',
+        'TURKISH', 'ARABIC', 'POLISH', 'DUTCH',
+        'MULTI.AUDIO', 'DUAL.AUDIO',
+        'Cinecalidad', 'Comando',  # Known Spanish release groups
+    ]
+    
     def get_sort_score(stream):
         # Extract seeders
         seeders = 0
@@ -2114,35 +2167,56 @@ async def get_all_streams(
         title = stream.get('title', '')
         name = stream.get('name', '')
         try:
-            if '🌱' in title:
-                seeds_part = title.split('🌱')[1].split('|')[0].strip()
-                seeders = int(seeds_part)
-            elif '👤' in title:
-                # Torrentio format
+            if '👤' in title:
                 import re
                 match = re.search(r'👤\s*(\d+)', title)
                 if match:
                     seeders = int(match.group(1))
+            elif '🌱' in title:
+                seeds_part = title.split('🌱')[1].split('|')[0].strip()
+                seeders = int(seeds_part)
         except:
             pass
         
+        combined_text = name + ' ' + title
+        combined_upper = combined_text.upper()
+        
+        # Language score: 100 = English/Unknown, 0 = Foreign
+        is_foreign = False
+        for flag in FOREIGN_INDICATORS:
+            if flag in combined_text:
+                is_foreign = True
+                break
+        if not is_foreign:
+            for kw in FOREIGN_KEYWORDS:
+                if kw.upper() in combined_upper:
+                    is_foreign = True
+                    break
+        
+        # Check for English indicator (🇬🇧 flag or ENG keyword)
+        has_english = '\U0001F1EC\U0001F1E7' in combined_text or 'ENGLISH' in combined_upper
+        
+        lang_score = 0 if is_foreign else 100
+        if has_english:
+            lang_score = 100  # Force English even if also tagged with another language
+        
         # Quality tier (higher is better)
         quality_score = 0
-        combined_text = (name + ' ' + title).upper()
-        if '2160P' in combined_text or '4K' in combined_text or 'UHD' in combined_text:
+        if '2160P' in combined_upper or '4K' in combined_upper or 'UHD' in combined_upper:
             quality_score = 4
-        elif '1080P' in combined_text:
+        elif '1080P' in combined_upper:
             quality_score = 3
-        elif '720P' in combined_text:
+        elif '720P' in combined_upper:
             quality_score = 2
-        elif 'SD' in combined_text or '480P' in combined_text:
+        elif 'SD' in combined_upper or '480P' in combined_upper:
             quality_score = 1
+        elif 'CAM' in combined_upper or 'TELESYNC' in combined_upper or 'TS' in combined_upper:
+            quality_score = 0  # Lowest quality
         else:
             quality_score = 2  # Default to 720p tier
         
-        # Combined score: quality tier * 10000 + seeders
-        # This ensures higher quality streams come first, with seeder count as tiebreaker
-        return (quality_score * 10000) + min(seeders, 9999)
+        # Combined score: language * 1000000 + quality * 10000 + seeders
+        return (lang_score * 1000000) + (quality_score * 10000) + min(seeders, 9999)
     
     unique_streams.sort(key=get_sort_score, reverse=True)
     
