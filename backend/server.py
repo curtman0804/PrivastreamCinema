@@ -141,13 +141,13 @@ FALLBACK_MANIFESTS = {
 
 class TorrentStreamer:
     """Handles torrent downloading and HTTP streaming like Stremio - OPTIMIZED FOR FAST STARTUP"""
+    MAX_SESSIONS = 2  # Only keep 2 active torrents to prevent disk overflow
     
     def __init__(self):
         self.sessions = {}  # infoHash -> session data
         self.download_dir = tempfile.mkdtemp(prefix="privastream_")
-        # Extensive tracker list for maximum peer discovery (critical for VPN users)
+        # Extensive tracker list for maximum peer discovery
         self.trackers = [
-            # HTTP/HTTPS trackers only (UDP blocked in K8s/container environments)
             "http://tracker.openbittorrent.com:80/announce",
             "http://tracker3.itzmx.com:6961/announce",
             "http://tracker.bt4g.com:2095/announce",
@@ -166,6 +166,15 @@ class TorrentStreamer:
         ]
         logger.info(f"TorrentStreamer initialized. Download dir: {self.download_dir}")
     
+    def _evict_oldest(self):
+        """Remove the oldest session to make room for new ones"""
+        if len(self.sessions) >= self.MAX_SESSIONS:
+            oldest_hash = min(self.sessions.keys(), key=lambda k: self.sessions[k]['created'])
+            logger.info(f"Evicting oldest torrent session: {oldest_hash}")
+            self.cleanup_session(oldest_hash)
+            # Also do a disk cleanup
+            self._cleanup_disk()
+    
     def get_session(self, info_hash: str):
         """Get or create a libtorrent session for a torrent - OPTIMIZED FOR STREAMING"""
         info_hash = info_hash.lower()
@@ -173,22 +182,24 @@ class TorrentStreamer:
         if info_hash in self.sessions:
             return self.sessions[info_hash]
         
+        # Evict oldest if at max capacity
+        self._evict_oldest()
+        
         # Create new session with STREAMING-OPTIMIZED settings
-        # Key optimizations: Fast peer connection, aggressive piece requests, high cache
         settings = {
             'listen_interfaces': '0.0.0.0:6881,[::]:6881',
             'enable_dht': True,             # DHT enabled - libtorrent handles this natively over TCP
             'enable_lsd': True,             # Local service discovery
-            'enable_upnp': False,           # Disabled - not useful in containers
-            'enable_natpmp': False,         # Disabled - not useful in containers
+            'enable_upnp': False,
+            'enable_natpmp': False,
             'announce_to_all_trackers': True,
             'announce_to_all_tiers': True,
             
             # ===== CONNECTION SETTINGS (TCP only) =====
             'connection_speed': 500,
             'connections_limit': 800,
-            'download_rate_limit': 0,
-            'upload_rate_limit': 500000,
+            'download_rate_limit': 5 * 1024 * 1024,  # 5 MB/s limit to prevent disk overflow
+            'upload_rate_limit': 100000,     # Minimal upload (100KB/s) to stay in swarm
             'unchoke_slots_limit': 20,
             
             # ===== PEER DISCOVERY (HTTP trackers only) =====
@@ -243,6 +254,7 @@ class TorrentStreamer:
             'created': time.time(),
             'video_file': None,
             'video_path': None,
+            'save_path': self.download_dir,  # Track for cleanup
         }
         
         logger.info(f"Started STREAMING-OPTIMIZED session for {info_hash}")
@@ -439,19 +451,43 @@ class TorrentStreamer:
             logger.error(f"Error checking disk usage: {e}")
     
     def cleanup_session(self, info_hash):
-        """Clean up a specific torrent session"""
+        """Clean up a specific torrent session and its files"""
         info_hash = info_hash.lower()
         if info_hash in self.sessions:
             try:
                 data = self.sessions[info_hash]
-                data['session'].remove_torrent(data['handle'])
-                video_path = data.get('video_path')
-                if video_path and os.path.exists(video_path):
-                    os.remove(video_path)
+                try:
+                    data['session'].remove_torrent(data['handle'])
+                except Exception:
+                    pass
+                # Clean up ALL files in the torrent's download subdirectory
+                save_path = data.get('save_path', '')
+                if save_path and os.path.exists(save_path):
+                    import shutil
+                    shutil.rmtree(save_path, ignore_errors=True)
+                    logger.info(f"Removed directory: {save_path}")
+                else:
+                    video_path = data.get('video_path')
+                    if video_path and os.path.exists(video_path):
+                        os.remove(video_path)
                 del self.sessions[info_hash]
                 logger.info(f"Cleaned up session for {info_hash}")
             except Exception as e:
                 logger.error(f"Error cleaning up session {info_hash}: {e}")
+    
+    def _cleanup_disk(self):
+        """Emergency cleanup - remove ALL orphaned torrent files"""
+        try:
+            import shutil
+            for item in os.listdir('/tmp'):
+                if item.startswith('privastream_'):
+                    path = os.path.join('/tmp', item)
+                    # Don't remove the current download dir
+                    if path != self.download_dir:
+                        shutil.rmtree(path, ignore_errors=True)
+                        logger.info(f"Cleaned orphaned dir: {path}")
+        except Exception as e:
+            logger.error(f"Disk cleanup error: {e}")
 
 # Global torrent streamer instance
 torrent_streamer = TorrentStreamer()
