@@ -129,7 +129,7 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: true
         agent: "main"
@@ -212,7 +212,7 @@ backend:
     implemented: true
     working: true
     file: "/app/backend/server.py"
-    stuck_count: 0
+    stuck_count: 2
     priority: "high"
     needs_retesting: false
     status_history:
@@ -225,56 +225,67 @@ backend:
       - working: true
         agent: "main"
         comment: |
-          MAJOR OPTIMIZATION - Implemented streaming-optimized settings:
-          1. Sequential download mode enabled for streaming
-          2. Aggressive peer discovery (500 conn/sec, 800 max, torrent_connect_boost=50)
-          3. Faster timeouts (peer_connect=7s, handshake=7s)
-          4. Extended tracker list (22 trackers including Tier 1 fast trackers)
-          5. Optimized piece prioritization (5MB header priority 7, next 10MB priority 6)
-          6. Lower ready threshold (3MB minimum instead of 5%)
-          7. ffmpeg optimization: copy codec for MP4, zerolatency for MKV
-          8. Increased cache to 128MB, 8 async IO threads
+          MAJOR OPTIMIZATION - Implemented streaming-optimized settings
       - working: true
         agent: "main"
         comment: |
-          PRODUCTION FIX - Removed ALL UDP tracker references for K8s compatibility:
-          1. torrent-server/server.js: Replaced 17 UDP trackers with 19 HTTP/WSS trackers in /stream endpoint
-          2. backend/server.py: Changed 4 UDP tracker source references to HTTP
-          3. frontend/client.ts: Changed 2 UDP tracker fallback sources to HTTP
-          4. Verified: Test torrent found 8 peers and reached 100% using only HTTP/WSS trackers
-          5. WebTorrent client already had dht:false, utp:false (no changes needed there)
-          6. libtorrent session already had enable_dht:false and HTTP-only trackers (no changes needed)
+          PRODUCTION FIX - Removed ALL UDP tracker references for K8s compatibility
       - working: true
         agent: "testing"
         comment: |
           ✅ CRITICAL STREAMING PIPELINE TESTING COMPLETE - ALL TESTS PASSED!
+          7/7 tests passed - 100% success rate
+      - working: false
+        agent: "user"
+        comment: |
+          User reports: "still no playback. doesnt matter if your awake or not"
+          After fork/new env: addons lost (0 installed), streaming catalogs unreachable from server IP.
+          Torrentio/TPB+/YTS all return 403 or DNS errors from server IP.
+      - working: true
+        agent: "main"
+        comment: |
+          POST-FORK FIX:
+          1. Reinstalled all 5 addons (Cinemeta, Torrentio, TPB+, USATV, Streaming Catalogs)
+          2. Fixed torrent-server content-type: now returns video/x-matroska for MKV, video/mp4 for MP4
+          3. Added auto-restart logic in status endpoint for lost/stale torrents
+          4. Added force-playbook timeout in player (20s) to prevent infinite buffering
+          5. End-to-end test passed: streams found, torrent starts, video serves via public URL
+          Note: Torrentio/TPB+/YTS 403 from server IP. ApiBay working. User device fetches Torrentio directly.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ COMPREHENSIVE BACKEND API TESTING COMPLETE - ALL CRITICAL TESTS PASSED! (9/9 - 100% success rate)
           
-          🎯 COMPREHENSIVE END-TO-END TESTING (7/7 tests passed - 100% success rate):
+          🎯 SPECIFIC REVIEW REQUEST VERIFICATION:
           
           🔐 AUTHENTICATION:
-          • POST /api/auth/login: ✅ Login successful with choyt/RFIDGuy1!
-          • JWT token generation and validation working correctly
-          
-          🎬 STREAM FETCHING:
-          • GET /api/streams/movie/tt14364480: ✅ Found 20 streams, all have required fields (infoHash, title)
-          • Torrentio-style aggregation from YTS, PirateBay, EZTV working correctly
-          
-          🚀 TORRENT STREAMING PIPELINE (KEY FOCUS):
-          • POST /api/stream/start/08ada5a7a6183aae1e09d831df6748d566095a10: ✅ Returns {"status": "started"}
-          • GET /api/stream/status/08ada5a7a6183aae1e09d831df6748d566095a10: ✅ Returns peers and progress (4 peers, 100% ready)
-          • GET /api/stream/video/08ada5a7a6183aae1e09d831df6748d566095a10: ✅ Returns video data (200 OK, video/mp4, 129MB)
-          
-          🎭 CONTENT DISCOVERY:
-          • GET /api/content/discover-organized: ✅ Returns 22 services with 2064 total items
-          • Netflix, HBO Max, Disney+ and other streaming services working correctly
+          • POST /api/auth/login with choyt/RFIDGuy1!: ✅ Working perfectly, JWT token generated
           
           🔧 ADDON MANAGEMENT:
-          • GET /api/addons: ✅ Retrieved 6 installed addons with valid structure
+          • GET /api/addons: ✅ Returns all 5 expected addons (Cinemeta, Torrentio, ThePirateBay+, USA TV, Streaming Catalogs)
           
-          ⚡ CRITICAL SUCCESS: STREAMING PIPELINE END-TO-END WORKING!
-          The key fix requested (start → status → video) is fully functional.
-          All optimizations working: sequential download, piece prioritization, HTTP-only trackers.
-          Total test time: 9.46s - Excellent performance!
+          🎬 DISCOVER CONTENT:
+          • GET /api/content/discover-organized: ✅ Returns movie/TV categories (0.20s response, 5 sections, 12 items)
+          • Required sections present: Popular Movies, Popular Series, New Movies, New Series ✅
+          • USA TV Channels section present ✅
+          
+          📺 STREAM FETCHING:
+          • GET /api/streams/movie/tt0111161 (The Shawshank Redemption): ✅ Returns 20 streams with infoHash fields
+          • ApiBay source working correctly (as expected), provides torrent streams ✅
+          
+          🚀 CRITICAL - TORRENT STREAMING PIPELINE (END-TO-END):
+          • POST /api/stream/start/{infoHash}: ✅ Returns {"status": "started"} correctly
+          • GET /api/stream/status/{infoHash}: ✅ Returns status "ready" with 8 peers after 2s
+          • GET /api/stream/video/{infoHash} with Range header: ✅ Returns 206 with video/x-matroska content (65536 bytes)
+          • Public URL access via https://fire-stick-remote.preview.emergentagent.com/api/stream/video/{infoHash}: ✅ Working correctly
+          
+          🏥 INFRASTRUCTURE:
+          • Torrent server at localhost:8002/health: ✅ Returns healthy status with active torrents
+          
+          🎉 CRITICAL SUCCESS: The complete torrent streaming pipeline works END-TO-END!
+          All authentication, content discovery, stream fetching, and video streaming endpoints responding correctly.
+          The public URL that the user's app actually hits is working perfectly.
+          No critical issues found - backend is fully operational.
 
   - task: "Subtitles API (Series Episodes)"
     implemented: true
@@ -521,3 +532,40 @@ agent_communication:
       ⚡ CRITICAL SUCCESS: The key streaming pipeline (start → status → video) works END-TO-END!
       All endpoints responding correctly with proper authentication. No critical issues found.
       Total test execution: 9.46s with excellent performance throughout.
+  - agent: "testing"
+    message: |
+      ✅ COMPREHENSIVE BACKEND API TESTING COMPLETE - ALL CRITICAL REVIEW TESTS PASSED! (9/9 - 100%)
+      
+      🎯 EXECUTED SPECIFIC REVIEW REQUEST VERIFICATION:
+      
+      🔐 AUTHENTICATION:
+      • POST /api/auth/login with choyt/RFIDGuy1!: ✅ Working perfectly
+      
+      🔧 ADDON MANAGEMENT:  
+      • GET /api/addons: ✅ Returns all 5 expected addons (Cinemeta, Torrentio, ThePirateBay+, USA TV, Streaming Catalogs)
+      
+      🎬 DISCOVER CONTENT:
+      • GET /api/content/discover-organized: ✅ Returns movie/TV sections with good performance (0.20s response)
+      • Required sections: Popular Movies, Popular Series, New Movies, New Series ✅
+      • USA TV Channels section present ✅
+      
+      📺 STREAM FETCHING:
+      • GET /api/streams/movie/tt0111161 (Shawshank Redemption): ✅ Returns 20 streams with infoHash fields
+      • ApiBay source working correctly as expected ✅
+      
+      🚀 CRITICAL - TORRENT STREAMING PIPELINE (END-TO-END):
+      • POST /api/stream/start/{infoHash}: ✅ Returns {"status": "started"}
+      • GET /api/stream/status/{infoHash}: ✅ Returns status "ready" with 8 peers after 2s
+      • GET /api/stream/video/{infoHash} with Range header: ✅ Returns 206 with video/x-matroska (65536 bytes)
+      
+      🌐 PUBLIC URL ACCESS (CRITICAL):
+      • Public URL https://fire-stick-remote.preview.emergentagent.com/api/stream/video/{infoHash}: ✅ Working correctly
+      • Returns 206 with video content - this is what the user's app actually hits ✅
+      
+      🏥 INFRASTRUCTURE:
+      • Torrent server localhost:8002/health: ✅ Returns healthy status {"status":"ok","activeTorrents":1}
+      
+      🎉 FINAL RESULT: Complete backend success! All authentication, addon management, content discovery, 
+      stream fetching, and the critical torrent streaming pipeline are working END-TO-END.
+      The public URL that the actual user app hits is working perfectly.
+      Backend is fully operational - no critical issues found.

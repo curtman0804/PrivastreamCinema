@@ -1,8 +1,26 @@
 import WebTorrent from 'webtorrent';
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 
 const app = express();
+
+// Get correct MIME type from filename
+function getMimeType(filename) {
+  const ext = path.extname(filename || '').toLowerCase();
+  const mimeTypes = {
+    '.mp4': 'video/mp4',
+    '.mkv': 'video/x-matroska',
+    '.avi': 'video/x-msvideo',
+    '.webm': 'video/webm',
+    '.mov': 'video/quicktime',
+    '.m4v': 'video/mp4',
+    '.ts': 'video/mp2t',
+    '.wmv': 'video/x-ms-wmv',
+    '.flv': 'video/x-flv',
+  };
+  return mimeTypes[ext] || 'video/mp4';
+}
 
 // Create WebTorrent client optimized for container/K8s environments (no UDP)
 const client = new WebTorrent({
@@ -40,8 +58,9 @@ const client = new WebTorrent({
 
 app.use(cors());
 
-// Store active torrents
+// Store active torrents and their start times
 const torrents = new Map();
+const torrentStartTimes = new Map();
 
 // Periodically log status for debugging
 setInterval(() => {
@@ -68,8 +87,20 @@ app.get('/status/:infoHash', (req, res) => {
       ready: false,
       progress: 0,
       peers: 0,
-      downloadSpeed: 0
+      downloadSpeed: 0,
+      status: 'not_found'
     });
+  }
+
+  // Find the largest video file for filename info
+  let videoFileName = '';
+  if (torrent.files && torrent.files.length > 0) {
+    const videoFile = torrent.files.reduce((largest, f) => {
+      const isVideo = /\.(mp4|mkv|avi|webm|mov|m4v|ts)$/i.test(f.name);
+      if (!isVideo) return largest;
+      return (!largest || f.length > largest.length) ? f : largest;
+    }, null);
+    if (videoFile) videoFileName = videoFile.name;
   }
 
   res.json({
@@ -78,7 +109,9 @@ app.get('/status/:infoHash', (req, res) => {
     peers: torrent.numPeers,
     downloadSpeed: torrent.downloadSpeed,
     downloaded: torrent.downloaded,
-    name: torrent.name
+    name: torrent.name,
+    videoFileName: videoFileName,
+    status: torrent.ready ? 'ready' : 'buffering'
   });
 });
 
@@ -178,7 +211,8 @@ app.get('/stream/:infoHash', (req, res) => {
       return res.status(404).send('No video file found');
     }
 
-    console.log('Streaming file:', file.name, 'Size:', (file.length / (1024*1024*1024)).toFixed(2), 'GB');
+    const contentType = getMimeType(file.name);
+    console.log('Streaming file:', file.name, 'Size:', (file.length / (1024*1024*1024)).toFixed(2), 'GB', 'MIME:', contentType);
 
     // Set proper headers for video streaming with CORS
     const fileSize = file.length;
@@ -196,7 +230,7 @@ app.get('/stream/:infoHash', (req, res) => {
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunksize,
-        'Content-Type': 'video/mp4',
+        'Content-Type': contentType,
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Range',
       });
@@ -204,6 +238,7 @@ app.get('/stream/:infoHash', (req, res) => {
       const stream = file.createReadStream({ start, end });
       stream.on('error', (err) => {
         console.error('Stream error:', err);
+        if (!res.headersSent) res.writeHead(500);
         res.end();
       });
       stream.pipe(res);
@@ -212,7 +247,7 @@ app.get('/stream/:infoHash', (req, res) => {
 
       res.writeHead(200, {
         'Content-Length': fileSize,
-        'Content-Type': 'video/mp4',
+        'Content-Type': contentType,
         'Accept-Ranges': 'bytes',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Range',
@@ -221,6 +256,7 @@ app.get('/stream/:infoHash', (req, res) => {
       const stream = file.createReadStream();
       stream.on('error', (err) => {
         console.error('Stream error:', err);
+        if (!res.headersSent) res.writeHead(500);
         res.end();
       });
       stream.pipe(res);
@@ -294,6 +330,7 @@ app.get('/stream/:infoHash', (req, res) => {
       });
 
       torrents.set(infoHashLower, newTorrent);
+      torrentStartTimes.set(infoHashLower, Date.now());
 
       newTorrent.on('error', (err) => {
         console.error('Torrent error:', err);

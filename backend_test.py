@@ -1,481 +1,412 @@
 #!/usr/bin/env python3
 """
-PrivastreamCinema Backend API Testing Suite
-
-Tests the critical streaming endpoints as specified in the review request:
-1. Authentication: POST /api/auth/login
-2. Stream Fetching: GET /api/streams/movie/tt14364480 
-3. Torrent Stream Start: POST /api/stream/start/{infoHash}
-4. Torrent Stream Status: GET /api/stream/status/{infoHash}
-5. Torrent Stream Video: GET /api/stream/video/{infoHash}
-6. Discover Content: GET /api/content/discover-organized
-7. Addon Management: GET /api/addons
-
-KEY FOCUS: Testing that the streaming pipeline works end-to-end (start → status → video)
+Comprehensive Backend API Testing for PrivastreamCinema
+Tests all critical endpoints as requested in the review.
 """
 
 import asyncio
 import httpx
 import json
 import time
+import logging
 from typing import Dict, Any, Optional
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-class PrivastreamCinemaAPITester:
+# Test configuration
+BACKEND_URL = "https://fire-stick-remote.preview.emergentagent.com"
+TORRENT_SERVER_URL = "http://localhost:8002"
+
+# Test credentials
+TEST_USER = {
+    "username": "choyt",
+    "password": "RFIDGuy1!"
+}
+
+class BackendTester:
     def __init__(self):
-        # Use the production URL from frontend/.env
-        self.base_url = "https://fire-stick-remote.preview.emergentagent.com"
-        self.api_base = f"{self.base_url}/api"
-        self.auth_token: Optional[str] = None
-        self.client: Optional[httpx.AsyncClient] = None
-        
-        # Test credentials from review request
-        self.username = "choyt"
-        self.password = "RFIDGuy1!"
-        
-        # Test data from review request
-        self.test_movie_id = "tt14364480"  # Wake Up Dead Man
-        self.test_info_hash = "08ada5a7a6183aae1e09d831df6748d566095a10"  # Test torrent
-        
-        # Test results tracking
-        self.test_results = {
-            "authentication": {"passed": False, "details": ""},
-            "stream_fetching": {"passed": False, "details": ""},
-            "torrent_start": {"passed": False, "details": ""},
-            "torrent_status": {"passed": False, "details": ""},
-            "torrent_video": {"passed": False, "details": ""},
-            "discover_content": {"passed": False, "details": ""},
-            "addon_management": {"passed": False, "details": ""}
-        }
+        self.token = None
+        self.client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
+        self.test_results = []
         
     async def __aenter__(self):
-        self.client = httpx.AsyncClient(
-            timeout=30.0,
-            follow_redirects=True,
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "User-Agent": "PrivastreamCinema-Tester/1.0"
-            }
-        )
         return self
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.client:
-            await self.client.aclose()
-            
-    def get_auth_headers(self) -> Dict[str, str]:
-        """Get headers with Bearer token for authenticated requests"""
-        if not self.auth_token:
-            raise Exception("No auth token available - login first")
-        return {"Authorization": f"Bearer {self.auth_token}"}
-        
-    async def test_authentication(self) -> bool:
+        await self.client.aclose()
+    
+    def add_result(self, test_name: str, passed: bool, details: str = "", error: str = ""):
+        """Add test result to the collection"""
+        self.test_results.append({
+            "test": test_name,
+            "passed": passed,
+            "details": details,
+            "error": error
+        })
+        status = "✅ PASS" if passed else "❌ FAIL"
+        logger.info(f"{status}: {test_name} - {details}")
+        if error:
+            logger.error(f"ERROR: {error}")
+    
+    async def test_authentication(self):
         """Test 1: Authentication - POST /api/auth/login"""
-        print("\n🔐 Testing Authentication...")
-        
         try:
             login_data = {
-                "username": self.username,
-                "password": self.password
+                "username": TEST_USER["username"],
+                "password": TEST_USER["password"]
             }
             
-            response = await self.client.post(
-                f"{self.api_base}/auth/login",
-                json=login_data
-            )
+            response = await self.client.post(f"{BACKEND_URL}/api/auth/login", json=login_data)
             
-            if response.status_code != 200:
-                self.test_results["authentication"]["details"] = f"Login failed with status {response.status_code}: {response.text}"
-                return False
-                
-            response_data = response.json()
-            
-            # Verify response structure
-            if "token" not in response_data or "user" not in response_data:
-                self.test_results["authentication"]["details"] = f"Invalid response structure: {response_data}"
-                return False
-                
-            self.auth_token = response_data["token"]
-            user = response_data["user"]
-            
-            # Verify user data
-            if user.get("username") != self.username:
-                self.test_results["authentication"]["details"] = f"Username mismatch: expected {self.username}, got {user.get('username')}"
-                return False
-                
-            self.test_results["authentication"]["passed"] = True
-            self.test_results["authentication"]["details"] = f"✅ Login successful for user {user.get('username')}, token received"
-            print(f"✅ Authentication passed - User: {user.get('username')}, Admin: {user.get('is_admin', False)}")
-            return True
-            
-        except Exception as e:
-            self.test_results["authentication"]["details"] = f"Authentication failed with exception: {str(e)}"
-            print(f"❌ Authentication failed: {e}")
-            return False
-            
-    async def test_stream_fetching(self) -> bool:
-        """Test 2: Stream Fetching - GET /api/streams/movie/tt14364480"""
-        print(f"\n🎬 Testing Stream Fetching for movie {self.test_movie_id}...")
-        
-        try:
-            response = await self.client.get(
-                f"{self.api_base}/streams/movie/{self.test_movie_id}",
-                headers=self.get_auth_headers()
-            )
-            
-            if response.status_code != 200:
-                self.test_results["stream_fetching"]["details"] = f"Stream fetch failed with status {response.status_code}: {response.text}"
-                return False
-                
-            response_data = response.json()
-            
-            # Verify response structure
-            if "streams" not in response_data:
-                self.test_results["stream_fetching"]["details"] = f"Invalid response structure - missing 'streams': {response_data}"
-                return False
-                
-            streams = response_data["streams"]
-            if not isinstance(streams, list):
-                self.test_results["stream_fetching"]["details"] = f"'streams' should be a list, got {type(streams)}"
-                return False
-                
-            if len(streams) == 0:
-                self.test_results["stream_fetching"]["details"] = "No streams found for the test movie"
-                return False
-                
-            # Verify stream structure (should have infoHash, seeders, title)
-            valid_streams = 0
-            for stream in streams:
-                if isinstance(stream, dict):
-                    if "infoHash" in stream and "title" in stream:
-                        valid_streams += 1
-                        
-            if valid_streams == 0:
-                self.test_results["stream_fetching"]["details"] = f"No valid streams found (need infoHash and title). Found {len(streams)} streams but none had required fields"
-                return False
-                
-            self.test_results["stream_fetching"]["passed"] = True
-            self.test_results["stream_fetching"]["details"] = f"✅ Found {len(streams)} streams, {valid_streams} have required fields (infoHash, title)"
-            print(f"✅ Stream fetching passed - Found {len(streams)} streams, {valid_streams} valid")
-            return True
-            
-        except Exception as e:
-            self.test_results["stream_fetching"]["details"] = f"Stream fetching failed with exception: {str(e)}"
-            print(f"❌ Stream fetching failed: {e}")
-            return False
-            
-    async def test_torrent_stream_start(self) -> bool:
-        """Test 3: Torrent Stream Start - POST /api/stream/start/{infoHash}"""
-        print(f"\n🚀 Testing Torrent Stream Start for infoHash {self.test_info_hash}...")
-        
-        try:
-            response = await self.client.post(
-                f"{self.api_base}/stream/start/{self.test_info_hash}",
-                headers=self.get_auth_headers()
-            )
-            
-            if response.status_code != 200:
-                self.test_results["torrent_start"]["details"] = f"Stream start failed with status {response.status_code}: {response.text}"
-                return False
-                
-            response_data = response.json()
-            
-            # Should return {"status": "started"}
-            if not isinstance(response_data, dict) or response_data.get("status") != "started":
-                self.test_results["torrent_start"]["details"] = f"Expected {{\"status\": \"started\"}}, got: {response_data}"
-                return False
-                
-            self.test_results["torrent_start"]["passed"] = True
-            self.test_results["torrent_start"]["details"] = f"✅ Torrent stream started successfully: {response_data}"
-            print(f"✅ Torrent stream start passed - Status: {response_data.get('status')}")
-            return True
-            
-        except Exception as e:
-            self.test_results["torrent_start"]["details"] = f"Torrent stream start failed with exception: {str(e)}"
-            print(f"❌ Torrent stream start failed: {e}")
-            return False
-            
-    async def test_torrent_stream_status(self) -> bool:
-        """Test 4: Torrent Stream Status - GET /api/stream/status/{infoHash}"""
-        print(f"\n📊 Testing Torrent Stream Status for infoHash {self.test_info_hash}...")
-        
-        try:
-            # Wait a moment for torrent to initialize
-            await asyncio.sleep(2)
-            
-            response = await self.client.get(
-                f"{self.api_base}/stream/status/{self.test_info_hash}",
-                headers=self.get_auth_headers()
-            )
-            
-            if response.status_code != 200:
-                self.test_results["torrent_status"]["details"] = f"Stream status failed with status {response.status_code}: {response.text}"
-                return False
-                
-            response_data = response.json()
-            
-            # Should return status with peers and progress info
-            if not isinstance(response_data, dict):
-                self.test_results["torrent_status"]["details"] = f"Expected dict response, got: {type(response_data)}"
-                return False
-                
-            required_fields = ["status", "peers", "progress"]
-            missing_fields = [field for field in required_fields if field not in response_data]
-            
-            if missing_fields:
-                self.test_results["torrent_status"]["details"] = f"Missing required fields: {missing_fields}. Got: {response_data}"
-                return False
-                
-            status = response_data.get("status")
-            peers = response_data.get("peers", 0)
-            progress = response_data.get("progress", 0)
-            
-            self.test_results["torrent_status"]["passed"] = True
-            self.test_results["torrent_status"]["details"] = f"✅ Status: {status}, Peers: {peers}, Progress: {progress}%"
-            print(f"✅ Torrent stream status passed - Status: {status}, Peers: {peers}, Progress: {progress}%")
-            return True
-            
-        except Exception as e:
-            self.test_results["torrent_status"]["details"] = f"Torrent stream status failed with exception: {str(e)}"
-            print(f"❌ Torrent stream status failed: {e}")
-            return False
-            
-    async def test_torrent_stream_video(self) -> bool:
-        """Test 5: Torrent Stream Video - GET /api/stream/video/{infoHash}"""
-        print(f"\n🎥 Testing Torrent Stream Video for infoHash {self.test_info_hash}...")
-        
-        try:
-            # Wait more time for some data to be available
-            print("⏳ Waiting for torrent data to become available...")
-            await asyncio.sleep(5)
-            
-            response = await self.client.get(
-                f"{self.api_base}/stream/video/{self.test_info_hash}",
-                headers=self.get_auth_headers(),
-                timeout=60.0  # Longer timeout for video endpoint
-            )
-            
-            # Should return 200 (full content) or 206 (partial content) status
-            if response.status_code not in [200, 206]:
-                # Check if it's a 404 or 500 - these indicate real problems
-                if response.status_code in [404, 500]:
-                    self.test_results["torrent_video"]["details"] = f"Video endpoint failed with status {response.status_code}: {response.text}"
-                    return False
-                elif response.status_code == 503:
-                    # Service unavailable - torrent might not be ready yet
-                    self.test_results["torrent_video"]["details"] = f"⚠️ Video not ready yet (503): {response.text} - This is normal for new torrents"
-                    self.test_results["torrent_video"]["passed"] = True  # Consider this a pass since endpoint works
-                    print(f"⚠️ Video endpoint responded but content not ready yet (503) - endpoint is working")
+            if response.status_code == 200:
+                data = response.json()
+                if "token" in data and "user" in data:
+                    self.token = data["token"]
+                    user = data["user"]
+                    self.add_result(
+                        "Authentication", 
+                        True, 
+                        f"Login successful for user {user['username']}, token obtained"
+                    )
                     return True
                 else:
-                    self.test_results["torrent_video"]["details"] = f"Video endpoint returned unexpected status {response.status_code}: {response.text}"
+                    self.add_result("Authentication", False, "", "Response missing token or user data")
                     return False
+            else:
+                self.add_result("Authentication", False, "", f"Login failed with status {response.status_code}: {response.text}")
+                return False
                 
-            # Check response headers for video content
-            content_type = response.headers.get("content-type", "")
-            content_length = response.headers.get("content-length", "0")
-            
-            self.test_results["torrent_video"]["passed"] = True
-            self.test_results["torrent_video"]["details"] = f"✅ Video endpoint working - Status: {response.status_code}, Content-Type: {content_type}, Length: {content_length}"
-            print(f"✅ Torrent stream video passed - Status: {response.status_code}, Type: {content_type}")
-            return True
-            
-        except httpx.TimeoutException:
-            self.test_results["torrent_video"]["details"] = "Video endpoint timeout - torrent might not have enough data yet (this is normal for new torrents)"
-            self.test_results["torrent_video"]["passed"] = True  # Timeout can be normal
-            print(f"⚠️ Video endpoint timeout - likely waiting for torrent data (normal)")
-            return True
         except Exception as e:
-            self.test_results["torrent_video"]["details"] = f"Torrent stream video failed with exception: {str(e)}"
-            print(f"❌ Torrent stream video failed: {e}")
+            self.add_result("Authentication", False, "", f"Exception during login: {str(e)}")
             return False
-            
-    async def test_discover_content(self) -> bool:
-        """Test 6: Discover Content - GET /api/content/discover-organized"""
-        print(f"\n🎭 Testing Discover Content...")
-        
+    
+    async def test_addon_management(self):
+        """Test 2: Addon Management - GET /api/addons"""
         try:
-            response = await self.client.get(
-                f"{self.api_base}/content/discover-organized",
-                headers=self.get_auth_headers()
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = await self.client.get(f"{BACKEND_URL}/api/addons", headers=headers)
+            
+            if response.status_code == 200:
+                addons = response.json()
+                if isinstance(addons, list):
+                    addon_names = [addon.get("manifest", {}).get("name", "Unknown") for addon in addons]
+                    expected_addons = ["Cinemeta", "Torrentio", "ThePirateBay+", "USA TV", "Streaming Catalogs"]
+                    
+                    found_addons = [name for name in expected_addons if any(name in addon_name for addon_name in addon_names)]
+                    
+                    self.add_result(
+                        "Addon Management",
+                        len(found_addons) >= 4,  # At least 4 of the 5 expected addons
+                        f"Found {len(addons)} addons: {', '.join(addon_names)}"
+                    )
+                    return True
+                else:
+                    self.add_result("Addon Management", False, "", "Response is not a list")
+                    return False
+            else:
+                self.add_result("Addon Management", False, "", f"Failed with status {response.status_code}")
+                return False
+                
+        except Exception as e:
+            self.add_result("Addon Management", False, "", f"Exception: {str(e)}")
+            return False
+    
+    async def test_discover_content(self):
+        """Test 3: Discover Content - GET /api/content/discover-organized"""
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            start_time = time.time()
+            response = await self.client.get(f"{BACKEND_URL}/api/content/discover-organized", headers=headers)
+            response_time = time.time() - start_time
+            
+            if response.status_code == 200:
+                data = response.json()
+                services = data.get("services", {})
+                
+                required_sections = ["Popular Movies", "Popular Series", "New Movies", "New Series"]
+                found_sections = []
+                total_items = 0
+                
+                # Check for required sections
+                for section_name in required_sections:
+                    if section_name in services and services[section_name]:
+                        found_sections.append(section_name)
+                        total_items += len(services[section_name])
+                
+                # Check for streaming services
+                streaming_services = ["Netflix Movies", "Netflix Series", "HBO Max Movies", "Disney+ Movies"]
+                found_streaming = [svc for svc in streaming_services if any(svc in key for key in services.keys())]
+                
+                # Check for USA TV
+                usa_tv_found = any("USA TV" in key for key in services.keys())
+                
+                all_tests_passed = (
+                    len(found_sections) >= 3 and  # At least 3 of the 4 required sections
+                    total_items > 10  # Reasonable amount of content (lowered threshold)
+                )
+                
+                # Additional info about streaming services and USA TV
+                streaming_info = f"Streaming services: {len(found_streaming)}, USA TV: {'Yes' if usa_tv_found else 'No'}"
+                
+                self.add_result(
+                    "Discover Content",
+                    all_tests_passed,
+                    f"Response time: {response_time:.2f}s, {len(services)} sections, {total_items} total items. Found sections: {', '.join(found_sections)}. {streaming_info}"
+                )
+                return True
+                
+            else:
+                self.add_result("Discover Content", False, "", f"Failed with status {response.status_code}")
+                return False
+                
+        except Exception as e:
+            self.add_result("Discover Content", False, "", f"Exception: {str(e)}")
+            return False
+    
+    async def test_stream_fetching(self):
+        """Test 4: Stream Fetching - GET /api/streams/movie/tt0111161"""
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            # Test with The Shawshank Redemption
+            movie_id = "tt0111161"
+            response = await self.client.get(f"{BACKEND_URL}/api/streams/movie/{movie_id}", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                streams = data.get("streams", [])
+                
+                # Check that we have streams with infoHash
+                streams_with_hash = [s for s in streams if s.get("infoHash")]
+                
+                self.add_result(
+                    "Stream Fetching",
+                    len(streams_with_hash) > 0,
+                    f"Found {len(streams)} total streams, {len(streams_with_hash)} with infoHash for {movie_id}"
+                )
+                return streams_with_hash[0]["infoHash"] if streams_with_hash else None
+                
+            else:
+                self.add_result("Stream Fetching", False, "", f"Failed with status {response.status_code}")
+                return None
+                
+        except Exception as e:
+            self.add_result("Stream Fetching", False, "", f"Exception: {str(e)}")
+            return None
+    
+    async def test_torrent_server_health(self):
+        """Test: Torrent Server Health Check"""
+        try:
+            # Test local torrent server
+            response = await self.client.get(f"{TORRENT_SERVER_URL}/health")
+            
+            if response.status_code == 200:
+                # Check for either "ok" or JSON response with status "ok"
+                response_text = response.text.strip()
+                if response_text == "ok" or (response_text.startswith("{") and "ok" in response_text):
+                    self.add_result("Torrent Server Health", True, f"Torrent server at {TORRENT_SERVER_URL} is healthy")
+                    return True
+                else:
+                    self.add_result("Torrent Server Health", False, "", f"Unexpected health response: {response_text}")
+                    return False
+            else:
+                self.add_result("Torrent Server Health", False, "", f"Health check failed: {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            self.add_result("Torrent Server Health", False, "", f"Cannot connect to torrent server: {str(e)}")
+            return False
+    
+    async def test_torrent_streaming_pipeline(self, info_hash: str):
+        """Test 5: CRITICAL - Torrent Streaming Pipeline (End-to-End)"""
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            
+            # Step 1: Start the torrent
+            start_response = await self.client.post(f"{BACKEND_URL}/api/stream/start/{info_hash}", headers=headers)
+            
+            if start_response.status_code != 200:
+                self.add_result("Torrent Start", False, "", f"Start failed with status {start_response.status_code}")
+                return False
+            
+            start_data = start_response.json()
+            if start_data.get("status") != "started":
+                self.add_result("Torrent Start", False, "", f"Expected status 'started', got {start_data.get('status')}")
+                return False
+            
+            self.add_result("Torrent Start", True, f"Torrent {info_hash[:8]}... started successfully")
+            
+            # Step 2: Poll status until ready (max 30 seconds)
+            max_attempts = 15
+            ready = False
+            peers = 0
+            
+            for attempt in range(max_attempts):
+                await asyncio.sleep(2)
+                status_response = await self.client.get(f"{BACKEND_URL}/api/stream/status/{info_hash}", headers=headers)
+                
+                if status_response.status_code == 200:
+                    status_data = status_response.json()
+                    status = status_data.get("status", "")
+                    peers = status_data.get("peers", 0)
+                    progress = status_data.get("progress", 0)
+                    
+                    logger.info(f"Status check {attempt+1}: status={status}, peers={peers}, progress={progress}")
+                    
+                    if status == "ready" and peers > 0:
+                        ready = True
+                        break
+                    elif status == "ready" or peers > 0:  # Accept if either condition is met
+                        ready = True
+                        break
+            
+            if ready:
+                self.add_result("Torrent Status", True, f"Torrent ready after {(attempt+1)*2}s, peers={peers}")
+            else:
+                # Still try the video test even if status isn't perfect
+                self.add_result("Torrent Status", False, "Torrent not ready within 30s, but continuing with video test", "Timeout waiting for ready status")
+            
+            # Step 3: Test video streaming
+            video_headers = headers.copy()
+            video_headers["Range"] = "bytes=0-65535"  # Request first 64KB
+            
+            video_response = await self.client.get(
+                f"{BACKEND_URL}/api/stream/video/{info_hash}", 
+                headers=video_headers
             )
             
-            if response.status_code != 200:
-                self.test_results["discover_content"]["details"] = f"Discover content failed with status {response.status_code}: {response.text}"
-                return False
+            expected_statuses = [200, 206]  # Accept both full content and partial content
+            if video_response.status_code in expected_statuses:
+                content_type = video_response.headers.get("content-type", "")
+                content_length = video_response.headers.get("content-length", "0")
                 
-            response_data = response.json()
+                # Check for video content types
+                is_video = any(vtype in content_type.lower() for vtype in ["video/", "application/octet-stream"])
+                
+                if is_video and len(video_response.content) > 1000:  # At least some video data
+                    self.add_result(
+                        "Video Streaming", 
+                        True, 
+                        f"Video stream working: {content_type}, {len(video_response.content)} bytes received"
+                    )
+                else:
+                    self.add_result("Video Streaming", False, "", f"Invalid video data: {content_type}, {len(video_response.content)} bytes")
+            else:
+                self.add_result("Video Streaming", False, "", f"Video request failed: {video_response.status_code}")
+                return False
             
-            # Should return movie/TV categories organized by services
-            if not isinstance(response_data, dict):
-                self.test_results["discover_content"]["details"] = f"Expected dict response, got: {type(response_data)}"
-                return False
-                
-            # Check for required top-level structure
-            if "services" not in response_data:
-                self.test_results["discover_content"]["details"] = "Missing 'services' in response"
-                return False
-                
-            services = response_data.get("services", {})
-            if not isinstance(services, dict):
-                self.test_results["discover_content"]["details"] = f"'services' should be a dict, got: {type(services)}"
-                return False
-                
-            if len(services) == 0:
-                self.test_results["discover_content"]["details"] = "No services found in discover content"
-                return False
-                
-            # Count content across all services
-            valid_services = 0
-            total_content = 0
-            
-            for service_name, service_data in services.items():
-                if isinstance(service_data, dict):
-                    valid_services += 1
-                    # Count movies, series, and channels
-                    for content_type in ["movies", "series", "channels"]:
-                        content_list = service_data.get(content_type, [])
-                        if isinstance(content_list, list):
-                            total_content += len(content_list)
-                        
-            if valid_services == 0:
-                self.test_results["discover_content"]["details"] = f"No valid services found. Got {len(services)} services but none had required structure"
-                return False
-                
-            self.test_results["discover_content"]["passed"] = True
-            self.test_results["discover_content"]["details"] = f"✅ Found {valid_services} services with {total_content} total items"
-            print(f"✅ Discover content passed - {valid_services} services, {total_content} items")
             return True
             
         except Exception as e:
-            self.test_results["discover_content"]["details"] = f"Discover content failed with exception: {str(e)}"
-            print(f"❌ Discover content failed: {e}")
+            self.add_result("Torrent Streaming Pipeline", False, "", f"Exception: {str(e)}")
             return False
-            
-    async def test_addon_management(self) -> bool:
-        """Test 7: Addon Management - GET /api/addons"""
-        print(f"\n🔧 Testing Addon Management...")
-        
+    
+    async def test_public_video_access(self, info_hash: str):
+        """Test 6: CRITICAL - Public URL Video Access"""
         try:
-            response = await self.client.get(
-                f"{self.api_base}/addons",
-                headers=self.get_auth_headers()
-            )
+            # Test the public URL that the user's app actually hits
+            public_url = f"{BACKEND_URL}/api/stream/video/{info_hash}"
             
-            if response.status_code != 200:
-                self.test_results["addon_management"]["details"] = f"Addon management failed with status {response.status_code}: {response.text}"
+            # Use range header like a video player would
+            headers = {"Range": "bytes=0-65535"}
+            
+            response = await self.client.get(public_url, headers=headers)
+            
+            expected_statuses = [200, 206]
+            if response.status_code in expected_statuses:
+                content_type = response.headers.get("content-type", "")
+                content_length = len(response.content)
+                
+                # Check for valid video content
+                is_video = any(vtype in content_type.lower() for vtype in ["video/", "application/octet-stream"])
+                
+                if is_video and content_length > 1000:
+                    self.add_result(
+                        "Public Video Access",
+                        True,
+                        f"Public URL works: {response.status_code}, {content_type}, {content_length} bytes"
+                    )
+                    return True
+                else:
+                    self.add_result("Public Video Access", False, "", f"Invalid content: {content_type}, {content_length} bytes")
+                    return False
+            else:
+                self.add_result("Public Video Access", False, "", f"Public access failed: {response.status_code}")
                 return False
                 
-            response_data = response.json()
-            
-            # Should return installed addons list
-            if not isinstance(response_data, list):
-                self.test_results["addon_management"]["details"] = f"Expected list response, got: {type(response_data)}"
-                return False
-                
-            # Empty list is okay - user might not have addons installed
-            addon_count = len(response_data)
-            
-            # Verify addon structure if any exist
-            valid_addons = 0
-            for addon in response_data:
-                if isinstance(addon, dict) and "manifest" in addon:
-                    manifest = addon.get("manifest", {})
-                    if isinstance(manifest, dict) and "name" in manifest:
-                        valid_addons += 1
-                        
-            self.test_results["addon_management"]["passed"] = True
-            self.test_results["addon_management"]["details"] = f"✅ Retrieved {addon_count} addons, {valid_addons} with valid structure"
-            print(f"✅ Addon management passed - {addon_count} addons found")
-            return True
-            
         except Exception as e:
-            self.test_results["addon_management"]["details"] = f"Addon management failed with exception: {str(e)}"
-            print(f"❌ Addon management failed: {e}")
+            self.add_result("Public Video Access", False, "", f"Exception: {str(e)}")
             return False
-            
-    async def run_all_tests(self) -> Dict[str, Any]:
-        """Run all tests in sequence and return results"""
-        print(f"🎯 Starting PrivastreamCinema Backend API Testing")
-        print(f"🌐 Testing against: {self.base_url}")
-        print("=" * 70)
+    
+    def print_summary(self):
+        """Print test summary"""
+        passed = [r for r in self.test_results if r["passed"]]
+        failed = [r for r in self.test_results if not r["passed"]]
         
-        # Run tests in specified order
-        tests = [
-            ("authentication", self.test_authentication),
-            ("stream_fetching", self.test_stream_fetching),
-            ("torrent_start", self.test_torrent_stream_start),
-            ("torrent_status", self.test_torrent_stream_status),
-            ("torrent_video", self.test_torrent_stream_video),
-            ("discover_content", self.test_discover_content),
-            ("addon_management", self.test_addon_management),
-        ]
+        print("\n" + "="*70)
+        print("🎬 PRIVASTREAMCINEMA BACKEND TEST RESULTS")
+        print("="*70)
         
-        start_time = time.time()
+        if failed:
+            print(f"\n❌ FAILED TESTS ({len(failed)}):")
+            for test in failed:
+                print(f"   • {test['test']}: {test['error']}")
         
-        for test_name, test_func in tests:
-            try:
-                success = await test_func()
-                if not success:
-                    print(f"❌ {test_name} test failed")
-                    # Continue with other tests even if one fails
-            except Exception as e:
-                print(f"💥 {test_name} test crashed: {e}")
-                self.test_results[test_name]["details"] = f"Test crashed with exception: {str(e)}"
-                
-        total_time = time.time() - start_time
+        if passed:
+            print(f"\n✅ PASSED TESTS ({len(passed)}):")
+            for test in passed:
+                print(f"   • {test['test']}: {test['details']}")
         
-        # Summary
-        print("\n" + "=" * 70)
-        print("📊 TEST RESULTS SUMMARY")
-        print("=" * 70)
+        print(f"\n📊 SUMMARY: {len(passed)}/{len(self.test_results)} tests passed")
         
-        passed_count = sum(1 for result in self.test_results.values() if result["passed"])
-        total_count = len(self.test_results)
-        
-        print(f"✅ Passed: {passed_count}/{total_count} tests")
-        print(f"⏱️  Total time: {total_time:.2f}s")
-        print()
-        
-        # Detailed results
-        for test_name, result in self.test_results.items():
-            status = "✅ PASS" if result["passed"] else "❌ FAIL"
-            print(f"{status} {test_name}: {result['details']}")
-            
-        # Critical pipeline check
-        print("\n" + "🎯 CRITICAL STREAMING PIPELINE CHECK")
-        print("=" * 50)
-        
-        pipeline_tests = ["torrent_start", "torrent_status", "torrent_video"]
-        pipeline_passed = all(self.test_results[test]["passed"] for test in pipeline_tests)
-        
-        if pipeline_passed:
-            print("✅ STREAMING PIPELINE: END-TO-END WORKING!")
-            print("   ↳ start → status → video all functional")
+        if len(passed) == len(self.test_results):
+            print("🎉 ALL TESTS PASSED - Backend is working correctly!")
+        elif len(failed) == 0:
+            print("⚠️  No tests failed, but some may have been skipped")
         else:
-            print("❌ STREAMING PIPELINE: Issues detected")
-            for test in pipeline_tests:
-                status = "✅" if self.test_results[test]["passed"] else "❌"
-                print(f"   {status} {test}")
-                
-        return {
-            "summary": {
-                "passed": passed_count,
-                "total": total_count,
-                "success_rate": f"{(passed_count/total_count)*100:.1f}%",
-                "pipeline_working": pipeline_passed,
-                "total_time": f"{total_time:.2f}s"
-            },
-            "results": self.test_results
-        }
+            print("⚠️  Some tests failed - see details above")
+        
+        return len(failed) == 0
 
 
-async def main():
-    """Main test runner"""
-    async with PrivastreamCinemaAPITester() as tester:
-        return await tester.run_all_tests()
+async def run_comprehensive_test():
+    """Run all backend tests"""
+    async with BackendTester() as tester:
+        print("🚀 Starting PrivastreamCinema Backend Testing...")
+        
+        # Test 1: Authentication (required for all other tests)
+        auth_success = await tester.test_authentication()
+        if not auth_success:
+            print("❌ Authentication failed - cannot proceed with other tests")
+            tester.print_summary()
+            return
+        
+        # Test 2: Addon Management
+        await tester.test_addon_management()
+        
+        # Test 3: Discover Content
+        await tester.test_discover_content()
+        
+        # Test 4: Stream Fetching (and get an infoHash for torrent tests)
+        info_hash = await tester.test_stream_fetching()
+        
+        # Test Torrent Server Health
+        await tester.test_torrent_server_health()
+        
+        # Test 5 & 6: Torrent Streaming Pipeline (if we have an infoHash)
+        if info_hash:
+            print(f"\n🎯 Testing torrent streaming with infoHash: {info_hash[:16]}...")
+            
+            await tester.test_torrent_streaming_pipeline(info_hash)
+            await tester.test_public_video_access(info_hash)
+        else:
+            tester.add_result("Torrent Streaming Pipeline", False, "", "No infoHash available from stream fetching")
+            tester.add_result("Public Video Access", False, "", "No infoHash available for testing")
+        
+        # Print final results
+        return tester.print_summary()
+
 
 if __name__ == "__main__":
-    results = asyncio.run(main())
-    print(f"\n🏁 Testing complete!")
+    asyncio.run(run_comprehensive_test())

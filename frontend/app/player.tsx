@@ -1208,9 +1208,12 @@ export default function PlayerScreen() {
       await api.stream.start(infoHash, validFileIdx, filename || undefined);
       
       let pollInterval = 500;
+      let pollCount = 0;
+      const MAX_POLL_BEFORE_FORCE = 40; // ~20 seconds of polling, then force playback
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
+        pollCount++;
         
         try {
           const status = await api.stream.status(infoHash);
@@ -1219,31 +1222,14 @@ export default function PlayerScreen() {
           setPeers(status.peers || 0);
           setDownloadSpeed(status.download_rate || 0);
           
-          if (status.status === 'downloading_metadata') {
-            const peerCount = status.peers || 0;
-            if (peerCount === 0) {
-              setLoadingStatus('Searching for peers...');
-            } else {
-              setLoadingStatus(`Found ${peerCount} peers, getting file info...`);
-            }
-          } else if (status.status === 'buffering') {
-            const speedMB = ((status.download_rate || 0) / 1024 / 1024).toFixed(1);
-            const downloaded = status.downloaded ? (status.downloaded / (1024 * 1024)).toFixed(1) : '0';
-            const threshold = status.ready_threshold_mb ? status.ready_threshold_mb.toFixed(1) : '3';
-            setLoadingStatus(`Buffering ${downloaded}MB / ${threshold}MB (${speedMB} MB/s)`);
-            
-            if (pollInterval < 1000) pollInterval = 1000;
-          } else if (status.status === 'ready') {
+          if (status.status === 'ready') {
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
             }
             
             setLoadingStatus('Starting playback...');
-            // Pass fileIdx to getVideoUrl for file selection
             const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
             setStreamUrl(videoUrl);
-            // Keep isLoading true - it will be set to false when video actually starts playing
-            // This keeps the Stremio loading screen visible until playback begins
             return;
           } else if (status.status === 'not_found' || status.status === 'invalid') {
             setError('Failed to start. Try selecting a different stream with more seeders.');
@@ -1252,6 +1238,42 @@ export default function PlayerScreen() {
               clearInterval(pollIntervalRef.current);
             }
             return;
+          } else if (status.status === 'buffering') {
+            const peerCount = status.peers || 0;
+            const speedMB = ((status.download_rate || 0) / 1024 / 1024).toFixed(1);
+            const downloaded = status.downloaded ? (status.downloaded / (1024 * 1024)).toFixed(1) : '0';
+            
+            if (peerCount === 0) {
+              setLoadingStatus(`Searching for peers... (${pollCount})`);
+            } else {
+              setLoadingStatus(`Buffering ${downloaded}MB (${speedMB} MB/s) • ${peerCount} peers`);
+            }
+            
+            if (pollInterval < 1000) pollInterval = 1000;
+            
+            // FORCE PLAYBACK after timeout - the video endpoint handles waiting internally
+            // This prevents the player from being stuck in "buffering" forever
+            if (pollCount >= MAX_POLL_BEFORE_FORCE && peerCount > 0) {
+              console.log(`[PLAYER] Force-starting playback after ${pollCount} polls with ${peerCount} peers`);
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+              }
+              setLoadingStatus('Starting playback...');
+              const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
+              setStreamUrl(videoUrl);
+              return;
+            }
+            
+            // After 60 seconds (120 polls at 500ms), give up if no peers
+            if (pollCount >= 120 && peerCount === 0) {
+              console.log('[PLAYER] No peers found after 60s, giving up');
+              setError('No peers found. This torrent may be dead. Try a different stream with more seeders.');
+              setIsLoading(false);
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+              }
+              return;
+            }
           }
           
           pollIntervalRef.current = setTimeout(pollStatus, pollInterval) as any;

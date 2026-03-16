@@ -2959,6 +2959,9 @@ async def delete_watch_progress(content_id: str, current_user: User = Depends(ge
 
 TORRENT_SERVER_URL = "http://localhost:8002"
 
+# Track torrent start times for auto-restart logic
+_torrent_start_times = {}
+
 @api_router.post("/stream/start/{info_hash}")
 async def start_stream(
     info_hash: str, 
@@ -2970,14 +2973,13 @@ async def start_stream(
     try:
         logger.info(f"Starting torrent download for {info_hash}, fileIdx={fileIdx}, filename={filename}")
         
+        # Record start time
+        _torrent_start_times[info_hash.lower()] = datetime.utcnow()
+        
         # Trigger the WebTorrent server to start downloading
-        # We make a GET request to /stream which adds the torrent
-        # Use a background task so we don't block the response
         async def trigger_torrent():
             try:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-                    # Make a request to trigger torrent addition
-                    # Pass fileIdx and filename as query params if provided
                     params = {}
                     if fileIdx is not None:
                         params['fileIdx'] = fileIdx
@@ -2990,13 +2992,12 @@ async def start_stream(
                     
                     response = await client.get(
                         url,
-                        headers={"Range": "bytes=0-1024"}  # Request just first 1KB to trigger start
+                        headers={"Range": "bytes=0-1024"}
                     )
                     logger.info(f"Torrent trigger response: {response.status_code}")
             except Exception as e:
                 logger.info(f"Torrent {info_hash} triggered (exception: {type(e).__name__})")
         
-        # Start in background
         asyncio.create_task(trigger_torrent())
         
         return {"status": "started", "info_hash": info_hash}
@@ -3006,20 +3007,58 @@ async def start_stream(
 
 @api_router.get("/stream/status/{info_hash}")
 async def stream_status(info_hash: str, current_user: User = Depends(get_current_user)):
-    """Get the status of a torrent download from WebTorrent server"""
+    """Get the status of a torrent download from WebTorrent server - with auto-restart"""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{TORRENT_SERVER_URL}/status/{info_hash}")
             if response.status_code == 200:
                 data = response.json()
-                # Map WebTorrent response to our expected format
+                
+                ts_status = data.get("status", "")
+                is_ready = data.get("ready", False)
+                peers = data.get("peers", 0)
+                progress = data.get("progress", 0)
+                name = data.get("name", "")
+                
+                # If torrent-server says not_found, auto-restart the torrent
+                if ts_status == "not_found" or (not is_ready and peers == 0 and progress == 0 and not name):
+                    start_time = _torrent_start_times.get(info_hash.lower())
+                    elapsed = (datetime.utcnow() - start_time).total_seconds() if start_time else 999
+                    
+                    # If it's been more than 10 seconds since start and still nothing, restart
+                    if elapsed > 10:
+                        logger.info(f"Torrent {info_hash} appears lost (elapsed={elapsed:.0f}s), auto-restarting...")
+                        _torrent_start_times[info_hash.lower()] = datetime.utcnow()
+                        
+                        # Restart the torrent in background
+                        async def restart():
+                            try:
+                                async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as rc:
+                                    await rc.get(
+                                        f"{TORRENT_SERVER_URL}/stream/{info_hash}",
+                                        headers={"Range": "bytes=0-1024"}
+                                    )
+                            except Exception:
+                                pass
+                        asyncio.create_task(restart())
+                        
+                        return {
+                            "status": "buffering",
+                            "progress": 0,
+                            "peers": 0,
+                            "download_rate": 0,
+                            "downloaded": 0,
+                            "name": "Restarting torrent...",
+                        }
+                
                 return {
-                    "status": "ready" if data.get("ready") else "buffering",
-                    "progress": data.get("progress", 0),
-                    "peers": data.get("peers", 0),
+                    "status": "ready" if is_ready else "buffering",
+                    "progress": progress,
+                    "peers": peers,
                     "download_rate": data.get("downloadSpeed", 0),
                     "downloaded": data.get("downloaded", 0),
-                    "name": data.get("name", ""),
+                    "name": name,
+                    "video_filename": data.get("videoFileName", ""),
                 }
             return {"status": "buffering", "progress": 0, "peers": 0}
     except Exception as e:
