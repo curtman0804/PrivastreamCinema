@@ -256,7 +256,7 @@ export default function PlayerScreen() {
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [loadingStatus, setLoadingStatus] = useState('Initializing...');
+  const [loadingStatus, setLoadingStatus] = useState('');
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [peers, setPeers] = useState(0);
@@ -1004,7 +1004,7 @@ export default function PlayerScreen() {
       setPlaybackStarted(false);
       setError(null);
       setIsLoading(true);
-      setLoadingStatus(`Trying stream ${nextIndex + 1}/${fallbackUrls.length}...`);
+      setLoadingStatus('');
       
       // Start new timeout for this stream
       if (playbackTimeoutRef.current) {
@@ -1216,10 +1216,8 @@ export default function PlayerScreen() {
       if (isLive === 'true') {
         // For live TV, keep loading state until video actually starts playing
         setIsLoading(true);
-        setLoadingStatus('Loading live stream...');
       } else {
         setIsLoading(false);
-        setLoadingStatus('');
       }
     } else if (url) {
       setStreamUrl(url);
@@ -1240,17 +1238,19 @@ export default function PlayerScreen() {
     };
   }, [url, infoHash, directUrl, isLive, fallbackStreams]);
 
-  const startTorrentStream = async () => {
+  const startTorrentStream = async (retryCount = 0) => {
     if (!infoHash) return;
 
+    const MAX_RETRIES = 3;
+
     try {
-      setLoadingStatus('Starting torrent engine...');
+      // No text status - just the title filling
       
       // Parse fileIdx if provided (for selecting specific episode in season packs)
       // Handle empty string, null, undefined, and NaN cases
       const parsedFileIdx = fileIdx && fileIdx !== '' ? parseInt(fileIdx, 10) : undefined;
       const validFileIdx = parsedFileIdx !== undefined && !isNaN(parsedFileIdx) ? parsedFileIdx : undefined;
-      console.log(`[PLAYER] Starting torrent with fileIdx=${validFileIdx}, filename=${filename || 'auto'}`);
+      console.log(`[PLAYER] Starting torrent with fileIdx=${validFileIdx}, filename=${filename || 'auto'} (attempt ${retryCount + 1})`);
       
       await api.stream.start(infoHash, validFileIdx, filename || undefined);
       
@@ -1274,12 +1274,20 @@ export default function PlayerScreen() {
               clearInterval(pollIntervalRef.current);
             }
             
-            setLoadingStatus('Starting playback...');
             const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
             setStreamUrl(videoUrl);
             return;
           } else if (status.status === 'not_found' || status.status === 'invalid') {
-            setError('Failed to start. Try selecting a different stream with more seeders.');
+            // Retry the whole stream start if we haven't exhausted retries
+            if (retryCount < MAX_RETRIES) {
+              console.log(`[PLAYER] Stream not found, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+              }
+              setTimeout(() => startTorrentStream(retryCount + 1), 2000);
+              return;
+            }
+            setError('Stream unavailable. Try selecting a different stream.');
             setIsLoading(false);
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
@@ -1287,14 +1295,6 @@ export default function PlayerScreen() {
             return;
           } else if (status.status === 'buffering') {
             const peerCount = status.peers || 0;
-            const speedMB = ((status.download_rate || 0) / 1024 / 1024).toFixed(1);
-            const downloaded = status.downloaded ? (status.downloaded / (1024 * 1024)).toFixed(1) : '0';
-            
-            if (peerCount === 0) {
-              setLoadingStatus('Searching for peers...');
-            } else {
-              setLoadingStatus('Buffering...');
-            }
             
             if (pollInterval < 1000) pollInterval = 1000;
             
@@ -1305,7 +1305,6 @@ export default function PlayerScreen() {
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current);
               }
-              setLoadingStatus('Starting playback...');
               const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
               setStreamUrl(videoUrl);
               return;
@@ -1314,7 +1313,7 @@ export default function PlayerScreen() {
             // After 60 seconds (120 polls at 500ms), give up if no peers
             if (pollCount >= 120 && peerCount === 0) {
               console.log('[PLAYER] No peers found after 60s, giving up');
-              setError('No peers found. This torrent may be dead. Try a different stream with more seeders.');
+              setError('No peers found. Try a different stream.');
               setIsLoading(false);
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current);
@@ -1326,6 +1325,7 @@ export default function PlayerScreen() {
           pollIntervalRef.current = setTimeout(pollStatus, pollInterval) as any;
         } catch (err) {
           console.error('Status poll error:', err);
+          // On poll error, retry with backoff instead of giving up
           pollIntervalRef.current = setTimeout(pollStatus, 2000) as any;
         }
       };
@@ -1334,6 +1334,12 @@ export default function PlayerScreen() {
       
     } catch (err: any) {
       console.error('Stream start error:', err);
+      // Auto-retry on network errors (502, 520, etc.)
+      if (retryCount < MAX_RETRIES) {
+        console.log(`[PLAYER] Stream start failed, retrying in 3s (${retryCount + 1}/${MAX_RETRIES})...`);
+        setTimeout(() => startTorrentStream(retryCount + 1), 3000);
+        return;
+      }
       setError(err.message || 'Failed to start stream');
       setIsLoading(false);
     }
@@ -1487,18 +1493,10 @@ export default function PlayerScreen() {
               )
             )}
             
-            {/* Loading status text - clean and minimal like Stremio */}
-            {loadingStatus ? (
-              <Text style={[styles.loadingStatusText, { marginTop: 30 }]}>{loadingStatus}</Text>
-            ) : null}
-            
-            {/* Live TV / Direct URL Loading Indicator */}
+            {/* Minimal loading indicator - no text, just a subtle spinner below the title */}
             {!infoHash && (
               <View style={{ marginTop: 40, alignItems: 'center' }}>
                 <ActivityIndicator size="large" color="#B8A05C" />
-                <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 16, marginTop: 16, fontWeight: '500' }}>
-                  {isLiveTV ? 'Connecting to live stream...' : 'Loading stream...'}
-                </Text>
               </View>
             )}
           </View>
@@ -1511,16 +1509,9 @@ export default function PlayerScreen() {
           <Ionicons name="warning-outline" size={48} color="#ff6b6b" />
           <Text style={styles.errorText}>{error}</Text>
           
-          <TouchableOpacity 
-            style={[styles.button, { backgroundColor: '#B8A05C', marginBottom: 12 }]} 
-            onPress={openInExternalPlayer}
-          >
-            <Ionicons name="open-outline" size={20} color="#000" style={{ marginRight: 8 }} />
-            <Text style={[styles.buttonText, { color: '#000' }]}>Open in External Player</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.button} onPress={handleBack}>
-            <Text style={styles.buttonText}>Go Back</Text>
+          <TouchableOpacity style={[styles.button, { backgroundColor: '#B8A05C', marginTop: 12 }]} onPress={handleBack}>
+            <Ionicons name="arrow-back" size={20} color="#000" style={{ marginRight: 8 }} />
+            <Text style={[styles.buttonText, { color: '#000' }]}>Go Back</Text>
           </TouchableOpacity>
         </View>
       )}

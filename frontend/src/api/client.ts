@@ -35,6 +35,7 @@ apiClient.interceptors.request.use(async (config) => {
 });
 
 // Handle 401/403 responses - clear invalid auth
+// Also auto-retry on 5xx server errors (502, 520, etc.)
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -44,6 +45,28 @@ apiClient.interceptors.response.use(
       await AsyncStorage.removeItem('auth_token');
       await AsyncStorage.removeItem('user');
     }
+    
+    // Auto-retry on server errors (502, 503, 520, etc.)
+    const config = error.config;
+    if (!config || config.__retryCount >= 3) {
+      return Promise.reject(error);
+    }
+    
+    const status = error.response?.status || 0;
+    const isServerError = status >= 500 || status === 0; // 0 = network error
+    
+    if (isServerError && !config.__retryCount) {
+      config.__retryCount = 0;
+    }
+    
+    if (isServerError && config.__retryCount < 3) {
+      config.__retryCount = (config.__retryCount || 0) + 1;
+      const delay = config.__retryCount * 1500; // 1.5s, 3s, 4.5s
+      console.log(`[API] Server error ${status}, retrying in ${delay}ms (attempt ${config.__retryCount}/3)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return apiClient(config);
+    }
+    
     return Promise.reject(error);
   }
 );
