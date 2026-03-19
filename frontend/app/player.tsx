@@ -2092,7 +2092,7 @@ const styles = StyleSheet.create({
   titleUnfilled: {
     fontSize: 42,
     fontWeight: '800',
-    color: 'rgba(255, 255, 255, 0.3)',
+    color: 'rgba(255, 255, 255, 0.12)',
     textAlign: 'center',
     letterSpacing: 2,
   },

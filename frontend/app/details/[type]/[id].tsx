@@ -752,7 +752,19 @@ export default function DetailsScreen() {
                 </View>
               ) : (
                 <FlatList
-                  data={streams}
+                  data={[...streams].sort((a, b) => {
+                    // Sort: English streams first, then by seed count (highest first)
+                    const titleA = (a.title || '').toLowerCase();
+                    const titleB = (b.title || '').toLowerCase();
+                    const isNonEngA = /\b(lat|latino|esp|spanish|french|german|hindi|ita|por|rus|ara|kor|jpn|chi|dubbed)\b/i.test(titleA);
+                    const isNonEngB = /\b(lat|latino|esp|spanish|french|german|hindi|ita|por|rus|ara|kor|jpn|chi|dubbed)\b/i.test(titleB);
+                    if (isNonEngA && !isNonEngB) return 1;
+                    if (!isNonEngA && isNonEngB) return -1;
+                    // Then sort by seed count (higher = better)
+                    const seedsA = a.seeders || 0;
+                    const seedsB = b.seeders || 0;
+                    return seedsB - seedsA;
+                  })}
                   renderItem={renderStreamItem}
                   keyExtractor={(item, index) => `${item.infoHash || item.url || index}`}
                   horizontal

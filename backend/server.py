@@ -3253,27 +3253,24 @@ async def stream_video(
         session_data = torrent_streamer.get_session(info_hash)
         handle = session_data['handle']
         
-        # Wait for metadata and video file discovery (up to 30 seconds)
-        max_wait = 30
+        # Wait for metadata and video file discovery (max 10 seconds, check every 0.5s)
         waited = 0
-        while waited < max_wait:
+        while waited < 20:  # 20 * 0.5s = 10 seconds max
             status = torrent_streamer.get_status(info_hash)
             if status.get("status") in ["ready", "buffering"] and status.get("video_file"):
                 break
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
             waited += 1
         
         video_path = torrent_streamer.get_video_path(info_hash)
         if not video_path:
             raise HTTPException(status_code=404, detail="Video file not found in torrent")
         
-        # Wait for the file to exist on disk (libtorrent might still be writing)
+        # Wait for the file to appear on disk (max 5 seconds)
         waited = 0
-        while waited < 30 and (not os.path.exists(video_path) or os.path.getsize(video_path) < 1024 * 1024):
-            await asyncio.sleep(1)
+        while waited < 10 and (not os.path.exists(video_path) or os.path.getsize(video_path) < 256 * 1024):
+            await asyncio.sleep(0.5)
             waited += 1
-            s = handle.status()
-            logger.info(f"Waiting for file: exists={os.path.exists(video_path)}, peers={s.num_peers}, progress={s.progress*100:.1f}%")
         
         if not os.path.exists(video_path):
             raise HTTPException(status_code=404, detail="Video file not yet available")
@@ -3356,7 +3353,7 @@ async def stream_video(
                     need_end_piece = (file_offset + end) // piece_length
                     
                     disk_wait = 0
-                    while disk_wait < 120:  # Wait up to 2 minutes for pieces
+                    while disk_wait < 20:  # Wait up to 10 seconds for pieces
                         all_ready = True
                         for p in range(need_start_piece, need_end_piece + 1):
                             if not handle.have_piece(p):
@@ -3374,7 +3371,7 @@ async def stream_video(
                         await asyncio.sleep(0.5)
                         disk_wait += 1
                     
-                    if disk_wait >= 120:
+                    if disk_wait >= 40:
                         logger.error(f"Timeout waiting for pieces {need_start_piece}-{need_end_piece}")
                         return
                 

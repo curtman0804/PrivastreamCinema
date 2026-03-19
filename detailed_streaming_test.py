@@ -15,8 +15,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Test configuration
-BACKEND_URL = "https://fire-stick-remote.preview.emergentagent.com"
-PUBLIC_URL = "https://fire-stick-remote.preview.emergentagent.com"
+BACKEND_URL = "https://fix-test-deploy.preview.emergentagent.com"
+PUBLIC_URL = "https://fix-test-deploy.preview.emergentagent.com"
 
 TEST_USER = {
     "username": "choyt",

@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Test configuration
-BACKEND_URL = "https://fire-stick-remote.preview.emergentagent.com"
+BACKEND_URL = "https://fix-test-deploy.preview.emergentagent.com"
 TORRENT_SERVER_URL = "http://localhost:8002"
 
 # Test credentials
