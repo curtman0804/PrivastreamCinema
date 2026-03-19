@@ -39,9 +39,12 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      // Token is invalid or expired - clear stored auth
-      console.log('[API] Auth error, clearing stored credentials');
+    // Only clear auth for explicit auth endpoints, NOT for all 401/403 responses
+    // This prevents losing the token due to transient errors on non-auth endpoints
+    const requestUrl = error.config?.url || '';
+    const isAuthEndpoint = requestUrl.includes('/auth/') || requestUrl.includes('/login');
+    if ((error.response?.status === 401 || error.response?.status === 403) && isAuthEndpoint) {
+      console.log('[API] Auth error on auth endpoint, clearing stored credentials');
       await AsyncStorage.removeItem('auth_token');
       await AsyncStorage.removeItem('user');
     }

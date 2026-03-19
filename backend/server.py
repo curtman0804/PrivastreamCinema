@@ -3184,7 +3184,6 @@ async def start_stream(
     info_hash: str, 
     fileIdx: Optional[int] = None,
     filename: Optional[str] = None,
-    current_user: User = Depends(get_current_user)
 ):
     """Start downloading a torrent via libtorrent (native peer discovery)"""
     try:
@@ -3199,7 +3198,7 @@ async def start_stream(
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/stream/status/{info_hash}")
-async def stream_status(info_hash: str, current_user: User = Depends(get_current_user)):
+async def stream_status(info_hash: str):
     """Get the status of a torrent download from libtorrent"""
     try:
         status = torrent_streamer.get_status(info_hash)
