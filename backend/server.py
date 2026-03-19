@@ -393,6 +393,7 @@ class TorrentStreamer:
             return {
                 "status": "ready" if is_ready else "buffering",
                 "progress": s.progress * 100,
+                "ready_progress": min(100, (downloaded_bytes / ready_threshold) * 100) if ready_threshold > 0 else 0,
                 "peers": s.num_peers,
                 "download_rate": s.download_rate,
                 "upload_rate": s.upload_rate,

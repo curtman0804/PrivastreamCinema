@@ -1315,7 +1315,13 @@ export default function PlayerScreen() {
       
       let pollInterval = 500;
       let pollCount = 0;
-      const MAX_POLL_BEFORE_FORCE = 8; // ~4 seconds of polling, then force playback
+      const MAX_POLL_BEFORE_FORCE = 6; // ~3 seconds, then force playback
+      let playbackStarted = false;
+      
+      // AGGRESSIVE: Set the video URL immediately after starting the torrent
+      // ExoPlayer will connect and buffer while the torrent downloads
+      // The backend video endpoint serves data as it becomes available
+      const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
@@ -1324,16 +1330,18 @@ export default function PlayerScreen() {
         try {
           const status = await api.stream.status(infoHash);
           
-          setDownloadProgress(status.progress || 0);
+          // Use ready_progress (0-100, progress toward playback readiness)
+          // instead of progress (0-100, progress of ENTIRE file download)
+          const readyPct = status.ready_progress ?? (status.progress || 0);
+          setDownloadProgress(readyPct);
           setPeers(status.peers || 0);
           setDownloadSpeed(status.download_rate || 0);
           
-          if (status.status === 'ready') {
+          if (status.status === 'ready' && !playbackStarted) {
+            playbackStarted = true;
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
             }
-            
-            const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
             
             // Start playback immediately - no pre-warm delay needed
             // ExoPlayer handles buffering natively
@@ -1362,20 +1370,21 @@ export default function PlayerScreen() {
             
             if (pollInterval < 1000) pollInterval = 1000;
             
-            // FORCE PLAYBACK after timeout - the video endpoint handles waiting internally
-            // This prevents the player from being stuck in "buffering" forever
-            if (pollCount >= MAX_POLL_BEFORE_FORCE && peerCount > 0) {
-              console.log(`[PLAYER] Force-starting playback after ${pollCount} polls with ${peerCount} peers`);
+            // FORCE PLAYBACK after ~3 seconds - don't wait for "ready"
+            // ExoPlayer handles its own buffering, and the backend streams as data arrives
+            if (pollCount >= MAX_POLL_BEFORE_FORCE && !playbackStarted) {
+              playbackStarted = true;
+              console.log(`[PLAYER] Force-starting playback after ${pollCount} polls (peers: ${peerCount})`);
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current);
               }
-              const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
+              videoRetryCountRef.current = 0;
               setStreamUrl(videoUrl);
               return;
             }
             
-            // After 30 seconds (60 polls at 500ms), give up if no peers
-            if (pollCount >= 60 && peerCount === 0) {
+            // After 20 seconds (40 polls at 500ms), give up if no peers
+            if (pollCount >= 40 && peerCount === 0) {
               console.log('[PLAYER] No peers found after 30s, giving up');
               setError('No peers found. Try a different stream.');
               setIsLoading(false);
