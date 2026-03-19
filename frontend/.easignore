@@ -9,11 +9,15 @@ ios/
 *.log
 *.tsbuildinfo
 .metro-health-check*
+.metro-cache/
 npm-debug.*
 yarn-debug.*
 yarn-error.*
 .DS_Store
-public/sync-files/
+public/
 __tests__/
 coverage/
 .ruff_cache/
+package-lock.json
+*.zip
+*.tar.gz
