@@ -376,10 +376,10 @@ class TorrentStreamer:
             video_size = video_file['size']
             downloaded_bytes = int(s.progress * video_size) if s.progress > 0 else 0
             
-            # FAST START: Need only ~3MB downloaded to start playback
+            # FAST START: Need only ~1MB downloaded to start playback
             # ExoPlayer handles its own buffering - we just need enough for it to
             # read the file header (moov atom for mp4, seekhead for mkv)
-            min_bytes_for_playback = 3 * 1024 * 1024  # 3MB - enough for headers
+            min_bytes_for_playback = 1 * 1024 * 1024  # 1MB - enough for headers
             ready_threshold = min_bytes_for_playback
             
             # Check if file exists and has content
@@ -3353,8 +3353,19 @@ async def stream_video(
                     need_start_piece = (file_offset + start) // piece_length
                     need_end_piece = (file_offset + end) // piece_length
                     
+                    # BOOST: Prioritize the pieces ExoPlayer is requesting RIGHT NOW
+                    try:
+                        priorities = handle.get_piece_priorities()
+                        for p in range(need_start_piece, min(need_end_piece + 1, len(priorities))):
+                            if priorities[p] < 7:
+                                priorities[p] = 7
+                        handle.prioritize_pieces(priorities)
+                    except:
+                        pass
+                    
                     disk_wait = 0
-                    while disk_wait < 20:  # Wait up to 10 seconds for pieces
+                    max_wait = 60  # 30 seconds max wait (60 * 0.5s)
+                    while disk_wait < max_wait:
                         all_ready = True
                         for p in range(need_start_piece, need_end_piece + 1):
                             if not handle.have_piece(p):
@@ -3364,7 +3375,7 @@ async def stream_video(
                         if all_ready:
                             break
                         
-                        # Log progress periodically
+                        # Log progress periodically (every 5 seconds)
                         if disk_wait % 10 == 0:
                             s = handle.status()
                             logger.info(f"Waiting for pieces {need_start_piece}-{need_end_piece}: peers={s.num_peers}, progress={s.progress*100:.1f}%")
@@ -3372,7 +3383,7 @@ async def stream_video(
                         await asyncio.sleep(0.5)
                         disk_wait += 1
                     
-                    if disk_wait >= 40:
+                    if disk_wait >= max_wait:
                         logger.error(f"Timeout waiting for pieces {need_start_piece}-{need_end_piece}")
                         return
                 

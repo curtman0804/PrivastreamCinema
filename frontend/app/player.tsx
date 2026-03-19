@@ -1313,18 +1313,11 @@ export default function PlayerScreen() {
       
       await api.stream.start(infoHash, validFileIdx, filename || undefined);
       
-      // INSTANT PLAYBACK: Set the video URL immediately after starting the torrent.
-      // Don't wait for polling — ExoPlayer handles its own buffering natively.
-      // The backend video endpoint serves partial content via range requests as data arrives.
       const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
-      console.log('[PLAYER] Setting video URL immediately (no polling wait):', videoUrl);
-      videoRetryCountRef.current = 0;
-      setStreamUrl(videoUrl);
-      
-      // Continue polling in background ONLY for progress UI (download %, peers, speed)
-      // This does NOT gate playback — it just updates the loading screen progress bar
-      let pollInterval = 500;
       let pollCount = 0;
+      let smoothProgress = 0; // Smooth progress for the fill animation (0-100)
+      let lastStatus = 'starting';
+      let videoUrlSet = false;
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
@@ -1332,51 +1325,87 @@ export default function PlayerScreen() {
         
         try {
           const status = await api.stream.status(infoHash);
+          const peerCount = status.peers || 0;
+          const dlRate = status.download_rate || 0;
+          setPeers(peerCount);
+          setDownloadSpeed(dlRate);
+          lastStatus = status.status;
           
-          // Update progress UI
-          const readyPct = status.ready_progress ?? (status.progress || 0);
-          setDownloadProgress(readyPct);
-          setPeers(status.peers || 0);
-          setDownloadSpeed(status.download_rate || 0);
+          // --- Smooth progress for loading bar fill ---
+          // During metadata: slowly creep 0→30%
+          // During buffering: map ready_progress 0-100 → 30→95%
+          // When ready: snap to 100%
+          if (status.status === 'downloading_metadata') {
+            // Slowly creep during metadata phase (max 30%)
+            smoothProgress = Math.min(smoothProgress + 1.5, 30);
+          } else if (status.status === 'buffering') {
+            const readyPct = status.ready_progress ?? 0;
+            // Map 0-100 ready_progress to 30-95 range
+            const targetProgress = 30 + (readyPct / 100) * 65;
+            // Ease toward target (never go backward)
+            smoothProgress = Math.max(smoothProgress, Math.min(smoothProgress + (targetProgress - smoothProgress) * 0.3, targetProgress));
+          } else if (status.status === 'ready') {
+            smoothProgress = 100;
+          }
+          setDownloadProgress(smoothProgress);
+          
+          // --- Set video URL for ExoPlayer as soon as we have metadata ---
+          // ExoPlayer will connect and start buffering while we keep showing the loading screen
+          if (!videoUrlSet && (status.status === 'buffering' || status.status === 'ready')) {
+            videoUrlSet = true;
+            console.log('[PLAYER] Metadata ready, setting video URL for ExoPlayer:', videoUrl);
+            videoRetryCountRef.current = 0;
+            setStreamUrl(videoUrl);
+          }
           
           if (status.status === 'not_found' || status.status === 'invalid') {
-            // Torrent disappeared — retry the whole stream start
             if (retryCount < MAX_RETRIES) {
               console.log(`[PLAYER] Stream not found, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
-              if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+              if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
               setTimeout(() => startTorrentStream(retryCount + 1), 2000);
               return;
             }
             setError('Stream unavailable. Try selecting a different stream.');
             setIsLoading(false);
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
             return;
           }
           
           if (status.status === 'ready') {
-            // Stream is fully ready — stop polling, ExoPlayer is already playing
-            console.log('[PLAYER] Stream fully ready, stopping background poll');
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            // If video URL still not set somehow, set it now
+            if (!videoUrlSet) {
+              videoUrlSet = true;
+              videoRetryCountRef.current = 0;
+              setStreamUrl(videoUrl);
+            }
+            console.log('[PLAYER] Stream ready, ExoPlayer will start when buffered enough');
+            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
             return;
           }
           
-          // After 60 seconds (120 polls at 500ms) with no peers, give up
-          if (pollCount >= 120 && (status.peers || 0) === 0) {
+          // Force set video URL after 2 seconds even if still downloading metadata
+          // ExoPlayer will retry internally
+          if (!videoUrlSet && pollCount >= 8) {
+            videoUrlSet = true;
+            console.log(`[PLAYER] Force-setting video URL after ${pollCount} polls`);
+            videoRetryCountRef.current = 0;
+            setStreamUrl(videoUrl);
+          }
+          
+          // After 60 seconds with no peers, give up
+          if (pollCount >= 240 && peerCount === 0) {
             console.log('[PLAYER] No peers found after 60s, giving up');
             setError('No peers found. Try a different stream.');
             setIsLoading(false);
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
             return;
           }
           
-          // Slow down polling after initial burst
-          if (pollCount > 10 && pollInterval < 1000) pollInterval = 1000;
-          if (pollCount > 30) pollInterval = 2000;
-          
-          pollIntervalRef.current = setTimeout(pollStatus, pollInterval) as any;
+          // Poll every 250ms for fast progress updates
+          pollIntervalRef.current = setTimeout(pollStatus, 250) as any;
         } catch (err) {
           console.error('Status poll error:', err);
-          pollIntervalRef.current = setTimeout(pollStatus, 2000) as any;
+          pollIntervalRef.current = setTimeout(pollStatus, 1000) as any;
         }
       };
       
@@ -1489,11 +1518,13 @@ export default function PlayerScreen() {
                   />
                   {infoHash && (
                   <View style={[styles.logoFillClip, { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }]}>
-                    <Image
-                      source={{ uri: logo }}
-                      style={styles.logoFilled}
-                      resizeMode="contain"
-                    />
+                    <View style={{ width: Dimensions.get('window').width * 0.8, maxWidth: 500, height: '100%' }}>
+                      <Image
+                        source={{ uri: logo }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="contain"
+                      />
+                    </View>
                   </View>
                   )}
                 </View>
@@ -1534,9 +1565,12 @@ export default function PlayerScreen() {
                         { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }
                       ]}
                     >
-                      <Text style={styles.titleFilled} numberOfLines={1}>
-                        {title || 'Loading...'}
-                      </Text>
+                      {/* Inner container matches full parent width so text position aligns with unfilled */}
+                      <View style={{ width: Dimensions.get('window').width - 48, alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <Text style={styles.titleFilled} numberOfLines={1}>
+                          {title || 'Loading...'}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                   )}
@@ -2097,7 +2131,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: 2,
     textAlign: 'center',
-    width: Dimensions.get('window').width - 48,
   },
   loadingStatusText: {
     color: '#FFFFFF',
