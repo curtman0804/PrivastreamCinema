@@ -376,12 +376,11 @@ class TorrentStreamer:
             video_size = video_file['size']
             downloaded_bytes = int(s.progress * video_size) if s.progress > 0 else 0
             
-            # FAST START: Need only ~2MB downloaded to start playback
-            min_bytes_for_playback = 2 * 1024 * 1024  # 2MB minimum - start ASAP
-            
-            # For very small files, use percentage instead
-            min_for_small_files = int(video_size * 0.02)  # 2% for small files
-            ready_threshold = max(min_bytes_for_playback, min_for_small_files)
+            # FAST START: Need only ~3MB downloaded to start playback
+            # ExoPlayer handles its own buffering - we just need enough for it to
+            # read the file header (moov atom for mp4, seekhead for mkv)
+            min_bytes_for_playback = 3 * 1024 * 1024  # 3MB - enough for headers
+            ready_threshold = min_bytes_for_playback
             
             # Check if file exists and has content
             video_path = data.get('video_path')

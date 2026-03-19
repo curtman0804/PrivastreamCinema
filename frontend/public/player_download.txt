@@ -1315,7 +1315,7 @@ export default function PlayerScreen() {
       
       let pollInterval = 500;
       let pollCount = 0;
-      const MAX_POLL_BEFORE_FORCE = 20; // ~10 seconds of polling, then force playback
+      const MAX_POLL_BEFORE_FORCE = 8; // ~4 seconds of polling, then force playback
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
@@ -1335,20 +1335,10 @@ export default function PlayerScreen() {
             
             const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
             
-            // Pre-warm: verify the video URL is accessible before setting it
-            // This prevents ExoPlayer from failing on a cold URL
-            console.log('[PLAYER] Stream ready, pre-warming video URL...');
-            try {
-              const baseUrl = Platform.OS === 'web' ? '' : (process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '');
-              const warmUrl = `${baseUrl}/api/stream/status/${infoHash}`;
-              // Wait a moment for initial pieces to be available at the start of the file
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              console.log('[PLAYER] Pre-warm complete, starting playback');
-            } catch (warmErr) {
-              console.log('[PLAYER] Pre-warm failed, starting anyway:', warmErr);
-            }
-            
-            videoRetryCountRef.current = 0; // Reset retry counter for new URL
+            // Start playback immediately - no pre-warm delay needed
+            // ExoPlayer handles buffering natively
+            console.log('[PLAYER] Stream ready, starting playback immediately');
+            videoRetryCountRef.current = 0;
             setStreamUrl(videoUrl);
             return;
           } else if (status.status === 'not_found' || status.status === 'invalid') {
@@ -1384,9 +1374,9 @@ export default function PlayerScreen() {
               return;
             }
             
-            // After 60 seconds (120 polls at 500ms), give up if no peers
-            if (pollCount >= 120 && peerCount === 0) {
-              console.log('[PLAYER] No peers found after 60s, giving up');
+            // After 30 seconds (60 polls at 500ms), give up if no peers
+            if (pollCount >= 60 && peerCount === 0) {
+              console.log('[PLAYER] No peers found after 30s, giving up');
               setError('No peers found. Try a different stream.');
               setIsLoading(false);
               if (pollIntervalRef.current) {
