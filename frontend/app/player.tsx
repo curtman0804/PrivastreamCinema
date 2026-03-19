@@ -264,6 +264,30 @@ export default function PlayerScreen() {
   const [isLiveTV, setIsLiveTV] = useState(false);
   const [hasAudioError, setHasAudioError] = useState(false);
   
+  // Pulsating animation for loading title
+  const pulseAnim = useRef(new Animated.Value(0.3)).current;
+  
+  useEffect(() => {
+    if (isLoading && !error) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0.3,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    }
+  }, [isLoading, error]);
+  
   // Fallback streams for auto-retry
   const [fallbackUrls, setFallbackUrls] = useState<string[]>([]);
   const [currentStreamIndex, setCurrentStreamIndex] = useState(-1);
@@ -1378,7 +1402,8 @@ export default function PlayerScreen() {
           
           {/* Content */}
           <View style={styles.loadingContent}>
-            {/* Logo/Title as Loading Bar - Exact Stremio Style */}
+            {/* Logo/Title as Loading Bar - Exact Stremio Style with Pulse */}
+            <Animated.View style={{ opacity: pulseAnim, alignItems: 'center', width: '100%' }}>
             {logo ? (
               // Use the actual movie logo image with fill effect
               Platform.OS === 'web' ? (
@@ -1492,6 +1517,7 @@ export default function PlayerScreen() {
                 </View>
               )
             )}
+            </Animated.View>
             
             {/* Minimal loading indicator - no text, just a subtle spinner below the title */}
             {!infoHash && (
