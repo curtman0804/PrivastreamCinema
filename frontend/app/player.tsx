@@ -14,6 +14,7 @@ import {
   Image,
   Pressable,
   DeviceEventEmitter,
+  findNodeHandle,
 } from 'react-native';
 
 // Safe TV event handler imports - these may not exist in all RN versions
@@ -31,6 +32,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/api/client';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import Constants from 'expo-constants';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Modal, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -103,6 +105,9 @@ function TVFocusButton({
 }
 
 // Seekable Progress Bar Component for TV - handles left/right D-pad for seeking
+// CRITICAL: Uses nextFocusLeft/nextFocusRight pointing to self to TRAP focus,
+// so D-pad left/right doesn't move focus away. Instead, the DeviceEventEmitter
+// handler detects left/right when this bar is focused and seeks the video.
 function SeekableProgressBar({
   position,
   duration,
@@ -119,20 +124,48 @@ function SeekableProgressBar({
   focusedStyle?: any;
 }) {
   const [isFocused, setIsFocused] = useState(false);
+  const barRef = useRef<View>(null);
+  const [selfTag, setSelfTag] = useState<number>(0);
+  
+  // Get native tag for self-referencing focus trap
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (barRef.current) {
+        try {
+          const tag = findNodeHandle(barRef.current);
+          if (tag && tag > 0) {
+            setSelfTag(tag);
+          }
+        } catch (e) {
+          // findNodeHandle not available
+        }
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, []);
   
   const percentage = duration > 0 ? (position / duration) * 100 : 0;
   
+  // Build focus trap props - when focused, left/right stays on this bar
+  const focusTrapProps: any = {};
+  if (selfTag > 0) {
+    focusTrapProps.nextFocusLeft = selfTag;
+    focusTrapProps.nextFocusRight = selfTag;
+  }
+  
   return (
     <Pressable
+      ref={barRef}
       style={[styles.progressBarContainer, style, isFocused && (focusedStyle || styles.progressBarFocused)]}
       onFocus={() => { setIsFocused(true); onFocusChange?.(true); }}
       onBlur={() => { setIsFocused(false); onFocusChange?.(false); }}
+      {...focusTrapProps}
     >
       <View style={[styles.progressBarFill, { width: `${percentage}%` }]} />
       <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
       {isFocused && (
         <View style={styles.seekHint}>
-          <Text style={styles.seekHintText}>{'<< >> Seek  |  Controls'}</Text>
+          <Text style={styles.seekHintText}>◀ -10s  |  +10s ▶</Text>
         </View>
       )}
     </Pressable>
@@ -263,6 +296,8 @@ export default function PlayerScreen() {
   const [downloadSpeed, setDownloadSpeed] = useState(0);
   const [isLiveTV, setIsLiveTV] = useState(false);
   const [hasAudioError, setHasAudioError] = useState(false);
+  const videoRetryCountRef = useRef(0);
+  const maxVideoRetries = 5;
   
   // Pulsating animation for loading title
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
@@ -1299,6 +1334,21 @@ export default function PlayerScreen() {
             }
             
             const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
+            
+            // Pre-warm: verify the video URL is accessible before setting it
+            // This prevents ExoPlayer from failing on a cold URL
+            console.log('[PLAYER] Stream ready, pre-warming video URL...');
+            try {
+              const baseUrl = Platform.OS === 'web' ? '' : (process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '');
+              const warmUrl = `${baseUrl}/api/stream/status/${infoHash}`;
+              // Wait a moment for initial pieces to be available at the start of the file
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              console.log('[PLAYER] Pre-warm complete, starting playback');
+            } catch (warmErr) {
+              console.log('[PLAYER] Pre-warm failed, starting anyway:', warmErr);
+            }
+            
+            videoRetryCountRef.current = 0; // Reset retry counter for new URL
             setStreamUrl(videoUrl);
             return;
           } else if (status.status === 'not_found' || status.status === 'invalid') {
@@ -1675,11 +1725,25 @@ export default function PlayerScreen() {
                 isMuted={false}
                 onPlaybackStatusUpdate={handlePlaybackStatus}
                 onError={(error) => {
-                  console.log('[PLAYER] Video error:', error);
-                  if (fallbackUrls.length > currentStreamIndex + 1) {
+                  console.log(`[PLAYER] Video error (attempt ${videoRetryCountRef.current + 1}/${maxVideoRetries}):`, error);
+                  
+                  // Retry the same stream URL multiple times before giving up
+                  if (videoRetryCountRef.current < maxVideoRetries) {
+                    videoRetryCountRef.current += 1;
+                    const delay = videoRetryCountRef.current * 2000; // 2s, 4s, 6s, 8s, 10s
+                    console.log(`[PLAYER] Retrying video load in ${delay}ms...`);
+                    
+                    // Reset the streamUrl to force re-render of Video component
+                    const currentUrl = streamUrl;
+                    setStreamUrl(null);
+                    setTimeout(() => {
+                      setStreamUrl(currentUrl);
+                    }, delay);
+                  } else if (fallbackUrls.length > currentStreamIndex + 1) {
+                    videoRetryCountRef.current = 0; // Reset for next stream
                     tryNextStream();
                   } else {
-                    setError('Failed to play video. All streams failed.');
+                    setError('Failed to play video. Please try a different stream.');
                     setHasAudioError(true);
                   }
                 }}

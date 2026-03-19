@@ -994,7 +994,7 @@ async def get_addon_streams(
     stream_url = f"{base_url}/stream/{content_type}/{content_id}.json"
     
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=12.0) as client:
             response = await client.get(stream_url)
             if response.status_code == 200:
                 return response.json()

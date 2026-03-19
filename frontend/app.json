@@ -25,7 +25,8 @@
       },
       "edgeToEdgeEnabled": false,
       "package": "com.privastream.cinema",
-      "allowBackup": false
+      "allowBackup": false,
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro",

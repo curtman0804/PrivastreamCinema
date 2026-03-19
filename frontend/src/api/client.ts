@@ -22,7 +22,7 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000,
+  timeout: 15000,  // Reduced from 30s for faster failure/retry
 });
 
 // Add auth token to requests
@@ -396,7 +396,7 @@ export const api = {
       const CONFIG = 'sort=seeders|qualityfilter=480p,scr,cam';
       const torrentioUrl = `${TORRENTIO_BASE}/${CONFIG}/stream/${type}/${id}.json`;
       
-      // 3-second timeout wrapper
+      // 2-second timeout wrapper (reduced for speed)
       const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
         Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
       
@@ -413,7 +413,7 @@ export const api = {
             if (!result?.streams?.length) throw new Error('No streams');
             console.log(`[TORRENTIO] allorigins: ${result.streams.length} streams`);
             return result;
-          }), 3000),
+          }), 2500),
           withTimeout(fetch(torrentioUrl, {
             method: 'GET', headers: { 'Accept': 'application/json' },
           }).then(async r => {
@@ -422,12 +422,12 @@ export const api = {
             if (!result?.streams?.length) throw new Error('No streams');
             console.log(`[TORRENTIO] direct: ${result.streams.length} streams`);
             return result;
-          }), 3000),
+          }), 2500),
           withTimeout(apiClient.get(`/api/addon-proxy/torrentio/${type}/${id}`).then(r => {
             if (!r.data?.streams?.length) throw new Error('No streams');
             console.log(`[TORRENTIO] backend proxy: ${r.data.streams.length} streams`);
             return r.data;
-          }), 3000),
+          }), 2500),
         ];
         
         try {
@@ -508,7 +508,7 @@ export const api = {
       const TPB_BASE = 'https://thepiratebay-plus.strem.fun';
       const tpbUrl = `${TPB_BASE}/stream/${type}/${id}.json`;
       
-      // 3-second timeout wrapper
+      // 2-second timeout wrapper (reduced for speed)
       const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
         Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
       
@@ -525,7 +525,7 @@ export const api = {
             if (!result?.streams?.length) throw new Error('No streams');
             console.log(`[TPB+] allorigins: ${result.streams.length} streams`);
             return result;
-          }), 3000),
+          }), 2500),
           withTimeout(fetch(tpbUrl, {
             method: 'GET', headers: { 'Accept': 'application/json' },
           }).then(async r => {
@@ -534,12 +534,12 @@ export const api = {
             if (!result?.streams?.length) throw new Error('No streams');
             console.log(`[TPB+] direct: ${result.streams.length} streams`);
             return result;
-          }), 3000),
+          }), 2500),
           withTimeout(apiClient.get(`/api/addon-proxy/tpb/${type}/${id}`).then(r => {
             if (!r.data?.streams?.length) throw new Error('No streams');
             console.log(`[TPB+] backend proxy: ${r.data.streams.length} streams`);
             return r.data;
-          }), 3000),
+          }), 2500),
         ];
         
         try {

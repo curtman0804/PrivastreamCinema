@@ -14,6 +14,7 @@ import {
   Image,
   Pressable,
   DeviceEventEmitter,
+  findNodeHandle,
 } from 'react-native';
 
 // Safe TV event handler imports - these may not exist in all RN versions
@@ -31,6 +32,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/api/client';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import Constants from 'expo-constants';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Modal, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -103,35 +105,67 @@ function TVFocusButton({
 }
 
 // Seekable Progress Bar Component for TV - handles left/right D-pad for seeking
+// CRITICAL: Uses nextFocusLeft/nextFocusRight pointing to self to TRAP focus,
+// so D-pad left/right doesn't move focus away. Instead, the DeviceEventEmitter
+// handler detects left/right when this bar is focused and seeks the video.
 function SeekableProgressBar({
   position,
   duration,
   onSeek,
+  onFocusChange,
   style,
   focusedStyle,
 }: {
   position: number;
   duration: number;
   onSeek: (newPosition: number) => void;
+  onFocusChange?: (focused: boolean) => void;
   style?: any;
   focusedStyle?: any;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-  const seekAmount = 10000; // 10 seconds in ms
+  const barRef = useRef<View>(null);
+  const [selfTag, setSelfTag] = useState<number>(0);
+  
+  // Get native tag for self-referencing focus trap
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (barRef.current) {
+        try {
+          const tag = findNodeHandle(barRef.current);
+          if (tag && tag > 0) {
+            setSelfTag(tag);
+          }
+        } catch (e) {
+          // findNodeHandle not available
+        }
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, []);
   
   const percentage = duration > 0 ? (position / duration) * 100 : 0;
   
+  // Build focus trap props - when focused, left/right stays on this bar
+  const focusTrapProps: any = {};
+  if (selfTag > 0) {
+    focusTrapProps.nextFocusLeft = selfTag;
+    focusTrapProps.nextFocusRight = selfTag;
+  }
+  
   return (
     <Pressable
+      ref={barRef}
       style={[styles.progressBarContainer, style, isFocused && (focusedStyle || styles.progressBarFocused)]}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
+      onFocus={() => { setIsFocused(true); onFocusChange?.(true); }}
+      onBlur={() => { setIsFocused(false); onFocusChange?.(false); }}
+      {...focusTrapProps}
     >
       <View style={[styles.progressBarFill, { width: `${percentage}%` }]} />
       <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
       {isFocused && (
         <View style={styles.seekHint}>
-          <Text style={styles.seekHintText}>Use ⏪ ⏩ buttons to seek</Text>
+          <Text style={styles.seekHintText}>◀ -10s  |  +10s ▶</Text>
         </View>
       )}
     </Pressable>
@@ -255,13 +289,39 @@ export default function PlayerScreen() {
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [loadingStatus, setLoadingStatus] = useState('Initializing...');
+  const [loadingStatus, setLoadingStatus] = useState('');
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [peers, setPeers] = useState(0);
   const [downloadSpeed, setDownloadSpeed] = useState(0);
   const [isLiveTV, setIsLiveTV] = useState(false);
   const [hasAudioError, setHasAudioError] = useState(false);
+  const videoRetryCountRef = useRef(0);
+  const maxVideoRetries = 5;
+  
+  // Pulsating animation for loading title
+  const pulseAnim = useRef(new Animated.Value(0.3)).current;
+  
+  useEffect(() => {
+    if (isLoading && !error) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0.3,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    }
+  }, [isLoading, error]);
   
   // Fallback streams for auto-retry
   const [fallbackUrls, setFallbackUrls] = useState<string[]>([]);
@@ -801,10 +861,14 @@ export default function PlayerScreen() {
   // Handle TV remote / hardware button events via native dispatchKeyEvent
   // This uses our custom config plugin (withTVKeyEvents) that intercepts
   // ALL key events at the Activity level and emits them via DeviceEventEmitter
+  // 
+  // CRITICAL: Empty dependency array - set up ONCE on mount.
+  // Uses refs (isPlayingRef, positionRef, durationRef) for current state values
+  // to avoid constant teardown/rebuild that drops events.
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     
-    console.log('[TV] Setting up native key event listener');
+    console.log('[TV] Setting up native key event listener (stable, ref-based)');
     
     const subscription = DeviceEventEmitter.addListener('onTVKeyEvent', (evt: any) => {
       if (!evt || !evt.eventType) return;
@@ -812,39 +876,67 @@ export default function PlayerScreen() {
       console.log('[TV] Key event:', evt.eventType, 'keyCode:', evt.keyCode);
       
       // Show controls on any button press
-      showControlsWithTimeout();
+      showControlsWithTimeoutRef.current?.();
       
       switch (evt.eventType) {
         case 'playPause':
           // Hardware play/pause button on Fire Stick remote
-          console.log('[TV] Play/Pause - isPlaying:', isPlaying);
-          togglePlayPause();
+          console.log('[TV] Play/Pause - isPlaying:', isPlayingRef.current);
+          if (videoRef.current) {
+            if (isPlayingRef.current) {
+              videoRef.current.pauseAsync();
+            } else {
+              videoRef.current.playAsync();
+            }
+          }
           break;
         case 'play':
-          if (videoRef.current && !isPlaying) {
+          console.log('[TV] Play');
+          if (videoRef.current && !isPlayingRef.current) {
             videoRef.current.playAsync();
           }
           break;
         case 'pause':
-          if (videoRef.current && isPlaying) {
+          console.log('[TV] Pause');
+          if (videoRef.current && isPlayingRef.current) {
             videoRef.current.pauseAsync();
           }
           break;
         case 'rewind':
-          // Hardware rewind button on Fire Stick remote
-          console.log('[TV] Rewind -10s');
-          seekToMs(position - 10000);
+          // Hardware rewind button on Fire Stick remote - skip back 10s
+          console.log('[TV] Rewind -10s from', positionRef.current);
+          if (videoRef.current) {
+            const newPos = Math.max(0, positionRef.current - 10000);
+            videoRef.current.setPositionAsync(newPos);
+          }
           break;
         case 'fastForward':
-          // Hardware fast-forward button on Fire Stick remote
-          console.log('[TV] FastForward +10s');
-          seekToMs(position + 10000);
+          // Hardware fast-forward button on Fire Stick remote - skip forward 10s
+          console.log('[TV] FastForward +10s from', positionRef.current);
+          if (videoRef.current) {
+            const newPos = Math.min(durationRef.current, positionRef.current + 10000);
+            videoRef.current.setPositionAsync(newPos);
+          }
           break;
         case 'left':
+          // If progress bar is focused, seek backward 10s
+          if (progressBarFocusedRef.current && videoRef.current) {
+            console.log('[TV] Seek Left -10s (progress bar focused)');
+            const newPos = Math.max(0, positionRef.current - 10000);
+            videoRef.current.setPositionAsync(newPos);
+          }
+          break;
         case 'right':
+          // If progress bar is focused, seek forward 10s
+          if (progressBarFocusedRef.current && videoRef.current) {
+            console.log('[TV] Seek Right +10s (progress bar focused)');
+            const newPos = Math.min(durationRef.current, positionRef.current + 10000);
+            videoRef.current.setPositionAsync(newPos);
+          }
+          break;
+        case 'select':
         case 'up':
         case 'down':
-        case 'select':
           // D-pad events - just show controls (focus navigation handled natively)
           break;
       }
@@ -858,17 +950,28 @@ export default function PlayerScreen() {
         tvEventHandler.enable(null, (cmp: any, evt: any) => {
           if (!evt || !evt.eventType) return;
           console.log('[TV Legacy] Event:', evt.eventType);
-          // Same handling as above
-          showControlsWithTimeout();
+          showControlsWithTimeoutRef.current?.();
           switch (evt.eventType) {
             case 'playPause':
-              togglePlayPause();
+              if (videoRef.current) {
+                if (isPlayingRef.current) {
+                  videoRef.current.pauseAsync();
+                } else {
+                  videoRef.current.playAsync();
+                }
+              }
               break;
             case 'rewind':
-              seekToMs(position - 10000);
+              if (videoRef.current) {
+                const newPos = Math.max(0, positionRef.current - 10000);
+                videoRef.current.setPositionAsync(newPos);
+              }
               break;
             case 'fastForward':
-              seekToMs(position + 10000);
+              if (videoRef.current) {
+                const newPos = Math.min(durationRef.current, positionRef.current + 10000);
+                videoRef.current.setPositionAsync(newPos);
+              }
               break;
           }
         });
@@ -883,7 +986,7 @@ export default function PlayerScreen() {
         try { tvEventHandler.disable(); } catch (e) {}
       }
     };
-  }, [isPlaying, showControls, position]);
+  }, []); // EMPTY deps - uses refs for all mutable state
   
   // Fade controls in/out
   const fadeControls = (show: boolean) => {
@@ -935,6 +1038,9 @@ export default function PlayerScreen() {
     }, hideTimeout);
   };
   
+  // Keep the ref in sync so TV event handler (empty deps) can call it
+  showControlsWithTimeoutRef.current = showControlsWithTimeout;
+  
   // Initial show controls with auto-hide
   useEffect(() => {
     if (streamUrl && !error && !isLoading) {
@@ -957,7 +1063,7 @@ export default function PlayerScreen() {
       setPlaybackStarted(false);
       setError(null);
       setIsLoading(true);
-      setLoadingStatus(`Trying stream ${nextIndex + 1}/${fallbackUrls.length}...`);
+      setLoadingStatus('');
       
       // Start new timeout for this stream
       if (playbackTimeoutRef.current) {
@@ -1166,8 +1272,12 @@ export default function PlayerScreen() {
     
     if (directUrl) {
       setStreamUrl(directUrl);
-      setIsLoading(false);
-      setLoadingStatus('');
+      if (isLive === 'true') {
+        // For live TV, keep loading state until video actually starts playing
+        setIsLoading(true);
+      } else {
+        setIsLoading(false);
+      }
     } else if (url) {
       setStreamUrl(url);
       setIsLoading(false);
@@ -1187,24 +1297,29 @@ export default function PlayerScreen() {
     };
   }, [url, infoHash, directUrl, isLive, fallbackStreams]);
 
-  const startTorrentStream = async () => {
+  const startTorrentStream = async (retryCount = 0) => {
     if (!infoHash) return;
 
+    const MAX_RETRIES = 3;
+
     try {
-      setLoadingStatus('Starting torrent engine...');
+      // No text status - just the title filling
       
       // Parse fileIdx if provided (for selecting specific episode in season packs)
       // Handle empty string, null, undefined, and NaN cases
       const parsedFileIdx = fileIdx && fileIdx !== '' ? parseInt(fileIdx, 10) : undefined;
       const validFileIdx = parsedFileIdx !== undefined && !isNaN(parsedFileIdx) ? parsedFileIdx : undefined;
-      console.log(`[PLAYER] Starting torrent with fileIdx=${validFileIdx}, filename=${filename || 'auto'}`);
+      console.log(`[PLAYER] Starting torrent with fileIdx=${validFileIdx}, filename=${filename || 'auto'} (attempt ${retryCount + 1})`);
       
       await api.stream.start(infoHash, validFileIdx, filename || undefined);
       
       let pollInterval = 500;
+      let pollCount = 0;
+      const MAX_POLL_BEFORE_FORCE = 20; // ~10 seconds of polling, then force playback
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
+        pollCount++;
         
         try {
           const status = await api.stream.status(infoHash);
@@ -1213,44 +1328,78 @@ export default function PlayerScreen() {
           setPeers(status.peers || 0);
           setDownloadSpeed(status.download_rate || 0);
           
-          if (status.status === 'downloading_metadata') {
-            const peerCount = status.peers || 0;
-            if (peerCount === 0) {
-              setLoadingStatus('Searching for peers...');
-            } else {
-              setLoadingStatus(`Found ${peerCount} peers, getting file info...`);
-            }
-          } else if (status.status === 'buffering') {
-            const speedMB = ((status.download_rate || 0) / 1024 / 1024).toFixed(1);
-            const downloaded = status.downloaded ? (status.downloaded / (1024 * 1024)).toFixed(1) : '0';
-            const threshold = status.ready_threshold_mb ? status.ready_threshold_mb.toFixed(1) : '3';
-            setLoadingStatus(`Buffering ${downloaded}MB / ${threshold}MB (${speedMB} MB/s)`);
-            
-            if (pollInterval < 1000) pollInterval = 1000;
-          } else if (status.status === 'ready') {
+          if (status.status === 'ready') {
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
             }
             
-            setLoadingStatus('Starting playback...');
-            // Pass fileIdx to getVideoUrl for file selection
             const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
+            
+            // Pre-warm: verify the video URL is accessible before setting it
+            // This prevents ExoPlayer from failing on a cold URL
+            console.log('[PLAYER] Stream ready, pre-warming video URL...');
+            try {
+              const baseUrl = Platform.OS === 'web' ? '' : (process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '');
+              const warmUrl = `${baseUrl}/api/stream/status/${infoHash}`;
+              // Wait a moment for initial pieces to be available at the start of the file
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              console.log('[PLAYER] Pre-warm complete, starting playback');
+            } catch (warmErr) {
+              console.log('[PLAYER] Pre-warm failed, starting anyway:', warmErr);
+            }
+            
+            videoRetryCountRef.current = 0; // Reset retry counter for new URL
             setStreamUrl(videoUrl);
-            // Keep isLoading true - it will be set to false when video actually starts playing
-            // This keeps the Stremio loading screen visible until playback begins
             return;
           } else if (status.status === 'not_found' || status.status === 'invalid') {
-            setError('Failed to start. Try selecting a different stream with more seeders.');
+            // Retry the whole stream start if we haven't exhausted retries
+            if (retryCount < MAX_RETRIES) {
+              console.log(`[PLAYER] Stream not found, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+              }
+              setTimeout(() => startTorrentStream(retryCount + 1), 2000);
+              return;
+            }
+            setError('Stream unavailable. Try selecting a different stream.');
             setIsLoading(false);
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
             }
             return;
+          } else if (status.status === 'buffering') {
+            const peerCount = status.peers || 0;
+            
+            if (pollInterval < 1000) pollInterval = 1000;
+            
+            // FORCE PLAYBACK after timeout - the video endpoint handles waiting internally
+            // This prevents the player from being stuck in "buffering" forever
+            if (pollCount >= MAX_POLL_BEFORE_FORCE && peerCount > 0) {
+              console.log(`[PLAYER] Force-starting playback after ${pollCount} polls with ${peerCount} peers`);
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+              }
+              const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
+              setStreamUrl(videoUrl);
+              return;
+            }
+            
+            // After 60 seconds (120 polls at 500ms), give up if no peers
+            if (pollCount >= 120 && peerCount === 0) {
+              console.log('[PLAYER] No peers found after 60s, giving up');
+              setError('No peers found. Try a different stream.');
+              setIsLoading(false);
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+              }
+              return;
+            }
           }
           
           pollIntervalRef.current = setTimeout(pollStatus, pollInterval) as any;
         } catch (err) {
           console.error('Status poll error:', err);
+          // On poll error, retry with backoff instead of giving up
           pollIntervalRef.current = setTimeout(pollStatus, 2000) as any;
         }
       };
@@ -1259,6 +1408,12 @@ export default function PlayerScreen() {
       
     } catch (err: any) {
       console.error('Stream start error:', err);
+      // Auto-retry on network errors (502, 520, etc.)
+      if (retryCount < MAX_RETRIES) {
+        console.log(`[PLAYER] Stream start failed, retrying in 3s (${retryCount + 1}/${MAX_RETRIES})...`);
+        setTimeout(() => startTorrentStream(retryCount + 1), 3000);
+        return;
+      }
       setError(err.message || 'Failed to start stream');
       setIsLoading(false);
     }
@@ -1297,7 +1452,8 @@ export default function PlayerScreen() {
           
           {/* Content */}
           <View style={styles.loadingContent}>
-            {/* Logo/Title as Loading Bar - Exact Stremio Style */}
+            {/* Logo/Title as Loading Bar - Exact Stremio Style with Pulse */}
+            <Animated.View style={{ opacity: pulseAnim, alignItems: 'center', width: '100%' }}>
             {logo ? (
               // Use the actual movie logo image with fill effect
               Platform.OS === 'web' ? (
@@ -1352,9 +1508,10 @@ export default function PlayerScreen() {
                 <View style={styles.logoWrapper}>
                   <Image
                     source={{ uri: logo }}
-                    style={styles.logoUnfilled}
+                    style={[styles.logoUnfilled, !infoHash && { opacity: 1 }]}
                     resizeMode="contain"
                   />
+                  {infoHash && (
                   <View style={[styles.logoFillClip, { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }]}>
                     <Image
                       source={{ uri: logo }}
@@ -1362,6 +1519,7 @@ export default function PlayerScreen() {
                       resizeMode="contain"
                     />
                   </View>
+                  )}
                 </View>
               )
             ) : (
@@ -1389,9 +1547,10 @@ export default function PlayerScreen() {
                 </div>
               ) : (
                 <View style={styles.titleWrapper}>
-                  <Text style={styles.titleUnfilled} numberOfLines={1} adjustsFontSizeToFit>
+                  <Text style={[styles.titleUnfilled, !infoHash && { opacity: 1 }]} numberOfLines={1} adjustsFontSizeToFit>
                     {title || 'Loading...'}
                   </Text>
+                  {infoHash && (
                   <View style={styles.titleFillContainer}>
                     <View 
                       style={[
@@ -1404,25 +1563,16 @@ export default function PlayerScreen() {
                       </Text>
                     </View>
                   </View>
+                  )}
                 </View>
               )
             )}
+            </Animated.View>
             
-            {/* Stats Row - Only show for torrents */}
-            {infoHash && downloadProgress < 100 && (
-              <View style={[styles.loadingStatsRow, { marginTop: 40 }]}>
-                <View style={styles.loadingStat}>
-                  <Ionicons name="people-outline" size={14} color="rgba(255,255,255,0.6)" />
-                  <Text style={styles.loadingStatText}>{peers}</Text>
-                </View>
-                <View style={styles.loadingStat}>
-                  <Ionicons name="arrow-down-outline" size={14} color="rgba(255,255,255,0.6)" />
-                  <Text style={styles.loadingStatText}>{formatSpeed(downloadSpeed)}</Text>
-                </View>
-                <View style={styles.loadingStat}>
-                  <Ionicons name="disc-outline" size={14} color="rgba(255,255,255,0.6)" />
-                  <Text style={styles.loadingStatText}>{downloadProgress.toFixed(0)}%</Text>
-                </View>
+            {/* Minimal loading indicator - no text, just a subtle spinner below the title */}
+            {!infoHash && (
+              <View style={{ marginTop: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#B8A05C" />
               </View>
             )}
           </View>
@@ -1435,16 +1585,9 @@ export default function PlayerScreen() {
           <Ionicons name="warning-outline" size={48} color="#ff6b6b" />
           <Text style={styles.errorText}>{error}</Text>
           
-          <TouchableOpacity 
-            style={[styles.button, { backgroundColor: '#B8A05C', marginBottom: 12 }]} 
-            onPress={openInExternalPlayer}
-          >
-            <Ionicons name="open-outline" size={20} color="#000" style={{ marginRight: 8 }} />
-            <Text style={[styles.buttonText, { color: '#000' }]}>Open in External Player</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.button} onPress={handleBack}>
-            <Text style={styles.buttonText}>Go Back</Text>
+          <TouchableOpacity style={[styles.button, { backgroundColor: '#B8A05C', marginTop: 12 }]} onPress={handleBack}>
+            <Ionicons name="arrow-back" size={20} color="#000" style={{ marginRight: 8 }} />
+            <Text style={[styles.buttonText, { color: '#000' }]}>Go Back</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1567,6 +1710,9 @@ export default function PlayerScreen() {
                 ref={videoRef}
                 source={{ 
                   uri: streamUrl,
+                  // CRITICAL: Forces ExoPlayer to use HLS media source for redirect URLs
+                  // Without this, URLs without .m3u8 extension (like redirects) fail
+                  overrideFileExtensionAndroid: (isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true') ? 'm3u8' : undefined,
                   headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                   },
@@ -1579,11 +1725,25 @@ export default function PlayerScreen() {
                 isMuted={false}
                 onPlaybackStatusUpdate={handlePlaybackStatus}
                 onError={(error) => {
-                  console.log('[PLAYER] Video error:', error);
-                  if (fallbackUrls.length > currentStreamIndex + 1) {
+                  console.log(`[PLAYER] Video error (attempt ${videoRetryCountRef.current + 1}/${maxVideoRetries}):`, error);
+                  
+                  // Retry the same stream URL multiple times before giving up
+                  if (videoRetryCountRef.current < maxVideoRetries) {
+                    videoRetryCountRef.current += 1;
+                    const delay = videoRetryCountRef.current * 2000; // 2s, 4s, 6s, 8s, 10s
+                    console.log(`[PLAYER] Retrying video load in ${delay}ms...`);
+                    
+                    // Reset the streamUrl to force re-render of Video component
+                    const currentUrl = streamUrl;
+                    setStreamUrl(null);
+                    setTimeout(() => {
+                      setStreamUrl(currentUrl);
+                    }, delay);
+                  } else if (fallbackUrls.length > currentStreamIndex + 1) {
+                    videoRetryCountRef.current = 0; // Reset for next stream
                     tryNextStream();
                   } else {
-                    setError('Failed to play video. All streams failed.');
+                    setError('Failed to play video. Please try a different stream.');
                     setHasAudioError(true);
                   }
                 }}
@@ -1660,6 +1820,7 @@ export default function PlayerScreen() {
                     position={position}
                     duration={duration}
                     onSeek={seekToMs}
+                    onFocusChange={(focused: boolean) => { progressBarFocusedRef.current = focused; }}
                   />
                   <Text style={styles.timeText}>{formatRemainingTime(position, duration)}</Text>
                 </View>
