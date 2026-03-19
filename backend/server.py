@@ -3197,6 +3197,32 @@ async def start_stream(
         logger.error(f"Error starting stream: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.post("/stream/prewarm/{info_hash}")
+async def prewarm_stream(info_hash: str):
+    """Pre-warm a torrent: start downloading metadata in background without blocking.
+    Called from the details/stream selection page so the torrent is ready when user taps play.
+    Returns immediately - no waiting for metadata or pieces."""
+    try:
+        # Just ensure the session exists - libtorrent will start metadata download
+        # in the background. This is fire-and-forget.
+        existing = torrent_streamer.sessions.get(info_hash.lower())
+        if existing:
+            # Already pre-warming or ready
+            status = torrent_streamer.get_status(info_hash)
+            return {
+                "status": "already_warming",
+                "torrent_status": status.get("status", "unknown"),
+                "peers": status.get("peers", 0),
+            }
+        
+        torrent_streamer.get_session(info_hash)
+        logger.info(f"Pre-warming torrent {info_hash}")
+        return {"status": "warming", "info_hash": info_hash}
+    except Exception as e:
+        # Don't fail hard on prewarm - it's just an optimization
+        logger.warning(f"Prewarm failed for {info_hash}: {e}")
+        return {"status": "prewarm_failed", "error": str(e)}
+
 @api_router.get("/stream/status/{info_hash}")
 async def stream_status(info_hash: str):
     """Get the status of a torrent download from libtorrent"""

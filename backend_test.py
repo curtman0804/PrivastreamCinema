@@ -1,412 +1,401 @@
 #!/usr/bin/env python3
 """
-Comprehensive Backend API Testing for PrivastreamCinema
-Tests all critical endpoints as requested in the review.
+Comprehensive PrivastreamCinema Backend API Testing
+Focus on NEW pre-warm endpoint and existing endpoint verification
+Review Request Specific Testing
 """
 
 import asyncio
 import httpx
 import json
 import time
-import logging
 from typing import Dict, Any, Optional
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Configuration
+BASE_URL = "https://fix-test-deploy.preview.emergentagent.com/api"
+CREDENTIALS = {"username": "choyt", "password": "RFIDGuy1!"}
+TEST_INFO_HASH = "08ada5a7a6183aae1e09d831df6748d566095a10"  # Shawshank Redemption
+MOVIE_ID = "tt0111161"  # Shawshank Redemption IMDB ID
 
-# Test configuration
-BACKEND_URL = "https://fix-test-deploy.preview.emergentagent.com"
-TORRENT_SERVER_URL = "http://localhost:8002"
-
-# Test credentials
-TEST_USER = {
-    "username": "choyt",
-    "password": "RFIDGuy1!"
-}
-
-class BackendTester:
+class PrivastreamAPITester:
     def __init__(self):
         self.token = None
-        self.client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
+        self.client = httpx.AsyncClient(timeout=30.0)
         self.test_results = []
         
-    async def __aenter__(self):
-        return self
-        
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.client.aclose()
-    
-    def add_result(self, test_name: str, passed: bool, details: str = "", error: str = ""):
-        """Add test result to the collection"""
-        self.test_results.append({
+    async def log_test(self, test_name: str, success: bool, message: str, response_time: float = 0, data: Any = None):
+        """Log test result with details"""
+        status = "✅ PASS" if success else "❌ FAIL"
+        result = {
             "test": test_name,
-            "passed": passed,
-            "details": details,
-            "error": error
-        })
-        status = "✅ PASS" if passed else "❌ FAIL"
-        logger.info(f"{status}: {test_name} - {details}")
-        if error:
-            logger.error(f"ERROR: {error}")
-    
-    async def test_authentication(self):
-        """Test 1: Authentication - POST /api/auth/login"""
+            "status": status, 
+            "success": success,
+            "message": message,
+            "response_time": f"{response_time:.3f}s" if response_time > 0 else "N/A",
+            "data": data
+        }
+        self.test_results.append(result)
+        print(f"{status} {test_name}: {message} ({response_time:.3f}s)" if response_time > 0 else f"{status} {test_name}: {message}")
+
+    async def authenticate(self) -> bool:
+        """Test authentication endpoint - Required for all subsequent tests"""
         try:
-            login_data = {
-                "username": TEST_USER["username"],
-                "password": TEST_USER["password"]
-            }
-            
-            response = await self.client.post(f"{BACKEND_URL}/api/auth/login", json=login_data)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if "token" in data and "user" in data:
-                    self.token = data["token"]
-                    user = data["user"]
-                    self.add_result(
-                        "Authentication", 
-                        True, 
-                        f"Login successful for user {user['username']}, token obtained"
-                    )
-                    return True
-                else:
-                    self.add_result("Authentication", False, "", "Response missing token or user data")
-                    return False
-            else:
-                self.add_result("Authentication", False, "", f"Login failed with status {response.status_code}: {response.text}")
-                return False
-                
-        except Exception as e:
-            self.add_result("Authentication", False, "", f"Exception during login: {str(e)}")
-            return False
-    
-    async def test_addon_management(self):
-        """Test 2: Addon Management - GET /api/addons"""
-        try:
-            headers = {"Authorization": f"Bearer {self.token}"}
-            response = await self.client.get(f"{BACKEND_URL}/api/addons", headers=headers)
-            
-            if response.status_code == 200:
-                addons = response.json()
-                if isinstance(addons, list):
-                    addon_names = [addon.get("manifest", {}).get("name", "Unknown") for addon in addons]
-                    expected_addons = ["Cinemeta", "Torrentio", "ThePirateBay+", "USA TV", "Streaming Catalogs"]
-                    
-                    found_addons = [name for name in expected_addons if any(name in addon_name for addon_name in addon_names)]
-                    
-                    self.add_result(
-                        "Addon Management",
-                        len(found_addons) >= 4,  # At least 4 of the 5 expected addons
-                        f"Found {len(addons)} addons: {', '.join(addon_names)}"
-                    )
-                    return True
-                else:
-                    self.add_result("Addon Management", False, "", "Response is not a list")
-                    return False
-            else:
-                self.add_result("Addon Management", False, "", f"Failed with status {response.status_code}")
-                return False
-                
-        except Exception as e:
-            self.add_result("Addon Management", False, "", f"Exception: {str(e)}")
-            return False
-    
-    async def test_discover_content(self):
-        """Test 3: Discover Content - GET /api/content/discover-organized"""
-        try:
-            headers = {"Authorization": f"Bearer {self.token}"}
             start_time = time.time()
-            response = await self.client.get(f"{BACKEND_URL}/api/content/discover-organized", headers=headers)
+            response = await self.client.post(
+                f"{BASE_URL}/auth/login", 
+                json=CREDENTIALS
+            )
             response_time = time.time() - start_time
             
             if response.status_code == 200:
                 data = response.json()
-                services = data.get("services", {})
-                
-                required_sections = ["Popular Movies", "Popular Series", "New Movies", "New Series"]
-                found_sections = []
-                total_items = 0
-                
-                # Check for required sections
-                for section_name in required_sections:
-                    if section_name in services and services[section_name]:
-                        found_sections.append(section_name)
-                        total_items += len(services[section_name])
-                
-                # Check for streaming services
-                streaming_services = ["Netflix Movies", "Netflix Series", "HBO Max Movies", "Disney+ Movies"]
-                found_streaming = [svc for svc in streaming_services if any(svc in key for key in services.keys())]
-                
-                # Check for USA TV
-                usa_tv_found = any("USA TV" in key for key in services.keys())
-                
-                all_tests_passed = (
-                    len(found_sections) >= 3 and  # At least 3 of the 4 required sections
-                    total_items > 10  # Reasonable amount of content (lowered threshold)
-                )
-                
-                # Additional info about streaming services and USA TV
-                streaming_info = f"Streaming services: {len(found_streaming)}, USA TV: {'Yes' if usa_tv_found else 'No'}"
-                
-                self.add_result(
-                    "Discover Content",
-                    all_tests_passed,
-                    f"Response time: {response_time:.2f}s, {len(services)} sections, {total_items} total items. Found sections: {', '.join(found_sections)}. {streaming_info}"
-                )
-                return True
-                
+                self.token = data.get("token")  # The response uses "token" not "access_token"
+                if self.token:
+                    await self.log_test("Authentication", True, f"Login successful with choyt/RFIDGuy1!", response_time, data)
+                    return True
+                else:
+                    await self.log_test("Authentication", False, "No access token in response", response_time, data)
+                    return False
             else:
-                self.add_result("Discover Content", False, "", f"Failed with status {response.status_code}")
+                await self.log_test("Authentication", False, f"HTTP {response.status_code}: {response.text}", response_time)
                 return False
-                
         except Exception as e:
-            self.add_result("Discover Content", False, "", f"Exception: {str(e)}")
+            await self.log_test("Authentication", False, f"Exception: {str(e)}")
             return False
-    
-    async def test_stream_fetching(self):
-        """Test 4: Stream Fetching - GET /api/streams/movie/tt0111161"""
+
+    async def test_health_endpoint(self) -> bool:
+        """Test health check endpoint"""
+        try:
+            start_time = time.time()
+            response = await self.client.get(f"{BASE_URL}/health")
+            response_time = time.time() - start_time
+            
+            if response.status_code == 200:
+                data = response.json()
+                expected_service = "PrivastreamCinema"
+                if data.get("status") == "ok" and data.get("service") == expected_service:
+                    await self.log_test("Health Check", True, f"Health endpoint working: {data}", response_time, data)
+                    return True
+                else:
+                    await self.log_test("Health Check", False, f"Unexpected response format: {data}", response_time, data)
+                    return False
+            else:
+                await self.log_test("Health Check", False, f"HTTP {response.status_code}: {response.text}", response_time)
+                return False
+        except Exception as e:
+            await self.log_test("Health Check", False, f"Exception: {str(e)}")
+            return False
+
+    async def test_streams_endpoint(self) -> bool:
+        """Test streams endpoint to verify it returns streams with infoHash"""
         try:
             headers = {"Authorization": f"Bearer {self.token}"}
-            # Test with The Shawshank Redemption
-            movie_id = "tt0111161"
-            response = await self.client.get(f"{BACKEND_URL}/api/streams/movie/{movie_id}", headers=headers)
+            start_time = time.time()
+            response = await self.client.get(f"{BASE_URL}/streams/movie/{MOVIE_ID}", headers=headers)
+            response_time = time.time() - start_time
             
             if response.status_code == 200:
                 data = response.json()
                 streams = data.get("streams", [])
+                streams_with_infohash = [s for s in streams if s.get("infoHash")]
                 
-                # Check that we have streams with infoHash
-                streams_with_hash = [s for s in streams if s.get("infoHash")]
-                
-                self.add_result(
-                    "Stream Fetching",
-                    len(streams_with_hash) > 0,
-                    f"Found {len(streams)} total streams, {len(streams_with_hash)} with infoHash for {movie_id}"
-                )
-                return streams_with_hash[0]["infoHash"] if streams_with_hash else None
-                
-            else:
-                self.add_result("Stream Fetching", False, "", f"Failed with status {response.status_code}")
-                return None
-                
-        except Exception as e:
-            self.add_result("Stream Fetching", False, "", f"Exception: {str(e)}")
-            return None
-    
-    async def test_torrent_server_health(self):
-        """Test: Torrent Server Health Check"""
-        try:
-            # Test local torrent server
-            response = await self.client.get(f"{TORRENT_SERVER_URL}/health")
-            
-            if response.status_code == 200:
-                # Check for either "ok" or JSON response with status "ok"
-                response_text = response.text.strip()
-                if response_text == "ok" or (response_text.startswith("{") and "ok" in response_text):
-                    self.add_result("Torrent Server Health", True, f"Torrent server at {TORRENT_SERVER_URL} is healthy")
+                if len(streams_with_infohash) > 0:
+                    await self.log_test(
+                        "Streams Endpoint", 
+                        True, 
+                        f"Returns {len(streams_with_infohash)} streams with infoHash (total: {len(streams)})", 
+                        response_time, 
+                        {"total_streams": len(streams), "streams_with_infohash": len(streams_with_infohash)}
+                    )
                     return True
                 else:
-                    self.add_result("Torrent Server Health", False, "", f"Unexpected health response: {response_text}")
+                    await self.log_test("Streams Endpoint", False, f"No streams with infoHash found. Total streams: {len(streams)}", response_time, data)
                     return False
             else:
-                self.add_result("Torrent Server Health", False, "", f"Health check failed: {response.status_code} - {response.text}")
+                await self.log_test("Streams Endpoint", False, f"HTTP {response.status_code}: {response.text}", response_time)
                 return False
-                
         except Exception as e:
-            self.add_result("Torrent Server Health", False, "", f"Cannot connect to torrent server: {str(e)}")
+            await self.log_test("Streams Endpoint", False, f"Exception: {str(e)}")
             return False
-    
-    async def test_torrent_streaming_pipeline(self, info_hash: str):
-        """Test 5: CRITICAL - Torrent Streaming Pipeline (End-to-End)"""
+
+    async def test_prewarm_endpoint(self) -> bool:
+        """Test NEW pre-warm endpoint - Key focus of review request"""
         try:
             headers = {"Authorization": f"Bearer {self.token}"}
+            start_time = time.time()
+            response = await self.client.post(f"{BASE_URL}/stream/prewarm/{TEST_INFO_HASH}", headers=headers)
+            response_time = time.time() - start_time
             
-            # Step 1: Start the torrent
-            start_response = await self.client.post(f"{BACKEND_URL}/api/stream/start/{info_hash}", headers=headers)
-            
-            if start_response.status_code != 200:
-                self.add_result("Torrent Start", False, "", f"Start failed with status {start_response.status_code}")
-                return False
-            
-            start_data = start_response.json()
-            if start_data.get("status") != "started":
-                self.add_result("Torrent Start", False, "", f"Expected status 'started', got {start_data.get('status')}")
-                return False
-            
-            self.add_result("Torrent Start", True, f"Torrent {info_hash[:8]}... started successfully")
-            
-            # Step 2: Poll status until ready (max 30 seconds)
-            max_attempts = 15
-            ready = False
-            peers = 0
-            
-            for attempt in range(max_attempts):
-                await asyncio.sleep(2)
-                status_response = await self.client.get(f"{BACKEND_URL}/api/stream/status/{info_hash}", headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                status = data.get("status")
                 
-                if status_response.status_code == 200:
-                    status_data = status_response.json()
-                    status = status_data.get("status", "")
-                    peers = status_data.get("peers", 0)
-                    progress = status_data.get("progress", 0)
-                    
-                    logger.info(f"Status check {attempt+1}: status={status}, peers={peers}, progress={progress}")
-                    
-                    if status == "ready" and peers > 0:
-                        ready = True
-                        break
-                    elif status == "ready" or peers > 0:  # Accept if either condition is met
-                        ready = True
-                        break
-            
-            if ready:
-                self.add_result("Torrent Status", True, f"Torrent ready after {(attempt+1)*2}s, peers={peers}")
-            else:
-                # Still try the video test even if status isn't perfect
-                self.add_result("Torrent Status", False, "Torrent not ready within 30s, but continuing with video test", "Timeout waiting for ready status")
-            
-            # Step 3: Test video streaming
-            video_headers = headers.copy()
-            video_headers["Range"] = "bytes=0-65535"  # Request first 64KB
-            
-            video_response = await self.client.get(
-                f"{BACKEND_URL}/api/stream/video/{info_hash}", 
-                headers=video_headers
-            )
-            
-            expected_statuses = [200, 206]  # Accept both full content and partial content
-            if video_response.status_code in expected_statuses:
-                content_type = video_response.headers.get("content-type", "")
-                content_length = video_response.headers.get("content-length", "0")
-                
-                # Check for video content types
-                is_video = any(vtype in content_type.lower() for vtype in ["video/", "application/octet-stream"])
-                
-                if is_video and len(video_response.content) > 1000:  # At least some video data
-                    self.add_result(
-                        "Video Streaming", 
+                if status in ["warming", "already_warming"]:
+                    await self.log_test(
+                        "Pre-warm Endpoint", 
                         True, 
-                        f"Video stream working: {content_type}, {len(video_response.content)} bytes received"
+                        f"Pre-warm successful: status='{status}'", 
+                        response_time, 
+                        data
                     )
+                    return True
+                elif status == "prewarm_failed":
+                    await self.log_test("Pre-warm Endpoint", False, f"Pre-warm failed: {data.get('error')}", response_time, data)
+                    return False
                 else:
-                    self.add_result("Video Streaming", False, "", f"Invalid video data: {content_type}, {len(video_response.content)} bytes")
+                    await self.log_test("Pre-warm Endpoint", False, f"Unexpected status: {status}", response_time, data)
+                    return False
             else:
-                self.add_result("Video Streaming", False, "", f"Video request failed: {video_response.status_code}")
+                await self.log_test("Pre-warm Endpoint", False, f"HTTP {response.status_code}: {response.text}", response_time)
                 return False
-            
-            return True
-            
         except Exception as e:
-            self.add_result("Torrent Streaming Pipeline", False, "", f"Exception: {str(e)}")
+            await self.log_test("Pre-warm Endpoint", False, f"Exception: {str(e)}")
             return False
-    
-    async def test_public_video_access(self, info_hash: str):
-        """Test 6: CRITICAL - Public URL Video Access"""
+
+    async def test_prewarm_status_check(self) -> bool:
+        """Test status after pre-warming - should show downloading_metadata or buffering"""
         try:
-            # Test the public URL that the user's app actually hits
-            public_url = f"{BACKEND_URL}/api/stream/video/{info_hash}"
+            headers = {"Authorization": f"Bearer {self.token}"}
+            # Wait a moment for pre-warm to start
+            await asyncio.sleep(2)
             
-            # Use range header like a video player would
-            headers = {"Range": "bytes=0-65535"}
+            start_time = time.time()
+            response = await self.client.get(f"{BASE_URL}/stream/status/{TEST_INFO_HASH}", headers=headers)
+            response_time = time.time() - start_time
             
-            response = await self.client.get(public_url, headers=headers)
-            
-            expected_statuses = [200, 206]
-            if response.status_code in expected_statuses:
-                content_type = response.headers.get("content-type", "")
-                content_length = len(response.content)
+            if response.status_code == 200:
+                data = response.json()
+                status = data.get("status")
+                peers = data.get("peers", 0)
                 
-                # Check for valid video content
-                is_video = any(vtype in content_type.lower() for vtype in ["video/", "application/octet-stream"])
-                
-                if is_video and content_length > 1000:
-                    self.add_result(
-                        "Public Video Access",
-                        True,
-                        f"Public URL works: {response.status_code}, {content_type}, {content_length} bytes"
+                # After pre-warming, should be in downloading_metadata or buffering state
+                if status in ["downloading_metadata", "buffering", "ready"]:
+                    await self.log_test(
+                        "Pre-warm Status Check", 
+                        True, 
+                        f"Torrent started in background: status='{status}', peers={peers}", 
+                        response_time, 
+                        data
                     )
                     return True
                 else:
-                    self.add_result("Public Video Access", False, "", f"Invalid content: {content_type}, {content_length} bytes")
+                    await self.log_test("Pre-warm Status Check", False, f"Unexpected status after pre-warm: {status}", response_time, data)
                     return False
             else:
-                self.add_result("Public Video Access", False, "", f"Public access failed: {response.status_code}")
+                await self.log_test("Pre-warm Status Check", False, f"HTTP {response.status_code}: {response.text}", response_time)
                 return False
-                
         except Exception as e:
-            self.add_result("Public Video Access", False, "", f"Exception: {str(e)}")
+            await self.log_test("Pre-warm Status Check", False, f"Exception: {str(e)}")
             return False
-    
-    def print_summary(self):
-        """Print test summary"""
-        passed = [r for r in self.test_results if r["passed"]]
-        failed = [r for r in self.test_results if not r["passed"]]
+
+    async def test_stream_start(self) -> bool:
+        """Test stream start - should return immediately since pre-warmed"""
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            start_time = time.time()
+            response = await self.client.post(f"{BASE_URL}/stream/start/{TEST_INFO_HASH}", headers=headers)
+            response_time = time.time() - start_time
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "started":
+                    await self.log_test(
+                        "Stream Start", 
+                        True, 
+                        f"Stream started immediately (pre-warmed): {response_time:.3f}s", 
+                        response_time, 
+                        data
+                    )
+                    return True
+                else:
+                    await self.log_test("Stream Start", False, f"Unexpected response: {data}", response_time, data)
+                    return False
+            else:
+                await self.log_test("Stream Start", False, f"HTTP {response.status_code}: {response.text}", response_time)
+                return False
+        except Exception as e:
+            await self.log_test("Stream Start", False, f"Exception: {str(e)}")
+            return False
+
+    async def test_stream_status_ready_progress(self) -> bool:
+        """Test stream status - verify ready_progress field exists"""
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            # Wait for torrent to get ready
+            await asyncio.sleep(5)
+            
+            start_time = time.time()
+            response = await self.client.get(f"{BASE_URL}/stream/status/{TEST_INFO_HASH}", headers=headers)
+            response_time = time.time() - start_time
+            
+            if response.status_code == 200:
+                data = response.json()
+                ready_progress = data.get("ready_progress")
+                
+                if ready_progress is not None:
+                    await self.log_test(
+                        "Stream Status - ready_progress Field", 
+                        True, 
+                        f"ready_progress field exists: {ready_progress}% (status: {data.get('status')})", 
+                        response_time, 
+                        data
+                    )
+                    return True
+                else:
+                    await self.log_test("Stream Status - ready_progress Field", False, f"ready_progress field missing from response", response_time, data)
+                    return False
+            else:
+                await self.log_test("Stream Status - ready_progress Field", False, f"HTTP {response.status_code}: {response.text}", response_time)
+                return False
+        except Exception as e:
+            await self.log_test("Stream Status - ready_progress Field", False, f"Exception: {str(e)}")
+            return False
+
+    async def test_video_endpoint_range_request(self) -> bool:
+        """Test video endpoint with Range header - Critical for ExoPlayer"""
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Range": "bytes=0-65535"
+            }
+            
+            start_time = time.time()
+            response = await self.client.get(
+                f"{BASE_URL}/stream/video/{TEST_INFO_HASH}?fileIdx=0", 
+                headers=headers
+            )
+            response_time = time.time() - start_time
+            
+            if response.status_code == 206:  # Partial Content
+                content_length = len(response.content)
+                content_type = response.headers.get("content-type", "unknown")
+                
+                await self.log_test(
+                    "Video Endpoint - Range Request", 
+                    True, 
+                    f"Range request successful: 206 Partial Content, {content_length} bytes, {content_type}", 
+                    response_time, 
+                    {
+                        "status_code": 206,
+                        "content_length": content_length,
+                        "content_type": content_type,
+                        "content_range": response.headers.get("content-range", "Not present")
+                    }
+                )
+                return True
+            elif response.status_code == 200:
+                await self.log_test("Video Endpoint - Range Request", False, f"Expected 206 but got 200 - Range request not supported", response_time)
+                return False
+            else:
+                await self.log_test("Video Endpoint - Range Request", False, f"HTTP {response.status_code}: {response.text}", response_time)
+                return False
+        except Exception as e:
+            await self.log_test("Video Endpoint - Range Request", False, f"Exception: {str(e)}")
+            return False
+
+    async def print_summary(self):
+        """Print comprehensive test summary"""
+        print("\n" + "="*80)
+        print("🎯 PRIVASTREAMCINEMA BACKEND API TEST RESULTS - REVIEW REQUEST SPECIFIC")
+        print("="*80)
         
-        print("\n" + "="*70)
-        print("🎬 PRIVASTREAMCINEMA BACKEND TEST RESULTS")
-        print("="*70)
+        passed = sum(1 for result in self.test_results if result["success"])
+        total = len(self.test_results)
         
-        if failed:
-            print(f"\n❌ FAILED TESTS ({len(failed)}):")
-            for test in failed:
-                print(f"   • {test['test']}: {test['error']}")
+        print(f"📊 OVERALL RESULTS: {passed}/{total} tests passed ({(passed/total*100):.1f}%)")
+        print()
         
-        if passed:
-            print(f"\n✅ PASSED TESTS ({len(passed)}):")
-            for test in passed:
-                print(f"   • {test['test']}: {test['details']}")
+        # Group results by success/failure
+        passed_tests = [r for r in self.test_results if r["success"]]
+        failed_tests = [r for r in self.test_results if not r["success"]]
         
-        print(f"\n📊 SUMMARY: {len(passed)}/{len(self.test_results)} tests passed")
+        if failed_tests:
+            print("❌ FAILED TESTS:")
+            for result in failed_tests:
+                print(f"   • {result['test']}: {result['message']}")
+            print()
         
-        if len(passed) == len(self.test_results):
-            print("🎉 ALL TESTS PASSED - Backend is working correctly!")
-        elif len(failed) == 0:
-            print("⚠️  No tests failed, but some may have been skipped")
+        if passed_tests:
+            print("✅ PASSED TESTS:")
+            for result in passed_tests:
+                print(f"   • {result['test']}: {result['message']}")
+            print()
+        
+        # Critical endpoint verification
+        print("🔍 REVIEW REQUEST VERIFICATION:")
+        key_endpoints = [
+            "Authentication",
+            "Health Check", 
+            "Pre-warm Endpoint",
+            "Pre-warm Status Check",
+            "Streams Endpoint",
+            "Stream Start",
+            "Stream Status - ready_progress Field",
+            "Video Endpoint - Range Request"
+        ]
+        
+        for endpoint in key_endpoints:
+            result = next((r for r in self.test_results if r["test"] == endpoint), None)
+            if result:
+                status = "✅" if result["success"] else "❌"
+                print(f"   {status} {endpoint}: {result['message']}")
+            else:
+                print(f"   ⚠️ {endpoint}: Not tested")
+        
+        print("\n🎉 NEW PRE-WARM ENDPOINT STATUS:")
+        prewarm_result = next((r for r in self.test_results if r["test"] == "Pre-warm Endpoint"), None)
+        if prewarm_result and prewarm_result["success"]:
+            print("   ✅ Pre-warm endpoint working correctly - returns 'warming' or 'already_warming'")
         else:
-            print("⚠️  Some tests failed - see details above")
-        
-        return len(failed) == 0
+            print("   ❌ Pre-warm endpoint has issues")
+            
+        print("\n" + "="*80)
 
-
-async def run_comprehensive_test():
-    """Run all backend tests"""
-    async with BackendTester() as tester:
-        print("🚀 Starting PrivastreamCinema Backend Testing...")
+    async def run_all_tests(self):
+        """Run all tests in the correct order"""
+        print("🚀 Starting PrivastreamCinema Backend API Testing...")
+        print(f"📍 Testing against: {BASE_URL}")
+        print(f"🎬 Using test infoHash: {TEST_INFO_HASH} (Shawshank Redemption)")
+        print(f"📺 Using movie ID: {MOVIE_ID}")
+        print("="*80)
         
-        # Test 1: Authentication (required for all other tests)
-        auth_success = await tester.test_authentication()
+        # Step 1: Authentication (required for all other tests)
+        auth_success = await self.authenticate()
         if not auth_success:
             print("❌ Authentication failed - cannot proceed with other tests")
-            tester.print_summary()
+            await self.print_summary()
             return
         
-        # Test 2: Addon Management
-        await tester.test_addon_management()
+        # Step 2: Health Check
+        await self.test_health_endpoint()
         
-        # Test 3: Discover Content
-        await tester.test_discover_content()
+        # Step 3: NEW Pre-warm endpoint (main focus)
+        await self.test_prewarm_endpoint()
         
-        # Test 4: Stream Fetching (and get an infoHash for torrent tests)
-        info_hash = await tester.test_stream_fetching()
+        # Step 4: Pre-warm status check (verify torrent started in background)
+        await self.test_prewarm_status_check()
         
-        # Test Torrent Server Health
-        await tester.test_torrent_server_health()
+        # Step 5: Streams endpoint
+        await self.test_streams_endpoint()
         
-        # Test 5 & 6: Torrent Streaming Pipeline (if we have an infoHash)
-        if info_hash:
-            print(f"\n🎯 Testing torrent streaming with infoHash: {info_hash[:16]}...")
-            
-            await tester.test_torrent_streaming_pipeline(info_hash)
-            await tester.test_public_video_access(info_hash)
-        else:
-            tester.add_result("Torrent Streaming Pipeline", False, "", "No infoHash available from stream fetching")
-            tester.add_result("Public Video Access", False, "", "No infoHash available for testing")
+        # Step 6: Stream start (should be fast since pre-warmed)
+        await self.test_stream_start()
         
-        # Print final results
-        return tester.print_summary()
+        # Step 7: Stream status with ready_progress field
+        await self.test_stream_status_ready_progress()
+        
+        # Step 8: Video endpoint with Range request
+        await self.test_video_endpoint_range_request()
+        
+        # Print final summary
+        await self.print_summary()
+        
+        await self.client.aclose()
 
+async def main():
+    """Main test runner"""
+    tester = PrivastreamAPITester()
+    await tester.run_all_tests()
 
 if __name__ == "__main__":
-    asyncio.run(run_comprehensive_test())
+    asyncio.run(main())

@@ -713,6 +713,7 @@ export const api = {
     status: async (infoHash: string): Promise<{
       status: string;
       progress?: number;
+      ready_progress?: number;
       peers?: number;
       download_rate?: number;
       upload_rate?: number;
@@ -722,6 +723,16 @@ export const api = {
     }> => {
       const response = await apiClient.get(`/api/stream/status/${infoHash}`);
       return response.data;
+    },
+    prewarm: async (infoHash: string): Promise<{ status: string }> => {
+      try {
+        const response = await apiClient.post(`/api/stream/prewarm/${infoHash}`);
+        return response.data;
+      } catch (err) {
+        // Prewarm is fire-and-forget, don't throw
+        console.log('[PREWARM] Failed (non-critical):', err);
+        return { status: 'failed' };
+      }
     },
     getVideoUrl: (infoHash: string, fileIdx?: number): string => {
       // Return the full URL for the video stream with optional fileIdx

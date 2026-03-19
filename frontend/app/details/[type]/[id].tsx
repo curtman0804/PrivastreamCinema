@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -321,6 +321,21 @@ export default function DetailsScreen() {
       setInLibrary(!!found);
     }
   }, [content, library]);
+
+  // PRE-WARM: When streams are loaded, silently pre-start the top torrent
+  // This saves 5-10 seconds of metadata download when user taps play
+  const prewarmedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (streams && streams.length > 0 && !isLoadingStreams) {
+      // Find the best stream to prewarm (highest seeders)
+      const topStream = streams[0]; // Already sorted by quality/seeders
+      if (topStream?.infoHash && topStream.infoHash !== prewarmedRef.current) {
+        prewarmedRef.current = topStream.infoHash;
+        console.log(`[PREWARM] Pre-warming top stream: ${topStream.infoHash} (${topStream.title || topStream.name})`);
+        api.stream.prewarm(topStream.infoHash);
+      }
+    }
+  }, [streams, isLoadingStreams]);
 
   const loadContent = async () => {
     try {
