@@ -3228,6 +3228,7 @@ async def stream_status(info_hash: str):
         return {
             "status": lt_status,  # "ready", "buffering", "downloading_metadata"
             "progress": status.get("progress", 0),
+            "ready_progress": status.get("ready_progress", 0),
             "peers": peers,
             "download_rate": download_rate,
             "downloaded": downloaded,
@@ -3253,23 +3254,23 @@ async def stream_video(
         session_data = torrent_streamer.get_session(info_hash)
         handle = session_data['handle']
         
-        # Wait for metadata and video file discovery (max 10 seconds, check every 0.5s)
+        # Wait for metadata and video file discovery (max 5 seconds, check every 0.25s)
         waited = 0
-        while waited < 20:  # 20 * 0.5s = 10 seconds max
+        while waited < 20:  # 20 * 0.25s = 5 seconds max
             status = torrent_streamer.get_status(info_hash)
             if status.get("status") in ["ready", "buffering"] and status.get("video_file"):
                 break
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.25)
             waited += 1
         
         video_path = torrent_streamer.get_video_path(info_hash)
         if not video_path:
             raise HTTPException(status_code=404, detail="Video file not found in torrent")
         
-        # Wait for the file to appear on disk (max 5 seconds)
+        # Wait for the file to appear on disk (max 2 seconds)
         waited = 0
-        while waited < 10 and (not os.path.exists(video_path) or os.path.getsize(video_path) < 256 * 1024):
-            await asyncio.sleep(0.5)
+        while waited < 8 and (not os.path.exists(video_path) or os.path.getsize(video_path) < 64 * 1024):
+            await asyncio.sleep(0.25)
             waited += 1
         
         if not os.path.exists(video_path):

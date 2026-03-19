@@ -299,27 +299,27 @@ export default function PlayerScreen() {
   const videoRetryCountRef = useRef(0);
   const maxVideoRetries = 5;
   
-  // Pulsating animation for loading title
-  const pulseAnim = useRef(new Animated.Value(0.3)).current;
+  // Stremio-style breathing zoom animation for loading title
+  const breatheAnim = useRef(new Animated.Value(1)).current;
   
   useEffect(() => {
     if (isLoading && !error) {
-      const pulse = Animated.loop(
+      const breathe = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1200,
+          Animated.timing(breatheAnim, {
+            toValue: 1.06,
+            duration: 2000,
             useNativeDriver: true,
           }),
-          Animated.timing(pulseAnim, {
-            toValue: 0.3,
-            duration: 1200,
+          Animated.timing(breatheAnim, {
+            toValue: 0.96,
+            duration: 2000,
             useNativeDriver: true,
           }),
         ])
       );
-      pulse.start();
-      return () => pulse.stop();
+      breathe.start();
+      return () => breathe.stop();
     }
   }, [isLoading, error]);
   
@@ -1313,15 +1313,18 @@ export default function PlayerScreen() {
       
       await api.stream.start(infoHash, validFileIdx, filename || undefined);
       
+      // INSTANT PLAYBACK: Set the video URL immediately after starting the torrent.
+      // Don't wait for polling — ExoPlayer handles its own buffering natively.
+      // The backend video endpoint serves partial content via range requests as data arrives.
+      const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
+      console.log('[PLAYER] Setting video URL immediately (no polling wait):', videoUrl);
+      videoRetryCountRef.current = 0;
+      setStreamUrl(videoUrl);
+      
+      // Continue polling in background ONLY for progress UI (download %, peers, speed)
+      // This does NOT gate playback — it just updates the loading screen progress bar
       let pollInterval = 500;
       let pollCount = 0;
-      const MAX_POLL_BEFORE_FORCE = 6; // ~3 seconds, then force playback
-      let playbackStarted = false;
-      
-      // AGGRESSIVE: Set the video URL immediately after starting the torrent
-      // ExoPlayer will connect and buffer while the torrent downloads
-      // The backend video endpoint serves data as it becomes available
-      const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
@@ -1330,75 +1333,49 @@ export default function PlayerScreen() {
         try {
           const status = await api.stream.status(infoHash);
           
-          // Use ready_progress (0-100, progress toward playback readiness)
-          // instead of progress (0-100, progress of ENTIRE file download)
+          // Update progress UI
           const readyPct = status.ready_progress ?? (status.progress || 0);
           setDownloadProgress(readyPct);
           setPeers(status.peers || 0);
           setDownloadSpeed(status.download_rate || 0);
           
-          if (status.status === 'ready' && !playbackStarted) {
-            playbackStarted = true;
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current);
-            }
-            
-            // Start playback immediately - no pre-warm delay needed
-            // ExoPlayer handles buffering natively
-            console.log('[PLAYER] Stream ready, starting playback immediately');
-            videoRetryCountRef.current = 0;
-            setStreamUrl(videoUrl);
-            return;
-          } else if (status.status === 'not_found' || status.status === 'invalid') {
-            // Retry the whole stream start if we haven't exhausted retries
+          if (status.status === 'not_found' || status.status === 'invalid') {
+            // Torrent disappeared — retry the whole stream start
             if (retryCount < MAX_RETRIES) {
               console.log(`[PLAYER] Stream not found, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-              }
+              if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
               setTimeout(() => startTorrentStream(retryCount + 1), 2000);
               return;
             }
             setError('Stream unavailable. Try selecting a different stream.');
             setIsLoading(false);
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current);
-            }
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             return;
-          } else if (status.status === 'buffering') {
-            const peerCount = status.peers || 0;
-            
-            if (pollInterval < 1000) pollInterval = 1000;
-            
-            // FORCE PLAYBACK after ~3 seconds - don't wait for "ready"
-            // ExoPlayer handles its own buffering, and the backend streams as data arrives
-            if (pollCount >= MAX_POLL_BEFORE_FORCE && !playbackStarted) {
-              playbackStarted = true;
-              console.log(`[PLAYER] Force-starting playback after ${pollCount} polls (peers: ${peerCount})`);
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-              }
-              videoRetryCountRef.current = 0;
-              setStreamUrl(videoUrl);
-              return;
-            }
-            
-            // After 20 seconds (40 polls at 500ms), give up if no peers
-            if (pollCount >= 40 && peerCount === 0) {
-              console.log('[PLAYER] No peers found after 30s, giving up');
-              setError('No peers found. Try a different stream.');
-              setIsLoading(false);
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-              }
-              return;
-            }
           }
+          
+          if (status.status === 'ready') {
+            // Stream is fully ready — stop polling, ExoPlayer is already playing
+            console.log('[PLAYER] Stream fully ready, stopping background poll');
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            return;
+          }
+          
+          // After 60 seconds (120 polls at 500ms) with no peers, give up
+          if (pollCount >= 120 && (status.peers || 0) === 0) {
+            console.log('[PLAYER] No peers found after 60s, giving up');
+            setError('No peers found. Try a different stream.');
+            setIsLoading(false);
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            return;
+          }
+          
+          // Slow down polling after initial burst
+          if (pollCount > 10 && pollInterval < 1000) pollInterval = 1000;
+          if (pollCount > 30) pollInterval = 2000;
           
           pollIntervalRef.current = setTimeout(pollStatus, pollInterval) as any;
         } catch (err) {
           console.error('Status poll error:', err);
-          // On poll error, retry with backoff instead of giving up
           pollIntervalRef.current = setTimeout(pollStatus, 2000) as any;
         }
       };
@@ -1451,8 +1428,8 @@ export default function PlayerScreen() {
           
           {/* Content */}
           <View style={styles.loadingContent}>
-            {/* Logo/Title as Loading Bar - Exact Stremio Style with Pulse */}
-            <Animated.View style={{ opacity: pulseAnim, alignItems: 'center', width: '100%' }}>
+            {/* Logo/Title as Loading Bar - Stremio Style with Breathing Zoom + Fill */}
+            <Animated.View style={{ transform: [{ scale: breatheAnim }], alignItems: 'center', width: '100%' }}>
             {logo ? (
               // Use the actual movie logo image with fill effect
               Platform.OS === 'web' ? (

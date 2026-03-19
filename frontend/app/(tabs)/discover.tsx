@@ -10,6 +10,7 @@ import {
   FlatList,
   useWindowDimensions,
   findNodeHandle,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -451,6 +452,8 @@ function ContinueWatchingItem({
 
   useEffect(() => {
     // Get native node handles after mount for nextFocusUp/Down wiring
+    // findNodeHandle is not supported on web — skip entirely
+    if (Platform.OS === 'web') return;
     const pTag = posterRef.current ? findNodeHandle(posterRef.current) : null;
     const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
     if (pTag) setPosterTag(pTag);
