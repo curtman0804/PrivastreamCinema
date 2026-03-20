@@ -2232,8 +2232,9 @@ async def get_all_streams(
         else:
             quality_score = 2  # Default to 720p tier
         
-        # Combined score: language * 1000000 + quality * 10000 + seeders
-        return (lang_score * 1000000) + (quality_score * 10000) + min(seeders, 9999)
+        # Combined score: language first, then seeders, then quality as tiebreaker
+        # English streams always on top, then sorted by most seeds
+        return (lang_score * 10000000) + (min(seeders, 99999) * 100) + quality_score
     
     unique_streams.sort(key=get_sort_score, reverse=True)
     
