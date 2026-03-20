@@ -71,6 +71,61 @@ setInterval(() => {
   }
 }, 30000);
 
+// Pre-warm: start downloading a torrent without streaming
+app.post('/prewarm/:infoHash', (req, res) => {
+  const { infoHash } = req.params;
+  const infoHashLower = infoHash.toLowerCase();
+  
+  // Check if already started
+  let torrent = torrents.get(infoHashLower);
+  if (!torrent) {
+    torrent = client.torrents.find(t => t.infoHash && t.infoHash.toLowerCase() === infoHashLower);
+  }
+  
+  if (torrent) {
+    return res.json({
+      status: torrent.ready ? 'ready' : 'warming',
+      peers: torrent.numPeers,
+      progress: Math.round(torrent.progress * 100)
+    });
+  }
+  
+  // Start the torrent
+  const trackers = [
+    'wss://tracker.openwebtorrent.com',
+    'wss://tracker.btorrent.xyz',
+    'wss://tracker.files.fm:7073/announce',
+    'wss://spacetradersapi-chatbox.herokuapp.com:443/announce',
+    'http://tracker.openbittorrent.com:80/announce',
+    'http://tracker3.itzmx.com:6961/announce',
+    'http://tracker.bt4g.com:2095/announce',
+    'http://tracker.files.fm:6969/announce',
+    'http://tracker.opentrackr.org:1337/announce',
+    'https://tracker.lilithraws.org:443/announce',
+    'https://tr.burnabyhighstar.com:443/announce',
+    'https://tracker.tamersunion.org:443/announce',
+  ];
+  
+  let magnetURI = `magnet:?xt=urn:btih:${infoHash}`;
+  trackers.forEach(t => { magnetURI += `&tr=${encodeURIComponent(t)}`; });
+  
+  try {
+    const newTorrent = client.add(magnetURI, { maxWebConns: 10, storeCacheSlots: 50 });
+    torrents.set(infoHashLower, newTorrent);
+    torrentStartTimes.set(infoHashLower, Date.now());
+    console.log(`🔥 Pre-warming torrent: ${infoHash}`);
+    
+    newTorrent.on('error', (err) => {
+      console.error('Pre-warm torrent error:', err);
+    });
+    
+    res.json({ status: 'warming', info_hash: infoHash });
+  } catch (err) {
+    console.error('Pre-warm error:', err);
+    res.json({ status: 'error', error: err.message });
+  }
+});
+
 // Get torrent status
 app.get('/status/:infoHash', (req, res) => {
   const { infoHash } = req.params;

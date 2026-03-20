@@ -3219,12 +3219,30 @@ async def start_stream(
     fileIdx: Optional[int] = None,
     filename: Optional[str] = None,
 ):
-    """Start downloading a torrent via libtorrent (native peer discovery)"""
+    """Start downloading a torrent via BOTH libtorrent and WebTorrent for maximum peer connectivity"""
     try:
         logger.info(f"Starting torrent download for {info_hash}, fileIdx={fileIdx}, filename={filename}")
         
-        # Use libtorrent-based TorrentStreamer (much better peer discovery than WebTorrent)
-        session_data = torrent_streamer.get_session(info_hash)
+        # Start on libtorrent (has DHT, better for well-connected networks)
+        try:
+            session_data = torrent_streamer.get_session(info_hash)
+        except Exception as e:
+            logger.warning(f"libtorrent start failed (non-critical): {e}")
+        
+        # ALSO start on WebTorrent server (uses WebSocket/HTTP trackers, K8s-friendly)
+        # This is the PRIMARY streaming source - much faster in container environments
+        try:
+            params = {}
+            if fileIdx is not None:
+                params['fileIdx'] = str(fileIdx)
+            if filename:
+                params['filename'] = filename
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                wt_url = f"http://localhost:8002/status/{info_hash}"
+                await client.get(wt_url)
+                logger.info(f"WebTorrent pre-started for {info_hash}")
+        except Exception as e:
+            logger.warning(f"WebTorrent pre-start failed (non-critical): {e}")
         
         return {"status": "started", "info_hash": info_hash}
     except Exception as e:
@@ -3233,27 +3251,40 @@ async def start_stream(
 
 @api_router.post("/stream/prewarm/{info_hash}")
 async def prewarm_stream(info_hash: str):
-    """Pre-warm a torrent: start downloading metadata in background without blocking.
-    Called from the details/stream selection page so the torrent is ready when user taps play.
+    """Pre-warm a torrent on BOTH libtorrent AND WebTorrent for fastest startup.
     Returns immediately - no waiting for metadata or pieces."""
     try:
-        # Just ensure the session exists - libtorrent will start metadata download
-        # in the background. This is fire-and-forget.
+        # Pre-warm on libtorrent
         existing = torrent_streamer.sessions.get(info_hash.lower())
+        lt_status = "unknown"
         if existing:
-            # Already pre-warming or ready
             status = torrent_streamer.get_status(info_hash)
-            return {
-                "status": "already_warming",
-                "torrent_status": status.get("status", "unknown"),
-                "peers": status.get("peers", 0),
-            }
+            lt_status = status.get("status", "unknown")
+        else:
+            try:
+                torrent_streamer.get_session(info_hash)
+                lt_status = "warming"
+            except Exception as e:
+                logger.warning(f"libtorrent prewarm failed: {e}")
+                lt_status = "failed"
         
-        torrent_streamer.get_session(info_hash)
-        logger.info(f"Pre-warming torrent {info_hash}")
-        return {"status": "warming", "info_hash": info_hash}
+        # Pre-warm on WebTorrent server (fire-and-forget)
+        wt_status = "unknown"
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                # Use the new prewarm endpoint that actually starts the torrent
+                resp = await client.post(f"http://localhost:8002/prewarm/{info_hash}")
+                if resp.status_code == 200:
+                    wt_data = resp.json()
+                    wt_status = wt_data.get("status", "warming")
+                    logger.info(f"WebTorrent prewarm: {info_hash} - status={wt_status}")
+        except Exception as e:
+            logger.warning(f"WebTorrent prewarm failed (non-critical): {e}")
+            wt_status = "failed"
+        
+        logger.info(f"Pre-warming torrent {info_hash} (lt={lt_status}, wt={wt_status})")
+        return {"status": "warming", "info_hash": info_hash, "lt_status": lt_status, "wt_status": wt_status}
     except Exception as e:
-        # Don't fail hard on prewarm - it's just an optimization
         logger.warning(f"Prewarm failed for {info_hash}: {e}")
         return {"status": "prewarm_failed", "error": str(e)}
 
@@ -3300,6 +3331,94 @@ async def stream_status(info_hash: str):
     except Exception as e:
         logger.error(f"Error getting stream status: {e}")
         return {"status": "buffering", "progress": 0, "peers": 0, "error": str(e)}
+
+@api_router.get("/stream/wt-video/{info_hash}")
+@api_router.head("/stream/wt-video/{info_hash}")
+async def webtorrent_video_proxy(
+    info_hash: str,
+    request: Request,
+    fileIdx: Optional[int] = None,
+    filename: Optional[str] = None
+):
+    """Proxy video stream from WebTorrent server (K8s-optimized, faster peer discovery).
+    This endpoint streams directly from WebTorrent's in-memory torrent,
+    no waiting for file download to disk first."""
+    try:
+        wt_url = f"http://localhost:8002/stream/{info_hash}"
+        params = {}
+        if fileIdx is not None:
+            params['fileIdx'] = str(fileIdx)
+        if filename:
+            params['filename'] = filename
+        
+        # Forward Range header from client
+        headers = {}
+        range_header = request.headers.get("range")
+        if range_header:
+            headers["Range"] = range_header
+        
+        logger.info(f"WebTorrent proxy: {info_hash}, range={range_header or 'none'}")
+        
+        # Use streaming response to proxy the WebTorrent server's output
+        async def stream_proxy():
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=30.0)) as client:
+                    async with client.stream("GET", wt_url, params=params, headers=headers) as resp:
+                        async for chunk in resp.aiter_bytes(chunk_size=64 * 1024):
+                            yield chunk
+            except Exception as e:
+                logger.error(f"WebTorrent proxy stream error: {e}")
+        
+        # First make a HEAD-like request to get response headers from WebTorrent
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)) as client:
+                # For HEAD requests, just forward
+                if request.method == "HEAD":
+                    resp = await client.head(wt_url, params=params, headers=headers)
+                    response_headers = dict(resp.headers)
+                    response_headers["Access-Control-Allow-Origin"] = "*"
+                    return Response(
+                        content=b"",
+                        status_code=resp.status_code,
+                        headers=response_headers,
+                    )
+                
+                # For GET requests, stream the response
+                async with client.stream("GET", wt_url, params=params, headers=headers) as resp:
+                    # Build response headers
+                    response_headers = {
+                        "Access-Control-Allow-Origin": "*",
+                        "Accept-Ranges": "bytes",
+                    }
+                    
+                    # Copy relevant headers from WebTorrent response
+                    for key in ["Content-Range", "Content-Length", "Content-Type"]:
+                        if key.lower() in resp.headers:
+                            response_headers[key] = resp.headers[key.lower()]
+                    
+                    status_code = resp.status_code
+                    
+                    async def response_stream():
+                        async for chunk in resp.aiter_bytes(chunk_size=64 * 1024):
+                            yield chunk
+                    
+                    return StreamingResponse(
+                        response_stream(),
+                        status_code=status_code,
+                        headers=response_headers,
+                    )
+        except httpx.ConnectError:
+            logger.error("WebTorrent server not reachable at localhost:8002")
+            raise HTTPException(status_code=503, detail="WebTorrent server unavailable")
+        except httpx.ReadTimeout:
+            logger.error("WebTorrent server timeout - torrent may be slow")
+            raise HTTPException(status_code=504, detail="Stream timeout - torrent is slow, try a different stream")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"WebTorrent proxy error: {e}")
+        raise HTTPException(status_code=503, detail=f"Stream unavailable: {str(e)}")
 
 @api_router.get("/stream/video/{info_hash}")
 @api_router.head("/stream/video/{info_hash}")
