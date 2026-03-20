@@ -1322,8 +1322,7 @@ export default function PlayerScreen() {
       
       const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
       let pollCount = 0;
-      let smoothProgress = 0; // Smooth progress for the fill animation (0-100)
-      let lastStatus = 'starting';
+      let smoothProgress = 0;
       let videoUrlSet = false;
       
       const pollStatus = async () => {
@@ -1336,33 +1335,29 @@ export default function PlayerScreen() {
           const dlRate = status.download_rate || 0;
           setPeers(peerCount);
           setDownloadSpeed(dlRate);
-          lastStatus = status.status;
           
           // --- Smooth progress for loading bar fill ---
-          // During metadata: slowly creep 0→30%
-          // During buffering: map ready_progress 0-100 → 30→95%
-          // When ready: snap to 100%
           if (status.status === 'downloading_metadata') {
-            // Slowly creep during metadata phase (max 30%)
             smoothProgress = Math.min(smoothProgress + 1.5, 30);
           } else if (status.status === 'buffering') {
             const readyPct = status.ready_progress ?? 0;
-            // Map 0-100 ready_progress to 30-95 range
             const targetProgress = 30 + (readyPct / 100) * 65;
-            // Ease toward target (never go backward)
             smoothProgress = Math.max(smoothProgress, Math.min(smoothProgress + (targetProgress - smoothProgress) * 0.3, targetProgress));
           } else if (status.status === 'ready') {
             smoothProgress = 100;
           }
           setDownloadProgress(smoothProgress);
           
-          // --- Set video URL for ExoPlayer as soon as we have metadata ---
-          // ExoPlayer will connect and start buffering while we keep showing the loading screen
-          if (!videoUrlSet && (status.status === 'buffering' || status.status === 'ready')) {
+          // --- ONLY set video URL when backend reports READY ---
+          // "Ready" = 3MB downloaded. Video endpoint can serve data immediately.
+          // Setting URL earlier causes ExoPlayer to enter a 3-min retry loop.
+          if (status.status === 'ready' && !videoUrlSet) {
             videoUrlSet = true;
-            console.log('[PLAYER] Metadata ready, setting video URL for ExoPlayer:', videoUrl);
+            console.log('[PLAYER] Stream READY, setting video URL:', videoUrl);
             videoRetryCountRef.current = 0;
             setStreamUrl(videoUrl);
+            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+            return;
           }
           
           if (status.status === 'not_found' || status.status === 'invalid') {
@@ -1378,37 +1373,14 @@ export default function PlayerScreen() {
             return;
           }
           
-          if (status.status === 'ready') {
-            // If video URL still not set somehow, set it now
-            if (!videoUrlSet) {
-              videoUrlSet = true;
-              videoRetryCountRef.current = 0;
-              setStreamUrl(videoUrl);
-            }
-            console.log('[PLAYER] Stream ready, ExoPlayer will start when buffered enough');
-            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
-            return;
-          }
-          
-          // Force set video URL after 2 seconds even if still downloading metadata
-          // ExoPlayer will retry internally
-          if (!videoUrlSet && pollCount >= 8) {
-            videoUrlSet = true;
-            console.log(`[PLAYER] Force-setting video URL after ${pollCount} polls`);
-            videoRetryCountRef.current = 0;
-            setStreamUrl(videoUrl);
-          }
-          
-          // After 60 seconds with no peers, give up
-          if (pollCount >= 240 && peerCount === 0) {
-            console.log('[PLAYER] No peers found after 60s, giving up');
-            setError('No peers found. Try a different stream.');
+          // After 3 minutes with no peers, give up
+          if (pollCount >= 720 && peerCount === 0) {
+            setError('No peers found. Try a different stream with more seeders.');
             setIsLoading(false);
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
             return;
           }
           
-          // Poll every 250ms for fast progress updates
           pollIntervalRef.current = setTimeout(pollStatus, 250) as any;
         } catch (err) {
           console.error('Status poll error:', err);

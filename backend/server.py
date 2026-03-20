@@ -2255,11 +2255,11 @@ async def get_all_streams(
     
     logger.info(f"Found {len(unique_streams)} total streams for {content_type}/{content_id}")
     
-    # Cache the result (2 minute TTL for streams)
+    # Cache the result (30 second TTL for streams - short to reflect sorting changes)
     result_data = {"streams": unique_streams}
     _discover_cache[stream_cache_key] = {
         "data": result_data,
-        "expires": datetime.utcnow() + timedelta(seconds=120)
+        "expires": datetime.utcnow() + timedelta(seconds=30)
     }
     
     return result_data

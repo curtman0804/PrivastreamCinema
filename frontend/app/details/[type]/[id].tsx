@@ -185,6 +185,23 @@ function StreamCard({
     >
       <View style={styles.streamCardHeader}>
         <Text style={styles.streamSource}>{source}</Text>
+        <View style={styles.streamCardBody}>
+          {seeders > 0 && (
+            <View style={styles.streamStat}>
+              <Ionicons name="people" size={12} color="#888" />
+              <Text style={styles.streamStatText}>{seeders}</Text>
+            </View>
+          )}
+          {size ? (
+            <View style={styles.streamStat}>
+              <Ionicons name="document" size={12} color="#888" />
+              <Text style={styles.streamStatText}>{size}</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+      
+      <View style={styles.streamCardFooter}>
         <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <View style={[
             styles.langBadge, 
@@ -199,24 +216,6 @@ function StreamCard({
             <Text style={styles.qualityText}>{quality}</Text>
           </View>
         </View>
-      </View>
-      
-      <View style={styles.streamCardBody}>
-        {seeders > 0 && (
-          <View style={styles.streamStat}>
-            <Ionicons name="people" size={12} color="#888" />
-            <Text style={styles.streamStatText}>{seeders}</Text>
-          </View>
-        )}
-        {size && (
-          <View style={styles.streamStat}>
-            <Ionicons name="document" size={12} color="#888" />
-            <Text style={styles.streamStatText}>{size}</Text>
-          </View>
-        )}
-      </View>
-      
-      <View style={styles.streamCardFooter}>
         <Ionicons name="play-circle" size={20} color="#B8A05C" />
       </View>
     </Pressable>
@@ -1231,6 +1230,8 @@ const styles = StyleSheet.create({
     color: '#888888',
   },
   streamCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 8,
     borderTopWidth: 1,
