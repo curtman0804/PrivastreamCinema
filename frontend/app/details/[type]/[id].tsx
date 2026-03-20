@@ -83,6 +83,7 @@ function StreamCard({
   const parseStreamInfo = (stream: Stream) => {
     const name = stream.name || '';
     const title = stream.title || '';
+    const combined = `${name} ${title}`.toUpperCase();
     
     // Extract quality
     let quality = 'SD';
@@ -94,7 +95,6 @@ function StreamCard({
     // Extract source - use provider code for USAATV, otherwise addon name
     let source = stream.addon || 'Unknown';
     if (stream.provider) {
-      // USAATV streams have provider abbreviation (AX, CV, MJ, TP, etc.)
       source = stream.provider;
     } else if (name.includes('TPB') || name.includes('🏴‍☠️')) source = 'TPB';
     else if (name.includes('⚡') || name.includes('Torrentio')) source = 'Torrentio';
@@ -111,11 +111,70 @@ function StreamCard({
       const seederMatch = title.match(/🌱\s*(\d+)/);
       if (seederMatch) seeders = parseInt(seederMatch[1], 10);
     }
+    if (!seeders) {
+      const peerMatch = title.match(/👤\s*(\d+)/);
+      if (peerMatch) seeders = parseInt(peerMatch[1], 10);
+    }
     
-    return { quality, source, size, seeders, title };
+    // Detect language
+    const FOREIGN_KEYWORDS = [
+      'FRENCH', 'TRUEFRENCH', 'VFF', 'VFQ', 'VOSTFR',
+      'SPANISH', 'LATINO', 'CASTELLANO',
+      'GERMAN', 'DEUTSCH',
+      'ITALIAN', 'ITALIANO',
+      'RUSSIAN', 'DUBBED', 'DUBLADO',
+      'PORTUGUESE', 'HINDI', 'TAMIL', 'TELUGU',
+      'KOREAN', 'JAPANESE', 'CHINESE', 'MANDARIN',
+      'TURKISH', 'ARABIC', 'POLISH', 'DUTCH', 'CZECH',
+      'THAI', 'INDONESIAN', 'VIETNAMESE', 'SWEDISH',
+      'MULTI',
+    ];
+    const FOREIGN_FLAGS = ['🇫🇷', '🇪🇸', '🇲🇽', '🇧🇷', '🇩🇪', '🇮🇹', '🇷🇺', '🇵🇹', '🇵🇱', '🇳🇱', '🇨🇳', '🇯🇵', '🇰🇷', '🇮🇳', '🇹🇷'];
+    const HAS_ENGLISH = combined.includes('ENGLISH') || combined.includes('🇬🇧') || combined.includes('🇺🇸') || combined.includes('EN/') || combined.includes('/EN');
+    
+    let language = 'ENG'; // Default to English
+    let isForeign = false;
+    
+    // Check for foreign indicators
+    for (const kw of FOREIGN_KEYWORDS) {
+      if (combined.includes(kw)) {
+        isForeign = true;
+        // Set specific language label
+        if (kw.includes('FRENCH') || kw === 'VFF' || kw === 'VFQ' || kw === 'VOSTFR' || kw === 'TRUEFRENCH') language = 'FRE';
+        else if (kw.includes('SPANISH') || kw === 'LATINO' || kw === 'CASTELLANO') language = 'SPA';
+        else if (kw.includes('GERMAN') || kw === 'DEUTSCH') language = 'GER';
+        else if (kw.includes('ITALIAN') || kw === 'ITALIANO') language = 'ITA';
+        else if (kw.includes('RUSSIAN')) language = 'RUS';
+        else if (kw.includes('HINDI')) language = 'HIN';
+        else if (kw === 'DUBBED' || kw === 'DUBLADO') language = 'DUB';
+        else if (kw === 'MULTI') language = 'MULTI';
+        else language = 'OTHER';
+        break;
+      }
+    }
+    for (const flag of FOREIGN_FLAGS) {
+      if (title.includes(flag) || name.includes(flag)) {
+        isForeign = true;
+        if (flag === '🇫🇷') language = 'FRE';
+        else if (flag === '🇪🇸' || flag === '🇲🇽') language = 'SPA';
+        else if (flag === '🇩🇪') language = 'GER';
+        else if (flag === '🇮🇹') language = 'ITA';
+        else if (flag === '🇷🇺') language = 'RUS';
+        else if (flag === '🇮🇳') language = 'HIN';
+        else language = 'OTHER';
+        break;
+      }
+    }
+    
+    // If has English indicator AND foreign, mark as MULTI
+    if (HAS_ENGLISH && isForeign) language = 'MULTI';
+    // If has English indicator and no foreign, mark as ENG
+    if (HAS_ENGLISH && !isForeign) language = 'ENG';
+    
+    return { quality, source, size, seeders, title, language, isForeign };
   };
   
-  const { quality, source, size, seeders, title } = parseStreamInfo(stream);
+  const { quality, source, size, seeders, title, language, isForeign } = parseStreamInfo(stream);
   
   return (
     <Pressable
@@ -126,8 +185,19 @@ function StreamCard({
     >
       <View style={styles.streamCardHeader}>
         <Text style={styles.streamSource}>{source}</Text>
-        <View style={[styles.qualityBadge, quality === '4K' && styles.qualityBadge4K]}>
-          <Text style={styles.qualityText}>{quality}</Text>
+        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <View style={[
+            styles.langBadge, 
+            isForeign ? styles.langBadgeForeign : styles.langBadgeEnglish
+          ]}>
+            <Text style={[
+              styles.langBadgeText,
+              isForeign ? styles.langBadgeTextForeign : styles.langBadgeTextEnglish
+            ]}>{language}</Text>
+          </View>
+          <View style={[styles.qualityBadge, quality === '4K' && styles.qualityBadge4K]}>
+            <Text style={styles.qualityText}>{quality}</Text>
+          </View>
         </View>
       </View>
       
@@ -1124,6 +1194,27 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
     color: '#B8A05C',
+  },
+  langBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  langBadgeEnglish: {
+    backgroundColor: 'rgba(76, 175, 80, 0.3)',
+  },
+  langBadgeForeign: {
+    backgroundColor: 'rgba(244, 67, 54, 0.3)',
+  },
+  langBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  langBadgeTextEnglish: {
+    color: '#4CAF50',
+  },
+  langBadgeTextForeign: {
+    color: '#F44336',
   },
   streamCardBody: {
     flexDirection: 'row',

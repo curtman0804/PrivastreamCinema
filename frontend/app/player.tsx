@@ -329,21 +329,11 @@ export default function PlayerScreen() {
   const [playbackStarted, setPlaybackStarted] = useState(false);
   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Safety timeout: hide loading screen after streamUrl is set
-  // First-time torrents can take up to 45 seconds to download metadata + initial pieces.
-  // If it STILL hasn't played after 45 seconds, show a helpful error.
-  useEffect(() => {
-    if (streamUrl && isLoading && !error) {
-      const safetyTimeout = setTimeout(() => {
-        if (isLoading) {
-          console.log('[PLAYER] Safety timeout: 45s passed, ExoPlayer may be stuck.');
-          setError('Video is taking too long to buffer. Try selecting a different stream with more seeders.');
-          setIsLoading(false);
-        }
-      }, 45000);
-      return () => clearTimeout(safetyTimeout);
-    }
-  }, [streamUrl, isLoading, error]);
+  // NO safety timeout - let the torrent download and ExoPlayer buffer naturally.
+  // First-click torrents need 30-60+ seconds for metadata + initial pieces.
+  // The loading screen (breathing zoom + fill) provides good UX during this wait.
+  // ExoPlayer's onError handler + retry mechanism handles actual failures.
+  // The user can always press back to cancel if they don't want to wait.
   
   // Subtitles state
   const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
