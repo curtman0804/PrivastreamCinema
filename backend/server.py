@@ -394,9 +394,10 @@ class TorrentStreamer:
             video_size = video_file['size']
             downloaded_bytes = int(s.progress * video_size) if s.progress > 0 else 0
             
-            # Need ~3MB downloaded to start playback
-            # ExoPlayer needs enough data to read the file header and start decoding
-            min_bytes_for_playback = 3 * 1024 * 1024  # 3MB - enough for headers + initial frames
+            # Need ~1MB downloaded to start playback
+            # ExoPlayer reads moov atom from end of file (separately prioritized at priority 7)
+            # We just need enough data for ExoPlayer to start reading the stream
+            min_bytes_for_playback = 1 * 1024 * 1024  # 1MB - enough for headers
             ready_threshold = min_bytes_for_playback
             
             # Check if file exists and has content
@@ -3328,7 +3329,7 @@ async def stream_video(
         
         # Wait for the file to appear on disk (max 5 seconds)
         waited = 0
-        while waited < 10 and (not os.path.exists(video_path) or os.path.getsize(video_path) < 256 * 1024):
+        while waited < 10 and (not os.path.exists(video_path) or os.path.getsize(video_path) < 64 * 1024):
             await asyncio.sleep(0.5)
             waited += 1
         

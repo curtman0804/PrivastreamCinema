@@ -1310,10 +1310,7 @@ export default function PlayerScreen() {
     const MAX_RETRIES = 3;
 
     try {
-      // No text status - just the title filling
-      
       // Parse fileIdx if provided (for selecting specific episode in season packs)
-      // Handle empty string, null, undefined, and NaN cases
       const parsedFileIdx = fileIdx && fileIdx !== '' ? parseInt(fileIdx, 10) : undefined;
       const validFileIdx = parsedFileIdx !== undefined && !isNaN(parsedFileIdx) ? parsedFileIdx : undefined;
       console.log(`[PLAYER] Starting torrent with fileIdx=${validFileIdx}, filename=${filename || 'auto'} (attempt ${retryCount + 1})`);
@@ -1324,6 +1321,8 @@ export default function PlayerScreen() {
       let pollCount = 0;
       let smoothProgress = 0;
       let videoUrlSet = false;
+      let hadPeersOnce = false;
+      let startTime = Date.now();
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
@@ -1335,6 +1334,9 @@ export default function PlayerScreen() {
           const dlRate = status.download_rate || 0;
           setPeers(peerCount);
           setDownloadSpeed(dlRate);
+          if (peerCount > 0) hadPeersOnce = true;
+          
+          const elapsedSec = (Date.now() - startTime) / 1000;
           
           // --- Smooth progress for loading bar fill ---
           if (status.status === 'downloading_metadata') {
@@ -1348,9 +1350,7 @@ export default function PlayerScreen() {
           }
           setDownloadProgress(smoothProgress);
           
-          // --- ONLY set video URL when backend reports READY ---
-          // "Ready" = 3MB downloaded. Video endpoint can serve data immediately.
-          // Setting URL earlier causes ExoPlayer to enter a 3-min retry loop.
+          // --- Set video URL when backend reports READY ---
           if (status.status === 'ready' && !videoUrlSet) {
             videoUrlSet = true;
             console.log('[PLAYER] Stream READY, setting video URL:', videoUrl);
@@ -1358,6 +1358,20 @@ export default function PlayerScreen() {
             setStreamUrl(videoUrl);
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
             return;
+          }
+          
+          // --- FALLBACK: If buffering for 45+ seconds with a video file, try playing anyway ---
+          // The video endpoint serves with Range requests, so the player can handle buffering
+          if (!videoUrlSet && status.status === 'buffering' && status.video_file && elapsedSec > 45) {
+            const readyPct = status.ready_progress ?? 0;
+            if (readyPct > 20) { // At least 20% of threshold downloaded
+              videoUrlSet = true;
+              console.log(`[PLAYER] EARLY PLAY: ${readyPct.toFixed(0)}% ready after ${elapsedSec.toFixed(0)}s, trying video URL`);
+              videoRetryCountRef.current = 0;
+              setStreamUrl(videoUrl);
+              if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+              return;
+            }
           }
           
           if (status.status === 'not_found' || status.status === 'invalid') {
@@ -1373,18 +1387,28 @@ export default function PlayerScreen() {
             return;
           }
           
-          // After 3 minutes with no peers, give up
-          if (pollCount >= 720 && peerCount === 0) {
+          // After 90 seconds with no peers ever, give up
+          if (elapsedSec > 90 && !hadPeersOnce) {
             setError('No peers found. Try a different stream with more seeders.');
             setIsLoading(false);
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
             return;
           }
           
-          pollIntervalRef.current = setTimeout(pollStatus, 250) as any;
+          // After 3 minutes total, give up regardless
+          if (elapsedSec > 180) {
+            setError('Stream is too slow. Try a different stream with more seeders.');
+            setIsLoading(false);
+            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+            return;
+          }
+          
+          // Dynamic poll interval - faster at start, slower later
+          const nextPoll = pollCount < 60 ? 500 : 1000;
+          pollIntervalRef.current = setTimeout(pollStatus, nextPoll) as any;
         } catch (err) {
           console.error('Status poll error:', err);
-          pollIntervalRef.current = setTimeout(pollStatus, 1000) as any;
+          pollIntervalRef.current = setTimeout(pollStatus, 1500) as any;
         }
       };
       
@@ -1392,7 +1416,6 @@ export default function PlayerScreen() {
       
     } catch (err: any) {
       console.error('Stream start error:', err);
-      // Auto-retry on network errors (502, 520, etc.)
       if (retryCount < MAX_RETRIES) {
         console.log(`[PLAYER] Stream start failed, retrying in 3s (${retryCount + 1}/${MAX_RETRIES})...`);
         setTimeout(() => startTorrentStream(retryCount + 1), 3000);

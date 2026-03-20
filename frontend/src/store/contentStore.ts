@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
+import { getCached, setCache, CACHE_DURATIONS } from '../utils/cache';
 
 // ============================================================
 // MODULE-LEVEL CACHES — persist across screen mounts/unmounts
@@ -88,11 +89,30 @@ export const useContentStore = create<ContentState>((set, get) => ({
 
   fetchDiscover: async (forceRefresh = false) => {
     const currentData = get().discoverData;
+    
+    // Try to load from persistent cache instantly (first open after app restart)
+    if (!currentData && !forceRefresh) {
+      const cached = await getCached<DiscoverResponse>('discover_data');
+      if (cached) {
+        console.log('[ContentStore] Loaded discover from cache instantly');
+        set({ discoverData: cached, isLoadingDiscover: false });
+        // Still refresh in background
+        api.content.getDiscover().then(data => {
+          set({ discoverData: data });
+          setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
+        }).catch(err => {
+          console.log('[ContentStore] Background refresh error:', err);
+        });
+        return;
+      }
+    }
+    
     // Show cached data immediately (stale-while-revalidate)
     if (currentData && !forceRefresh) {
       // Still refresh in background, but don't show loading spinner
       api.content.getDiscover().then(data => {
         set({ discoverData: data });
+        setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
       }).catch(err => {
         console.log('[ContentStore] Background refresh error:', err);
       });
@@ -102,6 +122,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     try {
       const data = await api.content.getDiscover();
       set({ discoverData: data, isLoadingDiscover: false });
+      setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
     } catch (error: any) {
       console.log('[ContentStore] fetchDiscover error:', error);
       set({ error: error.message, isLoadingDiscover: false, discoverData: currentData || null });

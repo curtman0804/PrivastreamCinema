@@ -70,7 +70,128 @@ function ChipButton({ label, onPress }: { label: string; onPress: () => void }) 
 }
 
 
-// Stream Card Component - Stremio style horizontal card
+// Parse stream info helper - used by StreamCard and sorting
+function parseStreamInfo(stream: Stream) {
+  const name = stream.name || '';
+  const title = stream.title || '';
+  const combined = `${name} ${title}`.toUpperCase();
+  
+  // Extract quality
+  let quality = 'SD';
+  if (name.includes('4K') || name.includes('2160') || title.includes('2160')) quality = '4K';
+  else if (name.includes('1080') || title.includes('1080')) quality = '1080p';
+  else if (name.includes('720') || title.includes('720')) quality = '720p';
+  else if (name.toUpperCase().includes('HD') && !name.toUpperCase().includes('SD')) quality = 'HD';
+  
+  // Extract source
+  let source = stream.addon || 'Unknown';
+  if (stream.provider) {
+    source = stream.provider;
+  } else if (name.includes('TPB') || name.includes('🏴‍☠️')) source = 'TPB+';
+  else if (name.includes('⚡') || name.includes('Torrentio')) source = 'Torrentio';
+  else if (name.includes('EZTV')) source = 'EZTV';
+  else if (name.includes('YTS') || name.includes('YIFY')) source = 'YTS';
+  
+  // Extract size from title
+  let size = '';
+  const sizeMatch = title.match(/💾\s*([\d.]+\s*[GM]B)/i);
+  if (sizeMatch) size = sizeMatch[1];
+  if (!size) {
+    const sizeMatch2 = title.match(/([\d.]+)\s*(GB|MB)/i);
+    if (sizeMatch2) size = `${sizeMatch2[1]} ${sizeMatch2[2].toUpperCase()}`;
+  }
+  
+  // Extract seeders
+  let seeders = stream.seeders || 0;
+  if (!seeders) {
+    const seederMatch = title.match(/👤\s*(\d+)/);
+    if (seederMatch) seeders = parseInt(seederMatch[1], 10);
+  }
+  if (!seeders) {
+    const peerMatch = title.match(/🌱\s*(\d+)/);
+    if (peerMatch) seeders = parseInt(peerMatch[1], 10);
+  }
+  
+  // Detect language
+  const FOREIGN_KEYWORDS = [
+    'FRENCH', 'TRUEFRENCH', 'VFF', 'VFQ', 'VOSTFR',
+    'SPANISH', 'LATINO', 'CASTELLANO',
+    'GERMAN', 'DEUTSCH',
+    'ITALIAN', 'ITALIANO',
+    'RUSSIAN', 'DUBBED', 'DUBLADO',
+    'PORTUGUESE', 'HINDI', 'TAMIL', 'TELUGU',
+    'KOREAN', 'JAPANESE', 'CHINESE', 'MANDARIN',
+    'TURKISH', 'ARABIC', 'POLISH', 'DUTCH', 'CZECH',
+    'THAI', 'INDONESIAN', 'VIETNAMESE', 'SWEDISH',
+    'MULTI',
+  ];
+  const FOREIGN_FLAGS = ['🇫🇷', '🇪🇸', '🇲🇽', '🇧🇷', '🇩🇪', '🇮🇹', '🇷🇺', '🇵🇹', '🇵🇱', '🇳🇱', '🇨🇳', '🇯🇵', '🇰🇷', '🇮🇳', '🇹🇷'];
+  const HAS_ENGLISH = combined.includes('ENGLISH') || combined.includes('🇬🇧') || combined.includes('🇺🇸') || combined.includes('EN/') || combined.includes('/EN');
+  
+  let language = 'ENG';
+  let isForeign = false;
+  
+  for (const kw of FOREIGN_KEYWORDS) {
+    if (combined.includes(kw)) {
+      isForeign = true;
+      if (kw.includes('FRENCH') || kw === 'VFF' || kw === 'VFQ' || kw === 'VOSTFR' || kw === 'TRUEFRENCH') language = 'FRE';
+      else if (kw.includes('SPANISH') || kw === 'LATINO' || kw === 'CASTELLANO') language = 'SPA';
+      else if (kw.includes('GERMAN') || kw === 'DEUTSCH') language = 'GER';
+      else if (kw.includes('ITALIAN') || kw === 'ITALIANO') language = 'ITA';
+      else if (kw.includes('RUSSIAN')) language = 'RUS';
+      else if (kw.includes('HINDI')) language = 'HIN';
+      else if (kw === 'DUBBED' || kw === 'DUBLADO') language = 'DUB';
+      else if (kw === 'MULTI') language = 'MULTI';
+      else language = 'OTHER';
+      break;
+    }
+  }
+  for (const flag of FOREIGN_FLAGS) {
+    if (title.includes(flag) || name.includes(flag)) {
+      isForeign = true;
+      if (flag === '🇫🇷') language = 'FRE';
+      else if (flag === '🇪🇸' || flag === '🇲🇽') language = 'SPA';
+      else if (flag === '🇩🇪') language = 'GER';
+      else if (flag === '🇮🇹') language = 'ITA';
+      else if (flag === '🇷🇺') language = 'RUS';
+      else if (flag === '🇮🇳') language = 'HIN';
+      else language = 'OTHER';
+      break;
+    }
+  }
+  
+  if (HAS_ENGLISH && isForeign) language = 'MULTI';
+  if (HAS_ENGLISH && !isForeign) language = 'ENG';
+  
+  return { quality, source, size, seeders, title, language, isForeign };
+}
+
+// Sort streams: English first (by seeds desc), then other languages (by seeds desc)
+function sortStreamsByLanguage(streams: Stream[]): Stream[] {
+  // Parse all stream info first
+  const parsed = streams.map(s => ({ stream: s, info: parseStreamInfo(s) }));
+  
+  // Language priority: ENG > MULTI > everything else alphabetically
+  const langPriority = (lang: string): number => {
+    if (lang === 'ENG') return 0;
+    if (lang === 'MULTI') return 1;
+    return 2;
+  };
+  
+  // Sort: primary by language priority, secondary by seeders desc
+  parsed.sort((a, b) => {
+    const langA = langPriority(a.info.language);
+    const langB = langPriority(b.info.language);
+    if (langA !== langB) return langA - langB;
+    // Same language group - sort by language name then seeds
+    if (a.info.language !== b.info.language) return a.info.language.localeCompare(b.info.language);
+    return (b.info.seeders || 0) - (a.info.seeders || 0);
+  });
+  
+  return parsed.map(p => p.stream);
+}
+
+// Stream Card Component - 3-row vertical layout
 function StreamCard({ 
   stream, 
   onPress 
@@ -79,102 +200,7 @@ function StreamCard({
   onPress: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-  
-  const parseStreamInfo = (stream: Stream) => {
-    const name = stream.name || '';
-    const title = stream.title || '';
-    const combined = `${name} ${title}`.toUpperCase();
-    
-    // Extract quality
-    let quality = 'SD';
-    if (name.includes('4K') || name.includes('2160')) quality = '4K';
-    else if (name.includes('1080')) quality = '1080p';
-    else if (name.includes('720')) quality = '720p';
-    else if (name.toUpperCase().includes('HD') && !name.toUpperCase().includes('SD')) quality = 'HD';
-    
-    // Extract source - use provider code for USAATV, otherwise addon name
-    let source = stream.addon || 'Unknown';
-    if (stream.provider) {
-      source = stream.provider;
-    } else if (name.includes('TPB') || name.includes('🏴‍☠️')) source = 'TPB';
-    else if (name.includes('⚡') || name.includes('Torrentio')) source = 'Torrentio';
-    else if (name.includes('EZTV')) source = 'EZTV';
-    
-    // Extract size from title
-    let size = '';
-    const sizeMatch = title.match(/💾\s*([\d.]+\s*[GM]B)/);
-    if (sizeMatch) size = sizeMatch[1];
-    
-    // Extract seeders
-    let seeders = stream.seeders || 0;
-    if (!seeders) {
-      const seederMatch = title.match(/🌱\s*(\d+)/);
-      if (seederMatch) seeders = parseInt(seederMatch[1], 10);
-    }
-    if (!seeders) {
-      const peerMatch = title.match(/👤\s*(\d+)/);
-      if (peerMatch) seeders = parseInt(peerMatch[1], 10);
-    }
-    
-    // Detect language
-    const FOREIGN_KEYWORDS = [
-      'FRENCH', 'TRUEFRENCH', 'VFF', 'VFQ', 'VOSTFR',
-      'SPANISH', 'LATINO', 'CASTELLANO',
-      'GERMAN', 'DEUTSCH',
-      'ITALIAN', 'ITALIANO',
-      'RUSSIAN', 'DUBBED', 'DUBLADO',
-      'PORTUGUESE', 'HINDI', 'TAMIL', 'TELUGU',
-      'KOREAN', 'JAPANESE', 'CHINESE', 'MANDARIN',
-      'TURKISH', 'ARABIC', 'POLISH', 'DUTCH', 'CZECH',
-      'THAI', 'INDONESIAN', 'VIETNAMESE', 'SWEDISH',
-      'MULTI',
-    ];
-    const FOREIGN_FLAGS = ['🇫🇷', '🇪🇸', '🇲🇽', '🇧🇷', '🇩🇪', '🇮🇹', '🇷🇺', '🇵🇹', '🇵🇱', '🇳🇱', '🇨🇳', '🇯🇵', '🇰🇷', '🇮🇳', '🇹🇷'];
-    const HAS_ENGLISH = combined.includes('ENGLISH') || combined.includes('🇬🇧') || combined.includes('🇺🇸') || combined.includes('EN/') || combined.includes('/EN');
-    
-    let language = 'ENG'; // Default to English
-    let isForeign = false;
-    
-    // Check for foreign indicators
-    for (const kw of FOREIGN_KEYWORDS) {
-      if (combined.includes(kw)) {
-        isForeign = true;
-        // Set specific language label
-        if (kw.includes('FRENCH') || kw === 'VFF' || kw === 'VFQ' || kw === 'VOSTFR' || kw === 'TRUEFRENCH') language = 'FRE';
-        else if (kw.includes('SPANISH') || kw === 'LATINO' || kw === 'CASTELLANO') language = 'SPA';
-        else if (kw.includes('GERMAN') || kw === 'DEUTSCH') language = 'GER';
-        else if (kw.includes('ITALIAN') || kw === 'ITALIANO') language = 'ITA';
-        else if (kw.includes('RUSSIAN')) language = 'RUS';
-        else if (kw.includes('HINDI')) language = 'HIN';
-        else if (kw === 'DUBBED' || kw === 'DUBLADO') language = 'DUB';
-        else if (kw === 'MULTI') language = 'MULTI';
-        else language = 'OTHER';
-        break;
-      }
-    }
-    for (const flag of FOREIGN_FLAGS) {
-      if (title.includes(flag) || name.includes(flag)) {
-        isForeign = true;
-        if (flag === '🇫🇷') language = 'FRE';
-        else if (flag === '🇪🇸' || flag === '🇲🇽') language = 'SPA';
-        else if (flag === '🇩🇪') language = 'GER';
-        else if (flag === '🇮🇹') language = 'ITA';
-        else if (flag === '🇷🇺') language = 'RUS';
-        else if (flag === '🇮🇳') language = 'HIN';
-        else language = 'OTHER';
-        break;
-      }
-    }
-    
-    // If has English indicator AND foreign, mark as MULTI
-    if (HAS_ENGLISH && isForeign) language = 'MULTI';
-    // If has English indicator and no foreign, mark as ENG
-    if (HAS_ENGLISH && !isForeign) language = 'ENG';
-    
-    return { quality, source, size, seeders, title, language, isForeign };
-  };
-  
-  const { quality, source, size, seeders, title, language, isForeign } = parseStreamInfo(stream);
+  const { quality, source, size, seeders, language, isForeign } = parseStreamInfo(stream);
   
   return (
     <Pressable
@@ -183,26 +209,28 @@ function StreamCard({
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
     >
-      <View style={styles.streamCardHeader}>
-        <Text style={styles.streamSource}>{source}</Text>
-        <View style={styles.streamCardBody}>
-          {seeders > 0 && (
-            <View style={styles.streamStat}>
-              <Ionicons name="people" size={12} color="#888" />
-              <Text style={styles.streamStatText}>{seeders}</Text>
-            </View>
-          )}
-          {size ? (
-            <View style={styles.streamStat}>
-              <Ionicons name="document" size={12} color="#888" />
-              <Text style={styles.streamStatText}>{size}</Text>
-            </View>
-          ) : null}
-        </View>
+      {/* Row 1: Source */}
+      <Text style={styles.streamSource} numberOfLines={1}>{source}</Text>
+      
+      {/* Row 2: Seeds + Size */}
+      <View style={styles.streamStatsRow}>
+        {seeders > 0 && (
+          <View style={styles.streamStat}>
+            <Ionicons name="people" size={13} color="#aaa" />
+            <Text style={styles.streamStatText}>{seeders.toLocaleString()}</Text>
+          </View>
+        )}
+        {size ? (
+          <View style={styles.streamStat}>
+            <Ionicons name="download-outline" size={13} color="#aaa" />
+            <Text style={styles.streamStatText}>{size}</Text>
+          </View>
+        ) : null}
       </View>
       
+      {/* Row 3: Language + Quality + Play Button */}
       <View style={styles.streamCardFooter}>
-        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <View style={styles.streamBadgeRow}>
           <View style={[
             styles.langBadge, 
             isForeign ? styles.langBadgeForeign : styles.langBadgeEnglish
@@ -216,7 +244,7 @@ function StreamCard({
             <Text style={styles.qualityText}>{quality}</Text>
           </View>
         </View>
-        <Ionicons name="play-circle" size={20} color="#B8A05C" />
+        <Ionicons name="play-circle" size={22} color="#B8A05C" />
       </View>
     </Pressable>
   );
@@ -391,16 +419,17 @@ export default function DetailsScreen() {
     }
   }, [content, library]);
 
-  // PRE-WARM: When streams are loaded, silently pre-start the top torrent
+  // PRE-WARM: When streams are loaded, silently pre-start the top ENGLISH torrent
   // This saves 5-10 seconds of metadata download when user taps play
   const prewarmedRef = useRef<string | null>(null);
   useEffect(() => {
     if (streams && streams.length > 0 && !isLoadingStreams) {
-      // Find the best stream to prewarm (highest seeders)
-      const topStream = streams[0]; // Already sorted by quality/seeders
+      // Find the best English stream to prewarm (highest seeders)
+      const sorted = sortStreamsByLanguage(streams);
+      const topStream = sorted[0]; // English first, highest seeders
       if (topStream?.infoHash && topStream.infoHash !== prewarmedRef.current) {
         prewarmedRef.current = topStream.infoHash;
-        console.log(`[PREWARM] Pre-warming top stream: ${topStream.infoHash} (${topStream.title || topStream.name})`);
+        console.log(`[PREWARM] Pre-warming top English stream: ${topStream.infoHash} (${topStream.title || topStream.name})`);
         api.stream.prewarm(topStream.infoHash);
       }
     }
@@ -836,19 +865,7 @@ export default function DetailsScreen() {
                 </View>
               ) : (
                 <FlatList
-                  data={[...streams].sort((a, b) => {
-                    // Sort: English streams first, then by seed count (highest first)
-                    const titleA = (a.title || '').toLowerCase();
-                    const titleB = (b.title || '').toLowerCase();
-                    const isNonEngA = /\b(lat|latino|esp|spanish|french|german|hindi|ita|por|rus|ara|kor|jpn|chi|dubbed)\b/i.test(titleA);
-                    const isNonEngB = /\b(lat|latino|esp|spanish|french|german|hindi|ita|por|rus|ara|kor|jpn|chi|dubbed)\b/i.test(titleB);
-                    if (isNonEngA && !isNonEngB) return 1;
-                    if (!isNonEngA && isNonEngB) return -1;
-                    // Then sort by seed count (higher = better)
-                    const seedsA = a.seeders || 0;
-                    const seedsB = b.seeders || 0;
-                    return seedsB - seedsA;
-                  })}
+                  data={sortStreamsByLanguage(streams)}
                   renderItem={renderStreamItem}
                   keyExtractor={(item, index) => `${item.infoHash || item.url || index}`}
                   horizontal
@@ -1158,27 +1175,29 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   streamCard: {
-    width: 140,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    padding: 12,
+    width: 160,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'space-between',
   },
   streamCardFocused: {
     borderColor: '#B8A05C',
     backgroundColor: 'rgba(184, 160, 92, 0.2)',
   },
-  streamCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
   streamSource: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: '#B8A05C',
+    marginBottom: 6,
+  },
+  streamStatsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 8,
   },
   qualityBadge: {
     backgroundColor: 'rgba(184, 160, 92, 0.3)',
@@ -1215,19 +1234,15 @@ const styles = StyleSheet.create({
   langBadgeTextForeign: {
     color: '#F44336',
   },
-  streamCardBody: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 8,
-  },
   streamStat: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
   streamStatText: {
-    fontSize: 11,
-    color: '#888888',
+    fontSize: 12,
+    color: '#aaaaaa',
+    fontWeight: '500',
   },
   streamCardFooter: {
     flexDirection: 'row',
@@ -1235,7 +1250,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  streamBadgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
   },
   defaultFocused: {
     borderColor: '#B8A05C',
