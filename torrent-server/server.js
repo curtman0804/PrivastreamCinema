@@ -182,22 +182,41 @@ app.get('/stream/:infoHash', (req, res) => {
     'wss://tracker.btorrent.xyz',
     'wss://tracker.files.fm:7073/announce',
     'wss://spacetradersapi-chatbox.herokuapp.com:443/announce',
-    // HTTP/HTTPS trackers (K8s friendly - no UDP required)
-    'http://tracker.openbittorrent.com:80/announce',
-    'http://tracker3.itzmx.com:6961/announce',
-    'http://tracker.bt4g.com:2095/announce',
-    'http://tracker.files.fm:6969/announce',
-    'http://t.nyaatracker.com:80/announce',
-    'http://tracker.gbitt.info:80/announce',
-    'http://tracker.ccp.ovh:6969/announce',
-    'http://open.acgnxtracker.com:80/announce',
-    'http://tracker.dler.org:6969/announce',
-    'http://opentracker.i2p.rocks:6969/announce',
+    // HTTP trackers (verified working 2026)
     'http://tracker.opentrackr.org:1337/announce',
-    'https://tracker.lilithraws.org:443/announce',
-    'https://tr.burnabyhighstar.com:443/announce',
-    'https://tracker.tamersunion.org:443/announce',
-    'https://tracker.imgoingto.icu:443/announce',
+    'http://tracker.bt4g.com:2095/announce',
+    'http://tracker2.dler.org:80/announce',
+    'http://tracker.renfei.net:8080/announce',
+    'http://tracker.tritan.gg:8080/announce',
+    'http://tracker.sbsub.com:2710/announce',
+    'http://tracker.mywaifu.best:6969/announce',
+    'http://tracker.moxing.party:6969/announce',
+    'http://tracker.ipv6tracker.org:80/announce',
+    'http://tracker.bz:80/announce',
+    'http://tracker.bittor.pw:1337/announce',
+    'http://open.trackerlist.xyz:80/announce',
+    'http://open.acgtracker.com:1096/announce',
+    'http://bvarf.tracker.sh:2086/announce',
+    'http://bt1.xxxxbt.cc:6969/announce',
+    'http://tracker.ghostchu-services.top:80/announce',
+    'http://tracker.dler.org:6969/announce',
+    'http://tr.nyacat.pw:80/announce',
+    'http://1337.abcvg.info:80/announce',
+    'http://wepzone.net:6969/announce',
+    'http://tracker.wepzone.net:6969/announce',
+    'http://tracker.qu.ax:6969/announce',
+    'http://tracker.darkness.services:6969/announce',
+    'http://bittorrent-tracker.e-n-c-r-y-p-t.net:1337/announce',
+    'http://www.genesis-sp.org:2710/announce',
+    'http://tracker.skyts.net:6969/announce',
+    // HTTPS trackers
+    'https://tracker.zhuqiy.com:443/announce',
+    'https://tracker.pmman.tech:443/announce',
+    'https://tracker.moeblog.cn:443/announce',
+    'https://tracker.bt4g.com:443/announce',
+    'https://tr.zukizuki.org:443/announce',
+    'https://tracker.ghostchu-services.top:443/announce',
+    'https://tr.nyacat.pw:443/announce',
   ];
   
   let magnetURI = `magnet:?xt=urn:btih:${infoHash}`;
@@ -356,7 +375,7 @@ app.get('/stream/:infoHash', (req, res) => {
           console.log('⚠️ Timeout - forcing stream start');
           handleTorrent(torrent);
         }
-      }, 15000); // 15 second absolute timeout
+      }, 60000); // 60 second absolute timeout (HTTP trackers need time to respond)
     }
   };
 

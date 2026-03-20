@@ -242,6 +242,7 @@ export default function PlayerScreen() {
     poster?: string;
     logo?: string;
     resumePosition?: string;
+    sources?: string;
   }>();
   const router = useRouter();
   
@@ -1312,17 +1313,27 @@ export default function PlayerScreen() {
     try {
       const parsedFileIdx = fileIdx && fileIdx !== '' ? parseInt(fileIdx, 10) : undefined;
       const validFileIdx = parsedFileIdx !== undefined && !isNaN(parsedFileIdx) ? parsedFileIdx : undefined;
+      
+      // Parse sources from navigation params (tracker URLs from Torrentio)
+      let streamSources: string[] = [];
+      try {
+        if (sources) {
+          streamSources = JSON.parse(sources);
+          console.log(`[PLAYER] Got ${streamSources.length} tracker sources from Torrentio`);
+        }
+      } catch (e) {
+        console.log('[PLAYER] Could not parse sources:', e);
+      }
+      
       console.log(`[PLAYER] Starting torrent with fileIdx=${validFileIdx}, filename=${filename || 'auto'} (attempt ${retryCount + 1})`);
       
-      // Start the torrent on both libtorrent and WebTorrent
-      await api.stream.start(infoHash, validFileIdx, filename || undefined);
+      // Start the torrent on both libtorrent and WebTorrent, passing Torrentio tracker sources
+      await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources);
       
       // Get the WebTorrent video URL (proxied through backend)
       const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
       
       // SET VIDEO URL IMMEDIATELY - WebTorrent handles buffering natively
-      // The video player will show its own buffering indicator while data arrives
-      // This is how Stremio works: set URL → player buffers → playback starts
       console.log('[PLAYER] Setting WebTorrent video URL immediately:', videoUrl);
       videoRetryCountRef.current = 0;
       setStreamUrl(videoUrl);

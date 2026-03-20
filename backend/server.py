@@ -140,58 +140,75 @@ FALLBACK_MANIFESTS = {
 # This provides Stremio-like torrent streaming capabilities
 
 class TorrentStreamer:
-    """Handles torrent downloading and HTTP streaming like Stremio - OPTIMIZED FOR FAST STARTUP"""
+    """Handles torrent downloading and HTTP streaming like Stremio - OPTIMIZED FOR K8s (HTTP trackers only)"""
     MAX_SESSIONS = 2  # Only keep 2 active torrents to prevent disk overflow
     
     def __init__(self):
         self.sessions = {}  # infoHash -> session data
         self.download_dir = tempfile.mkdtemp(prefix="privastream_")
-        # Extensive tracker list for maximum peer discovery - fastest first
+        # HTTP/HTTPS trackers ONLY - UDP is blocked in Kubernetes
         self.trackers = [
-            "udp://tracker.opentrackr.org:1337/announce",
-            "udp://open.stealth.si:80/announce",
-            "udp://tracker.torrent.eu.org:451/announce",
-            "udp://tracker.bittor.pw:1337/announce",
-            "udp://public.popcorn-tracker.org:6969/announce",
-            "udp://tracker.dler.org:6969/announce",
-            "udp://exodus.desync.com:6969/announce",
-            "udp://open.demonii.com:1337/announce",
-            "udp://tracker.openbittorrent.com:6969/announce",
-            "udp://explodie.org:6969/announce",
-            "udp://tracker.tiny-vps.com:6969/announce",
-            "udp://tracker.moeking.me:6969/announce",
-            "udp://tracker1.bt.moack.co.kr:80/announce",
-            "udp://tracker.theoks.net:6969/announce",
-            "udp://tracker-udp.gbitt.info:80/announce",
-            "udp://tracker.dump.cl:6969/announce",
-            "http://tracker.openbittorrent.com:80/announce",
+            # High-reliability HTTP trackers (verified working 2026)
             "http://tracker.opentrackr.org:1337/announce",
             "http://tracker.bt4g.com:2095/announce",
-            "http://open.acgnxtracker.com:80/announce",
-            "https://tracker.lilithraws.org:443/announce",
-            "https://tracker.tamersunion.org:443/announce",
+            "http://tracker2.dler.org:80/announce",
+            "http://tracker.renfei.net:8080/announce",
+            "http://tracker.tritan.gg:8080/announce",
+            "http://tracker.sbsub.com:2710/announce",
+            "http://tracker.mywaifu.best:6969/announce",
+            "http://tracker.moxing.party:6969/announce",
+            "http://tracker.ipv6tracker.org:80/announce",
+            "http://tracker.bz:80/announce",
+            "http://tracker.bittor.pw:1337/announce",
+            "http://open.trackerlist.xyz:80/announce",
+            "http://open.acgtracker.com:1096/announce",
+            "http://bvarf.tracker.sh:2086/announce",
+            "http://bt1.xxxxbt.cc:6969/announce",
+            "http://tracker.ghostchu-services.top:80/announce",
+            "http://tracker.dler.org:6969/announce",
+            "http://tr.nyacat.pw:80/announce",
+            "http://1337.abcvg.info:80/announce",
+            "http://wepzone.net:6969/announce",
+            "http://tracker.wepzone.net:6969/announce",
+            "http://tracker.qu.ax:6969/announce",
+            "http://tracker.darkness.services:6969/announce",
+            "http://bittorrent-tracker.e-n-c-r-y-p-t.net:1337/announce",
+            "http://www.genesis-sp.org:2710/announce",
+            "http://tracker.skyts.net:6969/announce",
+            "http://tr.highstar.shop:80/announce",
+            "http://tracker.dhitechnical.com:6969/announce",
+            "http://lucke.fenesisu.moe:6969/announce",
+            # HTTPS trackers
+            "https://tracker.zhuqiy.com:443/announce",
+            "https://tracker.pmman.tech:443/announce",
+            "https://tracker.moeblog.cn:443/announce",
+            "https://tracker.bt4g.com:443/announce",
+            "https://tr.zukizuki.org:443/announce",
+            "https://tracker.ghostchu-services.top:443/announce",
+            "https://tr.nyacat.pw:443/announce",
+            "https://t.213891.xyz:443/announce",
         ]
         logger.info(f"TorrentStreamer initialized. Download dir: {self.download_dir}")
         
-        # Create ONE shared libtorrent session - DHT stays warm across all torrents
+        # Create ONE shared libtorrent session - optimized for K8s (outgoing TCP only)
         settings = {
             'listen_interfaces': '0.0.0.0:6881,[::]:6881,0.0.0.0:6891,[::]:6891',
-            'enable_dht': True,
-            'enable_lsd': True,
-            'enable_upnp': True,
-            'enable_natpmp': True,
-            'announce_to_all_trackers': True,
+            'enable_dht': False,              # DHT uses UDP - BLOCKED in K8s
+            'enable_lsd': False,              # LSD uses multicast - BLOCKED in K8s
+            'enable_upnp': False,             # UPnP not useful in K8s
+            'enable_natpmp': False,           # NAT-PMP not useful in K8s
+            'announce_to_all_trackers': True,  # Hit ALL trackers for max peer discovery
             'announce_to_all_tiers': True,
-            'connection_speed': 1000,        # Faster connection attempts
-            'connections_limit': 2000,       # More connections
-            'download_rate_limit': 0,        # Unlimited
+            'connection_speed': 1000,         # Faster connection attempts
+            'connections_limit': 2000,        # More connections
+            'download_rate_limit': 0,         # Unlimited
             'upload_rate_limit': 2 * 1024 * 1024,  # 2MB/s upload
-            'unchoke_slots_limit': 64,       # More upload slots = more reciprocal downloads
+            'unchoke_slots_limit': 64,
             'max_peerlist_size': 10000,
-            'peer_connect_timeout': 5,       # Faster timeout on bad peers
+            'peer_connect_timeout': 5,
             'handshake_timeout': 5,
-            'torrent_connect_boost': 200,    # More initial connections per torrent
-            'peer_timeout': 30,              # Drop slow peers faster
+            'torrent_connect_boost': 200,
+            'peer_timeout': 30,
             'inactivity_timeout': 30,
             'cache_size': 4096,              # Larger cache (16MB)
             'disk_io_read_mode': 0,
@@ -218,12 +235,7 @@ class TorrentStreamer:
         }
         self.lt_session = lt.session(settings)
         
-        # Bootstrap DHT with known nodes
-        self.lt_session.add_dht_node(("router.bittorrent.com", 6881))
-        self.lt_session.add_dht_node(("router.utorrent.com", 6881))
-        self.lt_session.add_dht_node(("dht.transmissionbt.com", 6881))
-        
-        logger.info("Shared libtorrent session started with optimized settings")
+        logger.info("Shared libtorrent session started with optimized settings (HTTP trackers only, DHT disabled for K8s)")
     
     def _evict_oldest(self):
         """Remove the oldest session to make room for new ones"""
@@ -234,20 +246,39 @@ class TorrentStreamer:
             # Also do a disk cleanup
             self._cleanup_disk()
     
-    def get_session(self, info_hash: str):
+    def get_session(self, info_hash: str, extra_trackers: list = None):
         """Get or create a torrent handle using the shared session"""
         info_hash = info_hash.lower()
         
         if info_hash in self.sessions:
+            # Add extra trackers to existing session if provided
+            if extra_trackers:
+                handle = self.sessions[info_hash]['handle']
+                if handle.is_valid():
+                    for tracker_url in extra_trackers:
+                        if tracker_url.startswith('http'):  # Only HTTP/HTTPS trackers
+                            try:
+                                handle.add_tracker({'url': tracker_url, 'tier': 0})
+                            except:
+                                pass
+                    handle.force_reannounce()
             return self.sessions[info_hash]
         
         # Evict oldest if at max capacity
         self._evict_oldest()
         
-        # Build magnet URI with trackers
+        # Build magnet URI with ALL trackers (our list + Torrentio's trackers)
+        all_trackers = list(self.trackers)
+        if extra_trackers:
+            for t in extra_trackers:
+                if t.startswith('http') and t not in all_trackers:  # HTTP/HTTPS only
+                    all_trackers.append(t)
+        
         magnet = f"magnet:?xt=urn:btih:{info_hash}"
-        for tracker in self.trackers:
+        for tracker in all_trackers:
             magnet += f"&tr={tracker}"
+        
+        logger.info(f"Adding torrent {info_hash} with {len(all_trackers)} HTTP trackers")
         
         # Use the modern API (parse_magnet_uri + add_torrent)
         params = lt.parse_magnet_uri(magnet)
@@ -3216,30 +3247,40 @@ _torrent_start_times = {}
 @api_router.post("/stream/start/{info_hash}")
 async def start_stream(
     info_hash: str, 
+    request: Request,
     fileIdx: Optional[int] = None,
     filename: Optional[str] = None,
 ):
     """Start downloading a torrent via BOTH libtorrent and WebTorrent for maximum peer connectivity"""
     try:
-        logger.info(f"Starting torrent download for {info_hash}, fileIdx={fileIdx}, filename={filename}")
-        
-        # Start on libtorrent (has DHT, better for well-connected networks)
+        # Parse request body for trackers (from Torrentio stream sources)
+        extra_trackers = []
         try:
-            session_data = torrent_streamer.get_session(info_hash)
+            body = await request.json()
+            sources = body.get("sources", [])
+            for source in sources:
+                if isinstance(source, str) and source.startswith("tracker:"):
+                    tracker_url = source[len("tracker:"):]
+                    if tracker_url.startswith("http"):  # Only HTTP/HTTPS (UDP is blocked)
+                        extra_trackers.append(tracker_url)
+            if extra_trackers:
+                logger.info(f"Got {len(extra_trackers)} HTTP trackers from Torrentio for {info_hash}")
+        except Exception:
+            pass  # No body or invalid JSON - that's fine
+        
+        logger.info(f"Starting torrent download for {info_hash}, fileIdx={fileIdx}, filename={filename}, extra_trackers={len(extra_trackers)}")
+        
+        # Start on libtorrent with ALL trackers (ours + Torrentio's)
+        try:
+            session_data = torrent_streamer.get_session(info_hash, extra_trackers=extra_trackers)
         except Exception as e:
             logger.warning(f"libtorrent start failed (non-critical): {e}")
         
         # ALSO start on WebTorrent server (uses WebSocket/HTTP trackers, K8s-friendly)
-        # This is the PRIMARY streaming source - much faster in container environments
         try:
-            params = {}
-            if fileIdx is not None:
-                params['fileIdx'] = str(fileIdx)
-            if filename:
-                params['filename'] = filename
             async with httpx.AsyncClient(timeout=5.0) as client:
-                wt_url = f"http://localhost:8002/status/{info_hash}"
-                await client.get(wt_url)
+                wt_url = f"http://localhost:8002/prewarm/{info_hash}"
+                await client.post(wt_url)
                 logger.info(f"WebTorrent pre-started for {info_hash}")
         except Exception as e:
             logger.warning(f"WebTorrent pre-start failed (non-critical): {e}")

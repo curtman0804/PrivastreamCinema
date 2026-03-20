@@ -696,7 +696,7 @@ export const api = {
     },
   },
   stream: {
-    start: async (infoHash: string, fileIdx?: number, filename?: string): Promise<{ status: string; info_hash: string }> => {
+    start: async (infoHash: string, fileIdx?: number, filename?: string, sources?: string[]): Promise<{ status: string; info_hash: string }> => {
       // Pass fileIdx and filename to tell the torrent server which file to play
       const params = new URLSearchParams();
       if (fileIdx !== undefined && fileIdx !== null) {
@@ -707,7 +707,12 @@ export const api = {
       }
       const queryString = params.toString();
       const url = `/api/stream/start/${infoHash}${queryString ? '?' + queryString : ''}`;
-      const response = await apiClient.post(url);
+      // Send sources (trackers) in request body for better peer discovery
+      const body: any = {};
+      if (sources && sources.length > 0) {
+        body.sources = sources;
+      }
+      const response = await apiClient.post(url, body);
       return response.data;
     },
     status: async (infoHash: string): Promise<{

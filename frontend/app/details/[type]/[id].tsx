@@ -567,6 +567,7 @@ export default function DetailsScreen() {
           backdrop: content?.background || '',
           poster: content?.poster || '',
           logo: content?.logo || '',
+          sources: stream.sources ? JSON.stringify(stream.sources) : '',
           ...nextEpisodeData,
           ...resumeData,
         },
