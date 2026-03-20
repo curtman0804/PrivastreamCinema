@@ -362,7 +362,7 @@ backend:
           • POST /api/stream/start/{infoHash}: ✅ Returns {"status": "started"} correctly
           • GET /api/stream/status/{infoHash}: ✅ Returns status "ready" with 8 peers after 2s
           • GET /api/stream/video/{infoHash} with Range header: ✅ Returns 206 with video/x-matroska content (65536 bytes)
-          • Public URL access via https://fix-test-deploy.preview.emergentagent.com/api/stream/video/{infoHash}: ✅ Working correctly
+          • Public URL access via https://video-deploy-1.preview.emergentagent.com/api/stream/video/{infoHash}: ✅ Working correctly
           
           🏥 INFRASTRUCTURE:
           • Torrent server at localhost:8002/health: ✅ Returns healthy status with active torrents
@@ -396,7 +396,7 @@ backend:
           • e) GET END of file Range:{fileSize-200000}-{fileSize} → ✅ Returns 206 within 0.08s (target <30s)
           • f) GET Range:0-524287 → ✅ Returns 206 Partial Content (0.08s)
           
-          🌐 PUBLIC URL: https://fix-test-deploy.preview.emergentagent.com/api/stream/video/{infoHash}
+          🌐 PUBLIC URL: https://video-deploy-1.preview.emergentagent.com/api/stream/video/{infoHash}
           • ✅ Returns 206 with Range header (0.06s) - WORKING PERFECTLY
           
           🎬 DISCOVER CONTENT: GET /api/content/discover-organized
@@ -750,7 +750,7 @@ agent_communication:
       • e) GET END Range:{fileSize-200000}-{fileSize} → ✅ 206 within 0.08s (target <30s) 
       • f) GET Range:0-524287 → ✅ 206 Partial Content (0.08s)
       
-      5️⃣ PUBLIC URL: https://fix-test-deploy.preview.emergentagent.com/api/stream/video/{infoHash}?fileIdx=0
+      5️⃣ PUBLIC URL: https://video-deploy-1.preview.emergentagent.com/api/stream/video/{infoHash}?fileIdx=0
       • ✅ Returns 206 with Range header (0.06s) - PERFECT
       
       6️⃣ DISCOVER CONTENT: GET /api/content/discover-organized with Bearer

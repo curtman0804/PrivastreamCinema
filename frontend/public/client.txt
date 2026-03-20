@@ -11,7 +11,7 @@ const getBaseUrl = () => {
   }
   // Production backend URL - hardcoded for standalone APK builds
   // This ensures the app always connects to the correct backend
-  return 'https://fix-test-deploy.preview.emergentagent.com';
+  return 'https://video-deploy-1.preview.emergentagent.com';
 };
 
 const BASE_URL = getBaseUrl();
@@ -691,7 +691,7 @@ export const api = {
     getVideoUrl: (infoHash: string, fileIdx?: number): string => {
       // Return the full URL for the video stream with optional fileIdx
       // Use the hardcoded backend URL for mobile builds
-      const baseUrl = Platform.OS === 'web' ? '' : 'https://fix-test-deploy.preview.emergentagent.com';
+      const baseUrl = Platform.OS === 'web' ? '' : 'https://video-deploy-1.preview.emergentagent.com';
       const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
       return `${baseUrl}/api/stream/video/${infoHash}${params}`;
     },
