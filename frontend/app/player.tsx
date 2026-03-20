@@ -330,16 +330,17 @@ export default function PlayerScreen() {
   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Safety timeout: hide loading screen after streamUrl is set
-  // If ExoPlayer hasn't started playing within 8 seconds, force-hide the loading screen.
-  // ExoPlayer will show its own buffering state if still loading.
+  // If ExoPlayer hasn't started playing within 20 seconds, force-hide the loading screen
+  // and show a retry message. This handles cases where ExoPlayer is stuck.
   useEffect(() => {
     if (streamUrl && isLoading && !error) {
       const safetyTimeout = setTimeout(() => {
         if (isLoading) {
-          console.log('[PLAYER] Safety timeout: hiding loading screen after 8s (ExoPlayer should handle buffering)');
+          console.log('[PLAYER] Safety timeout: 20s passed, ExoPlayer may be stuck. Showing error.');
+          setError('Video is taking too long to buffer. Try selecting a different stream with more seeders.');
           setIsLoading(false);
         }
-      }, 8000);
+      }, 20000);
       return () => clearTimeout(safetyTimeout);
     }
   }, [streamUrl, isLoading, error]);
@@ -652,10 +653,10 @@ export default function PlayerScreen() {
         saveWatchProgress(status.positionMillis, status.durationMillis);
       }
       
-      // Hide loading screen as soon as video is LOADED (not waiting for isPlaying)
-      // ExoPlayer handles its own buffering UI natively
-      if (!playbackStarted) {
-        console.log('[PLAYER] Video loaded, hiding loading screen (ExoPlayer buffering if needed)');
+      // Hide loading screen when video is ACTUALLY PLAYING (not just loaded)
+      // This keeps the loading screen visible during ExoPlayer's buffering phase
+      if (status.isPlaying && !playbackStarted) {
+        console.log('[PLAYER] Playback started successfully!');
         setPlaybackStarted(true);
         setIsLoading(false);
         // Clear timeout since playback started

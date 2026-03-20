@@ -297,8 +297,12 @@ class TorrentStreamer:
         if not data['video_file']:
             ti = handle.get_torrent_info()
             files = ti.files()
-            largest_video = None
-            largest_size = 0
+            
+            # Collect all video files, categorized by format preference
+            # MP4/M4V are preferred (best Android TV compatibility)
+            # MKV works but may have codec issues on some TV hardware decoders
+            mp4_videos = []  # .mp4, .m4v - best compatibility
+            other_videos = []  # .mkv, .avi, .webm, .mov, .ts
             
             for i in range(files.num_files()):
                 file_path = files.file_path(i)
@@ -306,13 +310,27 @@ class TorrentStreamer:
                 
                 # Check if it's a video file
                 if any(file_path.lower().endswith(ext) for ext in ['.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v', '.ts']):
-                    if file_size > largest_size:
-                        largest_size = file_size
-                        largest_video = {
-                            'index': i,
-                            'path': file_path,
-                            'size': file_size,
-                        }
+                    video_info = {
+                        'index': i,
+                        'path': file_path,
+                        'size': file_size,
+                    }
+                    if file_path.lower().endswith('.mp4') or file_path.lower().endswith('.m4v'):
+                        mp4_videos.append(video_info)
+                    else:
+                        other_videos.append(video_info)
+            
+            # Pick the largest MP4 first, then largest MKV/other as fallback
+            # Android TV hardware decoders handle MP4 containers much better
+            largest_video = None
+            if mp4_videos:
+                largest_video = max(mp4_videos, key=lambda v: v['size'])
+                logger.info(f"Selected MP4 video (Android TV preferred): {largest_video['path']}")
+            elif other_videos:
+                largest_video = max(other_videos, key=lambda v: v['size'])
+                logger.info(f"No MP4 found, using: {largest_video['path']}")
+            
+            largest_size = largest_video['size'] if largest_video else 0
             
             if largest_video:
                 data['video_file'] = largest_video
@@ -376,10 +394,9 @@ class TorrentStreamer:
             video_size = video_file['size']
             downloaded_bytes = int(s.progress * video_size) if s.progress > 0 else 0
             
-            # FAST START: Need only ~1MB downloaded to start playback
-            # ExoPlayer handles its own buffering - we just need enough for it to
-            # read the file header (moov atom for mp4, seekhead for mkv)
-            min_bytes_for_playback = 1 * 1024 * 1024  # 1MB - enough for headers
+            # Need ~3MB downloaded to start playback
+            # ExoPlayer needs enough data to read the file header and start decoding
+            min_bytes_for_playback = 3 * 1024 * 1024  # 3MB - enough for headers + initial frames
             ready_threshold = min_bytes_for_playback
             
             # Check if file exists and has content
@@ -3280,23 +3297,23 @@ async def stream_video(
         session_data = torrent_streamer.get_session(info_hash)
         handle = session_data['handle']
         
-        # Wait for metadata and video file discovery (max 5 seconds, check every 0.25s)
+        # Wait for metadata and video file discovery (max 10 seconds, check every 0.5s)
         waited = 0
-        while waited < 20:  # 20 * 0.25s = 5 seconds max
+        while waited < 20:  # 20 * 0.5s = 10 seconds max
             status = torrent_streamer.get_status(info_hash)
             if status.get("status") in ["ready", "buffering"] and status.get("video_file"):
                 break
-            await asyncio.sleep(0.25)
+            await asyncio.sleep(0.5)
             waited += 1
         
         video_path = torrent_streamer.get_video_path(info_hash)
         if not video_path:
             raise HTTPException(status_code=404, detail="Video file not found in torrent")
         
-        # Wait for the file to appear on disk (max 2 seconds)
+        # Wait for the file to appear on disk (max 5 seconds)
         waited = 0
-        while waited < 8 and (not os.path.exists(video_path) or os.path.getsize(video_path) < 64 * 1024):
-            await asyncio.sleep(0.25)
+        while waited < 10 and (not os.path.exists(video_path) or os.path.getsize(video_path) < 256 * 1024):
+            await asyncio.sleep(0.5)
             waited += 1
         
         if not os.path.exists(video_path):
