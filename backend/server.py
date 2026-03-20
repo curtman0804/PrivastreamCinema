@@ -1809,6 +1809,17 @@ async def get_all_streams(
                                     logger.debug(f"Filtered adult/unrelated content: {name[:50]}")
                                     continue
                                 
+                                # VALIDATE: Check that the torrent name actually matches our search query
+                                # Split the search query into key words and check at least 2 match
+                                query_words = [w.lower() for w in search_query.split() if len(w) > 2 and not w.isdigit()]
+                                if query_words:
+                                    matching_words = sum(1 for w in query_words if w in name_lower)
+                                    # Need at least half the query words to match, minimum 1
+                                    min_matches = max(1, len(query_words) // 2)
+                                    if matching_words < min_matches:
+                                        logger.debug(f"Filtered non-matching torrent: '{name[:50]}' (matched {matching_words}/{len(query_words)} words of '{search_query}')")
+                                        continue
+                                
                                 size_bytes = int(torrent.get('size', 0))
                                 size_str = f"{size_bytes / (1024*1024*1024):.2f} GB" if size_bytes > 1024*1024*1024 else f"{size_bytes / (1024*1024):.0f} MB"
                                 seeds = int(torrent.get('seeders', 0))
@@ -2161,15 +2172,17 @@ async def get_all_streams(
         '\U0001F1F9\U0001F1F7',  # 🇹🇷 Turkey
     ]
     FOREIGN_KEYWORDS = [
-        'FRENCH', 'TRUEFRENCH', 'VF2', 'VFF', 'VOSTFR',
+        'FRENCH', 'TRUEFRENCH', 'VF2', 'VFF', 'VOSTFR', 'VFQ', 'SUBFRENCH',
         'SPANISH', 'LATINO', 'CASTELLANO', 'LAT.DUB', 'LATIN',
         'GERMAN', 'DEUTSCH',
         'ITALIAN', 'ITALIANO',
         'RUSSIAN', 'DUBBED', 'DUB.', 'DUBLADO',
         'PORTUGUESE', 'HINDI', 'TAMIL', 'TELUGU',
-        'KOREAN', 'JAPANESE', 'CHINESE', 'MANDARIN',
-        'TURKISH', 'ARABIC', 'POLISH', 'DUTCH',
-        'MULTI.AUDIO', 'DUAL.AUDIO',
+        'KOREAN', 'JAPANESE', 'CHINESE', 'MANDARIN', 'CANTONESE',
+        'TURKISH', 'ARABIC', 'POLISH', 'DUTCH', 'CZECH', 'ROMANIAN',
+        'THAI', 'INDONESIAN', 'MALAY', 'VIETNAMESE', 'SWEDISH', 'DANISH',
+        'NORWEGIAN', 'FINNISH', 'GREEK', 'HUNGARIAN', 'SERBIAN', 'CROATIAN',
+        'MULTI.AUDIO', 'DUAL.AUDIO', 'MULTI',
         'Cinecalidad', 'Comando',  # Known Spanish release groups
     ]
     
@@ -2210,8 +2223,10 @@ async def get_all_streams(
                     is_foreign = True
                     break
         
-        # Check for English indicator (🇬🇧 flag or ENG keyword)
-        has_english = '\U0001F1EC\U0001F1E7' in combined_text or 'ENGLISH' in combined_upper
+        # Check for English indicator (🇬🇧 flag, ENG keyword, or EN/ language tag)
+        has_english = '\U0001F1EC\U0001F1E7' in combined_text or 'ENGLISH' in combined_upper or \
+            'EN/' in combined_upper or '/EN' in combined_upper or \
+            '\U0001F1FA\U0001F1F8' in combined_text  # 🇺🇸 US flag
         
         lang_score = 0 if is_foreign else 100
         if has_english:
