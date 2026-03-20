@@ -329,6 +329,21 @@ export default function PlayerScreen() {
   const [playbackStarted, setPlaybackStarted] = useState(false);
   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Safety timeout: hide loading screen after streamUrl is set
+  // If ExoPlayer hasn't started playing within 8 seconds, force-hide the loading screen.
+  // ExoPlayer will show its own buffering state if still loading.
+  useEffect(() => {
+    if (streamUrl && isLoading && !error) {
+      const safetyTimeout = setTimeout(() => {
+        if (isLoading) {
+          console.log('[PLAYER] Safety timeout: hiding loading screen after 8s (ExoPlayer should handle buffering)');
+          setIsLoading(false);
+        }
+      }, 8000);
+      return () => clearTimeout(safetyTimeout);
+    }
+  }, [streamUrl, isLoading, error]);
+  
   // Subtitles state
   const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
   const [selectedSubtitle, setSelectedSubtitle] = useState<string | null>(null);
@@ -637,9 +652,10 @@ export default function PlayerScreen() {
         saveWatchProgress(status.positionMillis, status.durationMillis);
       }
       
-      // Mark playback as started when video is actually playing
-      if (status.isPlaying && !playbackStarted) {
-        console.log('[PLAYER] Playback started successfully!');
+      // Hide loading screen as soon as video is LOADED (not waiting for isPlaying)
+      // ExoPlayer handles its own buffering UI natively
+      if (!playbackStarted) {
+        console.log('[PLAYER] Video loaded, hiding loading screen (ExoPlayer buffering if needed)');
         setPlaybackStarted(true);
         setIsLoading(false);
         // Clear timeout since playback started
