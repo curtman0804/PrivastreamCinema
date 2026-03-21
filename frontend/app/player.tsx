@@ -289,6 +289,7 @@ export default function PlayerScreen() {
   }, [resumePosition]);
   
   const [isLoading, setIsLoading] = useState(true);
+  const [isRebuffering, setIsRebuffering] = useState(false); // Shows spinner during seek/rebuffer
   const [error, setError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState('');
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
@@ -649,6 +650,7 @@ export default function PlayerScreen() {
       if (status.isPlaying && !playbackStarted) {
         console.log('[PLAYER] Playback started successfully!');
         setPlaybackStarted(true);
+        setIsRebuffering(false);
         // Animate progress to 100% then hide loading after a brief delay
         setDownloadProgress(100);
         // Small delay to show the completed animation before hiding
@@ -664,6 +666,15 @@ export default function PlayerScreen() {
         // Save progress immediately when playback starts (force save)
         if (status.durationMillis && status.durationMillis > 0) {
           saveWatchProgress(status.positionMillis, status.durationMillis, true);
+        }
+      }
+      
+      // Show/hide rebuffering spinner during playback (e.g., after seeking)
+      if (playbackStarted && !isLoading) {
+        if (status.isBuffering && !status.isPlaying) {
+          setIsRebuffering(true);
+        } else if (status.isPlaying) {
+          setIsRebuffering(false);
         }
       }
       
@@ -1370,22 +1381,10 @@ export default function PlayerScreen() {
       // Get the video URL
       const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
       let pollCount = 0;
-      let smoothProgress = 0;
+      let smoothProgress = 5; // Start at 5% for immediate visual feedback
       let videoUrlSet = false;
       let hadPeersOnce = false;
       let startTime = Date.now();
-      
-      // IMMEDIATELY set the video URL after 2 seconds
-      // WebTorrent's /stream endpoint handles buffering internally - it waits for data
-      // This is how Stremio does it: start playing immediately, let the player buffer
-      setTimeout(() => {
-        if (!videoUrlSet && continuePollingRef.current) {
-          videoUrlSet = true;
-          console.log(`[PLAYER] Setting video URL immediately (WebTorrent handles buffering): ${videoUrl}`);
-          videoRetryCountRef.current = 0;
-          setStreamUrl(videoUrl);
-        }
-      }, 2000);
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
@@ -1401,8 +1400,7 @@ export default function PlayerScreen() {
           
           const elapsedSec = (Date.now() - startTime) / 1000;
           
-          // Smooth progress for loading bar
-          // IMPORTANT: Cap at 90% - only reach 100% when video ACTUALLY plays
+          // Smooth progress for loading bar - cap at 90%
           if (status.status === 'downloading_metadata') {
             smoothProgress = Math.min(smoothProgress + 3, 30);
           } else if (status.status === 'buffering') {
@@ -1414,22 +1412,14 @@ export default function PlayerScreen() {
           }
           setDownloadProgress(smoothProgress);
           
-          // If ready and we haven't set URL yet (shouldn't happen due to 2s timeout above)
+          // PLAY when backend reports READY (data available to stream)
           if (status.status === 'ready' && !videoUrlSet) {
             videoUrlSet = true;
-            console.log(`[PLAYER] Stream READY in ${elapsedSec.toFixed(1)}s! Setting video URL: ${videoUrl}`);
+            console.log(`[PLAYER] Stream READY in ${elapsedSec.toFixed(1)}s! Peers: ${peerCount}. Setting video URL.`);
             videoRetryCountRef.current = 0;
             setStreamUrl(videoUrl);
-            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+            // Keep polling for progress updates but don't set URL again
             return;
-          }
-          
-          // If peers found quickly, set URL immediately (don't wait the full 2s)
-          if (!videoUrlSet && peerCount > 0 && elapsedSec >= 1) {
-            videoUrlSet = true;
-            console.log(`[PLAYER] Peers found (${peerCount}), setting video URL early: ${videoUrl}`);
-            videoRetryCountRef.current = 0;
-            setStreamUrl(videoUrl);
           }
           
           if (status.status === 'not_found' || status.status === 'invalid') {
@@ -1818,6 +1808,19 @@ export default function PlayerScreen() {
                   }
                 }}
               />
+              
+              {/* Rebuffering spinner - shown when seeking to unbuffered position */}
+              {isRebuffering && !isLoading && (
+                <View style={{
+                  position: 'absolute',
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  backgroundColor: 'rgba(0,0,0,0.4)',
+                }}>
+                  <ActivityIndicator size="large" color="#FFFFFF" />
+                </View>
+              )}
             </Pressable>
             
             {/* Subtitle Overlay */}

@@ -4,6 +4,7 @@ import cors from 'cors';
 import path from 'path';
 
 const app = express();
+app.use(express.json()); // Parse JSON request bodies
 
 // Get correct MIME type from filename
 function getMimeType(filename) {
@@ -92,22 +93,48 @@ app.post('/prewarm/:infoHash', (req, res) => {
   
   // Start the torrent
   const trackers = [
+    // WebSocket trackers - KEY for peer discovery in K8s (where UDP is blocked)
     'wss://tracker.openwebtorrent.com',
     'wss://tracker.btorrent.xyz',
     'wss://tracker.files.fm:7073/announce',
     'wss://spacetradersapi-chatbox.herokuapp.com:443/announce',
+    'wss://tracker.webtorrent.dev',
+    // HTTP/HTTPS trackers
     'http://tracker.openbittorrent.com:80/announce',
     'http://tracker3.itzmx.com:6961/announce',
     'http://tracker.bt4g.com:2095/announce',
     'http://tracker.files.fm:6969/announce',
     'http://tracker.opentrackr.org:1337/announce',
+    'http://tracker2.dler.org:80/announce',
+    'http://tracker.mywaifu.best:6969/announce',
+    'http://tracker.renfei.net:8080/announce',
+    'http://tracker.tritan.gg:8080/announce',
+    'http://open.trackerlist.xyz:80/announce',
+    'http://1337.abcvg.info:80/announce',
+    'http://tracker.ghostchu-services.top:80/announce',
+    'http://wepzone.net:6969/announce',
+    'http://tracker.qu.ax:6969/announce',
     'https://tracker.lilithraws.org:443/announce',
     'https://tr.burnabyhighstar.com:443/announce',
     'https://tracker.tamersunion.org:443/announce',
+    'https://tracker.bt4g.com:443/announce',
+    'https://tracker.zhuqiy.com:443/announce',
+    'https://tracker.moeblog.cn:443/announce',
   ];
   
+  // Add extra trackers from the request body (from Torrentio stream sources)
+  let extraTrackers = [];
+  try {
+    if (req.body && req.body.trackers && Array.isArray(req.body.trackers)) {
+      extraTrackers = req.body.trackers.filter(t => t.startsWith('http'));
+      console.log(`📡 Got ${extraTrackers.length} extra trackers from Torrentio`);
+    }
+  } catch (e) {}
+  
+  const allTrackers = [...trackers, ...extraTrackers];
+  
   let magnetURI = `magnet:?xt=urn:btih:${infoHash}`;
-  trackers.forEach(t => { magnetURI += `&tr=${encodeURIComponent(t)}`; });
+  allTrackers.forEach(t => { magnetURI += `&tr=${encodeURIComponent(t)}`; });
   
   try {
     const newTorrent = client.add(magnetURI, { maxWebConns: 10, storeCacheSlots: 50 });

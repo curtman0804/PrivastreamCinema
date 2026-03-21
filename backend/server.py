@@ -488,29 +488,26 @@ class TorrentStreamer:
                         has_avi = header[:4] == b'RIFF'  # AVI
                         has_valid_header = has_ftyp or has_ebml or has_avi
                     
-                    # Ready when: valid video header + at least 2MB on disk + at least 1 peer
-                    # The 2MB buffer gives ExoPlayer enough data to start without immediate stalls
-                    min_buffer = 2 * 1024 * 1024  # 2MB minimum buffer
-                    has_peers = s.num_peers > 0
-                    first_pieces_ready = has_valid_header and file_size_on_disk >= min_buffer and has_peers
+                    # Ready when: valid video header + at least 1MB on disk
+                    # The 1MB buffer gives ExoPlayer enough data to start
+                    min_buffer = 1 * 1024 * 1024  # 1MB minimum buffer
+                    first_pieces_ready = has_valid_header and file_size_on_disk >= min_buffer
                     
                     if first_pieces_ready:
                         logger.info(f"Video file ready: {os.path.basename(video_path)}, "
                                    f"header={'ftyp' if has_ftyp else 'ebml' if has_ebml else 'avi'}, "
                                    f"size_on_disk={file_size_on_disk/1024/1024:.1f}MB, peers={s.num_peers}")
-                    elif has_valid_header and file_size_on_disk >= min_buffer and not has_peers:
-                        logger.info(f"Video file has data but 0 peers - not marking as ready yet")
                 
                 # Last pieces: check if end of file has data (for moov atom)
                 last_pieces_ready = True  # Don't block on last pieces
             except Exception as e:
                 logger.warning(f"File check error: {e}")
-                first_pieces_ready = file_size_on_disk >= 2 * 1024 * 1024 and s.num_peers > 0
+                first_pieces_ready = file_size_on_disk >= 1 * 1024 * 1024
             
             # Ready = first pieces of video are downloaded (header/moov atom at beginning)
             # Last pieces are prioritized at 7 but we don't wait for them - ExoPlayer handles buffering
             is_ready = first_pieces_ready
-            min_bytes_for_playback = 2 * 1024 * 1024  # 2MB for readiness
+            min_bytes_for_playback = 1 * 1024 * 1024  # 1MB for readiness
             ready_threshold = min_bytes_for_playback
             
             return {
@@ -3356,8 +3353,14 @@ async def start_stream(
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 wt_url = f"http://localhost:8002/prewarm/{info_hash}"
-                await client.post(wt_url)
-                logger.info(f"WebTorrent pre-started for {info_hash}")
+                # Pass extra trackers from Torrentio to WebTorrent
+                wt_body = {}
+                if extra_trackers:
+                    wt_body["trackers"] = extra_trackers
+                if fileIdx is not None:
+                    wt_body["fileIdx"] = fileIdx
+                await client.post(wt_url, json=wt_body)
+                logger.info(f"WebTorrent pre-started for {info_hash} with {len(extra_trackers)} extra trackers")
         except Exception as e:
             logger.warning(f"WebTorrent pre-start failed (non-critical): {e}")
         
