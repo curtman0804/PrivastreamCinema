@@ -304,6 +304,10 @@ export default function PlayerScreen() {
   const videoRetryCountRef = useRef(0);
   const maxVideoRetries = 15; // More retries - torrent data arrives progressively
   
+  // Track seek state to prevent URL reset during seeking
+  const isSeekingRef = useRef(false);
+  const lastSeekPositionRef = useRef<number>(0);
+  
   // Stremio-style breathing zoom animation for loading title
   const breatheAnim = useRef(new Animated.Value(1)).current;
   
@@ -681,6 +685,11 @@ export default function PlayerScreen() {
           setIsRebuffering(true);
         } else if (status.isPlaying) {
           setIsRebuffering(false);
+          // Clear seeking state once playback resumes after a seek
+          if (isSeekingRef.current) {
+            isSeekingRef.current = false;
+            videoRetryCountRef.current = 0;
+          }
         }
       }
       
@@ -857,17 +866,29 @@ export default function PlayerScreen() {
   const seekToPosition = async (percentage: number) => {
     if (videoRef.current && duration > 0) {
       const newPosition = Math.floor(duration * percentage);
-      await videoRef.current.setPositionAsync(newPosition);
+      isSeekingRef.current = true;
+      lastSeekPositionRef.current = newPosition;
+      setIsRebuffering(true);
+      
+      try {
+        await videoRef.current.setPositionAsync(newPosition);
+      } catch (e) {
+        console.log('[PLAYER] Seek position failed:', e);
+      }
+      
+      // Clear seeking state after a delay to allow buffering
+      setTimeout(() => {
+        isSeekingRef.current = false;
+      }, 10000); // Give 10 seconds for data to arrive after seek
+      
       showControlsWithTimeout();
       
       // Notify backend to reprioritize pieces for the seek target
       if (infoHash) {
-        // Use actual file size from status if available, otherwise estimate
         const totalDurationSec = duration / 1000;
         const seekTimeSec = newPosition / 1000;
         let estimatedFileSize = videoFileSizeRef.current;
         if (!estimatedFileSize || estimatedFileSize <= 0) {
-          // Fallback: estimate from bitrate (5Mbps average for 1080p)
           const estimatedBitrate = 5 * 1024 * 1024 / 8;
           estimatedFileSize = estimatedBitrate * totalDurationSec;
         }
@@ -881,7 +902,21 @@ export default function PlayerScreen() {
   const seekToMs = async (newPositionMs: number) => {
     if (videoRef.current) {
       const clampedPosition = Math.max(0, Math.min(duration, newPositionMs));
-      await videoRef.current.setPositionAsync(clampedPosition);
+      isSeekingRef.current = true;
+      lastSeekPositionRef.current = clampedPosition;
+      setIsRebuffering(true);
+      
+      try {
+        await videoRef.current.setPositionAsync(clampedPosition);
+      } catch (e) {
+        console.log('[PLAYER] Seek ms failed:', e);
+      }
+      
+      // Clear seeking state after a delay to allow buffering
+      setTimeout(() => {
+        isSeekingRef.current = false;
+      }, 10000);
+      
       showControlsWithTimeout();
       
       // Notify backend to reprioritize pieces for the seek target
@@ -1858,6 +1893,32 @@ export default function PlayerScreen() {
                 onPlaybackStatusUpdate={handlePlaybackStatus}
                 onError={(error) => {
                   console.log(`[PLAYER] Video error (attempt ${videoRetryCountRef.current + 1}/${maxVideoRetries}):`, error);
+                  
+                  // If we're seeking and get an error, DON'T reset the URL
+                  // Just retry the seek - the data might not be available yet
+                  if (isSeekingRef.current && lastSeekPositionRef.current > 0) {
+                    console.log(`[PLAYER] Error during seek - retrying seek to ${lastSeekPositionRef.current}ms instead of resetting`);
+                    setIsRebuffering(true);
+                    // Wait a bit for data to arrive, then retry the seek
+                    setTimeout(async () => {
+                      try {
+                        if (videoRef.current) {
+                          await videoRef.current.setPositionAsync(lastSeekPositionRef.current);
+                          console.log(`[PLAYER] Seek retry successful to ${lastSeekPositionRef.current}ms`);
+                        }
+                      } catch (e) {
+                        console.log(`[PLAYER] Seek retry failed:`, e);
+                        // After 3 retries during seek, give up and let it play from wherever it is
+                        videoRetryCountRef.current += 1;
+                        if (videoRetryCountRef.current > 3) {
+                          isSeekingRef.current = false;
+                          videoRetryCountRef.current = 0;
+                          setIsRebuffering(false);
+                        }
+                      }
+                    }, 2000);
+                    return;
+                  }
                   
                   // Retry aggressively - torrent data arrives progressively, each retry may succeed
                   if (videoRetryCountRef.current < maxVideoRetries) {

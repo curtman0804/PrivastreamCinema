@@ -506,9 +506,9 @@ class TorrentStreamer:
                         has_avi = header[:4] == b'RIFF'  # AVI
                         has_valid_header = has_ftyp or has_ebml or has_avi
                     
-                    # Ready when: valid video header + at least 1MB on disk
-                    # The 1MB buffer gives ExoPlayer enough data to start
-                    min_buffer = 1 * 1024 * 1024  # 1MB minimum buffer
+                    # Ready when: valid video header + at least 512KB on disk
+                    # 512KB is enough for ExoPlayer to start (it handles its own buffering)
+                    min_buffer = 512 * 1024  # 512KB minimum buffer
                     first_pieces_ready = has_valid_header and file_size_on_disk >= min_buffer
                     
                     if first_pieces_ready:
@@ -520,12 +520,12 @@ class TorrentStreamer:
                 last_pieces_ready = True  # Don't block on last pieces
             except Exception as e:
                 logger.warning(f"File check error: {e}")
-                first_pieces_ready = file_size_on_disk >= 1 * 1024 * 1024
+                first_pieces_ready = file_size_on_disk >= 512 * 1024
             
             # Ready = first pieces of video are downloaded (header/moov atom at beginning)
             # Last pieces are prioritized at 7 but we don't wait for them - ExoPlayer handles buffering
             is_ready = first_pieces_ready
-            min_bytes_for_playback = 1 * 1024 * 1024  # 1MB for readiness
+            min_bytes_for_playback = 512 * 1024  # 512KB for readiness
             ready_threshold = min_bytes_for_playback
             
             return {

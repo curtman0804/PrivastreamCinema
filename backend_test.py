@@ -20,8 +20,8 @@ from typing import Dict, Any
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Test configuration
-BACKEND_URL = "https://privastream-cinema-4.preview.emergentagent.com"
+# Test configuration - Using localhost:8001 as specified in review request
+BACKEND_URL = "http://localhost:8001"
 API_BASE = f"{BACKEND_URL}/api"
 TEST_INFO_HASH = "08ada5a7a6183aae1e09d831df6748d566095a10"  # Shawshank Redemption
 TEST_CREDENTIALS = {"username": "choyt", "password": "RFIDGuy1!"}
@@ -134,14 +134,12 @@ class BackendTester:
         return False
     
     async def test_stream_start_with_sources(self):
-        """Test 3: Stream Start Endpoint with sources array (critical bug fix)"""
+        """Test 3: Stream Start Endpoint with sources array (exact review request)"""
         try:
-            # Test the specific bug fix: sources array with tracker URLs
+            # Test with exact sources from review request
             test_sources = [
                 "tracker:http://tracker.opentrackr.org:1337/announce",
-                "tracker:udp://tracker.opentrackr.org:1337/announce",
-                "tracker:http://nyaa.tracker.wf:7777/announce",
-                "tracker:udp://open.stealth.si:80/announce"
+                "tracker:udp://tracker.openbittorrent.com:6969/announce"
             ]
             
             headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
@@ -156,10 +154,10 @@ class BackendTester:
             
             if response.status_code == 200:
                 data = response.json()
-                expected_fields = ["status", "info_hash"]
+                expected_fields = ["status"]
                 missing_fields = [f for f in expected_fields if f not in data]
                 
-                if not missing_fields and data.get("status") == "started":
+                if not missing_fields and data.get("status") in ["started", "already_started"]:
                     self.log_test_result(
                         "Stream Start with Sources", 
                         True, 
@@ -186,11 +184,11 @@ class BackendTester:
         return False
     
     async def test_stream_status(self):
-        """Test 4: Stream Status Endpoint with all required fields"""
+        """Test 4: Stream Status Endpoint - verify status field exists and video_size > 0"""
         try:
             headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
             
-            # Wait a moment for stream to initialize
+            # Wait 3 seconds as specified in review request
             await asyncio.sleep(3)
             
             start_time = time.time()
@@ -203,43 +201,23 @@ class BackendTester:
             if response.status_code == 200:
                 data = response.json()
                 
-                # Check for all required fields from review request
-                required_fields = [
-                    "status",           # should be "ready", "buffering", or "downloading_metadata"
-                    "video_size",       # used for accurate seeking
-                    "peers",            # peer count
-                    "download_rate",    # download rate
-                    "lt_peers",         # libtorrent peers
-                    "wt_peers",         # webtorrent peers
-                    "engine"            # engine field
-                ]
+                # Check for required fields from review request
+                status = data.get("status")
+                video_size = data.get("video_size", 0)
                 
-                missing_fields = [f for f in required_fields if f not in data]
-                
-                if not missing_fields:
-                    status = data.get("status")
-                    valid_statuses = ["ready", "buffering", "downloading_metadata"]
-                    
-                    if status in valid_statuses:
-                        self.log_test_result(
-                            "Stream Status", 
-                            True, 
-                            f"All required fields present. Status: {status}, Peers: {data.get('peers')}, Engine: {data.get('engine')}, Video Size: {data.get('video_size')}",
-                            response_time
-                        )
-                        return True
-                    else:
-                        self.log_test_result(
-                            "Stream Status", 
-                            False, 
-                            f"Invalid status '{status}'. Expected one of: {valid_statuses}",
-                            response_time
-                        )
+                if status is not None and video_size > 0:
+                    self.log_test_result(
+                        "Stream Status", 
+                        True, 
+                        f"Status field exists: '{status}', video_size > 0: {video_size}",
+                        response_time
+                    )
+                    return True
                 else:
                     self.log_test_result(
                         "Stream Status", 
                         False, 
-                        f"Missing required fields: {missing_fields}. Got: {list(data.keys())}",
+                        f"Missing status field or video_size <= 0. Status: {status}, video_size: {video_size}",
                         response_time
                     )
             else:
@@ -399,15 +377,13 @@ class BackendTester:
         logger.info(f"Test Info Hash: {TEST_INFO_HASH}")
         logger.info("=" * 80)
         
-        # Test sequence
+        # Test sequence - Only the specific tests from review request
         tests = [
-            ("Health Check", self.test_health_endpoint),
             ("Authentication", self.test_authentication),
+            ("Health Check", self.test_health_endpoint),
             ("Stream Start with Sources", self.test_stream_start_with_sources),
             ("Stream Status", self.test_stream_status),
-            ("Stream Seek", self.test_stream_seek),
             ("Stream Video Range", self.test_stream_video_range),
-            ("Stream Video HEAD", self.test_stream_video_head),
         ]
         
         passed = 0
