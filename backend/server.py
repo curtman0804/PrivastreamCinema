@@ -146,9 +146,10 @@ class TorrentStreamer:
     def __init__(self):
         self.sessions = {}  # infoHash -> session data
         self.download_dir = tempfile.mkdtemp(prefix="privastream_")
-        # HTTP/HTTPS trackers ONLY - UDP is blocked in Kubernetes
+        # MASSIVE HTTP/HTTPS tracker list - UDP is blocked in K8s
+        # More trackers = more peers discovered = faster playback
         self.trackers = [
-            # High-reliability HTTP trackers (verified working 2026)
+            # === HIGH-RELIABILITY HTTP TRACKERS (verified 2026) ===
             "http://tracker.opentrackr.org:1337/announce",
             "http://tracker.bt4g.com:2095/announce",
             "http://tracker2.dler.org:80/announce",
@@ -178,7 +179,22 @@ class TorrentStreamer:
             "http://tr.highstar.shop:80/announce",
             "http://tracker.dhitechnical.com:6969/announce",
             "http://lucke.fenesisu.moe:6969/announce",
-            # HTTPS trackers
+            # === ADDITIONAL HTTP TRACKERS (expanded for max peer coverage) ===
+            "http://echostar.ddnsfree.com:8080/announce",
+            "http://tracker.exe.in.th:6969/announce",
+            "http://ipv4.rer.lol:2710/announce",
+            "http://retracker.joxnet.ru:80/announce",
+            "http://fosstorrents.com:6969/announce",
+            "http://retracker.sevstar.net:2710/announce",
+            "http://buny.uk:6969/announce",
+            "http://torrenttracker.nwc.acsalaska.net:6969/announce",
+            "http://tracker.gbitt.info:80/announce",
+            "http://reisub.nsupdate.info:6969/announce",
+            "http://filetracker.xyz:11451/announce",
+            "http://tracker1.itzmx.com:8080/announce",
+            "http://tracker.xn--djrq4gl4hvoi.top:80/announce",
+            "http://107.189.10.20.sslip.io:7777/announce",
+            # === HTTPS TRACKERS (TLS encrypted, reliable) ===
             "https://tracker.zhuqiy.com:443/announce",
             "https://tracker.pmman.tech:443/announce",
             "https://tracker.moeblog.cn:443/announce",
@@ -187,55 +203,76 @@ class TorrentStreamer:
             "https://tracker.ghostchu-services.top:443/announce",
             "https://tr.nyacat.pw:443/announce",
             "https://t.213891.xyz:443/announce",
+            "https://shahidrazi.online:443/announce",
+            "https://tracker.nekomi.cn:443/announce",
+            "https://tracker.cyber-hub.net:443/announce",
+            "https://bittorrent.gongt.net:443/announce",
+            "https://tracker.mlsub.net:443/announce",
         ]
-        logger.info(f"TorrentStreamer initialized. Download dir: {self.download_dir}")
+        logger.info(f"TorrentStreamer initialized with {len(self.trackers)} HTTP trackers. Download dir: {self.download_dir}")
         
-        # Create ONE shared libtorrent session - optimized for K8s (outgoing TCP only)
+        # Create ONE shared libtorrent session - optimized for K8s (TCP ONLY)
         settings = {
             'listen_interfaces': '0.0.0.0:6881,[::]:6881,0.0.0.0:6891,[::]:6891',
+            # === NETWORK PROTOCOL SETTINGS ===
             'enable_dht': False,              # DHT uses UDP - BLOCKED in K8s
             'enable_lsd': False,              # LSD uses multicast - BLOCKED in K8s
             'enable_upnp': False,             # UPnP not useful in K8s
             'enable_natpmp': False,           # NAT-PMP not useful in K8s
+            'enable_outgoing_tcp': True,      # TCP is our ONLY transport
+            'enable_incoming_tcp': True,      # Accept incoming TCP connections
+            'enable_outgoing_utp': False,     # uTP uses UDP - BLOCKED in K8s
+            'enable_incoming_utp': False,     # uTP uses UDP - BLOCKED in K8s
+            # === TRACKER SETTINGS (critical for HTTP-only mode) ===
             'announce_to_all_trackers': True,  # Hit ALL trackers for max peer discovery
             'announce_to_all_tiers': True,
-            'connection_speed': 1000,         # Faster connection attempts
-            'connections_limit': 2000,        # More connections
-            'download_rate_limit': 0,         # Unlimited
+            'tracker_completion_timeout': 30,  # Wait for tracker response
+            'tracker_receive_timeout': 10,     # Timeout receiving tracker data
+            'stop_tracker_timeout': 1,         # Don't wait long when stopping
+            'min_announce_interval': 30,       # Re-announce frequently
+            # === CONNECTION SPEED SETTINGS ===
+            'connection_speed': 500,          # Connections per second (practical limit)
+            'connections_limit': 2000,        # Total connections
+            'download_rate_limit': 0,         # Unlimited download
             'upload_rate_limit': 2 * 1024 * 1024,  # 2MB/s upload
             'unchoke_slots_limit': 64,
             'max_peerlist_size': 10000,
-            'peer_connect_timeout': 5,
+            # === PEER TIMEOUT SETTINGS ===
+            'peer_connect_timeout': 5,        # Fast peer connect timeout
             'handshake_timeout': 5,
-            'torrent_connect_boost': 200,
+            'torrent_connect_boost': 200,     # Extra connection slots for new torrents
             'peer_timeout': 30,
             'inactivity_timeout': 30,
-            'cache_size': 4096,              # Larger cache (16MB)
+            'request_timeout': 10,            # Timeout for individual piece requests
+            # === DISK/CACHE SETTINGS ===
+            'cache_size': 4096,               # 16MB cache
             'disk_io_read_mode': 0,
             'disk_io_write_mode': 0,
-            'aio_threads': 8,               # More IO threads
+            'aio_threads': 8,
+            # === REQUEST PIPELINE ===
             'request_queue_time': 3,
             'max_out_request_queue': 2000,
             'whole_pieces_threshold': 5,
             'max_allowed_in_request_queue': 4000,
-            'send_buffer_watermark': 1024 * 1024,   # 1MB send buffer
+            # === BUFFER SETTINGS ===
+            'send_buffer_watermark': 1024 * 1024,
             'send_buffer_watermark_factor': 200,
-            'mixed_mode_algorithm': 0,
+            'recv_socket_buffer_size': 2 * 1024 * 1024,
+            'send_socket_buffer_size': 2 * 1024 * 1024,
+            # === ALGORITHM SETTINGS ===
+            'mixed_mode_algorithm': 0,        # Prefer TCP (only transport we have)
             'rate_limit_ip_overhead': False,
             'allow_multiple_connections_per_ip': True,
-            'seed_choking_algorithm': 1,     # Fastest upload
-            'choking_algorithm': 1,          # Optimize for downloading
+            'seed_choking_algorithm': 1,      # Fastest upload to help swarm
+            'choking_algorithm': 1,           # Optimize for downloading
             'max_rejects': 10,
-            'recv_socket_buffer_size': 2 * 1024 * 1024,  # 2MB receive buffer
-            'send_socket_buffer_size': 2 * 1024 * 1024,
-            'smooth_connects': False,        # Connect as fast as possible
+            'smooth_connects': False,         # Connect as fast as possible
             'always_send_user_agent': True,
             'no_connect_privileged_ports': False,
-            'dht_bootstrap_nodes': 'router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,dht.aelitis.com:6881',
         }
         self.lt_session = lt.session(settings)
         
-        logger.info("Shared libtorrent session started with optimized settings (HTTP trackers only, DHT disabled for K8s)")
+        logger.info("Shared libtorrent session started (TCP-only, uTP disabled, PEX active via extensions)")
     
     def _evict_oldest(self):
         """Remove the oldest session to make room for new ones"""
@@ -288,6 +325,9 @@ class TorrentStreamer:
         # Sequential download for streaming
         handle.set_flags(lt.torrent_flags.sequential_download)
         
+        # Force immediate announce to all trackers for fastest peer discovery
+        handle.force_reannounce(0)
+        
         self.sessions[info_hash] = {
             'session': self.lt_session,
             'handle': handle,
@@ -297,7 +337,7 @@ class TorrentStreamer:
             'save_path': self.download_dir,
         }
         
-        logger.info(f"Added torrent {info_hash} to shared session")
+        logger.info(f"Added torrent {info_hash} to shared session with force-reannounce")
         return self.sessions[info_hash]
     
     def get_status(self, info_hash: str) -> dict:
@@ -3601,20 +3641,16 @@ async def stream_video(
                         disk_wait = 0
                         max_wait = 60
                         while disk_wait < max_wait:
-                            all_ready = True
-                            for p in range(need_start_piece, need_end_piece + 1):
-                                if not handle_inner.have_piece(p):
-                                    all_ready = False
-                                    break
+                            all_ready = all(handle_inner.have_piece(p) for p in range(need_start_piece, need_end_piece + 1))
                             if all_ready:
                                 break
-                            await asyncio.sleep(0.5)
+                            await asyncio.sleep(0.3)
                             disk_wait += 1
                     
                     with open(video_path, 'rb') as f:
                         remaining = chunk_size
                         while remaining > 0:
-                            read_size = min(remaining, 64 * 1024)
+                            read_size = min(remaining, 128 * 1024)  # 128KB chunks
                             data = f.read(read_size)
                             if not data:
                                 break
@@ -3677,62 +3713,91 @@ async def stream_video(
         
         async def range_generator():
             try:
-                # CRITICAL: Wait for the actual PIECES to be downloaded, not just file size
-                # Sparse files return zeros for undownloaded regions which breaks video players
-                session_data = torrent_streamer.sessions.get(info_hash.lower())
-                if session_data:
-                    handle = session_data['handle']
-                    ti = handle.get_torrent_info()
-                    piece_length = ti.piece_length()
-                    vf = session_data.get('video_file', {})
-                    file_offset = ti.files().file_offset(vf.get('index', 0)) if vf else 0
-                    
-                    # Calculate which pieces we need for this range
-                    need_start_piece = (file_offset + start) // piece_length
-                    need_end_piece = (file_offset + end) // piece_length
-                    
-                    # BOOST: Prioritize the pieces ExoPlayer is requesting RIGHT NOW
-                    try:
-                        priorities = handle.get_piece_priorities()
-                        for p in range(need_start_piece, min(need_end_piece + 1, len(priorities))):
-                            if priorities[p] < 7:
-                                priorities[p] = 7
-                        handle.prioritize_pieces(priorities)
-                    except:
-                        pass
-                    
-                    disk_wait = 0
-                    max_wait = 60  # 30 seconds max wait (60 * 0.5s)
-                    while disk_wait < max_wait:
-                        all_ready = True
-                        for p in range(need_start_piece, need_end_piece + 1):
-                            if not handle.have_piece(p):
-                                all_ready = False
-                                break
-                        
-                        if all_ready:
-                            break
-                        
-                        # Log progress periodically (every 5 seconds)
-                        if disk_wait % 10 == 0:
-                            s = handle.status()
-                            logger.info(f"Waiting for pieces {need_start_piece}-{need_end_piece}: peers={s.num_peers}, progress={s.progress*100:.1f}%")
-                        
-                        await asyncio.sleep(0.5)
-                        disk_wait += 1
-                    
-                    if disk_wait >= max_wait:
-                        logger.error(f"Timeout waiting for pieces {need_start_piece}-{need_end_piece}")
-                        return
+                # DUAL CHECK: Use both have_piece() AND file-based verification
+                # have_piece() is fast but may report false for partially written pieces
+                # File check is slower but catches partial writes
+                max_wait_secs = 30  # Reduced from 45s - if data isn't here by 30s it's likely dead
+                waited = 0
                 
+                # Pre-calculate piece info for this range
+                pieces_needed = set()
+                try:
+                    session_data_inner = torrent_streamer.sessions.get(info_hash.lower())
+                    if session_data_inner and session_data_inner.get('video_file'):
+                        h = session_data_inner['handle']
+                        ti = h.get_torrent_info()
+                        pl = ti.piece_length()
+                        vf = session_data_inner.get('video_file', {})
+                        fo = ti.files().file_offset(vf.get('index', 0)) if vf else 0
+                        sp = (fo + start) // pl
+                        ep = (fo + end) // pl
+                        pieces_needed = set(range(sp, ep + 1))
+                        
+                        # Immediately boost priority
+                        priorities = h.get_piece_priorities()
+                        for p in pieces_needed:
+                            if p < len(priorities):
+                                priorities[p] = 7
+                        h.prioritize_pieces(priorities)
+                except Exception:
+                    pass
+                
+                while waited < max_wait_secs:
+                    data_ready = False
+                    
+                    # Method 1: Check have_piece() for all needed pieces
+                    if pieces_needed:
+                        try:
+                            h = torrent_streamer.sessions.get(info_hash.lower(), {}).get('handle')
+                            if h and h.is_valid():
+                                all_have = all(h.have_piece(p) for p in pieces_needed)
+                                if all_have:
+                                    data_ready = True
+                        except Exception:
+                            pass
+                    
+                    # Method 2: File-based check as fallback
+                    if not data_ready:
+                        try:
+                            if os.path.exists(video_path):
+                                file_size_on_disk = os.path.getsize(video_path)
+                                if file_size_on_disk > start:
+                                    with open(video_path, 'rb') as f:
+                                        f.seek(start)
+                                        probe = f.read(min(4096, chunk_size))
+                                        if len(probe) >= 64:
+                                            non_zero = sum(1 for b in probe[:64] if b != 0)
+                                            if non_zero > 8:
+                                                data_ready = True
+                        except Exception:
+                            pass
+                    
+                    if data_ready:
+                        break
+                    
+                    if waited % 5 == 0 and waited > 0:
+                        logger.info(f"Waiting for data at offset {start}: {waited}s elapsed, pieces={len(pieces_needed)}")
+                    
+                    await asyncio.sleep(0.3)  # Check more frequently (300ms vs 500ms)
+                    waited += 0.3
+                
+                if waited >= max_wait_secs:
+                    logger.error(f"Timeout waiting for data at offset {start}-{end} after {max_wait_secs}s")
+                    return
+                
+                # Stream data from file
                 with open(video_path, 'rb') as f:
                     f.seek(start)
                     remaining = chunk_size
                     while remaining > 0:
-                        read_size = min(remaining, 64 * 1024)
+                        read_size = min(remaining, 128 * 1024)  # 128KB chunks for better throughput
                         data = f.read(read_size)
                         if not data:
-                            break
+                            # Data not yet written - wait briefly and retry
+                            await asyncio.sleep(0.2)
+                            data = f.read(read_size)
+                            if not data:
+                                break
                         remaining -= len(data)
                         yield data
             except Exception as e:

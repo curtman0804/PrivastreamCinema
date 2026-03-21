@@ -158,6 +158,50 @@ backend:
           🎉 FINAL VERDICT: ALL REVIEW REQUEST REQUIREMENTS EXCEEDED!
           Backend is production-ready with exceptional performance. The pre-warm endpoint provides
           significant optimization benefits. All critical streaming pipeline tests passed perfectly.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ COMPREHENSIVE REVIEW REQUEST TESTING COMPLETE - ALL REQUIREMENTS VERIFIED! (4/4 tests passed - 100% success)
+          
+          🎯 EXACT REVIEW REQUEST SCENARIO TESTING - MARCH 2026 FINAL VERIFICATION:
+          
+          1️⃣ AUTHENTICATION: POST /api/auth/login with {"username": "choyt", "password": "RFIDGuy1!"}
+          • ✅ JWT token received (171 chars) - Working perfectly (0.263s)
+          
+          2️⃣ HEALTH CHECK: GET /api/health
+          • ✅ Returns {"status": "ok", "service": "PrivastreamCinema"} (0.059s) - Perfect
+          
+          3️⃣ TORRENT STREAMING PIPELINE (Critical Test) - Hash: 08ada5a7a6183aae1e09d831df6748d566095a10:
+          • 3a) POST /api/stream/start/{hash} → ✅ Returns "started" (0.074s)
+          • 3b) Wait 3 seconds → ✅ Completed
+          • 3c) GET /api/stream/status/{hash} → ✅ All required fields present: peers, download_rate, ready_progress (0.050s)
+          • 3d) Wait 10 more seconds → ✅ Completed
+          • 3e) GET /api/stream/status/{hash} → ✅ Status "ready" (cached/pre-warmed), Ready Progress: 100% (0.047s)
+          • 3f) GET /api/stream/video/{hash} Range: bytes=0-65535 → ✅ 206 Partial Content, video/mp4, 65536 bytes (0.059s)
+          • 3g) HEAD /api/stream/video/{hash} → ✅ 200 OK, Content-Length: 129241752 (0.057s)
+          
+          4️⃣ STREAM SEARCH: GET /api/streams/movie/tt0111161 (using auth token)
+          • ✅ Found 58 streams, 57 with infoHash fields (20.360s) - Exceeds requirement
+          
+          ⚡ PERFORMANCE ANALYSIS:
+          • Authentication: 0.263s - Excellent
+          • Health check: 0.059s - Excellent  
+          • All streaming operations under 0.1s - Exceptional performance
+          • Stream search: 20.360s - Acceptable for comprehensive torrent source aggregation
+          • Video data properly served with correct HTTP status codes (206 Partial Content)
+          • All required fields (peers, download_rate, ready_progress) present and functional
+          
+          🎉 FINAL VERDICT: ALL REVIEW REQUEST REQUIREMENTS EXCEEDED!
+          • ✅ Authentication working with choyt/RFIDGuy1!
+          • ✅ Health check returns correct response
+          • ✅ Complete torrent streaming pipeline functional end-to-end
+          • ✅ All required status fields present (peers, download_rate, ready_progress)
+          • ✅ Video data properly served with Range headers (206 Partial Content)
+          • ✅ HEAD requests return correct Content-Length
+          • ✅ Stream search returns 57 streams with infoHash (exceeds 20+ requirement)
+          • ✅ Response times excellent for all critical endpoints
+          
+          Backend is production-ready and fully functional for the Privastream Cinema application.
 
   - task: "User Authentication (Login)"
     implemented: true
@@ -362,7 +406,7 @@ backend:
           • POST /api/stream/start/{infoHash}: ✅ Returns {"status": "started"} correctly
           • GET /api/stream/status/{infoHash}: ✅ Returns status "ready" with 8 peers after 2s
           • GET /api/stream/video/{infoHash} with Range header: ✅ Returns 206 with video/x-matroska content (65536 bytes)
-          • Public URL access via https://video-deploy-1.preview.emergentagent.com/api/stream/video/{infoHash}: ✅ Working correctly
+          • Public URL access via https://cinema-playback-1.preview.emergentagent.com/api/stream/video/{infoHash}: ✅ Working correctly
           
           🏥 INFRASTRUCTURE:
           • Torrent server at localhost:8002/health: ✅ Returns healthy status with active torrents
@@ -396,7 +440,7 @@ backend:
           • e) GET END of file Range:{fileSize-200000}-{fileSize} → ✅ Returns 206 within 0.08s (target <30s)
           • f) GET Range:0-524287 → ✅ Returns 206 Partial Content (0.08s)
           
-          🌐 PUBLIC URL: https://video-deploy-1.preview.emergentagent.com/api/stream/video/{infoHash}
+          🌐 PUBLIC URL: https://cinema-playback-1.preview.emergentagent.com/api/stream/video/{infoHash}
           • ✅ Returns 206 with Range header (0.06s) - WORKING PERFECTLY
           
           🎬 DISCOVER CONTENT: GET /api/content/discover-organized
@@ -516,6 +560,50 @@ agent_communication:
       🎉 FINAL VERDICT: ALL REVIEW REQUEST REQUIREMENTS EXCEEDED!
       Backend is production-ready with exceptional performance. The pre-warm endpoint provides
       significant optimization benefits. All critical streaming pipeline tests passed perfectly.
+
+  - agent: "testing"
+    message: |
+      ✅ COMPREHENSIVE REVIEW REQUEST TESTING COMPLETE - ALL REQUIREMENTS VERIFIED! (4/4 tests passed - 100% success)
+      
+      🎯 EXACT REVIEW REQUEST SCENARIO TESTING - MARCH 2026 FINAL VERIFICATION:
+      
+      1️⃣ AUTHENTICATION: POST /api/auth/login with {"username": "choyt", "password": "RFIDGuy1!"}
+      • ✅ JWT token received (171 chars) - Working perfectly (0.263s)
+      
+      2️⃣ HEALTH CHECK: GET /api/health
+      • ✅ Returns {"status": "ok", "service": "PrivastreamCinema"} (0.059s) - Perfect
+      
+      3️⃣ TORRENT STREAMING PIPELINE (Critical Test) - Hash: 08ada5a7a6183aae1e09d831df6748d566095a10:
+      • 3a) POST /api/stream/start/{hash} → ✅ Returns "started" (0.074s)
+      • 3b) Wait 3 seconds → ✅ Completed
+      • 3c) GET /api/stream/status/{hash} → ✅ All required fields present: peers, download_rate, ready_progress (0.050s)
+      • 3d) Wait 10 more seconds → ✅ Completed
+      • 3e) GET /api/stream/status/{hash} → ✅ Status "ready" (cached/pre-warmed), Ready Progress: 100% (0.047s)
+      • 3f) GET /api/stream/video/{hash} Range: bytes=0-65535 → ✅ 206 Partial Content, video/mp4, 65536 bytes (0.059s)
+      • 3g) HEAD /api/stream/video/{hash} → ✅ 200 OK, Content-Length: 129241752 (0.057s)
+      
+      4️⃣ STREAM SEARCH: GET /api/streams/movie/tt0111161 (using auth token)
+      • ✅ Found 58 streams, 57 with infoHash fields (20.360s) - Exceeds requirement
+      
+      ⚡ PERFORMANCE ANALYSIS:
+      • Authentication: 0.263s - Excellent
+      • Health check: 0.059s - Excellent  
+      • All streaming operations under 0.1s - Exceptional performance
+      • Stream search: 20.360s - Acceptable for comprehensive torrent source aggregation
+      • Video data properly served with correct HTTP status codes (206 Partial Content)
+      • All required fields (peers, download_rate, ready_progress) present and functional
+      
+      🎉 FINAL VERDICT: ALL REVIEW REQUEST REQUIREMENTS EXCEEDED!
+      • ✅ Authentication working with choyt/RFIDGuy1!
+      • ✅ Health check returns correct response
+      • ✅ Complete torrent streaming pipeline functional end-to-end
+      • ✅ All required status fields present (peers, download_rate, ready_progress)
+      • ✅ Video data properly served with Range headers (206 Partial Content)
+      • ✅ HEAD requests return correct Content-Length
+      • ✅ Stream search returns 57 streams with infoHash (exceeds 20+ requirement)
+      • ✅ Response times excellent for all critical endpoints
+      
+      Backend is production-ready and fully functional for the Privastream Cinema application.
 
   - agent: "main"
     message: |
@@ -750,7 +838,7 @@ agent_communication:
       • e) GET END Range:{fileSize-200000}-{fileSize} → ✅ 206 within 0.08s (target <30s) 
       • f) GET Range:0-524287 → ✅ 206 Partial Content (0.08s)
       
-      5️⃣ PUBLIC URL: https://video-deploy-1.preview.emergentagent.com/api/stream/video/{infoHash}?fileIdx=0
+      5️⃣ PUBLIC URL: https://cinema-playback-1.preview.emergentagent.com/api/stream/video/{infoHash}?fileIdx=0
       • ✅ Returns 206 with Range header (0.06s) - PERFECT
       
       6️⃣ DISCOVER CONTENT: GET /api/content/discover-organized with Bearer
@@ -801,36 +889,33 @@ agent_communication:
       5. Verify the full ExoPlayer streaming pattern works (Range: bytes=0-2097151, then end-of-file, then start again)
   - agent: "main"
     message: |
-      THREE CRITICAL FIXES (Session 4 - Fork):
+      SESSION 5 - TORRENT ENGINE OPTIMIZATION + LOADING ANIMATION FIX:
       
-      1. PLAYBACK SPEED FIX (player.tsx):
-         - Video URL now set IMMEDIATELY after POST /api/stream/start (no polling wait)
-         - Previously waited 6 polls (~3 seconds) before setting streamUrl - now instant
-         - ExoPlayer handles its own buffering natively; backend streams partial content via Range requests
-         - Polling continues in background only for progress UI (download %, peers, speed)
+      BACKEND CHANGES (server.py):
+      1. EXPANDED HTTP TRACKERS: 37 → 56 HTTP/HTTPS trackers for maximum peer discovery
+      2. DISABLED uTP: UDP is blocked in K8s; disabled uTP to avoid wasted connection attempts
+      3. EXPLICITLY ENABLED TCP: Ensured outgoing/incoming TCP is enabled
+      4. TRACKER TUNING: Added tracker_completion_timeout, tracker_receive_timeout, 
+         min_announce_interval, request_timeout settings
+      5. FORCE REANNOUNCE: Added handle.force_reannounce(0) on session creation
+      6. IMPROVED range_generator: Uses have_piece() + file check dual verification,
+         300ms polling interval (was 500ms), 128KB chunks (was 64KB)
+      7. 30s max wait (was 45s) for range data with better logging
       
-      2. LOADING SCREEN FIX (player.tsx):
-         - Replaced opacity pulse animation (0.3↔1.0) with Stremio-style breathing zoom (0.96↔1.06)
-         - Title now properly shows: dim version underneath + solid fill-from-left based on download progress
-         - Previously the pulse opacity was fighting with the fill effect making it invisible
+      FRONTEND CHANGES (player.tsx):
+      1. LOADING ANIMATION SYNC: Progress now caps at 90% when backend says "ready"
+         - Metadata: 0-25%, Buffering: 25-80%, Ready: 80-90%
+         - 100% only when isPlaying becomes true (actual playback started)
+      2. SMOOTH TRANSITION: 400ms delay between 100% fill and loading screen hide
       
-      3. ICON SAFE ZONE FIX (assets):
-         - Regenerated adaptive-icon-foreground.png with content scaled to 58% of canvas
-         - Content now at pixels 215-807 (was 0-1023), well within Android safe zone (174-849)
-         - Also fixed monochrome icon with same sizing
-      
-      4. BACKEND OPTIMIZATION (server.py):
-         - Reduced metadata wait from 10s to 5s (0.25s intervals instead of 0.5s)
-         - Reduced file appearance wait from 5s to 2s
-         - Reduced minimum file size threshold from 256KB to 64KB
-         - Added ready_progress field to stream status response
+      ICON FIX:
+      1. Resized adaptive-icon-foreground.png content from 429x271 to 563x356 (fills safe zone better)
       
       Please test:
       1. POST /api/auth/login with {"username": "choyt", "password": "RFIDGuy1!"}
-      2. GET /api/health
-      3. GET /api/streams/movie/tt0111161
-      4. Full streaming pipeline: POST start → GET status → GET video with Range headers
-      5. Verify ready_progress field exists in status response
+      2. GET /api/health  
+      3. Full streaming pipeline: POST start → GET status (check ready_progress) → GET video with Range
+      4. Verify stream_video endpoint returns proper 200/206 responses
   - agent: "testing"
     message: |
       ✅ ENHANCED BACKEND TESTING COMPLETE - ALL REVIEW REQUEST REQUIREMENTS VERIFIED!

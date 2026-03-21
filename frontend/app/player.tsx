@@ -298,7 +298,7 @@ export default function PlayerScreen() {
   const [isLiveTV, setIsLiveTV] = useState(false);
   const [hasAudioError, setHasAudioError] = useState(false);
   const videoRetryCountRef = useRef(0);
-  const maxVideoRetries = 5;
+  const maxVideoRetries = 15; // More retries - torrent data arrives progressively
   
   // Stremio-style breathing zoom animation for loading title
   const breatheAnim = useRef(new Animated.Value(1)).current;
@@ -649,7 +649,12 @@ export default function PlayerScreen() {
       if (status.isPlaying && !playbackStarted) {
         console.log('[PLAYER] Playback started successfully!');
         setPlaybackStarted(true);
-        setIsLoading(false);
+        // Animate progress to 100% then hide loading after a brief delay
+        setDownloadProgress(100);
+        // Small delay to show the completed animation before hiding
+        setTimeout(() => {
+          setIsLoading(false);
+        }, 400);
         // Clear timeout since playback started
         if (playbackTimeoutRef.current) {
           clearTimeout(playbackTimeoutRef.current);
@@ -1353,14 +1358,18 @@ export default function PlayerScreen() {
           const elapsedSec = (Date.now() - startTime) / 1000;
           
           // Smooth progress for loading bar
+          // IMPORTANT: Cap at 90% - only reach 100% when video ACTUALLY plays
+          // This prevents the animation from completing before playback starts
           if (status.status === 'downloading_metadata') {
-            smoothProgress = Math.min(smoothProgress + 2, 30);
+            smoothProgress = Math.min(smoothProgress + 2, 25);
           } else if (status.status === 'buffering') {
             const readyPct = status.ready_progress ?? 0;
-            const targetProgress = 30 + (readyPct / 100) * 65;
+            const targetProgress = 25 + (readyPct / 100) * 55; // 25-80%
             smoothProgress = Math.max(smoothProgress, Math.min(smoothProgress + (targetProgress - smoothProgress) * 0.3, targetProgress));
           } else if (status.status === 'ready') {
-            smoothProgress = 100;
+            // Backend ready = data available, but player still needs to buffer
+            // Cap at 90% - the final 10% happens when isPlaying becomes true
+            smoothProgress = Math.min(Math.max(smoothProgress + 2, 85), 90);
           }
           setDownloadProgress(smoothProgress);
           
@@ -1751,10 +1760,11 @@ export default function PlayerScreen() {
                 onError={(error) => {
                   console.log(`[PLAYER] Video error (attempt ${videoRetryCountRef.current + 1}/${maxVideoRetries}):`, error);
                   
-                  // Retry the same stream URL multiple times before giving up
+                  // Retry aggressively - torrent data arrives progressively, each retry may succeed
                   if (videoRetryCountRef.current < maxVideoRetries) {
                     videoRetryCountRef.current += 1;
-                    const delay = videoRetryCountRef.current * 2000; // 2s, 4s, 6s, 8s, 10s
+                    // Fast retries: 1s, 1s, 2s, 2s, 3s, 3s, 4s, 4s, 5s, 5s, 5s, 5s, 5s, 5s, 5s
+                    const delay = Math.min(5000, Math.ceil(videoRetryCountRef.current / 2) * 1000);
                     console.log(`[PLAYER] Retrying video load in ${delay}ms...`);
                     
                     // Reset the streamUrl to force re-render of Video component

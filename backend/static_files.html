@@ -713,7 +713,7 @@ export default function DetailsScreen() {
     
     const buildFallbackUrls = async (): Promise&lt;string[]&gt; =&gt; {
       const authToken = await AsyncStorage.getItem(&#x27;auth_token&#x27;);
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://video-deploy-1.preview.emergentagent.com&#x27;;
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://cinema-playback-1.preview.emergentagent.com&#x27;;
       
       return streams
         .filter(s =&gt; s !== stream)
@@ -762,7 +762,7 @@ export default function DetailsScreen() {
       const authToken = await AsyncStorage.getItem(&#x27;auth_token&#x27;);
       const separator = stream.url.includes(&#x27;?&#x27;) ? &#x27;&amp;&#x27; : &#x27;?&#x27;;
       const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : &#x27;&#x27;;
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://video-deploy-1.preview.emergentagent.com&#x27;;
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://cinema-playback-1.preview.emergentagent.com&#x27;;
       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
       
       // Build fallback URLs - include other proxy streams + direct URLs
@@ -819,7 +819,7 @@ export default function DetailsScreen() {
       
       // For live TV streams, also include proxy URLs as additional fallbacks
       if (type === &#x27;tv&#x27;) {
-        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://video-deploy-1.preview.emergentagent.com&#x27;;
+        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || &#x27;https://cinema-playback-1.preview.emergentagent.com&#x27;;
         const authToken = await AsyncStorage.getItem(&#x27;auth_token&#x27;);
         
         // Add proxy URLs for all streams as fallbacks

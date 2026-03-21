@@ -12,7 +12,7 @@ import sys
 from typing import Dict, Any, Optional
 
 # Backend URL from environment
-BACKEND_URL = "https://video-deploy-1.preview.emergentagent.com"
+BACKEND_URL = "https://cinema-playback-1.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 class PrivastreamTester:
