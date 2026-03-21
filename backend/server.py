@@ -409,12 +409,15 @@ class TorrentStreamer:
                 for i in range(max(start_piece, end_piece - last_piece_count), end_piece + 1):
                     priorities[i] = 7  # Same as header - MUST download these early
                 
-                handle.prioritize_pieces(priorities)
-                
-                # Also set file priority to only download the video file
+                # First set FILE priorities (which file to download)
+                # This must be called BEFORE prioritize_pieces() because it overrides piece priorities!
                 file_priorities = [0] * files.num_files()
-                file_priorities[largest_video['index']] = 7
+                file_priorities[largest_video['index']] = 4  # Download video file
                 handle.prioritize_files(file_priorities)
+                
+                # THEN set PIECE priorities (which parts of the file to download first)
+                # This MUST be called AFTER prioritize_files() to override its settings
+                handle.prioritize_pieces(priorities)
                 
                 logger.info(f"Found video: {largest_video['path']} ({largest_size / 1024 / 1024:.1f} MB)")
                 logger.info(f"Piece info: {video_pieces} pieces @ {piece_length // 1024}KB each, prioritizing first {header_pieces} + {buffer_pieces} buffer")
@@ -425,19 +428,44 @@ class TorrentStreamer:
             video_size = video_file['size']
             downloaded_bytes = int(s.progress * video_size) if s.progress > 0 else 0
             
-            # Need ~1MB downloaded to start playback
-            # ExoPlayer reads moov atom from end of file (separately prioritized at priority 7)
-            # We just need enough data for ExoPlayer to start reading the stream
-            min_bytes_for_playback = 1 * 1024 * 1024  # 1MB - enough for headers
-            ready_threshold = min_bytes_for_playback
-            
             # Check if file exists and has content
             video_path = data.get('video_path')
             file_exists = video_path and os.path.exists(video_path)
             file_size_on_disk = os.path.getsize(video_path) if file_exists else 0
             
-            # Ready when: enough data downloaded AND file exists on disk
-            is_ready = file_size_on_disk >= min_bytes_for_playback or downloaded_bytes >= ready_threshold
+            # CRITICAL: Check if the video file has valid header data on disk
+            # libtorrent writes partial piece data to disk even before pieces are "complete"
+            # So we check the actual file content instead of piece status
+            first_pieces_ready = False
+            last_pieces_ready = False
+            try:
+                if file_exists and file_size_on_disk > 0:
+                    # Check for valid video header in first 32 bytes
+                    with open(video_path, 'rb') as f:
+                        header = f.read(32)
+                        has_ftyp = b'ftyp' in header  # MP4/M4V
+                        has_ebml = header[:4] == b'\x1a\x45\xdf\xa3'  # MKV/WebM
+                        has_avi = header[:4] == b'RIFF'  # AVI
+                        has_valid_header = has_ftyp or has_ebml or has_avi
+                    
+                    # Ready when: valid video header + at least 512KB on disk
+                    first_pieces_ready = has_valid_header and file_size_on_disk >= 512 * 1024
+                    if first_pieces_ready:
+                        logger.info(f"Video file ready: {os.path.basename(video_path)}, "
+                                   f"header={'ftyp' if has_ftyp else 'ebml' if has_ebml else 'avi'}, "
+                                   f"size_on_disk={file_size_on_disk/1024/1024:.1f}MB")
+                
+                # Last pieces: check if end of file has data (for moov atom)
+                last_pieces_ready = True  # Don't block on last pieces
+            except Exception as e:
+                logger.warning(f"File check error: {e}")
+                first_pieces_ready = file_size_on_disk >= 1 * 1024 * 1024
+            
+            # Ready = first pieces of video are downloaded (header/moov atom at beginning)
+            # Last pieces are prioritized at 7 but we don't wait for them - ExoPlayer handles buffering
+            is_ready = first_pieces_ready
+            min_bytes_for_playback = 1 * 1024 * 1024
+            ready_threshold = min_bytes_for_playback
             
             return {
                 "status": "ready" if is_ready else "buffering",
@@ -450,6 +478,8 @@ class TorrentStreamer:
                 "video_size": video_size,
                 "downloaded": downloaded_bytes,
                 "file_ready": file_exists,
+                "first_pieces_ready": first_pieces_ready,
+                "last_pieces_ready": last_pieces_ready,
                 "ready_threshold_mb": ready_threshold / (1024 * 1024),
             }
         
@@ -3366,8 +3396,12 @@ async def stream_status(info_hash: str):
             "downloaded": downloaded,
             "name": video_file or "",
             "video_filename": video_file or "",
+            "video_file": video_file or "",
             "video_size": video_size,
-            "ready_threshold_mb": status.get("ready_threshold_mb", 3),
+            "first_pieces_ready": status.get("first_pieces_ready", False),
+            "last_pieces_ready": status.get("last_pieces_ready", False),
+            "file_ready": status.get("file_ready", False),
+            "ready_threshold_mb": status.get("ready_threshold_mb", 1),
         }
     except Exception as e:
         logger.error(f"Error getting stream status: {e}")
@@ -3512,14 +3546,98 @@ async def stream_video(
         content_type = content_types.get(ext, 'video/mp4')
         
         # Handle range requests for video seeking
-        # ALWAYS use range-based streaming - ExoPlayer needs this for proper playback
         range_header = request.headers.get("range")
         
         if not range_header:
-            # No Range header = first request from player. Return first 2MB chunk as 206
-            # This tells ExoPlayer to use Range requests for all subsequent calls
-            range_header = "bytes=0-"
+            # No Range header = INITIAL probe from ExoPlayer/MediaPlayer
+            # Must return 200 OK with full Content-Length so player knows the total file size
+            # and that it can use Range requests for seeking
+            logger.info(f"Initial probe request (no Range) for {os.path.basename(video_path)}, size={file_size}")
+            
+            # Return just headers for HEAD, or first 2MB chunk for GET with 200 OK
+            if request.method == "HEAD":
+                return Response(
+                    content=b"",
+                    status_code=200,
+                    headers={
+                        "Content-Length": str(file_size),
+                        "Content-Type": content_type,
+                        "Accept-Ranges": "bytes",
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "no-store, no-cache, must-revalidate",
+                        "X-Accel-Buffering": "no",
+                    },
+                )
+            
+            # For GET without Range, return 200 with Content-Length = total file size
+            # and Accept-Ranges: bytes so the player knows it can seek
+            # We stream the beginning of the file
+            start = 0
+            end = min(2 * 1024 * 1024, file_size - 1)
+            chunk_size = end - start + 1
+            
+            async def initial_generator():
+                try:
+                    session_data_inner = torrent_streamer.sessions.get(info_hash.lower())
+                    if session_data_inner:
+                        handle_inner = session_data_inner['handle']
+                        ti = handle_inner.get_torrent_info()
+                        piece_length = ti.piece_length()
+                        vf = session_data_inner.get('video_file', {})
+                        file_offset = ti.files().file_offset(vf.get('index', 0)) if vf else 0
+                        
+                        need_start_piece = (file_offset + start) // piece_length
+                        need_end_piece = (file_offset + end) // piece_length
+                        
+                        try:
+                            priorities = handle_inner.get_piece_priorities()
+                            for p in range(need_start_piece, min(need_end_piece + 1, len(priorities))):
+                                if priorities[p] < 7:
+                                    priorities[p] = 7
+                            handle_inner.prioritize_pieces(priorities)
+                        except:
+                            pass
+                        
+                        disk_wait = 0
+                        max_wait = 60
+                        while disk_wait < max_wait:
+                            all_ready = True
+                            for p in range(need_start_piece, need_end_piece + 1):
+                                if not handle_inner.have_piece(p):
+                                    all_ready = False
+                                    break
+                            if all_ready:
+                                break
+                            await asyncio.sleep(0.5)
+                            disk_wait += 1
+                    
+                    with open(video_path, 'rb') as f:
+                        remaining = chunk_size
+                        while remaining > 0:
+                            read_size = min(remaining, 64 * 1024)
+                            data = f.read(read_size)
+                            if not data:
+                                break
+                            remaining -= len(data)
+                            yield data
+                except Exception as e:
+                    logger.error(f"Initial stream error: {e}")
+            
+            return StreamingResponse(
+                initial_generator(),
+                status_code=200,
+                headers={
+                    "Content-Length": str(file_size),
+                    "Content-Type": content_type,
+                    "Accept-Ranges": "bytes",
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "no-store, no-cache, must-revalidate",
+                    "X-Accel-Buffering": "no",
+                },
+                media_type=content_type,
+            )
         
+        # Range header present - return 206 Partial Content
         parts = range_header.replace("bytes=", "").split("-")
         start = int(parts[0]) if parts[0] else 0
         end = int(parts[1]) if len(parts) > 1 and parts[1] else min(start + 2 * 1024 * 1024, file_size - 1)  # 2MB chunks max
