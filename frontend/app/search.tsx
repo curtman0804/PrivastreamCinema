@@ -19,6 +19,9 @@ import { ContentItem } from '../src/api/client';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const isTV = screenWidth > screenHeight || screenWidth > 800;
 
+// Logo header image
+const logoHeaderImage = require('../assets/images/logo_header.png');
+
 // TV-optimized sizing: 6 columns on TV, 3 on mobile
 const NUM_COLUMNS = isTV ? 6 : 3;
 const HORIZONTAL_PADDING = isTV ? 32 : 16;
@@ -156,7 +159,7 @@ export default function SearchScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
+      {/* Branded Header with Logo */}
       <View style={styles.header}>
         <FocusableButton 
           onPress={() => router.back()} 
@@ -165,6 +168,16 @@ export default function SearchScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </FocusableButton>
+        <Image 
+          source={logoHeaderImage}
+          style={styles.headerLogo}
+          contentFit="contain"
+        />
+        <View style={{ width: 36 }} />{/* Spacer to center logo */}
+      </View>
+      
+      {/* Search Bar */}
+      <View style={styles.searchBarRow}>
         <View style={styles.searchInputContainer}>
           <TextInput
             style={styles.searchInput}
@@ -231,11 +244,19 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: HORIZONTAL_PADDING,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#1a1a1d',
-    gap: 12,
+  },
+  headerLogo: {
+    width: 140,
+    height: 32,
+  },
+  searchBarRow: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingVertical: 8,
   },
   backButton: {
     width: 44,

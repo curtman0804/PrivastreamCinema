@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Test configuration
-BACKEND_URL = "https://cinema-playback-1.preview.emergentagent.com"
+BACKEND_URL = "https://privastream-cinema-4.preview.emergentagent.com"
 
 # Test credentials as specified in review request
 TEST_USER = {

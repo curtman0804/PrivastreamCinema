@@ -223,6 +223,8 @@ export default function PlayerScreen() {
     logo,
     // Resume position (from continue watching)
     resumePosition,
+    // Tracker sources from Torrentio (CRITICAL for peer discovery)
+    sources,
   } = useLocalSearchParams<{
     url?: string;
     title?: string;
@@ -372,6 +374,9 @@ export default function PlayerScreen() {
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
+  
+  // Track actual video file size from backend status (used for accurate seek byte calculation)
+  const videoFileSizeRef = useRef<number>(0);
   
   // Watch progress tracking
   const lastProgressSaveRef = useRef<number>(0);
@@ -857,12 +862,15 @@ export default function PlayerScreen() {
       
       // Notify backend to reprioritize pieces for the seek target
       if (infoHash) {
-        // Estimate byte position: (seek_time / total_time) * file_size
-        // We approximate file_size from bitrate: typical 1080p = ~5Mbps = 625KB/s
-        const estimatedBitrate = 5 * 1024 * 1024 / 8; // 5Mbps in bytes/sec
+        // Use actual file size from status if available, otherwise estimate
         const totalDurationSec = duration / 1000;
         const seekTimeSec = newPosition / 1000;
-        const estimatedFileSize = estimatedBitrate * totalDurationSec;
+        let estimatedFileSize = videoFileSizeRef.current;
+        if (!estimatedFileSize || estimatedFileSize <= 0) {
+          // Fallback: estimate from bitrate (5Mbps average for 1080p)
+          const estimatedBitrate = 5 * 1024 * 1024 / 8;
+          estimatedFileSize = estimatedBitrate * totalDurationSec;
+        }
         const positionBytes = Math.floor((seekTimeSec / totalDurationSec) * estimatedFileSize);
         api.stream.seek(infoHash, positionBytes).catch(() => {});
       }
@@ -878,10 +886,13 @@ export default function PlayerScreen() {
       
       // Notify backend to reprioritize pieces for the seek target
       if (infoHash && duration > 0) {
-        const estimatedBitrate = 5 * 1024 * 1024 / 8; // 5Mbps in bytes/sec
         const totalDurationSec = duration / 1000;
         const seekTimeSec = clampedPosition / 1000;
-        const estimatedFileSize = estimatedBitrate * totalDurationSec;
+        let estimatedFileSize = videoFileSizeRef.current;
+        if (!estimatedFileSize || estimatedFileSize <= 0) {
+          const estimatedBitrate = 5 * 1024 * 1024 / 8;
+          estimatedFileSize = estimatedBitrate * totalDurationSec;
+        }
         const positionBytes = Math.floor((seekTimeSec / totalDurationSec) * estimatedFileSize);
         api.stream.seek(infoHash, positionBytes).catch(() => {});
       }
@@ -1427,22 +1438,38 @@ export default function PlayerScreen() {
           
           const elapsedSec = (Date.now() - startTime) / 1000;
           
+          // Track video file size for accurate seek calculations
+          if (status.video_size && status.video_size > 0) {
+            videoFileSizeRef.current = status.video_size;
+          }
+          
           // Smooth progress for loading bar - cap at 90%
           if (status.status === 'downloading_metadata') {
             smoothProgress = Math.min(smoothProgress + 3, 30);
+            setLoadingStatus(`Finding torrent... (${peerCount} peers)`);
           } else if (status.status === 'buffering') {
             const readyPct = status.ready_progress ?? 0;
             const targetProgress = 30 + (readyPct / 100) * 50; // 30-80%
             smoothProgress = Math.max(smoothProgress, Math.min(smoothProgress + (targetProgress - smoothProgress) * 0.3, targetProgress));
+            if (peerCount > 0) {
+              setLoadingStatus(`Buffering... ${peerCount} peers, ${formatSpeed(dlRate)}`);
+            } else {
+              setLoadingStatus(`Connecting to peers...`);
+            }
           } else if (status.status === 'ready') {
             smoothProgress = Math.min(Math.max(smoothProgress + 3, 85), 90);
+            setLoadingStatus(`Starting playback...`);
           }
           setDownloadProgress(smoothProgress);
           
           // PLAY when backend reports READY (data available to stream)
           if (status.status === 'ready' && !videoUrlSet) {
             videoUrlSet = true;
-            console.log(`[PLAYER] Stream READY in ${elapsedSec.toFixed(1)}s! Peers: ${peerCount}. Setting video URL.`);
+            // Save video file size for accurate seek calculations
+            if (status.video_size) {
+              videoFileSizeRef.current = status.video_size;
+            }
+            console.log(`[PLAYER] Stream READY in ${elapsedSec.toFixed(1)}s! Peers: ${peerCount}, FileSize: ${(videoFileSizeRef.current / 1024 / 1024).toFixed(1)}MB. Setting video URL.`);
             videoRetryCountRef.current = 0;
             setStreamUrl(videoUrl);
             // Keep polling for progress updates but don't set URL again
@@ -1462,11 +1489,23 @@ export default function PlayerScreen() {
             return;
           }
           
-          // Give up after 45 seconds with no peers (torrent is likely dead)
-          if (elapsedSec > 45 && !hadPeersOnce) {
-            setError('No peers found. Try a different stream with more seeders.');
-            setIsLoading(false);
+          // Auto-switch stream after 35 seconds with no peers (give DHT time to discover)
+          if (elapsedSec > 35 && !hadPeersOnce && !videoUrlSet) {
+            console.log('[PLAYER] No peers after 35s, auto-trying next stream');
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+            // Try next fallback stream
+            if (fallbackUrls && fallbackUrls.length > currentStreamIndex + 1) {
+              const nextIdx = currentStreamIndex + 1;
+              setCurrentStreamIndex(nextIdx);
+              const nextUrl = fallbackUrls[nextIdx];
+              console.log(`[PLAYER] Auto-switching to stream ${nextIdx + 1}/${fallbackUrls.length}`);
+              videoRetryCountRef.current = 0;
+              setStreamUrl(nextUrl);
+              return;
+            }
+            // No more fallbacks - show error
+            setError('No peers found for any stream. The content may be unavailable.');
+            setIsLoading(false);
             return;
           }
           
@@ -1654,6 +1693,13 @@ export default function PlayerScreen() {
               )
             )}
             </Animated.View>
+            
+            {/* Loading status for torrent streams - shows peer/speed info */}
+            {infoHash && loadingStatus ? (
+              <View style={{ marginTop: 24, alignItems: 'center' }}>
+                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '500' }}>{loadingStatus}</Text>
+              </View>
+            ) : null}
             
             {/* Minimal loading indicator - no text, just a subtle spinner below the title */}
             {!infoHash && (

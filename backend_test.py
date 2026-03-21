@@ -1,442 +1,459 @@
 #!/usr/bin/env python3
 """
-PrivastreamCinema Backend API Test Suite
-Tests the critical endpoints specified in the review request.
+Backend Testing for Privastream Cinema - Critical Backend Improvements
+Testing the specific review request requirements:
+1. Backend API Health & Auth
+2. Stream Start Endpoint with sources array (bug fix verification)
+3. Stream Status Endpoint with all required fields
+4. Stream Seek Endpoint
+5. Stream Video Endpoint with Range headers
 """
 
 import asyncio
-import aiohttp
+import httpx
 import json
 import time
-import sys
-from typing import Dict, Any, Optional
+import logging
+from typing import Dict, Any
 
-# Backend URL from environment
-BACKEND_URL = "https://cinema-playback-1.preview.emergentagent.com"
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Test configuration
+BACKEND_URL = "https://privastream-cinema-4.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
+TEST_INFO_HASH = "08ada5a7a6183aae1e09d831df6748d566095a10"  # Shawshank Redemption
+TEST_CREDENTIALS = {"username": "choyt", "password": "RFIDGuy1!"}
 
-class PrivastreamTester:
+class BackendTester:
     def __init__(self):
-        self.session = None
+        self.client = httpx.AsyncClient(timeout=30.0)
         self.auth_token = None
         self.test_results = []
         
-    async def setup(self):
-        """Initialize HTTP session"""
-        connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
-        timeout = aiohttp.ClientTimeout(total=30)
-        self.session = aiohttp.ClientSession(
-            connector=connector,
-            timeout=timeout,
-            headers={"User-Agent": "PrivastreamCinema-Tester/1.0"}
-        )
+    async def __aenter__(self):
+        return self
         
-    async def cleanup(self):
-        """Clean up resources"""
-        if self.session:
-            await self.session.close()
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.client.aclose()
     
-    def log_test(self, name: str, success: bool, duration: float, details: str = "", response_code: int = None):
-        """Log test result"""
+    def log_test_result(self, test_name: str, success: bool, details: str, response_time: float = 0):
+        """Log test result with timing"""
         status = "✅ PASS" if success else "❌ FAIL"
-        self.test_results.append({
-            "name": name,
-            "success": success,
-            "duration": duration,
-            "details": details,
-            "response_code": response_code
-        })
-        print(f"{status} {name} ({duration:.3f}s) - {details}")
+        time_str = f"({response_time:.3f}s)" if response_time > 0 else ""
+        logger.info(f"{status} {test_name} {time_str}")
+        if details:
+            logger.info(f"    {details}")
         
-    async def test_1_login(self) -> bool:
-        """Test 1: POST /api/auth/login with choyt/RFIDGuy1!"""
-        start_time = time.time()
+        self.test_results.append({
+            "test": test_name,
+            "success": success,
+            "details": details,
+            "response_time": response_time
+        })
+    
+    async def test_health_endpoint(self):
+        """Test 1: Health endpoint"""
         try:
-            login_data = {
-                "username": "choyt",
-                "password": "RFIDGuy1!"
-            }
+            start_time = time.time()
+            response = await self.client.get(f"{API_BASE}/health")
+            response_time = time.time() - start_time
             
-            async with self.session.post(
+            if response.status_code == 200:
+                data = response.json()
+                expected_fields = ["status", "service"]
+                missing_fields = [f for f in expected_fields if f not in data]
+                
+                if not missing_fields and data.get("status") == "ok":
+                    self.log_test_result(
+                        "Health Endpoint", 
+                        True, 
+                        f"Returns {data}, all required fields present",
+                        response_time
+                    )
+                    return True
+                else:
+                    self.log_test_result(
+                        "Health Endpoint", 
+                        False, 
+                        f"Missing fields: {missing_fields} or incorrect status. Got: {data}",
+                        response_time
+                    )
+            else:
+                self.log_test_result(
+                    "Health Endpoint", 
+                    False, 
+                    f"HTTP {response.status_code}: {response.text}",
+                    response_time
+                )
+        except Exception as e:
+            self.log_test_result("Health Endpoint", False, f"Exception: {str(e)}")
+        return False
+    
+    async def test_authentication(self):
+        """Test 2: Authentication with specific credentials"""
+        try:
+            start_time = time.time()
+            response = await self.client.post(
                 f"{API_BASE}/auth/login",
-                json=login_data,
-                headers={"Content-Type": "application/json"}
-            ) as response:
-                duration = time.time() - start_time
-                text = await response.text()
-                
-                if response.status == 200:
-                    try:
-                        data = await response.json()
-                        if "access_token" in data:
-                            self.auth_token = data["access_token"]
-                        elif "token" in data:
-                            self.auth_token = data["token"]
-                            self.log_test("Login Authentication", True, duration, 
-                                        f"JWT token received (length: {len(self.auth_token)})", response.status)
-                            return True
-                        else:
-                            self.log_test("Login Authentication", False, duration, 
-                                        f"No access_token in response: {text}", response.status)
-                            return False
-                    except json.JSONDecodeError:
-                        self.log_test("Login Authentication", False, duration, 
-                                    f"Invalid JSON response: {text}", response.status)
-                        return False
-                else:
-                    self.log_test("Login Authentication", False, duration, 
-                                f"HTTP {response.status}: {text}", response.status)
-                    return False
-                    
-        except Exception as e:
-            duration = time.time() - start_time
-            self.log_test("Login Authentication", False, duration, f"Exception: {str(e)}")
-            return False
-    
-    async def test_2_health(self) -> bool:
-        """Test 2: GET /api/health"""
-        start_time = time.time()
-        try:
-            async with self.session.get(f"{API_BASE}/health") as response:
-                duration = time.time() - start_time
-                text = await response.text()
-                
-                if response.status == 200:
-                    try:
-                        data = await response.json()
-                        if data.get("status") == "ok" and "service" in data:
-                            self.log_test("Health Check", True, duration, 
-                                        f"Service: {data.get('service', 'unknown')}", response.status)
-                            return True
-                        else:
-                            self.log_test("Health Check", False, duration, 
-                                        f"Invalid response structure: {data}", response.status)
-                            return False
-                    except json.JSONDecodeError:
-                        self.log_test("Health Check", False, duration, 
-                                    f"Invalid JSON response: {text}", response.status)
-                        return False
-                else:
-                    self.log_test("Health Check", False, duration, 
-                                f"HTTP {response.status}: {text}", response.status)
-                    return False
-                    
-        except Exception as e:
-            duration = time.time() - start_time
-            self.log_test("Health Check", False, duration, f"Exception: {str(e)}")
-            return False
-    
-    async def test_3_prewarm(self, info_hash: str) -> bool:
-        """Test 3: POST /api/stream/prewarm/{infoHash}"""
-        start_time = time.time()
-        try:
-            headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
+                json=TEST_CREDENTIALS
+            )
+            response_time = time.time() - start_time
             
-            async with self.session.post(
-                f"{API_BASE}/stream/prewarm/{info_hash}",
-                headers=headers
-            ) as response:
-                duration = time.time() - start_time
-                text = await response.text()
+            if response.status_code == 200:
+                data = response.json()
+                # Check for either 'token' or 'access_token' field
+                token = data.get("token") or data.get("access_token")
                 
-                if response.status == 200:
-                    try:
-                        data = await response.json()
-                        status = data.get("status")
-                        if status in ["warming", "already_warming"]:
-                            details = f"Status: {status}"
-                            if "torrent_status" in data:
-                                details += f", Torrent: {data['torrent_status']}"
-                            self.log_test("Stream Prewarm", True, duration, details, response.status)
-                            return True
-                        else:
-                            self.log_test("Stream Prewarm", False, duration, 
-                                        f"Unexpected status: {status}", response.status)
-                            return False
-                    except json.JSONDecodeError:
-                        self.log_test("Stream Prewarm", False, duration, 
-                                    f"Invalid JSON response: {text}", response.status)
-                        return False
-                else:
-                    self.log_test("Stream Prewarm", False, duration, 
-                                f"HTTP {response.status}: {text}", response.status)
-                    return False
-                    
-        except Exception as e:
-            duration = time.time() - start_time
-            self.log_test("Stream Prewarm", False, duration, f"Exception: {str(e)}")
-            return False
-    
-    async def test_4_stream_status(self, info_hash: str) -> bool:
-        """Test 4: GET /api/stream/status/{infoHash} - verify ready_progress field"""
-        start_time = time.time()
-        try:
-            headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
-            
-            async with self.session.get(
-                f"{API_BASE}/stream/status/{info_hash}",
-                headers=headers
-            ) as response:
-                duration = time.time() - start_time
-                text = await response.text()
-                
-                if response.status == 200:
-                    try:
-                        data = await response.json()
-                        
-                        # Check for ready_progress field (critical requirement)
-                        has_ready_progress = "ready_progress" in data
-                        ready_progress = data.get("ready_progress", "N/A")
-                        status = data.get("status", "unknown")
-                        peers = data.get("peers", 0)
-                        
-                        if has_ready_progress:
-                            self.log_test("Stream Status (ready_progress field)", True, duration, 
-                                        f"Status: {status}, Peers: {peers}, ready_progress: {ready_progress}%", 
-                                        response.status)
-                            return True
-                        else:
-                            self.log_test("Stream Status (ready_progress field)", False, duration, 
-                                        f"CRITICAL: ready_progress field MISSING. Response: {data}", 
-                                        response.status)
-                            return False
-                            
-                    except json.JSONDecodeError:
-                        self.log_test("Stream Status (ready_progress field)", False, duration, 
-                                    f"Invalid JSON response: {text}", response.status)
-                        return False
-                else:
-                    self.log_test("Stream Status (ready_progress field)", False, duration, 
-                                f"HTTP {response.status}: {text}", response.status)
-                    return False
-                    
-        except Exception as e:
-            duration = time.time() - start_time
-            self.log_test("Stream Status (ready_progress field)", False, duration, f"Exception: {str(e)}")
-            return False
-    
-    async def test_5_stream_start(self, info_hash: str) -> bool:
-        """Test 5: POST /api/stream/start/{infoHash}"""
-        start_time = time.time()
-        try:
-            headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
-            
-            async with self.session.post(
-                f"{API_BASE}/stream/start/{info_hash}",
-                headers=headers
-            ) as response:
-                duration = time.time() - start_time
-                text = await response.text()
-                
-                if response.status == 200:
-                    try:
-                        data = await response.json()
-                        status = data.get("status")
-                        if status == "started":
-                            self.log_test("Stream Start", True, duration, 
-                                        f"Status: {status}", response.status)
-                            return True
-                        else:
-                            self.log_test("Stream Start", False, duration, 
-                                        f"Unexpected status: {status}", response.status)
-                            return False
-                    except json.JSONDecodeError:
-                        # Sometimes returns plain text "started"
-                        if text.strip() == '"started"' or text.strip() == 'started':
-                            self.log_test("Stream Start", True, duration, 
-                                        f"Status: started (plain text)", response.status)
-                            return True
-                        else:
-                            self.log_test("Stream Start", False, duration, 
-                                        f"Invalid response: {text}", response.status)
-                            return False
-                else:
-                    self.log_test("Stream Start", False, duration, 
-                                f"HTTP {response.status}: {text}", response.status)
-                    return False
-                    
-        except Exception as e:
-            duration = time.time() - start_time
-            self.log_test("Stream Start", False, duration, f"Exception: {str(e)}")
-            return False
-    
-    async def test_6_video_range(self, info_hash: str) -> bool:
-        """Test 6: GET /api/stream/video/{infoHash}?fileIdx=0 with Range: bytes=0-65535 - expect 206"""
-        start_time = time.time()
-        try:
-            headers = {
-                "Range": "bytes=0-65535"
-            }
-            if self.auth_token:
-                headers["Authorization"] = f"Bearer {self.auth_token}"
-            
-            async with self.session.get(
-                f"{API_BASE}/stream/video/{info_hash}",
-                params={"fileIdx": "0"},
-                headers=headers
-            ) as response:
-                duration = time.time() - start_time
-                
-                if response.status == 206:  # Partial Content
-                    content_length = response.headers.get('Content-Length', '0')
-                    content_type = response.headers.get('Content-Type', 'unknown')
-                    content_range = response.headers.get('Content-Range', 'unknown')
-                    
-                    # Read the actual content to verify we get data
-                    content = await response.read()
-                    actual_bytes = len(content)
-                    
-                    self.log_test("Video Range Request (206)", True, duration, 
-                                f"Type: {content_type}, Range: {content_range}, Bytes: {actual_bytes}", 
-                                response.status)
+                if token:
+                    self.auth_token = token
+                    self.log_test_result(
+                        "Authentication", 
+                        True, 
+                        f"Login successful, JWT token received ({len(token)} chars)",
+                        response_time
+                    )
                     return True
-                    
-                elif response.status == 200:
-                    # Sometimes returns 200 instead of 206, but still valid if we get data
-                    content = await response.read()
-                    actual_bytes = len(content)
-                    content_type = response.headers.get('Content-Type', 'unknown')
-                    
-                    self.log_test("Video Range Request (200 fallback)", True, duration, 
-                                f"Type: {content_type}, Bytes received: {actual_bytes}", 
-                                response.status)
-                    return True
-                    
                 else:
-                    text = await response.text()
-                    self.log_test("Video Range Request", False, duration, 
-                                f"Expected 206, got HTTP {response.status}: {text}", response.status)
-                    return False
-                    
+                    self.log_test_result(
+                        "Authentication", 
+                        False, 
+                        f"No token in response. Got: {data}",
+                        response_time
+                    )
+            else:
+                self.log_test_result(
+                    "Authentication", 
+                    False, 
+                    f"HTTP {response.status_code}: {response.text}",
+                    response_time
+                )
         except Exception as e:
-            duration = time.time() - start_time
-            self.log_test("Video Range Request", False, duration, f"Exception: {str(e)}")
-            return False
+            self.log_test_result("Authentication", False, f"Exception: {str(e)}")
+        return False
     
-    async def test_7_streams_search(self) -> bool:
-        """Test 7: GET /api/streams/movie/tt0111161 - verify streams returned"""
-        start_time = time.time()
+    async def test_stream_start_with_sources(self):
+        """Test 3: Stream Start Endpoint with sources array (critical bug fix)"""
+        try:
+            # Test the specific bug fix: sources array with tracker URLs
+            test_sources = [
+                "tracker:http://tracker.opentrackr.org:1337/announce",
+                "tracker:udp://tracker.opentrackr.org:1337/announce",
+                "tracker:http://nyaa.tracker.wf:7777/announce",
+                "tracker:udp://open.stealth.si:80/announce"
+            ]
+            
+            headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
+            
+            start_time = time.time()
+            response = await self.client.post(
+                f"{API_BASE}/stream/start/{TEST_INFO_HASH}",
+                json={"sources": test_sources},
+                headers=headers
+            )
+            response_time = time.time() - start_time
+            
+            if response.status_code == 200:
+                data = response.json()
+                expected_fields = ["status", "info_hash"]
+                missing_fields = [f for f in expected_fields if f not in data]
+                
+                if not missing_fields and data.get("status") == "started":
+                    self.log_test_result(
+                        "Stream Start with Sources", 
+                        True, 
+                        f"Started with {len(test_sources)} tracker sources. Response: {data}",
+                        response_time
+                    )
+                    return True
+                else:
+                    self.log_test_result(
+                        "Stream Start with Sources", 
+                        False, 
+                        f"Missing fields: {missing_fields} or incorrect status. Got: {data}",
+                        response_time
+                    )
+            else:
+                self.log_test_result(
+                    "Stream Start with Sources", 
+                    False, 
+                    f"HTTP {response.status_code}: {response.text}",
+                    response_time
+                )
+        except Exception as e:
+            self.log_test_result("Stream Start with Sources", False, f"Exception: {str(e)}")
+        return False
+    
+    async def test_stream_status(self):
+        """Test 4: Stream Status Endpoint with all required fields"""
         try:
             headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
             
-            async with self.session.get(
-                f"{API_BASE}/streams/movie/tt0111161",
+            # Wait a moment for stream to initialize
+            await asyncio.sleep(3)
+            
+            start_time = time.time()
+            response = await self.client.get(
+                f"{API_BASE}/stream/status/{TEST_INFO_HASH}",
                 headers=headers
-            ) as response:
-                duration = time.time() - start_time
-                text = await response.text()
+            )
+            response_time = time.time() - start_time
+            
+            if response.status_code == 200:
+                data = response.json()
                 
-                if response.status == 200:
-                    try:
-                        data = await response.json()
-                        if isinstance(data, list):
-                            streams = data
-                        elif isinstance(data, dict) and "streams" in data:
-                            streams = data["streams"]
-                        else:
-                            streams = []
-                        
-                        total_streams = len(streams)
-                        streams_with_infohash = sum(1 for s in streams if s.get("infoHash"))
-                        
-                        if total_streams > 0:
-                            self.log_test("Streams Search", True, duration, 
-                                        f"Found {total_streams} streams, {streams_with_infohash} with infoHash", 
-                                        response.status)
-                            return True
-                        else:
-                            self.log_test("Streams Search", False, duration, 
-                                        f"No streams found in response: {data}", response.status)
-                            return False
-                            
-                    except json.JSONDecodeError:
-                        self.log_test("Streams Search", False, duration, 
-                                    f"Invalid JSON response: {text}", response.status)
-                        return False
-                else:
-                    self.log_test("Streams Search", False, duration, 
-                                f"HTTP {response.status}: {text}", response.status)
-                    return False
+                # Check for all required fields from review request
+                required_fields = [
+                    "status",           # should be "ready", "buffering", or "downloading_metadata"
+                    "video_size",       # used for accurate seeking
+                    "peers",            # peer count
+                    "download_rate",    # download rate
+                    "lt_peers",         # libtorrent peers
+                    "wt_peers",         # webtorrent peers
+                    "engine"            # engine field
+                ]
+                
+                missing_fields = [f for f in required_fields if f not in data]
+                
+                if not missing_fields:
+                    status = data.get("status")
+                    valid_statuses = ["ready", "buffering", "downloading_metadata"]
                     
+                    if status in valid_statuses:
+                        self.log_test_result(
+                            "Stream Status", 
+                            True, 
+                            f"All required fields present. Status: {status}, Peers: {data.get('peers')}, Engine: {data.get('engine')}, Video Size: {data.get('video_size')}",
+                            response_time
+                        )
+                        return True
+                    else:
+                        self.log_test_result(
+                            "Stream Status", 
+                            False, 
+                            f"Invalid status '{status}'. Expected one of: {valid_statuses}",
+                            response_time
+                        )
+                else:
+                    self.log_test_result(
+                        "Stream Status", 
+                        False, 
+                        f"Missing required fields: {missing_fields}. Got: {list(data.keys())}",
+                        response_time
+                    )
+            else:
+                self.log_test_result(
+                    "Stream Status", 
+                    False, 
+                    f"HTTP {response.status_code}: {response.text}",
+                    response_time
+                )
         except Exception as e:
-            duration = time.time() - start_time
-            self.log_test("Streams Search", False, duration, f"Exception: {str(e)}")
-            return False
+            self.log_test_result("Stream Status", False, f"Exception: {str(e)}")
+        return False
+    
+    async def test_stream_seek(self):
+        """Test 5: Stream Seek Endpoint"""
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
+            
+            seek_position = 10000000  # 10MB as specified in review request
+            
+            start_time = time.time()
+            response = await self.client.post(
+                f"{API_BASE}/stream/seek/{TEST_INFO_HASH}",
+                json={"position_bytes": seek_position},
+                headers=headers
+            )
+            response_time = time.time() - start_time
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Check for required fields from review request
+                required_fields = ["target_piece", "buffer_pieces"]
+                missing_fields = [f for f in required_fields if f not in data]
+                
+                if not missing_fields:
+                    self.log_test_result(
+                        "Stream Seek", 
+                        True, 
+                        f"Seek successful. Target piece: {data.get('target_piece')}, Buffer pieces: {data.get('buffer_pieces')}",
+                        response_time
+                    )
+                    return True
+                else:
+                    self.log_test_result(
+                        "Stream Seek", 
+                        False, 
+                        f"Missing required fields: {missing_fields}. Got: {data}",
+                        response_time
+                    )
+            else:
+                self.log_test_result(
+                    "Stream Seek", 
+                    False, 
+                    f"HTTP {response.status_code}: {response.text}",
+                    response_time
+                )
+        except Exception as e:
+            self.log_test_result("Stream Seek", False, f"Exception: {str(e)}")
+        return False
+    
+    async def test_stream_video_range(self):
+        """Test 6: Stream Video Endpoint with Range headers"""
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
+            
+            # Test Range request as specified in review request
+            headers["Range"] = "bytes=0-65535"
+            
+            start_time = time.time()
+            response = await self.client.get(
+                f"{API_BASE}/stream/video/{TEST_INFO_HASH}",
+                headers=headers
+            )
+            response_time = time.time() - start_time
+            
+            if response.status_code == 206:  # Partial Content
+                content_range = response.headers.get("Content-Range")
+                content_length = len(response.content)
+                content_type = response.headers.get("Content-Type")
+                
+                # Verify we got the expected range
+                expected_length = 65536  # bytes 0-65535 = 65536 bytes
+                
+                if content_length == expected_length:
+                    self.log_test_result(
+                        "Stream Video Range", 
+                        True, 
+                        f"206 Partial Content, {content_length} bytes, Content-Type: {content_type}, Content-Range: {content_range}",
+                        response_time
+                    )
+                    return True
+                else:
+                    self.log_test_result(
+                        "Stream Video Range", 
+                        False, 
+                        f"Expected {expected_length} bytes, got {content_length}. Content-Range: {content_range}",
+                        response_time
+                    )
+            else:
+                self.log_test_result(
+                    "Stream Video Range", 
+                    False, 
+                    f"Expected HTTP 206, got {response.status_code}: {response.text[:200]}",
+                    response_time
+                )
+        except Exception as e:
+            self.log_test_result("Stream Video Range", False, f"Exception: {str(e)}")
+        return False
+    
+    async def test_stream_video_head(self):
+        """Test 7: Stream Video HEAD request"""
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
+            
+            start_time = time.time()
+            response = await self.client.head(
+                f"{API_BASE}/stream/video/{TEST_INFO_HASH}",
+                headers=headers
+            )
+            response_time = time.time() - start_time
+            
+            if response.status_code == 200:
+                content_length = response.headers.get("Content-Length")
+                content_type = response.headers.get("Content-Type")
+                
+                if content_length:
+                    self.log_test_result(
+                        "Stream Video HEAD", 
+                        True, 
+                        f"200 OK, Content-Length: {content_length}, Content-Type: {content_type}",
+                        response_time
+                    )
+                    return True
+                else:
+                    self.log_test_result(
+                        "Stream Video HEAD", 
+                        False, 
+                        f"Missing Content-Length header. Headers: {dict(response.headers)}",
+                        response_time
+                    )
+            else:
+                self.log_test_result(
+                    "Stream Video HEAD", 
+                    False, 
+                    f"Expected HTTP 200, got {response.status_code}",
+                    response_time
+                )
+        except Exception as e:
+            self.log_test_result("Stream Video HEAD", False, f"Exception: {str(e)}")
+        return False
     
     async def run_all_tests(self):
-        """Run all review request tests in sequence"""
-        print("🎬 PRIVASTREAMCINEMA BACKEND API TESTING")
-        print("=" * 50)
-        print(f"Testing against: {BACKEND_URL}")
-        print()
+        """Run all backend tests in sequence"""
+        logger.info("🚀 STARTING CRITICAL BACKEND IMPROVEMENTS TESTING")
+        logger.info(f"Backend URL: {BACKEND_URL}")
+        logger.info(f"Test Info Hash: {TEST_INFO_HASH}")
+        logger.info("=" * 80)
         
-        # Test hash from review request
-        test_info_hash = "08ada5a7a6183aae1e09d831df6748d566095a10"
+        # Test sequence
+        tests = [
+            ("Health Check", self.test_health_endpoint),
+            ("Authentication", self.test_authentication),
+            ("Stream Start with Sources", self.test_stream_start_with_sources),
+            ("Stream Status", self.test_stream_status),
+            ("Stream Seek", self.test_stream_seek),
+            ("Stream Video Range", self.test_stream_video_range),
+            ("Stream Video HEAD", self.test_stream_video_head),
+        ]
         
-        # Run tests in sequence
-        await self.setup()
+        passed = 0
+        total = len(tests)
         
-        try:
-            # Test 1: Authentication (required for other tests)
-            print("🔐 Testing Authentication...")
-            login_success = await self.test_1_login()
-            
-            # Test 2: Health check
-            print("\n🏥 Testing Health Endpoint...")
-            await self.test_2_health()
-            
-            # Test 3: Pre-warm endpoint
-            print(f"\n🚀 Testing Pre-warm Endpoint (hash: {test_info_hash[:16]}...)...")
-            await self.test_3_prewarm(test_info_hash)
-            
-            # Test 4: Stream status with ready_progress field
-            print(f"\n📊 Testing Stream Status (ready_progress field)...")
-            await self.test_4_stream_status(test_info_hash)
-            
-            # Test 5: Stream start
-            print(f"\n▶️ Testing Stream Start...")
-            await self.test_5_stream_start(test_info_hash)
-            
-            # Test 6: Video range request (critical for ExoPlayer)
-            print(f"\n🎬 Testing Video Range Request (bytes=0-65535)...")
-            await self.test_6_video_range(test_info_hash)
-            
-            # Test 7: Stream search
-            print(f"\n🔍 Testing Streams Search (tt0111161 - Shawshank Redemption)...")
-            await self.test_7_streams_search()
-            
-        finally:
-            await self.cleanup()
+        for test_name, test_func in tests:
+            logger.info(f"\n🧪 Running: {test_name}")
+            try:
+                success = await test_func()
+                if success:
+                    passed += 1
+            except Exception as e:
+                logger.error(f"Test {test_name} crashed: {e}")
+                self.log_test_result(test_name, False, f"Test crashed: {str(e)}")
         
-        # Print summary
-        print("\n" + "=" * 50)
-        print("📋 FINAL TEST SUMMARY")
-        print("=" * 50)
-        
-        passed = sum(1 for r in self.test_results if r["success"])
-        total = len(self.test_results)
+        # Summary
+        logger.info("\n" + "=" * 80)
+        logger.info("🎯 CRITICAL BACKEND IMPROVEMENTS TEST SUMMARY")
+        logger.info("=" * 80)
         
         for result in self.test_results:
-            status = "✅ PASS" if result["success"] else "❌ FAIL"
-            code_info = f" [{result['response_code']}]" if result["response_code"] else ""
-            print(f"{status} {result['name']}{code_info} ({result['duration']:.3f}s)")
-            if not result["success"] or result["details"]:
-                print(f"     {result['details']}")
+            status = "✅" if result["success"] else "❌"
+            time_str = f" ({result['response_time']:.3f}s)" if result["response_time"] > 0 else ""
+            logger.info(f"{status} {result['test']}{time_str}")
+            if result["details"]:
+                logger.info(f"    {result['details']}")
         
-        print(f"\n🎯 OVERALL RESULT: {passed}/{total} tests passed ({passed/total*100:.1f}%)")
+        logger.info("=" * 80)
+        success_rate = (passed / total) * 100
+        logger.info(f"🎉 FINAL RESULT: {passed}/{total} tests passed ({success_rate:.1f}% success rate)")
         
         if passed == total:
-            print("🎉 ALL REVIEW REQUEST REQUIREMENTS VERIFIED!")
+            logger.info("✅ ALL CRITICAL BACKEND IMPROVEMENTS VERIFIED!")
+            logger.info("Backend is production-ready with all review request requirements met.")
         else:
-            print("⚠️  Some tests failed - see details above")
-            
+            failed = total - passed
+            logger.info(f"❌ {failed} test(s) failed. Review required.")
+        
         return passed == total
 
 async def main():
-    """Main entry point"""
-    tester = PrivastreamTester()
-    success = await tester.run_all_tests()
-    sys.exit(0 if success else 1)
+    """Main test runner"""
+    async with BackendTester() as tester:
+        success = await tester.run_all_tests()
+        return success
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    success = asyncio.run(main())
+    exit(0 if success else 1)

@@ -208,6 +208,20 @@ class TorrentStreamer:
             "https://tracker.cyber-hub.net:443/announce",
             "https://bittorrent.gongt.net:443/announce",
             "https://tracker.mlsub.net:443/announce",
+            # === UDP TRACKERS (DHT now enabled - these may work) ===
+            "udp://tracker.opentrackr.org:1337/announce",
+            "udp://open.tracker.cl:1337/announce",
+            "udp://tracker.openbittorrent.com:6969/announce",
+            "udp://open.stealth.si:80/announce",
+            "udp://tracker.torrent.eu.org:451/announce",
+            "udp://exodus.desync.com:6969/announce",
+            "udp://tracker.tiny-vps.com:6969/announce",
+            "udp://tracker.moeking.me:6969/announce",
+            "udp://explodie.org:6969/announce",
+            "udp://tracker.pomf.se:80/announce",
+            "udp://tracker.leechers-paradise.org:6969/announce",
+            "udp://tracker.coppersurfer.tk:6969/announce",
+            "udp://9.rarbg.to:2710/announce",
         ]
         logger.info(f"TorrentStreamer initialized with {len(self.trackers)} HTTP trackers. Download dir: {self.download_dir}")
         
@@ -215,14 +229,18 @@ class TorrentStreamer:
         settings = {
             'listen_interfaces': '0.0.0.0:6881,[::]:6881,0.0.0.0:6891,[::]:6891',
             # === NETWORK PROTOCOL SETTINGS ===
-            'enable_dht': False,              # DHT uses UDP - BLOCKED in K8s
-            'enable_lsd': False,              # LSD uses multicast - BLOCKED in K8s
+            # ENABLE DHT - even if UDP is partially blocked, some DHT traffic may get through
+            # This gives us access to the largest peer discovery network
+            'enable_dht': True,
+            'enable_lsd': True,              # Local service discovery
             'enable_upnp': False,             # UPnP not useful in K8s
             'enable_natpmp': False,           # NAT-PMP not useful in K8s
-            'enable_outgoing_tcp': True,      # TCP is our ONLY transport
+            'enable_outgoing_tcp': True,      # TCP is our primary transport
             'enable_incoming_tcp': True,      # Accept incoming TCP connections
-            'enable_outgoing_utp': False,     # uTP uses UDP - BLOCKED in K8s
-            'enable_incoming_utp': False,     # uTP uses UDP - BLOCKED in K8s
+            'enable_outgoing_utp': True,      # Enable uTP - might work partially
+            'enable_incoming_utp': True,      # Enable uTP - might work partially
+            # DHT bootstrap nodes - these help discover peers via distributed hash table
+            'dht_bootstrap_nodes': 'router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,dht.aelitis.com:6881,router.bitcomet.com:6881,dht.libtorrent.org:25401',
             # === TRACKER SETTINGS (critical for HTTP-only mode) ===
             'announce_to_all_trackers': True,  # Hit ALL trackers for max peer discovery
             'announce_to_all_tiers': True,
@@ -272,7 +290,7 @@ class TorrentStreamer:
         }
         self.lt_session = lt.session(settings)
         
-        logger.info("Shared libtorrent session started (TCP-only, uTP disabled, PEX active via extensions)")
+        logger.info("Shared libtorrent session started (DHT+TCP+uTP enabled, full peer discovery)")
     
     def _evict_oldest(self):
         """Remove the oldest session to make room for new ones"""
@@ -293,7 +311,7 @@ class TorrentStreamer:
                 handle = self.sessions[info_hash]['handle']
                 if handle.is_valid():
                     for tracker_url in extra_trackers:
-                        if tracker_url.startswith('http'):  # Only HTTP/HTTPS trackers
+                        if tracker_url.startswith('http') or tracker_url.startswith('udp'):
                             try:
                                 handle.add_tracker({'url': tracker_url, 'tier': 0})
                             except:
@@ -308,14 +326,14 @@ class TorrentStreamer:
         all_trackers = list(self.trackers)
         if extra_trackers:
             for t in extra_trackers:
-                if t.startswith('http') and t not in all_trackers:  # HTTP/HTTPS only
+                if (t.startswith('http') or t.startswith('udp')) and t not in all_trackers:
                     all_trackers.append(t)
         
         magnet = f"magnet:?xt=urn:btih:{info_hash}"
         for tracker in all_trackers:
             magnet += f"&tr={tracker}"
         
-        logger.info(f"Adding torrent {info_hash} with {len(all_trackers)} HTTP trackers")
+        logger.info(f"Adding torrent {info_hash} with {len(all_trackers)} trackers (HTTP+UDP)")
         
         # Use the modern API (parse_magnet_uri + add_torrent)
         params = lt.parse_magnet_uri(magnet)
@@ -3334,10 +3352,11 @@ async def start_stream(
             for source in sources:
                 if isinstance(source, str) and source.startswith("tracker:"):
                     tracker_url = source[len("tracker:"):]
-                    if tracker_url.startswith("http"):  # Only HTTP/HTTPS (UDP is blocked)
+                    # Accept HTTP, HTTPS, and UDP trackers (DHT+uTP enabled)
+                    if tracker_url.startswith("http") or tracker_url.startswith("udp"):
                         extra_trackers.append(tracker_url)
             if extra_trackers:
-                logger.info(f"Got {len(extra_trackers)} HTTP trackers from Torrentio for {info_hash}")
+                logger.info(f"Got {len(extra_trackers)} trackers from Torrentio for {info_hash}")
         except Exception:
             pass  # No body or invalid JSON - that's fine
         
@@ -3345,7 +3364,7 @@ async def start_stream(
         
         # Start on libtorrent with ALL trackers (ours + Torrentio's)
         try:
-            session_data = torrent_streamer.get_session(info_hash, extra_trackers=extra_trackers)
+            torrent_streamer.get_session(info_hash, extra_trackers=extra_trackers)
         except Exception as e:
             logger.warning(f"libtorrent start failed (non-critical): {e}")
         
@@ -3452,7 +3471,7 @@ async def stream_status(info_hash: str):
         best_downloaded = max(lt_downloaded, 0)
         
         # Determine overall status - if EITHER engine is ready, we're ready
-        if wt_ready and wt_peers > 0:
+        if wt_ready:
             overall_status = "ready"
         elif lt_status == "ready":
             overall_status = "ready"
