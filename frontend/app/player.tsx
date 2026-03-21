@@ -1363,7 +1363,6 @@ export default function PlayerScreen() {
       
       // Show immediate feedback - set initial progress so user sees the bar start filling
       setDownloadProgress(5);
-      setLoadingStatus('Connecting to peers...');
       
       // Start the torrent - passes Torrentio HTTP tracker sources to libtorrent
       await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources);
@@ -1395,22 +1394,14 @@ export default function PlayerScreen() {
           // This prevents the animation from completing before playback starts
           if (status.status === 'downloading_metadata') {
             smoothProgress = Math.min(smoothProgress + 2, 25);
-            setLoadingStatus('Finding peers...');
           } else if (status.status === 'buffering') {
             const readyPct = status.ready_progress ?? 0;
             const targetProgress = 25 + (readyPct / 100) * 55; // 25-80%
             smoothProgress = Math.max(smoothProgress, Math.min(smoothProgress + (targetProgress - smoothProgress) * 0.3, targetProgress));
-            if (peerCount > 0) {
-              const speedMB = (dlRate / (1024 * 1024)).toFixed(1);
-              setLoadingStatus(`${peerCount} peer${peerCount !== 1 ? 's' : ''} · ${speedMB} MB/s`);
-            } else {
-              setLoadingStatus('Searching for peers...');
-            }
           } else if (status.status === 'ready') {
             // Backend ready = data available, but player still needs to buffer
             // Cap at 90% - the final 10% happens when isPlaying becomes true
             smoothProgress = Math.min(Math.max(smoothProgress + 2, 85), 90);
-            setLoadingStatus('Starting playback...');
           }
           setDownloadProgress(smoothProgress);
           
@@ -1642,15 +1633,6 @@ export default function PlayerScreen() {
               )
             )}
             </Animated.View>
-            
-            {/* Loading status text - shows peer count, speed, and current phase */}
-            {infoHash && loadingStatus ? (
-              <View style={{ marginTop: 24, alignItems: 'center' }}>
-                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '500', letterSpacing: 1 }}>
-                  {loadingStatus}
-                </Text>
-              </View>
-            ) : null}
             
             {/* Minimal loading indicator - no text, just a subtle spinner below the title */}
             {!infoHash && (
