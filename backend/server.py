@@ -3407,47 +3407,82 @@ async def prewarm_stream(info_hash: str):
 
 @api_router.get("/stream/status/{info_hash}")
 async def stream_status(info_hash: str):
-    """Get the status of a torrent download from libtorrent"""
+    """Get the status of a torrent download - checks BOTH libtorrent AND WebTorrent,
+    returns the BEST status (whichever engine has more peers/progress)"""
     try:
-        status = torrent_streamer.get_status(info_hash)
-        
-        lt_status = status.get("status", "not_found")
+        # Check libtorrent status
+        lt_data = torrent_streamer.get_status(info_hash)
+        lt_status = lt_data.get("status", "not_found")
+        lt_peers = lt_data.get("peers", 0)
+        lt_dl_rate = lt_data.get("download_rate", 0)
+        lt_downloaded = lt_data.get("downloaded", 0)
         
         if lt_status == "not_found":
-            # Auto-restart: create a new session
-            logger.info(f"Torrent {info_hash} not found, auto-starting...")
-            torrent_streamer.get_session(info_hash)
-            return {
-                "status": "buffering",
-                "progress": 0,
-                "peers": 0,
-                "download_rate": 0,
-                "downloaded": 0,
-                "name": "Starting torrent...",
-            }
+            # Auto-restart on libtorrent
+            try:
+                torrent_streamer.get_session(info_hash)
+            except Exception:
+                pass
         
-        # Map libtorrent status to our format
-        peers = status.get("peers", 0)
-        download_rate = status.get("download_rate", 0)
-        downloaded = status.get("downloaded", 0)
-        video_file = status.get("video_file", "")
-        video_size = status.get("video_size", 0)
+        # Check WebTorrent status
+        wt_peers = 0
+        wt_dl_rate = 0
+        wt_ready = False
+        wt_progress = 0
+        wt_name = ""
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                wt_resp = await client.get(f"http://localhost:8002/status/{info_hash}")
+                if wt_resp.status_code == 200:
+                    wt_data = wt_resp.json()
+                    wt_peers = wt_data.get("peers", 0)
+                    wt_dl_rate = wt_data.get("downloadSpeed", 0)
+                    wt_ready = wt_data.get("ready", False)
+                    wt_progress = wt_data.get("progress", 0)
+                    wt_name = wt_data.get("name", "")
+        except Exception:
+            pass
+        
+        # Use the BEST engine's data
+        total_peers = lt_peers + wt_peers
+        best_dl_rate = max(lt_dl_rate, wt_dl_rate)
+        best_downloaded = max(lt_downloaded, 0)
+        
+        # Determine overall status - if EITHER engine is ready, we're ready
+        if wt_ready and wt_peers > 0:
+            overall_status = "ready"
+        elif lt_status == "ready":
+            overall_status = "ready"
+        elif lt_status == "downloading_metadata" and not wt_ready:
+            overall_status = "downloading_metadata"
+        else:
+            overall_status = "buffering"
+        
+        # Calculate ready_progress
+        ready_progress = lt_data.get("ready_progress", 0)
+        if wt_ready:
+            ready_progress = 100
+        elif wt_progress > 0:
+            ready_progress = max(ready_progress, wt_progress)
         
         return {
-            "status": lt_status,  # "ready", "buffering", "downloading_metadata"
-            "progress": status.get("progress", 0),
-            "ready_progress": status.get("ready_progress", 0),
-            "peers": peers,
-            "download_rate": download_rate,
-            "downloaded": downloaded,
-            "name": video_file or "",
-            "video_filename": video_file or "",
-            "video_file": video_file or "",
-            "video_size": video_size,
-            "first_pieces_ready": status.get("first_pieces_ready", False),
-            "last_pieces_ready": status.get("last_pieces_ready", False),
-            "file_ready": status.get("file_ready", False),
-            "ready_threshold_mb": status.get("ready_threshold_mb", 1),
+            "status": overall_status,
+            "progress": max(lt_data.get("progress", 0), wt_progress),
+            "ready_progress": ready_progress,
+            "peers": total_peers,
+            "download_rate": best_dl_rate,
+            "downloaded": best_downloaded,
+            "name": lt_data.get("video_file", "") or wt_name or "",
+            "video_filename": lt_data.get("video_file", "") or wt_name or "",
+            "video_file": lt_data.get("video_file", "") or wt_name or "",
+            "video_size": lt_data.get("video_size", 0),
+            "first_pieces_ready": lt_data.get("first_pieces_ready", False) or wt_ready,
+            "last_pieces_ready": lt_data.get("last_pieces_ready", False),
+            "file_ready": lt_data.get("file_ready", False) or wt_ready,
+            "ready_threshold_mb": lt_data.get("ready_threshold_mb", 2),
+            "engine": "webtorrent" if (wt_ready or wt_peers > lt_peers) else "libtorrent",
+            "lt_peers": lt_peers,
+            "wt_peers": wt_peers,
         }
     except Exception as e:
         logger.error(f"Error getting stream status: {e}")
@@ -3630,7 +3665,68 @@ async def stream_video(
     request: Request,
     fileIdx: Optional[int] = None
 ):
-    """Stream video file from libtorrent download"""
+    """Stream video - SMART ROUTING: tries WebTorrent first (faster peer discovery),
+    falls back to libtorrent if WebTorrent unavailable."""
+    
+    # Check if WebTorrent has this torrent ready
+    wt_available = False
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            wt_resp = await client.get(f"http://localhost:8002/status/{info_hash}")
+            if wt_resp.status_code == 200:
+                wt_data = wt_resp.json()
+                wt_available = wt_data.get("ready", False) or wt_data.get("peers", 0) > 0
+                if wt_available:
+                    logger.info(f"WebTorrent available for {info_hash}: ready={wt_data.get('ready')}, peers={wt_data.get('peers')}")
+    except Exception as e:
+        logger.debug(f"WebTorrent check failed: {e}")
+    
+    # ROUTE 1: WebTorrent (preferred - faster, more peers via WebSocket trackers)
+    if wt_available:
+        try:
+            wt_url = f"http://localhost:8002/stream/{info_hash}"
+            params = {}
+            if fileIdx is not None:
+                params['fileIdx'] = str(fileIdx)
+            
+            headers = {}
+            range_header = request.headers.get("range")
+            if range_header:
+                headers["Range"] = range_header
+            
+            if request.method == "HEAD":
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.head(wt_url, params=params, headers=headers)
+                    response_headers = dict(resp.headers)
+                    response_headers["Access-Control-Allow-Origin"] = "*"
+                    return Response(
+                        content=b"",
+                        status_code=resp.status_code,
+                        headers=response_headers,
+                    )
+            
+            # For GET: fetch the full response from WebTorrent then proxy it
+            # This avoids the httpx stream context manager closing issue
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0)) as client:
+                resp = await client.get(wt_url, params=params, headers=headers)
+                
+                response_headers = {
+                    "Access-Control-Allow-Origin": "*",
+                    "Accept-Ranges": "bytes",
+                }
+                for key in ["Content-Range", "Content-Length", "Content-Type"]:
+                    if key.lower() in resp.headers:
+                        response_headers[key] = resp.headers[key.lower()]
+                
+                return Response(
+                    content=resp.content,
+                    status_code=resp.status_code,
+                    headers=response_headers,
+                )
+        except Exception as e:
+            logger.warning(f"WebTorrent streaming failed, falling back to libtorrent: {e}")
+    
+    # ROUTE 2: Libtorrent fallback
     try:
         # Make sure the torrent session exists
         session_data = torrent_streamer.get_session(info_hash)
