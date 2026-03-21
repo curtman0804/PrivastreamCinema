@@ -1327,20 +1327,17 @@ export default function PlayerScreen() {
       
       console.log(`[PLAYER] Starting torrent with fileIdx=${validFileIdx}, filename=${filename || 'auto'} (attempt ${retryCount + 1})`);
       
-      // Start the torrent on both libtorrent and WebTorrent, passing Torrentio tracker sources
+      // Start the torrent - passes Torrentio HTTP tracker sources to libtorrent
       await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources);
       
-      // Get the WebTorrent video URL (proxied through backend)
+      // Get the video URL (libtorrent serves from disk with Range request support)
       const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
-      
-      // SET VIDEO URL IMMEDIATELY - WebTorrent handles buffering natively
-      console.log('[PLAYER] Setting WebTorrent video URL immediately:', videoUrl);
-      videoRetryCountRef.current = 0;
-      setStreamUrl(videoUrl);
-      setDownloadProgress(100); // Hide our custom loading overlay
-      
-      // Monitor status in background for debug info only
       let pollCount = 0;
+      let smoothProgress = 0;
+      let videoUrlSet = false;
+      let hadPeersOnce = false;
+      let startTime = Date.now();
+      
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
         pollCount++;
@@ -1351,19 +1348,83 @@ export default function PlayerScreen() {
           const dlRate = status.download_rate || 0;
           setPeers(peerCount);
           setDownloadSpeed(dlRate);
+          if (peerCount > 0) hadPeersOnce = true;
           
-          // Only poll for 30 seconds (just for monitoring)
-          if (pollCount < 30) {
-            pollIntervalRef.current = setTimeout(pollStatus, 1000) as any;
+          const elapsedSec = (Date.now() - startTime) / 1000;
+          
+          // Smooth progress for loading bar
+          if (status.status === 'downloading_metadata') {
+            smoothProgress = Math.min(smoothProgress + 2, 30);
+          } else if (status.status === 'buffering') {
+            const readyPct = status.ready_progress ?? 0;
+            const targetProgress = 30 + (readyPct / 100) * 65;
+            smoothProgress = Math.max(smoothProgress, Math.min(smoothProgress + (targetProgress - smoothProgress) * 0.3, targetProgress));
+          } else if (status.status === 'ready') {
+            smoothProgress = 100;
           }
+          setDownloadProgress(smoothProgress);
+          
+          // PLAY when backend reports READY (1MB downloaded - takes ~6-10 seconds with HTTP trackers)
+          if (status.status === 'ready' && !videoUrlSet) {
+            videoUrlSet = true;
+            console.log(`[PLAYER] Stream READY in ${elapsedSec.toFixed(1)}s! Setting video URL: ${videoUrl}`);
+            videoRetryCountRef.current = 0;
+            setStreamUrl(videoUrl);
+            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+            return;
+          }
+          
+          // If buffering with video file and 30+ seconds elapsed, try playing anyway
+          if (!videoUrlSet && status.status === 'buffering' && status.video_file && elapsedSec > 30) {
+            const readyPct = status.ready_progress ?? 0;
+            if (readyPct > 10) {
+              videoUrlSet = true;
+              console.log(`[PLAYER] EARLY PLAY at ${readyPct.toFixed(0)}% after ${elapsedSec.toFixed(0)}s`);
+              videoRetryCountRef.current = 0;
+              setStreamUrl(videoUrl);
+              if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+              return;
+            }
+          }
+          
+          if (status.status === 'not_found' || status.status === 'invalid') {
+            if (retryCount < MAX_RETRIES) {
+              console.log(`[PLAYER] Stream not found, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+              if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+              setTimeout(() => startTorrentStream(retryCount + 1), 2000);
+              return;
+            }
+            setError('Stream unavailable. Try selecting a different stream.');
+            setIsLoading(false);
+            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+            return;
+          }
+          
+          // Give up after 2 minutes with no peers
+          if (elapsedSec > 120 && !hadPeersOnce) {
+            setError('No peers found. Try a different stream with more seeders.');
+            setIsLoading(false);
+            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+            return;
+          }
+          
+          // Give up after 5 minutes total (very generous)
+          if (elapsedSec > 300) {
+            setError('Stream is too slow. Try a different stream with more seeders.');
+            setIsLoading(false);
+            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+            return;
+          }
+          
+          // Poll every 500ms for fast response
+          pollIntervalRef.current = setTimeout(pollStatus, 500) as any;
         } catch (err) {
-          // Non-critical monitoring, stop on error
-          console.log('[PLAYER] Status poll ended:', err);
+          console.error('Status poll error:', err);
+          pollIntervalRef.current = setTimeout(pollStatus, 1500) as any;
         }
       };
       
-      // Start background monitoring after a brief delay
-      setTimeout(pollStatus, 2000);
+      pollStatus();
       
     } catch (err: any) {
       console.error('Stream start error:', err);

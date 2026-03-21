@@ -740,10 +740,10 @@ export const api = {
       }
     },
     getVideoUrl: (infoHash: string, fileIdx?: number): string => {
-      // Use WebTorrent streaming proxy (K8s-optimized, faster startup)
+      // Use libtorrent video endpoint (HTTP trackers find peers, downloads to disk, serves via Range requests)
       const baseUrl = Platform.OS === 'web' ? '' : (process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '');
       const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
-      return `${baseUrl}/api/stream/wt-video/${infoHash}${params}`;
+      return `${baseUrl}/api/stream/video/${infoHash}${params}`;
     },
   },
   watchProgress: {
