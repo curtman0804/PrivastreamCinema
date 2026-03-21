@@ -842,6 +842,18 @@ export default function PlayerScreen() {
       const newPosition = Math.floor(duration * percentage);
       await videoRef.current.setPositionAsync(newPosition);
       showControlsWithTimeout();
+      
+      // Notify backend to reprioritize pieces for the seek target
+      if (infoHash) {
+        // Estimate byte position: (seek_time / total_time) * file_size
+        // We approximate file_size from bitrate: typical 1080p = ~5Mbps = 625KB/s
+        const estimatedBitrate = 5 * 1024 * 1024 / 8; // 5Mbps in bytes/sec
+        const totalDurationSec = duration / 1000;
+        const seekTimeSec = newPosition / 1000;
+        const estimatedFileSize = estimatedBitrate * totalDurationSec;
+        const positionBytes = Math.floor((seekTimeSec / totalDurationSec) * estimatedFileSize);
+        api.stream.seek(infoHash, positionBytes).catch(() => {});
+      }
     }
   };
 
@@ -851,6 +863,16 @@ export default function PlayerScreen() {
       const clampedPosition = Math.max(0, Math.min(duration, newPositionMs));
       await videoRef.current.setPositionAsync(clampedPosition);
       showControlsWithTimeout();
+      
+      // Notify backend to reprioritize pieces for the seek target
+      if (infoHash && duration > 0) {
+        const estimatedBitrate = 5 * 1024 * 1024 / 8; // 5Mbps in bytes/sec
+        const totalDurationSec = duration / 1000;
+        const seekTimeSec = clampedPosition / 1000;
+        const estimatedFileSize = estimatedBitrate * totalDurationSec;
+        const positionBytes = Math.floor((seekTimeSec / totalDurationSec) * estimatedFileSize);
+        api.stream.seek(infoHash, positionBytes).catch(() => {});
+      }
     }
   };
 
@@ -1138,9 +1160,16 @@ export default function PlayerScreen() {
       }
       // Set 30 second timeout for playback to start
       playbackTimeoutRef.current = setTimeout(() => {
-        if (!playbackStarted && fallbackUrls.length > currentStreamIndex + 1) {
-          console.log('[PLAYER] Playback timeout - trying next stream');
-          tryNextStream();
+        if (!playbackStarted) {
+          if (fallbackUrls.length > currentStreamIndex + 1) {
+            console.log('[PLAYER] Playback timeout - trying next stream');
+            tryNextStream();
+          } else {
+            // No more fallback streams - show error to user
+            console.log('[PLAYER] Playback timeout - no more fallback streams');
+            setError('Stream timed out. The source may have too few peers. Try a different stream with more seeds.');
+            setIsLoading(false);
+          }
         }
       }, 30000);
     }
@@ -1332,6 +1361,10 @@ export default function PlayerScreen() {
       
       console.log(`[PLAYER] Starting torrent with fileIdx=${validFileIdx}, filename=${filename || 'auto'} (attempt ${retryCount + 1})`);
       
+      // Show immediate feedback - set initial progress so user sees the bar start filling
+      setDownloadProgress(5);
+      setLoadingStatus('Connecting to peers...');
+      
       // Start the torrent - passes Torrentio HTTP tracker sources to libtorrent
       await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources);
       
@@ -1362,14 +1395,22 @@ export default function PlayerScreen() {
           // This prevents the animation from completing before playback starts
           if (status.status === 'downloading_metadata') {
             smoothProgress = Math.min(smoothProgress + 2, 25);
+            setLoadingStatus('Finding peers...');
           } else if (status.status === 'buffering') {
             const readyPct = status.ready_progress ?? 0;
             const targetProgress = 25 + (readyPct / 100) * 55; // 25-80%
             smoothProgress = Math.max(smoothProgress, Math.min(smoothProgress + (targetProgress - smoothProgress) * 0.3, targetProgress));
+            if (peerCount > 0) {
+              const speedMB = (dlRate / (1024 * 1024)).toFixed(1);
+              setLoadingStatus(`${peerCount} peer${peerCount !== 1 ? 's' : ''} · ${speedMB} MB/s`);
+            } else {
+              setLoadingStatus('Searching for peers...');
+            }
           } else if (status.status === 'ready') {
             // Backend ready = data available, but player still needs to buffer
             // Cap at 90% - the final 10% happens when isPlaying becomes true
             smoothProgress = Math.min(Math.max(smoothProgress + 2, 85), 90);
+            setLoadingStatus('Starting playback...');
           }
           setDownloadProgress(smoothProgress);
           
@@ -1601,6 +1642,15 @@ export default function PlayerScreen() {
               )
             )}
             </Animated.View>
+            
+            {/* Loading status text - shows peer count, speed, and current phase */}
+            {infoHash && loadingStatus ? (
+              <View style={{ marginTop: 24, alignItems: 'center' }}>
+                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '500', letterSpacing: 1 }}>
+                  {loadingStatus}
+                </Text>
+              </View>
+            ) : null}
             
             {/* Minimal loading indicator - no text, just a subtle spinner below the title */}
             {!infoHash && (

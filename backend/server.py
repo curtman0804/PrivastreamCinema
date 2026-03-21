@@ -141,7 +141,7 @@ FALLBACK_MANIFESTS = {
 
 class TorrentStreamer:
     """Handles torrent downloading and HTTP streaming like Stremio - OPTIMIZED FOR K8s (HTTP trackers only)"""
-    MAX_SESSIONS = 2  # Only keep 2 active torrents to prevent disk overflow
+    MAX_SESSIONS = 3  # Keep 3 active torrents - allows switching between streams
     
     def __init__(self):
         self.sessions = {}  # infoHash -> session data
@@ -488,23 +488,29 @@ class TorrentStreamer:
                         has_avi = header[:4] == b'RIFF'  # AVI
                         has_valid_header = has_ftyp or has_ebml or has_avi
                     
-                    # Ready when: valid video header + at least 512KB on disk
-                    first_pieces_ready = has_valid_header and file_size_on_disk >= 512 * 1024
+                    # Ready when: valid video header + at least 2MB on disk + at least 1 peer
+                    # The 2MB buffer gives ExoPlayer enough data to start without immediate stalls
+                    min_buffer = 2 * 1024 * 1024  # 2MB minimum buffer
+                    has_peers = s.num_peers > 0
+                    first_pieces_ready = has_valid_header and file_size_on_disk >= min_buffer and has_peers
+                    
                     if first_pieces_ready:
                         logger.info(f"Video file ready: {os.path.basename(video_path)}, "
                                    f"header={'ftyp' if has_ftyp else 'ebml' if has_ebml else 'avi'}, "
-                                   f"size_on_disk={file_size_on_disk/1024/1024:.1f}MB")
+                                   f"size_on_disk={file_size_on_disk/1024/1024:.1f}MB, peers={s.num_peers}")
+                    elif has_valid_header and file_size_on_disk >= min_buffer and not has_peers:
+                        logger.info(f"Video file has data but 0 peers - not marking as ready yet")
                 
                 # Last pieces: check if end of file has data (for moov atom)
                 last_pieces_ready = True  # Don't block on last pieces
             except Exception as e:
                 logger.warning(f"File check error: {e}")
-                first_pieces_ready = file_size_on_disk >= 1 * 1024 * 1024
+                first_pieces_ready = file_size_on_disk >= 2 * 1024 * 1024 and s.num_peers > 0
             
             # Ready = first pieces of video are downloaded (header/moov atom at beginning)
             # Last pieces are prioritized at 7 but we don't wait for them - ExoPlayer handles buffering
             is_ready = first_pieces_ready
-            min_bytes_for_playback = 1 * 1024 * 1024
+            min_bytes_for_playback = 2 * 1024 * 1024  # 2MB for readiness
             ready_threshold = min_bytes_for_playback
             
             return {
@@ -3446,6 +3452,88 @@ async def stream_status(info_hash: str):
     except Exception as e:
         logger.error(f"Error getting stream status: {e}")
         return {"status": "buffering", "progress": 0, "peers": 0, "error": str(e)}
+
+@api_router.post("/stream/seek/{info_hash}")
+async def seek_stream(info_hash: str, request: Request):
+    """Tell the backend to reprioritize pieces for a seek target position.
+    This is called when the user seeks in the video player so we can
+    download the pieces at the new position ASAP."""
+    try:
+        body = await request.json()
+        position_bytes = body.get("position_bytes", 0)
+        
+        session_data = torrent_streamer.sessions.get(info_hash.lower())
+        if not session_data:
+            return {"status": "error", "message": "Session not found"}
+        
+        handle = session_data.get('handle')
+        if not handle or not handle.is_valid() or not handle.has_metadata():
+            return {"status": "error", "message": "Torrent not ready"}
+        
+        ti = handle.get_torrent_info()
+        piece_length = ti.piece_length()
+        
+        # Get video file offset
+        video_file_info = session_data.get('video_file', {})
+        file_index = video_file_info.get('index', 0)
+        file_offset = ti.files().file_offset(file_index)
+        
+        # Calculate which pieces correspond to the seek position
+        absolute_offset = file_offset + position_bytes
+        target_piece = absolute_offset // piece_length
+        
+        # Prioritize a large window around the seek target (20MB = ~20 pieces at 1MB/piece)
+        buffer_pieces = max(40, 20 * 1024 * 1024 // piece_length)
+        
+        # Reset all priorities to normal first
+        num_pieces = ti.num_pieces()
+        priorities = [1] * num_pieces
+        
+        # Keep header pieces (first 5MB) at high priority
+        header_pieces = max(10, 5 * 1024 * 1024 // piece_length)
+        for p in range(min(header_pieces, num_pieces)):
+            piece_abs = (file_offset // piece_length) + p
+            if piece_abs < num_pieces:
+                priorities[piece_abs] = 7
+        
+        # Keep tail pieces (last 2MB) at high priority  
+        tail_pieces = max(5, 2 * 1024 * 1024 // piece_length)
+        video_size = video_file_info.get('size', 0)
+        if video_size > 0:
+            tail_start_abs = (file_offset + video_size - tail_pieces * piece_length) // piece_length
+            for p in range(tail_start_abs, min(tail_start_abs + tail_pieces, num_pieces)):
+                if 0 <= p < num_pieces:
+                    priorities[p] = 7
+        
+        # Set HIGH priority for seek target + buffer
+        seek_start = max(0, target_piece - 2)  # A few pieces before for safety
+        seek_end = min(num_pieces, target_piece + buffer_pieces)
+        for p in range(seek_start, seek_end):
+            priorities[p] = 7
+        
+        handle.prioritize_pieces(priorities)
+        
+        # Also use set_piece_deadline for the most urgent pieces (tight deadline)
+        try:
+            for i, p in enumerate(range(target_piece, min(target_piece + 10, num_pieces))):
+                handle.set_piece_deadline(p, i * 100)  # 100ms increments = "download these NOW"
+        except Exception as e:
+            logger.warning(f"set_piece_deadline not supported: {e}")
+        
+        # Force reannounce to find more peers for faster download
+        handle.force_reannounce(0)
+        
+        logger.info(f"Seek request for {info_hash}: position={position_bytes}, piece={target_piece}, buffer={buffer_pieces} pieces")
+        
+        return {
+            "status": "ok",
+            "target_piece": target_piece,
+            "buffer_pieces": buffer_pieces,
+            "message": f"Reprioritized {buffer_pieces} pieces from piece {target_piece}"
+        }
+    except Exception as e:
+        logger.error(f"Seek error: {e}")
+        return {"status": "error", "message": str(e)}
 
 @api_router.get("/stream/wt-video/{info_hash}")
 @api_router.head("/stream/wt-video/{info_hash}")

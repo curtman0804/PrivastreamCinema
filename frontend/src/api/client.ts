@@ -745,6 +745,17 @@ export const api = {
       const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
       return `${baseUrl}/api/stream/video/${infoHash}${params}`;
     },
+    seek: async (infoHash: string, positionBytes: number): Promise<{ status: string }> => {
+      try {
+        const response = await apiClient.post(`/api/stream/seek/${infoHash}`, {
+          position_bytes: positionBytes,
+        });
+        return response.data;
+      } catch (err) {
+        console.log('[SEEK] Failed to notify backend:', err);
+        return { status: 'failed' };
+      }
+    },
   },
   watchProgress: {
     // Get all continue watching items
