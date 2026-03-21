@@ -739,8 +739,16 @@ export const api = {
         return { status: 'failed' };
       }
     },
-    getVideoUrl: (infoHash: string, fileIdx?: number): string => {
-      // Use libtorrent video endpoint (HTTP trackers find peers, downloads to disk, serves via Range requests)
+    getVideoUrl: (infoHash: string, fileIdx?: number, torrServerUrl?: string): string => {
+      // If TorrServer URL is provided, use it for DIRECT streaming
+      // TorrServer handles the full torrent lifecycle - download, cache, stream
+      if (torrServerUrl) {
+        const magnetLink = `magnet:?xt=urn:btih:${infoHash}`;
+        const idxParam = fileIdx !== undefined && fileIdx !== null ? `&index=${fileIdx}` : '&index=0';
+        return `${torrServerUrl}/stream?link=${encodeURIComponent(magnetLink)}${idxParam}&play`;
+      }
+      
+      // Fallback: Use our backend's dual-engine video endpoint
       const baseUrl = Platform.OS === 'web' ? '' : (process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '');
       const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
       return `${baseUrl}/api/stream/video/${infoHash}${params}`;

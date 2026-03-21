@@ -38,6 +38,7 @@ import { Modal, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as NavigationBar from 'expo-navigation-bar';
+import { useSettingsStore } from '../src/store/settingsStore';
 
 // Check if running on TV
 const isTV = Platform.isTV || Platform.OS === 'android';
@@ -1358,6 +1359,32 @@ export default function PlayerScreen() {
     try {
       const parsedFileIdx = fileIdx && fileIdx !== '' ? parseInt(fileIdx, 10) : undefined;
       const validFileIdx = parsedFileIdx !== undefined && !isNaN(parsedFileIdx) ? parsedFileIdx : undefined;
+      
+      // Check if TorrServer is configured
+      const { torrServerUrl, useExternalServer } = useSettingsStore.getState();
+      
+      // === TORRSERVER MODE: Direct streaming, no polling ===
+      if (useExternalServer && torrServerUrl) {
+        console.log(`[PLAYER] TorrServer mode: streaming via ${torrServerUrl}`);
+        setDownloadProgress(30); // Jump to 30% - TorrServer handles the rest
+        
+        // TorrServer handles everything: torrent download, caching, HTTP streaming
+        // Just set the video URL directly - TorrServer's /stream endpoint buffers internally
+        const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx, torrServerUrl);
+        console.log(`[PLAYER] TorrServer video URL: ${videoUrl}`);
+        
+        // Small delay to let TorrServer start the torrent
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setDownloadProgress(60);
+        
+        videoRetryCountRef.current = 0;
+        setStreamUrl(videoUrl);
+        setDownloadProgress(90);
+        
+        return; // No polling needed - TorrServer handles everything
+      }
+      
+      // === BUILT-IN ENGINE MODE: Dual libtorrent + WebTorrent with polling ===
       
       // Parse sources from navigation params (tracker URLs from Torrentio)
       let streamSources: string[] = [];
