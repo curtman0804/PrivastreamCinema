@@ -3705,24 +3705,33 @@ async def stream_video(
                         headers=response_headers,
                     )
             
-            # For GET: fetch the full response from WebTorrent then proxy it
-            # This avoids the httpx stream context manager closing issue
-            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0)) as client:
-                resp = await client.get(wt_url, params=params, headers=headers)
-                
-                response_headers = {
-                    "Access-Control-Allow-Origin": "*",
-                    "Accept-Ranges": "bytes",
-                }
-                for key in ["Content-Range", "Content-Length", "Content-Type"]:
-                    if key.lower() in resp.headers:
-                        response_headers[key] = resp.headers[key.lower()]
-                
-                return Response(
-                    content=resp.content,
-                    status_code=resp.status_code,
-                    headers=response_headers,
-                )
+            # For GET: use streaming proxy to avoid buffering entire response
+            # This is critical for seeking - we need to forward data as it arrives
+            client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0))
+            req = client.build_request("GET", wt_url, params=params, headers=headers)
+            resp = await client.send(req, stream=True)
+            
+            response_headers = {
+                "Access-Control-Allow-Origin": "*",
+                "Accept-Ranges": "bytes",
+            }
+            for key in ["Content-Range", "Content-Length", "Content-Type"]:
+                if key.lower() in resp.headers:
+                    response_headers[key] = resp.headers[key.lower()]
+            
+            async def wt_streaming_proxy():
+                try:
+                    async for chunk in resp.aiter_bytes(chunk_size=128 * 1024):
+                        yield chunk
+                finally:
+                    await resp.aclose()
+                    await client.aclose()
+            
+            return StreamingResponse(
+                wt_streaming_proxy(),
+                status_code=resp.status_code,
+                headers=response_headers,
+            )
         except Exception as e:
             logger.warning(f"WebTorrent streaming failed, falling back to libtorrent: {e}")
     

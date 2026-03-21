@@ -1367,13 +1367,25 @@ export default function PlayerScreen() {
       // Start the torrent - passes Torrentio HTTP tracker sources to libtorrent
       await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources);
       
-      // Get the video URL (libtorrent serves from disk with Range request support)
+      // Get the video URL
       const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
       let pollCount = 0;
       let smoothProgress = 0;
       let videoUrlSet = false;
       let hadPeersOnce = false;
       let startTime = Date.now();
+      
+      // IMMEDIATELY set the video URL after 2 seconds
+      // WebTorrent's /stream endpoint handles buffering internally - it waits for data
+      // This is how Stremio does it: start playing immediately, let the player buffer
+      setTimeout(() => {
+        if (!videoUrlSet && continuePollingRef.current) {
+          videoUrlSet = true;
+          console.log(`[PLAYER] Setting video URL immediately (WebTorrent handles buffering): ${videoUrl}`);
+          videoRetryCountRef.current = 0;
+          setStreamUrl(videoUrl);
+        }
+      }, 2000);
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
@@ -1391,21 +1403,18 @@ export default function PlayerScreen() {
           
           // Smooth progress for loading bar
           // IMPORTANT: Cap at 90% - only reach 100% when video ACTUALLY plays
-          // This prevents the animation from completing before playback starts
           if (status.status === 'downloading_metadata') {
-            smoothProgress = Math.min(smoothProgress + 2, 25);
+            smoothProgress = Math.min(smoothProgress + 3, 30);
           } else if (status.status === 'buffering') {
             const readyPct = status.ready_progress ?? 0;
-            const targetProgress = 25 + (readyPct / 100) * 55; // 25-80%
+            const targetProgress = 30 + (readyPct / 100) * 50; // 30-80%
             smoothProgress = Math.max(smoothProgress, Math.min(smoothProgress + (targetProgress - smoothProgress) * 0.3, targetProgress));
           } else if (status.status === 'ready') {
-            // Backend ready = data available, but player still needs to buffer
-            // Cap at 90% - the final 10% happens when isPlaying becomes true
-            smoothProgress = Math.min(Math.max(smoothProgress + 2, 85), 90);
+            smoothProgress = Math.min(Math.max(smoothProgress + 3, 85), 90);
           }
           setDownloadProgress(smoothProgress);
           
-          // PLAY when backend reports READY (1MB downloaded - takes ~6-10 seconds with HTTP trackers)
+          // If ready and we haven't set URL yet (shouldn't happen due to 2s timeout above)
           if (status.status === 'ready' && !videoUrlSet) {
             videoUrlSet = true;
             console.log(`[PLAYER] Stream READY in ${elapsedSec.toFixed(1)}s! Setting video URL: ${videoUrl}`);
@@ -1415,17 +1424,12 @@ export default function PlayerScreen() {
             return;
           }
           
-          // If buffering with video file and 30+ seconds elapsed, try playing anyway
-          if (!videoUrlSet && status.status === 'buffering' && status.video_file && elapsedSec > 30) {
-            const readyPct = status.ready_progress ?? 0;
-            if (readyPct > 10) {
-              videoUrlSet = true;
-              console.log(`[PLAYER] EARLY PLAY at ${readyPct.toFixed(0)}% after ${elapsedSec.toFixed(0)}s`);
-              videoRetryCountRef.current = 0;
-              setStreamUrl(videoUrl);
-              if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
-              return;
-            }
+          // If peers found quickly, set URL immediately (don't wait the full 2s)
+          if (!videoUrlSet && peerCount > 0 && elapsedSec >= 1) {
+            videoUrlSet = true;
+            console.log(`[PLAYER] Peers found (${peerCount}), setting video URL early: ${videoUrl}`);
+            videoRetryCountRef.current = 0;
+            setStreamUrl(videoUrl);
           }
           
           if (status.status === 'not_found' || status.status === 'invalid') {
@@ -1441,16 +1445,16 @@ export default function PlayerScreen() {
             return;
           }
           
-          // Give up after 2 minutes with no peers
-          if (elapsedSec > 120 && !hadPeersOnce) {
+          // Give up after 45 seconds with no peers (torrent is likely dead)
+          if (elapsedSec > 45 && !hadPeersOnce) {
             setError('No peers found. Try a different stream with more seeders.');
             setIsLoading(false);
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
             return;
           }
           
-          // Give up after 5 minutes total (very generous)
-          if (elapsedSec > 300) {
+          // Give up after 2 minutes total
+          if (elapsedSec > 120) {
             setError('Stream is too slow. Try a different stream with more seeders.');
             setIsLoading(false);
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
