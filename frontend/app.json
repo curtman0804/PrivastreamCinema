@@ -54,7 +54,8 @@
       "expo-font",
       "./plugins/withTVKeyEvents",
       "./plugins/withTVLauncher",
-      "expo-video"
+      "expo-video",
+      "./plugins/nodejs-mobile"
     ],
     "experiments": {
       "typedRoutes": true
