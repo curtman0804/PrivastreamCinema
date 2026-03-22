@@ -1,161 +1,166 @@
 <analysis>**original_problem_statement:**
-The user wants to build a Stremio-like video streaming application, Privastream Cinema, that offers fast, reliable torrent streaming without requiring external services like Real-Debrid.
+The user wants to build a Stremio-like video streaming application, Privastream Cinema. The core requirements are fast, reliable torrent streaming, functional video seeking, and a correctly displayed application icon. The user is extremely frustrated with persistent failures across these core features. After multiple failed attempts with a cloud-based backend, the user has explicitly demanded that the application architecture be changed to match Stremio's by running the torrent streaming engine locally on the device for zero-latency playback. The most recent issue is a complete failure of the Android deployment build after an attempt to integrate the necessary local engine technology.
 
 PRODUCT REQUIREMENTS:
--   **Reliable, Fast Playback:** Streams must start quickly and play without interruption for all torrents, similar to the Stremio app experience.
--   **Functional Seeking:** Users must be able to seek to any point in a video, and playback should resume from that position.
--   **Correct App Icon:** The full, uncropped application logo must be displayed correctly as the app icon on all devices, especially Android.
--   **UI Consistency:** The application should have a consistent and polished UI, including displaying the proper logo on search result pages.
--   **Robustness:** The app should handle torrents with low seeds by gracefully trying alternative streams.
-
-The user is currently extremely frustrated due to persistent failures in playback, seeking, and the app icon, despite multiple attempts to fix them.
+-   **Local On-Device Streaming:** The torrent engine MUST run locally on the user's device, identical to Stremio's architecture. Cloud streaming is no longer an acceptable solution.
+-   **Reliable Playback & Seeking:** Streams must start quickly and seeking must be near-instantaneous, leveraging the local engine.
+-   **Correct App Icon:** The app icon must display correctly without being cropped on all Android devices, especially those with circular masks.
+-   **Fix Deployment Failure:** The app is currently unbuildable due to a native Gradle error. This is a hard blocker.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application is a full-stack project with a React Native/Expo frontend and a Python/FastAPI backend. It features a dual-engine streaming architecture designed to maximize peer discovery:
-1.  A **** engine with DHT, uTP, and a mix of HTTP/UDP trackers enabled.
-2.  A **** (Node.js) engine that uses WebSocket trackers.
-
-The backend intelligently merges status from both engines and proxies video streams from the engine with better peer connectivity for a given torrent. The frontend contains a complex player screen that polls for status and handles playback. A settings page for a self-hosted TorrServer was implemented but rejected by the user and is now obsolete.
+The project is a full-stack application with a React Native/Expo frontend and a FastAPI backend. A significant architectural shift has just been attempted to meet the user's core demand for on-device streaming. The  library has been integrated to run a  server directly inside the Android application. This involved creating a new Node.js project within , adding a custom Expo config plugin (), and updating the player logic to use  when the local engine is available. This change has broken the Android build process. The cloud-based FastAPI and  still exist but are now intended as a fallback.
 
 **Last working item**:
--   **Last item agent was working:** The agent was addressing a critical round of user feedback about failed playback, broken seeking, and the still-cropped app icon. Following a  analysis, the agent implemented several key fixes:
-    1.  **Playback Logic:** Reverted an experimental immediate URL approach in  to wait for a ready status from the backend, aiming for more stability.
-    2.  **Seeking UI:** Added a rebuffering/loading spinner in  that appears during seeks to provide user feedback.
-    3.  **Icon:** Attempted a new fix by generating an adaptive icon foreground image with a solid black background and a smaller, centered logo, intended to prevent the OS from cropping the logo itself.
-    4.  **Backend Engine:** Enabled DHT and uTP in the  engine () to better mimic a native client's network capabilities.
-    5.  **Frontend Logic:** Implemented auto-stream switching in  to try the next available stream if the current one has no peers after a timeout.
--   **Status:** USER VERIFICATION PENDING
--   **Agent Testing Done:** Y
--   **Which testing method agent to use?** both
+-   **Last item agent was working:** Debugging and fixing a critical Android build failure reported by the user via deployment logs. The agent correctly identified the root cause from the logs provided.
+-   **Status:** IN PROGRESS
+-   **Agent Testing Done:** N
+-   **Which testing method agent to use?** N/A. The immediate task is to fix the build. After that, a full deployment and on-device test by the user will be required.
 -   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
--   **Issue 1:** Playback is inconsistent and unreliable (P0)
--   **Issue 2:** Seeking within a video fails (P0)
--   **Issue 3:** The app icon is still cropped on Android (P0)
--   **Issue 4:** Search results show a generic text title instead of the proper logo (P1)
--   **Issue 5:** Initial poster loading on the discover screen is slow (11-12 seconds) (P2)
+-   **Issue 1:** Android build is failing (P0)
+-   **Issue 2:** Unreliable playback and timeouts (P0)
+-   **Issue 3:** Seeking kicks the user back to the start of the video (P0)
+-   **Issue 4:** App icon is still cropped on user's device (P0)
+-   **Issue 5:** Search results page shows a generic text title (P1)
+-   **Issue 6:** Slow initial poster loading on the discover screen (P2)
 
 **Issues Detail:**
--   **Issue 1: Playback is inconsistent and unreliable**
-    -   **Attempted fixes:** The architecture was overhauled to a dual-engine (libtorrent + webtorrent) system. DHT, uTP, and more trackers were enabled on the backend. The frontend was updated to auto-switch streams on failure. The ready threshold was tuned.
+-   **Issue 1: Android build is failing**
+    -   **Attempted fixes:** The integration of  caused this failure. No fix has been applied yet.
     -   **Next debug checklist:**
-        1.  In , add extensive logging to the  endpoint to see the individual status (peers, progress) from both  and  for failing torrents.
-        2.  Verify the  endpoint correctly passes extra trackers to both engines.
-        3.  In , add detailed logs inside the  loop and  function to trace the decision-making process when a stream times out or fails.
-    -   **Why fix this issue and what will be achieved with the fix?** This is the app's core function. Fixing it will make the app usable and meet the user's primary requirement.
+        1.  The build log clearly states the error: .
+        2.  The build server environment uses Node.js v20, but the dependency has a hardcoded check for v18.
+        3.  The next agent MUST edit the Gradle script for the dependency to resolve this mismatch. The file is located at: .
+        4.  Find the line with the Node.js version check and either update it to accept version 20 or remove the check entirely.
+    -   **Why fix this issue and what will be achieved with the fix?** This is a hard blocker. The application cannot be built, deployed, or tested until this is resolved. Fixing this will allow the new local streaming architecture to be validated.
     -   **Status:** IN PROGRESS
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** both
-
--   **Issue 2: Seeking within a video fails**
-    -   **Attempted fixes:** A  endpoint was added to the backend to reprioritize  pieces. The frontend was updated to call this endpoint. A rebuffering spinner was added for better UX. The backend proxy was changed to be a streaming proxy.
-    -   **Next debug checklist:**
-        1.  Review the  server (). Does it natively support piece prioritization for range requests? If not, seeking will only work if libtorrent is the active engine.
-        2.  Add logging to the  endpoint in  to ensure it's being called and executing .
-        3.  In , verify the  calculation in  is accurate for variable bitrate videos.
-    -   **Why fix this issue and what will be achieved with the fix?** Seeking is a fundamental video player feature.
-    -   **Status:** IN PROGRESS
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** both
-
--   **Issue 3: The app icon is still cropped on Android**
-    -   **Attempted fixes:** Multiple attempts were made, including adding padding, resizing, and finally creating a foreground image with an opaque black background and a downscaled logo.
-    -   **Next debug checklist:**
-        1.  **CRITICAL:** Re-confirm with the user that they are generating a **completely new Android build (APK/AAB)** after the agent makes changes. Icon assets are compiled into the app, and a simple server Redeploy will not update them.
-        2.  Inspect  to ensure the  configuration points to the latest generated assets.
-        3.  If it still fails, the next step is to abandon the  system entirely. Create a single, pre-composed square  (e.g., 1024x1024) with the logo centered and rounded corners already applied to the image itself. This offers less flexibility but bypasses Android's masking behavior.
-    -   **Why fix this issue and what will be achieved with the fix?** The user is extremely frustrated by this visual bug, which makes the app look unprofessional.
-    -   **Status:** IN PROGRESS
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** frontend (Requires a new build and user verification).
-
--   **Issue 4: Search results show a generic text title instead of the proper logo**
-    -   **Attempted fixes:** None.
-    -   **Next debug checklist:**
-        1.  Identify the component used for rendering items in .
-        2.  The title component from  (which correctly shows the filling logo) should be extracted into a reusable component.
-        3.  Replace the generic text title in the search results with this new reusable component.
-    -   **Why fix this issue and what will be achieved with the fix?** Ensures UI consistency and a more polished user experience.
-    -   **Status:** NOT STARTED
     -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** frontend
+    -   **Should Test frontend/backend/both after fix?** both. A successful build is the primary test.
+
+-   **Issue 2: Unreliable playback and timeouts**
+    -   **Attempted fixes:** A major architectural shift to a local on-device  engine was implemented. This is expected to be the definitive fix.
+    -   **Next debug checklist:** Blocked by the build failure (Issue 1). Once a successful build is installed, this needs to be the first feature tested.
+    -   **Why fix this issue and what will be achieved with the fix?** This is the app's primary function and the main source of user frustration.
+    -   **Status:** BLOCKED
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** frontend (requires a new build and user verification).
+    -   **Blocked on other issue:** Issue 1: Android build is failing
+
+-   **Issue 3: Seeking kicks the user back to the start of the video**
+    -   **Attempted fixes:** A prefetch-then-seek mechanism was added to the cloud backend. The shift to a local engine is the intended final solution, as it eliminates network latency during seeks.
+    -   **Next debug checklist:** Blocked by the build failure (Issue 1). This should be tested immediately after a successful build.
+    -   **Why fix this issue and what will be achieved with the fix?** It is a fundamental feature for any video player.
+    -   **Status:** BLOCKED
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** frontend (requires a new build and user verification).
+    -   **Blocked on other issue:** Issue 1: Android build is failing
+
+-   **Issue 4: App icon is still cropped on user's device**
+    -   **Attempted fixes:** Multiple attempts including padding and opaque backgrounds. The latest attempt involved resizing the logo to be much smaller (40% of the canvas width) to fit within the circular mask used by the user's device.
+    -   **Next debug checklist:** This fix is included in the current codebase but cannot be verified by the user until a new APK is successfully built (Issue 1).
+    -   **Why fix this issue and what will be achieved with the fix?** It is a major point of frustration for the user and affects the professional appearance of the app.
+    -   **Status:** BLOCKED
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** frontend (requires a new build and user verification).
+    -   **Blocked on other issue:** Issue 1: Android build is failing
 
 **In progress Task List**:
-There are no other in-progress tasks; all work is focused on resolving the issues listed above.
+-   **Task 1: Implement Local On-Device Streaming Engine**
+    -   **Where to resume:** Fix the Gradle build error in  that is preventing the app from being built.
+    -   **What will be achieved with this?** This will complete the pivot to a Stremio-like architecture, enabling low-latency local streaming which should solve the core playback and seeking issues.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** frontend
+    -   **Blocked on something:** The Gradle build error.
 
 **Upcoming and Future Tasks**
 -   **Upcoming Tasks:**
-    -   **(P1) Refactor Obsolete Code:** Remove the TorrServer settings page ( section), Zustand store (), and associated API client logic, as this feature was rejected by the user.
+    -   **(P1) Finalize Icon Fix:** After the build is successful, confirm with the user that the icon is no longer cropped.
+    -   **(P1) Refactor Obsolete Code:** Clean up the now-redundant TorrServer code from the profile page and the old libtorrent/webtorrent logic from the backend  to simplify the codebase.
 -   **Future Tasks:**
-    -   **(P2) Refactor  Deprecation:** Migrate to the newer  package to ensure long-term support.
-    -   **(P3) Optimize Initial Poster Loading:** Implement skeleton loaders on the discover screen to improve the perceived load time.
+    -   **(P2) Refactor  Deprecation:** Migrate to the newer  package.
+    -   **(P3) Optimize Initial Poster Loading:** Implement skeleton loaders on the discover screen to improve perceived load time.
 
 **Completed work in this session**
--   **Dual-Engine Streaming Architecture:** Architected and implemented a hybrid backend using both  and  to maximize peer discovery, with the FastAPI server acting as a smart proxy and status aggregator.
--   **Full Peer Discovery Enabled:** Re-configured the  engine to enable DHT and uTP, and added a comprehensive list of both UDP and HTTP trackers.
--   **Auto-Stream Switching:** Built logic into the frontend player to automatically try the next stream in the list if the current one fails to find peers, improving resilience.
--   **Seeking Mechanism V2:** Implemented a backend  endpoint for piece prioritization and added a rebuffering UI to the frontend player.
--   **Icon Generation V3:** Created a new adaptive icon with a solid background to work around Android's masking behavior.
+-   Architected and implemented a major pivot to a local on-device streaming engine using  to replicate Stremio's performance.
+-   Created a custom Expo config plugin to manage the native code integration for the local Node.js server.
+-   Updated the player to be dual-mode: it will use the local engine () if available in the native build, and fall back to the cloud backend otherwise.
+-   Implemented a  API on both the frontend and backend to improve seeking reliability.
+-   Resized the app icon assets to 40% of the canvas to fit within circular Android icon masks.
+-   Diagnosed the root cause of the deployment failure from user-provided logs.
 
 **Earlier issues found/mentioned but not fixed**
--   None. All known issues are listed in the pending section.
+-   None, all are captured in the pending list.
 
 **Known issue recurrence from previous fork**
--   The core problems of **unreliable playback**, **failed seeking**, and the **cropped app icon** are all highly recurrent issues that have persisted across multiple sessions and fixes.
+-   The core problems of **unreliable playback**, **failed seeking**, and the **cropped app icon** are all highly recurrent issues. The latest architectural change is the most drastic attempt to solve them.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Hybrid Streaming Backend:** Using  and  in parallel is the current core strategy to solve peer discovery issues in a restricted K8s environment.
--   **Frontend Player Logic:** The player in  is stateful and complex, managing polling, status updates, error handling, timeouts, and automatic stream fallback.
--   **Android Adaptive Icons:** The icon issue revolves around how Android applies various masks (circle, squircle) to a foreground image. The current fix involves using a solid background to control what gets masked.
+-   **Local On-Device Server:** The core concept is embedding a Node.js runtime into the Android app using . This runs a  server locally, which the  component connects to via .
+-   **Expo Config Plugins:** These are essential for integrating native modules like . They programmatically modify native project files (like  and ) during the prebuild phase, avoiding the need to eject from Expo.
+-   **Gradle Build System:** The current problem is a Gradle build failure. The agent must modify a  file to resolve a Node.js version conflict between the build environment and a dependency.
 
 **key DB schema**
--   **MongoDB:** Collections for , , .
+-   **MongoDB:** No changes. Collections include , , .
 
 **All files of reference**
--   : The main backend logic, including engine configuration and the smart proxy.
--   : The source of most playback and UI logic.
--   : The configuration file for the app icon.
--   : The Node.js WebTorrent server component.
--   : The file to modify for the text logo issue.
+-   : **This is the file that MUST be edited to fix the build.** It contains the Node.js version check that is failing.
+-   : Contains the configuration that activates the  plugin during the build.
+-   : The config plugin that instructs the build system on how to include the native Node.js module.
+-   : The code for the local torrent server that runs on the user's device.
+-   : Contains the logic that conditionally switches the  to  if the local engine is detected.
 
 **Areas that need refactoring**:
--   The entire TorrServer integration (settings UI, Zustand store, API client logic) is now obsolete and should be removed to simplify the codebase.
--    is over 2700 lines long and urgently needs to be broken down into smaller components and custom hooks for maintainability (e.g., , , ).
+-   The cloud-based  and  contain a lot of logic that is now either fallback or obsolete. They should be simplified to only handle metadata, search, and authentication, with all streaming logic removed.
+-    remains very large and could be broken into smaller hooks and components.
 
 **key api endpoints**
--   : Starts a torrent download on both backend engines.
--   : Merges and returns the status from both engines.
--   : Triggers piece reprioritization for seeking.
--   : Streams video, acting as a proxy to the best available engine.
+-   **Local (On-Device):**
+    -   
+    -   
+    -   
+-   **Cloud (Fallback):**
+    -   
+    -   
+    -   
 
 **Critical Info for New Agent**
--   The user is extremely frustrated. Your primary goal is to solve the recurring issues of playback, seeking, and the icon definitively. Acknowledge the user's frustration and be methodical.
--   **The app icon fix requires a new build.** You must clearly instruct the user to generate a new APK/AAB after you've made changes to the icon assets or . This is the most likely reason for the recurring failure.
--   The dual-engine backend is the established strategy. Focus on refining it, not replacing it.
--   The TorrServer feature was rejected and all related code is now technical debt. Plan to remove it.
+-   **Your absolute first priority is to fix the Android build failure.** The user cannot test anything until this is resolved.
+-   The error is .
+-   You must fix this by editing the dependency's Gradle file: . Modify the Node.js version check to allow v20.
+-   The user is extremely frustrated but has clearly stated the desired path forward: a local streaming engine identical to Stremio. Do not deviate from this plan. All efforts should be focused on making the  integration successful.
+-   After the build is fixed, you must remind the user that a **new APK must be generated and installed** to test both the local streaming engine and the icon fix. Redeploy is not sufficient for these native changes.
 
 **documents and test reports created in this job**
 -   
--   User-provided artifacts showing the cropped icon and the desired full logo are available in the history.
+-   The user has provided extensive build logs, which are critical for debugging the current issue.
 
 **Last 10 User Messages and any pending HUMAN messages**
-The user's last messages express extreme frustration and anger over the persistent issues:
-1.  **Latest:** Reports initial poster load is slow (11s), Zootopia 2 (12s) and War Machine (7s) playback work, but Harold and Kumar fails with a generic text logo. Demands the app work exactly like Stremio.
-2.  Rejects the self-hosted TorrServer idea, correctly stating Stremio doesn't require it from users.
-3.  Reports slow initial loading (12s), acceptable playback for War Machine (22s), but seeking still fails and Zootopia 2 times out. States the icon is still cropped with padding and expresses extreme anger.
-4.  Asks for clarification on the deployment process (redeploy then android builds and generate?).
-5.  Reports one battle after another stream fails to load, and re-entering War Machine is inconsistent. Seeking still broken. Icon still cropped.
+1.  **LATEST:** User provided detailed build logs for a failing deployment and asked the agent to analyze and fix the errors.
+2.  User stated they need the local streaming engine implemented correctly, just like Stremio, with no exceptions, and that the icon is still cropped.
+3.  User is confused about  vs.  for applying the icon fix.
+4.  User confirmed after the last fix that playback still fails/times out, seeking still restarts the video, and the icon is still cropped.
+5.  User is extremely frustrated and angry, feeling that the app is not improving and money is being wasted. They explicitly referenced that Stremio's repository is public and should be used as a blueprint.
+6.  User agrees to the plan to pivot to the  Stremio-style architecture.
+7.  User confirmed that the icon is still cropped, providing a screenshot of the circular mask.
+8.  User asked for clarification about building a new APK for the icon fix.
 
 **Project Health Check:**
--   **Broken:** Playback Reliability, Seeking, App Icon. These are core, user-facing features that are not functioning correctly and are causing significant user frustration.
+-   **Broken:** The entire Android build and deployment pipeline is non-functional. Core features (playback, seeking, icon) are still broken from the user's perspective, pending a successful build of the new architecture.
 
 **3rd Party Integrations**
--   None.
+-   ****: A native module for embedding a Node.js runtime in the React Native application. This is the new cornerstone of the architecture and the source of the current build failure.
 
-**Testing</analysis>
+**Testing status**
+-   Testing agent used after significant changes: NO (build is failing)
+-   Troubleshoot agent used after agent stuck in loop: YES (was called, but did not provide a solution for the slow download speed, which the main agent then fixed)
+-   Test files created: None recently.
+-   Known regressions: The entire app is unbuildable.
+
+**What agent forgot to execute**
+The agent failed to anticipate or verify the Node.js version requirements of the  dependency against the build environment's Node.js version. This oversight led directly to the critical build failure that has blocked all progress.</analysis>

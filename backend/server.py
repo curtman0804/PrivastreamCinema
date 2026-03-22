@@ -3384,8 +3384,6 @@ async def start_stream(
                 logger.info(f"torrent-stream engine created for {info_hash} with {len(extra_trackers)} extra trackers")
         except Exception as e:
             logger.warning(f"torrent-stream start failed (non-critical): {e}")
-        except Exception as e:
-            logger.warning(f"WebTorrent pre-start failed (non-critical): {e}")
         
         return {"status": "started", "info_hash": info_hash}
     except Exception as e:

@@ -7,6 +7,24 @@ const path = require('path');
 const fs = require('fs');
 
 function withNodejsMobile(config) {
+  // Ensure BUILD_NATIVE_MODULES.txt is set to 0
+  // Our nodejs-project has no native (.gyp) modules, so skip the native build
+  // which requires a specific Node.js version that may not match the build environment
+  config = withDangerousMod(config, ['android', (config) => {
+    const buildNativeModulesFile = path.join(
+      config.modRequest.projectRoot,
+      'nodejs-assets',
+      'BUILD_NATIVE_MODULES.txt'
+    );
+    const dir = path.dirname(buildNativeModulesFile);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(buildNativeModulesFile, '0\n');
+    console.log('[nodejs-mobile plugin] BUILD_NATIVE_MODULES.txt set to 0');
+    return config;
+  }]);
+
   // Modify Android app/build.gradle
   config = withAppBuildGradle(config, (config) => {
     if (config.modResults.language === 'groovy') {
