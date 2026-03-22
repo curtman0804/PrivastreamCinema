@@ -1178,7 +1178,7 @@ export default function PlayerScreen() {
           console.log('[PLAYER] Stream timeout, trying next...');
           tryNextStream();
         }
-      }, 30000); // 30 second timeout
+      }, 120000); // 120 second timeout - give torrent time to buffer
     } else {
       // No more fallback streams
       console.log('[PLAYER] No more fallback streams available');
@@ -1227,7 +1227,7 @@ export default function PlayerScreen() {
       if (playbackTimeoutRef.current) {
         clearTimeout(playbackTimeoutRef.current);
       }
-      // Set 30 second timeout for playback to start
+      // Set 120 second timeout for playback to start - torrent streams need time to buffer
       playbackTimeoutRef.current = setTimeout(() => {
         if (!playbackStarted) {
           if (fallbackUrls.length > currentStreamIndex + 1) {
@@ -1240,7 +1240,7 @@ export default function PlayerScreen() {
             setIsLoading(false);
           }
         }
-      }, 30000);
+      }, 120000); // 120 seconds for torrent buffering
     }
     return () => {
       if (playbackTimeoutRef.current) {

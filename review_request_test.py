@@ -12,7 +12,7 @@ import sys
 from typing import Dict, Any, Optional
 
 # Configuration - Use the production URL from frontend/.env
-BACKEND_URL = "https://stream-node-build.preview.emergentagent.com"
+BACKEND_URL = "https://torrent-playback-fix.preview.emergentagent.com"
 TEST_HASH = "08ada5a7a6183aae1e09d831df6748d566095a10"
 TEST_CREDENTIALS = {"username": "choyt", "password": "RFIDGuy1!"}
 

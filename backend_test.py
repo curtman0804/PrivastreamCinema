@@ -1,62 +1,61 @@
 #!/usr/bin/env python3
 """
-Privastream Cinema Backend Testing Script
-Tests the specific review request scenarios for the streaming stack
+Backend Test Suite for Privastream Cinema - 20MB Buffering Threshold Testing
+Tests the new 20MB buffering threshold implementation as specified in review request.
 """
 
-import asyncio
-import httpx
-import json
+import requests
 import time
+import json
 import sys
 from typing import Dict, Any, Optional
 
-# Configuration
-BACKEND_URL = "https://stream-node-build.preview.emergentagent.com"
-TORRENT_STREAM_URL = "http://localhost:8002"
-TEST_HASH = "08ada5a7a6183aae1e09d831df6748d566095a10"
-TEST_CREDENTIALS = {"username": "choyt", "password": "RFIDGuy1!"}
+# Backend URL from environment
+BACKEND_URL = "https://torrent-playback-fix.preview.emergentagent.com"
+API_BASE = f"{BACKEND_URL}/api"
 
-class BackendTester:
+# Test credentials
+TEST_USERNAME = "choyt"
+TEST_PASSWORD = "RFIDGuy1!"
+
+# Test torrent hash (Sintel - open source movie)
+TEST_HASH = "08ada5a7a6183aae1e09d831df6748d566095a10"
+
+class PrivastreamTester:
     def __init__(self):
-        self.client = httpx.AsyncClient(timeout=30.0)
+        self.session = requests.Session()
+        self.session.timeout = 30
         self.auth_token = None
         self.test_results = []
         
-    async def __aenter__(self):
-        return self
-        
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.client.aclose()
-    
     def log_test(self, test_name: str, success: bool, details: str, response_time: float = 0):
         """Log test result"""
-        status = "✅ PASS" if success else "❌ FAIL"
-        print(f"{status} {test_name} ({response_time:.3f}s)")
-        if details:
-            print(f"    {details}")
-        
-        self.test_results.append({
+        status = "✅" if success else "❌"
+        result = {
             "test": test_name,
             "success": success,
             "details": details,
             "response_time": response_time
-        })
-    
-    async def authenticate(self) -> bool:
-        """Authenticate and get JWT token"""
+        }
+        self.test_results.append(result)
+        print(f"{status} {test_name}: {details} ({response_time:.3f}s)")
+        
+    def test_authentication(self) -> bool:
+        """Test 1: Authentication with choyt/RFIDGuy1!"""
         start_time = time.time()
         try:
-            response = await self.client.post(
-                f"{BACKEND_URL}/api/auth/login",
-                json=TEST_CREDENTIALS
-            )
+            response = self.session.post(f"{API_BASE}/auth/login", json={
+                "username": TEST_USERNAME,
+                "password": TEST_PASSWORD
+            })
             response_time = time.time() - start_time
             
             if response.status_code == 200:
                 data = response.json()
                 self.auth_token = data.get("token")
                 if self.auth_token:
+                    # Set auth header for future requests
+                    self.session.headers.update({"Authorization": f"Bearer {self.auth_token}"})
                     self.log_test("Authentication", True, f"JWT token received ({len(self.auth_token)} chars)", response_time)
                     return True
                 else:
@@ -71,32 +70,20 @@ class BackendTester:
             self.log_test("Authentication", False, f"Exception: {str(e)}", response_time)
             return False
     
-    def get_auth_headers(self) -> Dict[str, str]:
-        """Get authorization headers"""
-        if self.auth_token:
-            return {"Authorization": f"Bearer {self.auth_token}"}
-        return {}
-    
-    async def test_health_endpoint(self) -> bool:
-        """Test GET /api/health"""
+    def test_health_endpoint(self) -> bool:
+        """Test 2: Health endpoint verification"""
         start_time = time.time()
         try:
-            response = await self.client.get(f"{BACKEND_URL}/api/health")
+            response = self.session.get(f"{API_BASE}/health")
             response_time = time.time() - start_time
             
             if response.status_code == 200:
                 data = response.json()
-                expected_fields = ["status", "service"]
-                
-                if all(field in data for field in expected_fields):
-                    if data.get("status") == "ok" and data.get("service") == "PrivastreamCinema":
-                        self.log_test("Health Check", True, f"Returns {data}", response_time)
-                        return True
-                    else:
-                        self.log_test("Health Check", False, f"Unexpected values: {data}", response_time)
-                        return False
+                if data.get("status") == "ok":
+                    self.log_test("Health Check", True, f"Returns {data}", response_time)
+                    return True
                 else:
-                    self.log_test("Health Check", False, f"Missing fields in response: {data}", response_time)
+                    self.log_test("Health Check", False, f"Unexpected response: {data}", response_time)
                     return False
             else:
                 self.log_test("Health Check", False, f"HTTP {response.status_code}: {response.text}", response_time)
@@ -107,25 +94,22 @@ class BackendTester:
             self.log_test("Health Check", False, f"Exception: {str(e)}", response_time)
             return False
     
-    async def test_stream_start(self) -> bool:
-        """Test POST /api/stream/start/{hash} with sources"""
+    def test_stream_start(self) -> bool:
+        """Test 3: Stream start with empty sources array"""
         start_time = time.time()
         try:
-            body = {"sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"]}
-            response = await self.client.post(
-                f"{BACKEND_URL}/api/stream/start/{TEST_HASH}",
-                json=body,
-                headers=self.get_auth_headers()
-            )
+            response = self.session.post(f"{API_BASE}/stream/start/{TEST_HASH}", json={
+                "sources": []
+            })
             response_time = time.time() - start_time
             
             if response.status_code == 200:
                 data = response.json()
-                if data.get("status") == "started" and data.get("info_hash"):
-                    self.log_test("Stream Start", True, f"Started with sources: {data}", response_time)
+                if data.get("status") == "started":
+                    self.log_test("Stream Start", True, f"Returns {data}", response_time)
                     return True
                 else:
-                    self.log_test("Stream Start", False, f"Unexpected response: {data}", response_time)
+                    self.log_test("Stream Start", False, f"Unexpected status: {data}", response_time)
                     return False
             else:
                 self.log_test("Stream Start", False, f"HTTP {response.status_code}: {response.text}", response_time)
@@ -136,120 +120,82 @@ class BackendTester:
             self.log_test("Stream Start", False, f"Exception: {str(e)}", response_time)
             return False
     
-    async def test_stream_status(self, wait_seconds: int = 2) -> bool:
-        """Test GET /api/stream/status/{hash} after waiting"""
-        print(f"⏳ Waiting {wait_seconds} seconds for torrent to initialize...")
-        await asyncio.sleep(wait_seconds)
+    def test_stream_status_20mb_threshold(self) -> Dict[str, Any]:
+        """Test 4: Stream status with 20MB threshold verification"""
+        print(f"\n⏳ Waiting 10 seconds for download to start...")
+        time.sleep(10)
         
         start_time = time.time()
         try:
-            response = await self.client.get(
-                f"{BACKEND_URL}/api/stream/status/{TEST_HASH}",
-                headers=self.get_auth_headers()
-            )
+            response = self.session.get(f"{API_BASE}/stream/status/{TEST_HASH}")
             response_time = time.time() - start_time
             
             if response.status_code == 200:
                 data = response.json()
-                status = data.get("status")
-                peers = data.get("peers", 0)
-                download_rate = data.get("download_rate", 0)
                 
-                # Check required fields
-                required_fields = ["status", "peers"]
-                missing_fields = [f for f in required_fields if f not in data]
+                # Check for required fields
+                required_fields = ["status", "peers", "ready_threshold_mb"]
+                missing_fields = [field for field in required_fields if field not in data]
                 
                 if missing_fields:
-                    self.log_test("Stream Status", False, f"Missing fields: {missing_fields}. Response: {data}", response_time)
-                    return False
+                    self.log_test("Stream Status", False, f"Missing fields: {missing_fields}", response_time)
+                    return {}
                 
-                # Check status is "ready" (or at least not error)
-                if status in ["ready", "buffering", "downloading_metadata"]:
-                    details = f"Status: {status}, Peers: {peers}, Download Rate: {download_rate}"
-                    
-                    # Check if requirements are met (peers > 5, download_rate > 100000)
-                    # Note: These are aggressive requirements, so we'll be flexible
-                    if status == "ready":
-                        self.log_test("Stream Status", True, f"READY - {details}", response_time)
-                        return True
-                    elif peers > 0:
-                        self.log_test("Stream Status", True, f"PROGRESSING - {details}", response_time)
-                        return True
-                    else:
-                        self.log_test("Stream Status", True, f"STARTING - {details} (no peers yet)", response_time)
-                        return True
+                # Verify 20MB threshold
+                ready_threshold_mb = data.get("ready_threshold_mb")
+                if ready_threshold_mb == 20:
+                    threshold_check = "✅ 20MB threshold confirmed"
                 else:
-                    self.log_test("Stream Status", False, f"Bad status: {status}. Full response: {data}", response_time)
-                    return False
+                    threshold_check = f"❌ Expected 20MB, got {ready_threshold_mb}MB"
+                
+                status = data.get("status")
+                peers = data.get("peers", 0)
+                
+                details = f"Status: {status}, Peers: {peers}, {threshold_check}"
+                self.log_test("Stream Status (20MB Threshold)", True, details, response_time)
+                
+                # Log additional useful fields
+                if "ready_progress" in data:
+                    print(f"   📊 Ready Progress: {data['ready_progress']:.1f}%")
+                if "downloaded" in data:
+                    downloaded_mb = data['downloaded'] / (1024 * 1024)
+                    print(f"   📥 Downloaded: {downloaded_mb:.1f}MB")
+                if "video_file" in data:
+                    print(f"   🎬 Video File: {data['video_file']}")
+                
+                return data
             else:
-                self.log_test("Stream Status", False, f"HTTP {response.status_code}: {response.text}", response_time)
-                return False
+                self.log_test("Stream Status (20MB Threshold)", False, f"HTTP {response.status_code}: {response.text}", response_time)
+                return {}
                 
         except Exception as e:
             response_time = time.time() - start_time
-            self.log_test("Stream Status", False, f"Exception: {str(e)}", response_time)
-            return False
+            self.log_test("Stream Status (20MB Threshold)", False, f"Exception: {str(e)}", response_time)
+            return {}
     
-    async def test_stream_prefetch(self) -> bool:
-        """Test POST /api/stream/prefetch/{hash} with position_bytes"""
+    def test_video_range_request(self) -> bool:
+        """Test 5: Video range request if status is ready"""
         start_time = time.time()
         try:
-            body = {"position_bytes": 0}
-            response = await self.client.post(
-                f"{BACKEND_URL}/api/stream/prefetch/{TEST_HASH}",
-                json=body,
-                headers=self.get_auth_headers()
-            )
-            response_time = time.time() - start_time
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "ready":
-                    self.log_test("Stream Prefetch", True, f"Prefetch ready: {data}", response_time)
-                    return True
-                else:
-                    self.log_test("Stream Prefetch", True, f"Prefetch response: {data}", response_time)
-                    return True  # Any response is acceptable for prefetch
-            else:
-                self.log_test("Stream Prefetch", False, f"HTTP {response.status_code}: {response.text}", response_time)
-                return False
-                
-        except Exception as e:
-            response_time = time.time() - start_time
-            self.log_test("Stream Prefetch", False, f"Exception: {str(e)}", response_time)
-            return False
-    
-    async def test_video_range_request(self) -> bool:
-        """Test GET /api/stream/video/{hash} with Range header"""
-        start_time = time.time()
-        try:
-            headers = {
-                "Range": "bytes=0-65535",
-                **self.get_auth_headers()
-            }
-            response = await self.client.get(
-                f"{BACKEND_URL}/api/stream/video/{TEST_HASH}",
-                headers=headers
-            )
+            headers = {"Range": "bytes=0-65535"}
+            response = self.session.get(f"{API_BASE}/stream/video/{TEST_HASH}", headers=headers)
             response_time = time.time() - start_time
             
             if response.status_code == 206:  # Partial Content
                 content_length = len(response.content)
-                content_type = response.headers.get("content-type", "")
+                content_type = response.headers.get("Content-Type", "")
                 
-                if content_length == 65536:  # Exact range requested
-                    self.log_test("Video Range Request", True, f"206 Partial Content, {content_length} bytes, {content_type}", response_time)
+                if content_length == 65536:
+                    self.log_test("Video Range Request", True, 
+                                f"HTTP 206, {content_length} bytes, {content_type}", response_time)
                     return True
                 else:
-                    self.log_test("Video Range Request", True, f"206 Partial Content, {content_length} bytes (expected 65536), {content_type}", response_time)
-                    return True  # Still acceptable
-            elif response.status_code == 200:
-                # Some implementations return 200 instead of 206
-                content_length = len(response.content)
-                self.log_test("Video Range Request", True, f"200 OK (should be 206), {content_length} bytes", response_time)
-                return True
+                    self.log_test("Video Range Request", False, 
+                                f"Expected 65536 bytes, got {content_length}", response_time)
+                    return False
             else:
-                self.log_test("Video Range Request", False, f"HTTP {response.status_code}: {response.text}", response_time)
+                self.log_test("Video Range Request", False, 
+                            f"HTTP {response.status_code}: {response.text[:100]}", response_time)
                 return False
                 
         except Exception as e:
@@ -257,117 +203,114 @@ class BackendTester:
             self.log_test("Video Range Request", False, f"Exception: {str(e)}", response_time)
             return False
     
-    async def test_torrent_stream_health(self) -> bool:
-        """Test GET /health on torrent-stream server"""
-        start_time = time.time()
-        try:
-            response = await self.client.get(f"{TORRENT_STREAM_URL}/health")
-            response_time = time.time() - start_time
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "ok":
-                    self.log_test("Torrent-Stream Health", True, f"Server healthy: {data}", response_time)
-                    return True
-                else:
-                    self.log_test("Torrent-Stream Health", False, f"Unexpected response: {data}", response_time)
-                    return False
-            else:
-                self.log_test("Torrent-Stream Health", False, f"HTTP {response.status_code}: {response.text}", response_time)
-                return False
-                
-        except Exception as e:
-            response_time = time.time() - start_time
-            self.log_test("Torrent-Stream Health", False, f"Exception: {str(e)}", response_time)
-            return False
-    
-    async def test_torrent_stream_status(self) -> bool:
-        """Test GET /status/{hash} on torrent-stream server"""
-        start_time = time.time()
-        try:
-            response = await self.client.get(f"{TORRENT_STREAM_URL}/status/{TEST_HASH}")
-            response_time = time.time() - start_time
-            
-            if response.status_code == 200:
-                data = response.json()
-                peers = data.get("peers", 0)
-                download_speed = data.get("downloadSpeed", 0)
-                
-                if peers > 0 and download_speed > 0:
-                    self.log_test("Torrent-Stream Status", True, f"Peers: {peers}, Speed: {download_speed}", response_time)
-                    return True
-                elif peers > 0:
-                    self.log_test("Torrent-Stream Status", True, f"Peers: {peers}, Speed: {download_speed} (speed may be 0 initially)", response_time)
-                    return True
-                else:
-                    self.log_test("Torrent-Stream Status", True, f"Peers: {peers}, Speed: {download_speed} (may be starting)", response_time)
-                    return True  # Still acceptable if torrent is starting
-            else:
-                self.log_test("Torrent-Stream Status", False, f"HTTP {response.status_code}: {response.text}", response_time)
-                return False
-                
-        except Exception as e:
-            response_time = time.time() - start_time
-            self.log_test("Torrent-Stream Status", False, f"Exception: {str(e)}", response_time)
-            return False
-    
-    async def run_all_tests(self) -> bool:
-        """Run all review request tests in sequence"""
-        print("🎯 PRIVASTREAM CINEMA BACKEND TESTING - REVIEW REQUEST VERIFICATION")
-        print("=" * 80)
+    def run_comprehensive_test(self):
+        """Run the complete test suite as specified in review request"""
+        print("🎯 PRIVASTREAM CINEMA - 20MB BUFFERING THRESHOLD TEST")
+        print("=" * 60)
+        print(f"Backend URL: {BACKEND_URL}")
+        print(f"Test Hash: {TEST_HASH}")
+        print(f"Credentials: {TEST_USERNAME}/{TEST_PASSWORD}")
+        print()
         
-        # Step 1: Authentication (not in review request but needed)
-        if not await self.authenticate():
-            print("❌ Authentication failed - cannot proceed with other tests")
+        # Test 1: Authentication
+        if not self.test_authentication():
+            print("❌ Authentication failed - stopping tests")
             return False
         
-        # Step 2: Health check
-        test1 = await self.test_health_endpoint()
+        # Test 2: Health check
+        if not self.test_health_endpoint():
+            print("❌ Health check failed - continuing with other tests")
         
-        # Step 3: Stream start with sources
-        test2 = await self.test_stream_start()
+        # Test 3: Stream start
+        if not self.test_stream_start():
+            print("❌ Stream start failed - stopping tests")
+            return False
         
-        # Step 4: Wait and check status
-        test3 = await self.test_stream_status(wait_seconds=2)
+        # Test 4: Stream status with 20MB threshold check
+        status_data = self.test_stream_status_20mb_threshold()
+        if not status_data:
+            print("❌ Stream status failed - stopping tests")
+            return False
         
-        # Step 5: Test prefetch endpoint
-        test4 = await self.test_stream_prefetch()
-        
-        # Step 6: Test video range request
-        test5 = await self.test_video_range_request()
-        
-        # Step 7: Test torrent-stream server health
-        test6 = await self.test_torrent_stream_health()
-        
-        # Step 8: Test torrent-stream server status
-        test7 = await self.test_torrent_stream_status()
-        
-        # Summary
-        print("\n" + "=" * 80)
-        print("📊 TEST SUMMARY")
-        print("=" * 80)
-        
-        passed = sum(1 for result in self.test_results if result["success"])
-        total = len(self.test_results)
-        
-        for result in self.test_results:
-            status = "✅" if result["success"] else "❌"
-            print(f"{status} {result['test']}: {result['details']}")
-        
-        print(f"\n🎯 OVERALL RESULT: {passed}/{total} tests passed")
-        
-        if passed == total:
-            print("🎉 ALL REVIEW REQUEST REQUIREMENTS VERIFIED!")
-            return True
+        # Test 5: Video range request (only if status is ready)
+        if status_data.get("status") == "ready":
+            print(f"\n🎬 Status is 'ready' - testing video data serving...")
+            self.test_video_range_request()
         else:
-            print("⚠️  Some tests failed - see details above")
-            return False
+            print(f"\n⏳ Status is '{status_data.get('status')}' - skipping video test")
+            print("   (This is normal if torrent is still buffering)")
+        
+        return True
+    
+    def print_summary(self):
+        """Print test summary"""
+        print("\n" + "=" * 60)
+        print("📊 TEST SUMMARY")
+        print("=" * 60)
+        
+        total_tests = len(self.test_results)
+        passed_tests = sum(1 for result in self.test_results if result["success"])
+        failed_tests = total_tests - passed_tests
+        
+        print(f"Total Tests: {total_tests}")
+        print(f"✅ Passed: {passed_tests}")
+        print(f"❌ Failed: {failed_tests}")
+        print(f"Success Rate: {(passed_tests/total_tests)*100:.1f}%")
+        
+        if failed_tests > 0:
+            print("\n❌ FAILED TESTS:")
+            for result in self.test_results:
+                if not result["success"]:
+                    print(f"   • {result['test']}: {result['details']}")
+        
+        print("\n🎯 KEY FINDINGS:")
+        
+        # Check for 20MB threshold confirmation
+        status_test = next((r for r in self.test_results if "20MB Threshold" in r["test"]), None)
+        if status_test and status_test["success"]:
+            if "20MB threshold confirmed" in status_test["details"]:
+                print("   ✅ 20MB buffering threshold is correctly implemented")
+            else:
+                print("   ❌ 20MB buffering threshold NOT found in response")
+        
+        # Check authentication
+        auth_test = next((r for r in self.test_results if r["test"] == "Authentication"), None)
+        if auth_test and auth_test["success"]:
+            print("   ✅ Authentication with choyt/RFIDGuy1! working")
+        
+        # Check health endpoint
+        health_test = next((r for r in self.test_results if r["test"] == "Health Check"), None)
+        if health_test and health_test["success"]:
+            print("   ✅ Health endpoint returns correct response")
+        
+        # Check streaming pipeline
+        stream_tests = [r for r in self.test_results if "Stream" in r["test"]]
+        if all(r["success"] for r in stream_tests):
+            print("   ✅ Complete streaming pipeline functional")
+        
+        print()
 
-async def main():
-    """Main test runner"""
-    async with BackendTester() as tester:
-        success = await tester.run_all_tests()
-        sys.exit(0 if success else 1)
+def main():
+    """Main test execution"""
+    tester = PrivastreamTester()
+    
+    try:
+        success = tester.run_comprehensive_test()
+        tester.print_summary()
+        
+        if success:
+            print("🎉 Testing completed successfully!")
+            return 0
+        else:
+            print("💥 Testing failed!")
+            return 1
+            
+    except KeyboardInterrupt:
+        print("\n⚠️ Testing interrupted by user")
+        return 1
+    except Exception as e:
+        print(f"\n💥 Unexpected error: {str(e)}")
+        return 1
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(main())

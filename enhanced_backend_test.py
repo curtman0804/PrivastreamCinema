@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Test configuration
-BACKEND_URL = "https://stream-node-build.preview.emergentagent.com"
+BACKEND_URL = "https://torrent-playback-fix.preview.emergentagent.com"
 
 # Test credentials as specified in review request
 TEST_USER = {
