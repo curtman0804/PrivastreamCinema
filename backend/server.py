@@ -3393,10 +3393,23 @@ async def start_stream(
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/stream/prewarm/{info_hash}")
-async def prewarm_stream(info_hash: str):
-    """Pre-warm a torrent on BOTH libtorrent AND WebTorrent for fastest startup.
+async def prewarm_stream(info_hash: str, request: Request):
+    """Pre-warm a torrent on BOTH libtorrent AND torrent-stream for fastest startup.
     Returns immediately - no waiting for metadata or pieces."""
     try:
+        # Parse optional sources from body
+        extra_trackers = []
+        try:
+            body = await request.json()
+            sources = body.get("sources", [])
+            for source in sources:
+                if isinstance(source, str) and source.startswith("tracker:"):
+                    tracker_url = source[len("tracker:"):]
+                    if tracker_url.startswith("http") or tracker_url.startswith("udp"):
+                        extra_trackers.append(tracker_url)
+        except Exception:
+            pass
+        
         # Pre-warm on libtorrent
         existing = torrent_streamer.sessions.get(info_hash.lower())
         lt_status = "unknown"
@@ -3405,27 +3418,30 @@ async def prewarm_stream(info_hash: str):
             lt_status = status.get("status", "unknown")
         else:
             try:
-                torrent_streamer.get_session(info_hash)
+                torrent_streamer.get_session(info_hash, extra_trackers=extra_trackers)
                 lt_status = "warming"
             except Exception as e:
                 logger.warning(f"libtorrent prewarm failed: {e}")
                 lt_status = "failed"
         
-        # Pre-warm on torrent-stream server (Stremio-style)
+        # Pre-warm on torrent-stream server (Stremio-style) with tracker sources
         wt_status = "unknown"
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(f"http://localhost:8002/create/{info_hash}", json={"sources": [f"dht:{info_hash}"]})
+            ts_body = {"sources": [f"dht:{info_hash}"]}
+            for t in extra_trackers:
+                ts_body["sources"].append(f"tracker:{t}")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(f"http://localhost:8002/create/{info_hash}", json=ts_body)
                 if resp.status_code == 200:
                     wt_data = resp.json()
                     wt_status = "ready" if wt_data.get("ready") else "warming"
-                    logger.info(f"torrent-stream prewarm: {info_hash} - status={wt_status}")
+                    logger.info(f"torrent-stream prewarm: {info_hash} - status={wt_status}, trackers={len(extra_trackers)}")
         except Exception as e:
-            logger.warning(f"WebTorrent prewarm failed (non-critical): {e}")
+            logger.warning(f"torrent-stream prewarm failed (non-critical): {e}")
             wt_status = "failed"
         
-        logger.info(f"Pre-warming torrent {info_hash} (lt={lt_status}, wt={wt_status})")
-        return {"status": "warming", "info_hash": info_hash, "lt_status": lt_status, "wt_status": wt_status}
+        logger.info(f"Pre-warming torrent {info_hash} (lt={lt_status}, ts={wt_status}, trackers={len(extra_trackers)})")
+        return {"status": "warming", "info_hash": info_hash, "lt_status": lt_status, "ts_status": wt_status}
     except Exception as e:
         logger.warning(f"Prewarm failed for {info_hash}: {e}")
         return {"status": "prewarm_failed", "error": str(e)}
@@ -3598,93 +3614,7 @@ async def seek_stream(info_hash: str, request: Request):
         logger.error(f"Seek error: {e}")
         return {"status": "error", "message": str(e)}
 
-@api_router.get("/stream/wt-video/{info_hash}")
-@api_router.head("/stream/wt-video/{info_hash}")
-async def webtorrent_video_proxy(
-    info_hash: str,
-    request: Request,
-    fileIdx: Optional[int] = None,
-    filename: Optional[str] = None
-):
-    """Proxy video stream from WebTorrent server (K8s-optimized, faster peer discovery).
-    This endpoint streams directly from WebTorrent's in-memory torrent,
-    no waiting for file download to disk first."""
-    try:
-        wt_url = f"http://localhost:8002/stream/{info_hash}"
-        params = {}
-        if fileIdx is not None:
-            params['fileIdx'] = str(fileIdx)
-        if filename:
-            params['filename'] = filename
-        
-        # Forward Range header from client
-        headers = {}
-        range_header = request.headers.get("range")
-        if range_header:
-            headers["Range"] = range_header
-        
-        logger.info(f"WebTorrent proxy: {info_hash}, range={range_header or 'none'}")
-        
-        # Use streaming response to proxy the WebTorrent server's output
-        async def stream_proxy():
-            try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=30.0)) as client:
-                    async with client.stream("GET", wt_url, params=params, headers=headers) as resp:
-                        async for chunk in resp.aiter_bytes(chunk_size=64 * 1024):
-                            yield chunk
-            except Exception as e:
-                logger.error(f"WebTorrent proxy stream error: {e}")
-        
-        # First make a HEAD-like request to get response headers from WebTorrent
-        try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)) as client:
-                # For HEAD requests, just forward
-                if request.method == "HEAD":
-                    resp = await client.head(wt_url, params=params, headers=headers)
-                    response_headers = dict(resp.headers)
-                    response_headers["Access-Control-Allow-Origin"] = "*"
-                    return Response(
-                        content=b"",
-                        status_code=resp.status_code,
-                        headers=response_headers,
-                    )
-                
-                # For GET requests, stream the response
-                async with client.stream("GET", wt_url, params=params, headers=headers) as resp:
-                    # Build response headers
-                    response_headers = {
-                        "Access-Control-Allow-Origin": "*",
-                        "Accept-Ranges": "bytes",
-                    }
-                    
-                    # Copy relevant headers from WebTorrent response
-                    for key in ["Content-Range", "Content-Length", "Content-Type"]:
-                        if key.lower() in resp.headers:
-                            response_headers[key] = resp.headers[key.lower()]
-                    
-                    status_code = resp.status_code
-                    
-                    async def response_stream():
-                        async for chunk in resp.aiter_bytes(chunk_size=64 * 1024):
-                            yield chunk
-                    
-                    return StreamingResponse(
-                        response_stream(),
-                        status_code=status_code,
-                        headers=response_headers,
-                    )
-        except httpx.ConnectError:
-            logger.error("WebTorrent server not reachable at localhost:8002")
-            raise HTTPException(status_code=503, detail="WebTorrent server unavailable")
-        except httpx.ReadTimeout:
-            logger.error("WebTorrent server timeout - torrent may be slow")
-            raise HTTPException(status_code=504, detail="Stream timeout - torrent is slow, try a different stream")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"WebTorrent proxy error: {e}")
-        raise HTTPException(status_code=503, detail=f"Stream unavailable: {str(e)}")
+# Old WebTorrent-specific video proxy removed - now using unified stream_video endpoint
 
 @api_router.get("/stream/video/{info_hash}")
 @api_router.head("/stream/video/{info_hash}")
@@ -3693,354 +3623,109 @@ async def stream_video(
     request: Request,
     fileIdx: Optional[int] = None
 ):
-    """Stream video - SMART ROUTING: tries WebTorrent first (faster peer discovery),
-    falls back to libtorrent if WebTorrent unavailable."""
+    """Stream video via torrent-stream (Stremio architecture).
     
-    # Check if WebTorrent has this torrent ready
-    wt_available = False
+    This proxies directly to the torrent-stream server which handles:
+    - Range requests natively via createReadStream({start, end})
+    - Automatic piece prioritization for requested ranges
+    - Backpressure handling via pump()
+    """
+    
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            wt_resp = await client.get(f"http://localhost:8002/status/{info_hash}")
-            if wt_resp.status_code == 200:
-                wt_data = wt_resp.json()
-                wt_available = wt_data.get("ready", False) or wt_data.get("peers", 0) > 0
-                if wt_available:
-                    logger.info(f"WebTorrent available for {info_hash}: ready={wt_data.get('ready')}, peers={wt_data.get('peers')}")
-    except Exception as e:
-        logger.debug(f"WebTorrent check failed: {e}")
-    
-    # ROUTE 1: WebTorrent (preferred - faster, more peers via WebSocket trackers)
-    if wt_available:
+        # Build torrent-stream URL
+        ts_url = f"http://localhost:8002/stream/{info_hash}"
+        if fileIdx is not None:
+            ts_url += f"/{fileIdx}"
+        
+        # Forward Range header from client
+        headers = {}
+        range_header = request.headers.get("range")
+        if range_header:
+            headers["Range"] = range_header
+        
+        logger.info(f"Streaming {info_hash[:8]}, range={range_header or 'none'}")
+        
+        # Handle HEAD requests
+        if request.method == "HEAD":
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.head(ts_url, headers=headers)
+                response_headers = {}
+                for key in ["Content-Range", "Content-Length", "Content-Type", "Accept-Ranges"]:
+                    val = resp.headers.get(key.lower())
+                    if val:
+                        response_headers[key] = val
+                response_headers["Access-Control-Allow-Origin"] = "*"
+                response_headers["X-Accel-Buffering"] = "no"
+                return Response(
+                    content=b"",
+                    status_code=resp.status_code,
+                    headers=response_headers,
+                )
+        
+        # GET: Stream the response with very long read timeout
+        # torrent-stream will block until pieces are downloaded (like Stremio)
+        # We need long timeouts because the data might not be downloaded yet
+        client = httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                connect=15.0,
+                read=600.0,   # 10 MINUTES read timeout - allow torrent-stream to download pieces
+                write=30.0,
+                pool=30.0
+            )
+        )
+        
         try:
-            wt_url = f"http://localhost:8002/stream/{info_hash}"
-            params = {}
-            if fileIdx is not None:
-                params['fileIdx'] = str(fileIdx)
-            
-            headers = {}
-            range_header = request.headers.get("range")
-            if range_header:
-                headers["Range"] = range_header
-            
-            if request.method == "HEAD":
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.head(wt_url, params=params, headers=headers)
-                    response_headers = dict(resp.headers)
-                    response_headers["Access-Control-Allow-Origin"] = "*"
-                    return Response(
-                        content=b"",
-                        status_code=resp.status_code,
-                        headers=response_headers,
-                    )
-            
-            # For GET: use streaming proxy to avoid buffering entire response
-            # This is critical for seeking - we need to forward data as it arrives
-            client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0))
-            req = client.build_request("GET", wt_url, params=params, headers=headers)
+            req = client.build_request("GET", ts_url, headers=headers)
             resp = await client.send(req, stream=True)
             
+            # Build response headers
             response_headers = {
                 "Access-Control-Allow-Origin": "*",
                 "Accept-Ranges": "bytes",
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "X-Accel-Buffering": "no",  # Prevent nginx/K8s proxy buffering
+                "X-Content-Type-Options": "nosniff",
             }
-            for key in ["Content-Range", "Content-Length", "Content-Type"]:
-                if key.lower() in resp.headers:
-                    response_headers[key] = resp.headers[key.lower()]
             
-            async def wt_streaming_proxy():
+            # DLNA headers for TV compatibility
+            response_headers["transferMode.dlna.org"] = "Streaming"
+            response_headers["contentFeatures.dlna.org"] = "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000"
+            
+            # Copy relevant headers from torrent-stream response
+            for key in ["Content-Range", "Content-Length", "Content-Type"]:
+                val = resp.headers.get(key.lower())
+                if val:
+                    response_headers[key] = val
+            
+            async def streaming_proxy():
                 try:
-                    async for chunk in resp.aiter_bytes(chunk_size=128 * 1024):
+                    async for chunk in resp.aiter_bytes(chunk_size=256 * 1024):  # 256KB chunks for faster throughput
                         yield chunk
+                except Exception as e:
+                    logger.error(f"Stream proxy error for {info_hash[:8]}: {e}")
                 finally:
                     await resp.aclose()
                     await client.aclose()
             
             return StreamingResponse(
-                wt_streaming_proxy(),
+                streaming_proxy(),
                 status_code=resp.status_code,
                 headers=response_headers,
             )
         except Exception as e:
-            logger.warning(f"WebTorrent streaming failed, falling back to libtorrent: {e}")
-    
-    # ROUTE 2: Libtorrent fallback
-    try:
-        # Make sure the torrent session exists
-        session_data = torrent_streamer.get_session(info_hash)
-        handle = session_data['handle']
-        
-        # Wait for metadata and video file discovery (max 10 seconds, check every 0.5s)
-        waited = 0
-        while waited < 20:  # 20 * 0.5s = 10 seconds max
-            status = torrent_streamer.get_status(info_hash)
-            if status.get("status") in ["ready", "buffering"] and status.get("video_file"):
-                break
-            await asyncio.sleep(0.5)
-            waited += 1
-        
-        video_path = torrent_streamer.get_video_path(info_hash)
-        if not video_path:
-            raise HTTPException(status_code=404, detail="Video file not found in torrent")
-        
-        # Wait for the file to appear on disk (max 5 seconds)
-        waited = 0
-        while waited < 10 and (not os.path.exists(video_path) or os.path.getsize(video_path) < 64 * 1024):
-            await asyncio.sleep(0.5)
-            waited += 1
-        
-        if not os.path.exists(video_path):
-            raise HTTPException(status_code=404, detail="Video file not yet available")
-        
-        file_size = session_data['video_file']['size']  # Use torrent's reported size, not disk size (might be partial)
-        
-        # Determine content type from file extension
-        ext = os.path.splitext(video_path)[1].lower()
-        content_types = {
-            '.mp4': 'video/mp4',
-            '.mkv': 'video/x-matroska',
-            '.avi': 'video/x-msvideo',
-            '.webm': 'video/webm',
-            '.mov': 'video/quicktime',
-            '.m4v': 'video/mp4',
-            '.ts': 'video/mp2t',
-        }
-        content_type = content_types.get(ext, 'video/mp4')
-        
-        # Handle range requests for video seeking
-        range_header = request.headers.get("range")
-        
-        if not range_header:
-            # No Range header = INITIAL probe from ExoPlayer/MediaPlayer
-            # Must return 200 OK with full Content-Length so player knows the total file size
-            # and that it can use Range requests for seeking
-            logger.info(f"Initial probe request (no Range) for {os.path.basename(video_path)}, size={file_size}")
+            await client.aclose()
+            raise e
             
-            # Return just headers for HEAD, or first 2MB chunk for GET with 200 OK
-            if request.method == "HEAD":
-                return Response(
-                    content=b"",
-                    status_code=200,
-                    headers={
-                        "Content-Length": str(file_size),
-                        "Content-Type": content_type,
-                        "Accept-Ranges": "bytes",
-                        "Access-Control-Allow-Origin": "*",
-                        "Cache-Control": "no-store, no-cache, must-revalidate",
-                        "X-Accel-Buffering": "no",
-                    },
-                )
-            
-            # For GET without Range, return 200 with Content-Length = total file size
-            # and Accept-Ranges: bytes so the player knows it can seek
-            # We stream the beginning of the file
-            start = 0
-            end = min(2 * 1024 * 1024, file_size - 1)
-            chunk_size = end - start + 1
-            
-            async def initial_generator():
-                try:
-                    session_data_inner = torrent_streamer.sessions.get(info_hash.lower())
-                    if session_data_inner:
-                        handle_inner = session_data_inner['handle']
-                        ti = handle_inner.get_torrent_info()
-                        piece_length = ti.piece_length()
-                        vf = session_data_inner.get('video_file', {})
-                        file_offset = ti.files().file_offset(vf.get('index', 0)) if vf else 0
-                        
-                        need_start_piece = (file_offset + start) // piece_length
-                        need_end_piece = (file_offset + end) // piece_length
-                        
-                        try:
-                            priorities = handle_inner.get_piece_priorities()
-                            for p in range(need_start_piece, min(need_end_piece + 1, len(priorities))):
-                                if priorities[p] < 7:
-                                    priorities[p] = 7
-                            handle_inner.prioritize_pieces(priorities)
-                        except:
-                            pass
-                        
-                        disk_wait = 0
-                        max_wait = 60
-                        while disk_wait < max_wait:
-                            all_ready = all(handle_inner.have_piece(p) for p in range(need_start_piece, need_end_piece + 1))
-                            if all_ready:
-                                break
-                            await asyncio.sleep(0.3)
-                            disk_wait += 1
-                    
-                    with open(video_path, 'rb') as f:
-                        remaining = chunk_size
-                        while remaining > 0:
-                            read_size = min(remaining, 128 * 1024)  # 128KB chunks
-                            data = f.read(read_size)
-                            if not data:
-                                break
-                            remaining -= len(data)
-                            yield data
-                except Exception as e:
-                    logger.error(f"Initial stream error: {e}")
-            
-            return StreamingResponse(
-                initial_generator(),
-                status_code=200,
-                headers={
-                    "Content-Length": str(file_size),
-                    "Content-Type": content_type,
-                    "Accept-Ranges": "bytes",
-                    "Access-Control-Allow-Origin": "*",
-                    "Cache-Control": "no-store, no-cache, must-revalidate",
-                    "X-Accel-Buffering": "no",
-                },
-                media_type=content_type,
-            )
-        
-        # Range header present - return 206 Partial Content
-        parts = range_header.replace("bytes=", "").split("-")
-        start = int(parts[0]) if parts[0] else 0
-        end = int(parts[1]) if len(parts) > 1 and parts[1] else min(start + 2 * 1024 * 1024, file_size - 1)  # 2MB chunks max
-        
-        # Clamp to file size
-        end = min(end, file_size - 1)
-        chunk_size = end - start + 1
-        
-        logger.info(f"Streaming range {start}-{end}/{file_size} from {os.path.basename(video_path)}")
-        
-        # ON-DEMAND PIECE PRIORITIZATION: When player requests a specific range,
-        # bump those pieces to highest priority so libtorrent downloads them ASAP
-        try:
-            session_data = torrent_streamer.sessions.get(info_hash.lower())
-            if session_data and session_data.get('video_file'):
-                handle = session_data['handle']
-                ti = handle.get_torrent_info()
-                piece_length = ti.piece_length()
-                file_offset = ti.files().file_offset(session_data['video_file']['index'])
-                
-                # Calculate which pieces cover the requested range
-                range_start_piece = (file_offset + start) // piece_length
-                range_end_piece = (file_offset + end) // piece_length
-                
-                # Set those pieces to highest priority
-                priorities = handle.get_piece_priorities()
-                changed = False
-                for p in range(range_start_piece, min(range_end_piece + 1, len(priorities))):
-                    if priorities[p] < 7:
-                        priorities[p] = 7
-                        changed = True
-                if changed:
-                    handle.prioritize_pieces(priorities)
-                    logger.info(f"Boosted pieces {range_start_piece}-{range_end_piece} to priority 7 for range request")
-        except Exception as e:
-            logger.warning(f"Could not boost piece priority: {e}")
-        
-        async def range_generator():
-            try:
-                # DUAL CHECK: Use both have_piece() AND file-based verification
-                # have_piece() is fast but may report false for partially written pieces
-                # File check is slower but catches partial writes
-                max_wait_secs = 30  # Reduced from 45s - if data isn't here by 30s it's likely dead
-                waited = 0
-                
-                # Pre-calculate piece info for this range
-                pieces_needed = set()
-                try:
-                    session_data_inner = torrent_streamer.sessions.get(info_hash.lower())
-                    if session_data_inner and session_data_inner.get('video_file'):
-                        h = session_data_inner['handle']
-                        ti = h.get_torrent_info()
-                        pl = ti.piece_length()
-                        vf = session_data_inner.get('video_file', {})
-                        fo = ti.files().file_offset(vf.get('index', 0)) if vf else 0
-                        sp = (fo + start) // pl
-                        ep = (fo + end) // pl
-                        pieces_needed = set(range(sp, ep + 1))
-                        
-                        # Immediately boost priority
-                        priorities = h.get_piece_priorities()
-                        for p in pieces_needed:
-                            if p < len(priorities):
-                                priorities[p] = 7
-                        h.prioritize_pieces(priorities)
-                except Exception:
-                    pass
-                
-                while waited < max_wait_secs:
-                    data_ready = False
-                    
-                    # Method 1: Check have_piece() for all needed pieces
-                    if pieces_needed:
-                        try:
-                            h = torrent_streamer.sessions.get(info_hash.lower(), {}).get('handle')
-                            if h and h.is_valid():
-                                all_have = all(h.have_piece(p) for p in pieces_needed)
-                                if all_have:
-                                    data_ready = True
-                        except Exception:
-                            pass
-                    
-                    # Method 2: File-based check as fallback
-                    if not data_ready:
-                        try:
-                            if os.path.exists(video_path):
-                                file_size_on_disk = os.path.getsize(video_path)
-                                if file_size_on_disk > start:
-                                    with open(video_path, 'rb') as f:
-                                        f.seek(start)
-                                        probe = f.read(min(4096, chunk_size))
-                                        if len(probe) >= 64:
-                                            non_zero = sum(1 for b in probe[:64] if b != 0)
-                                            if non_zero > 8:
-                                                data_ready = True
-                        except Exception:
-                            pass
-                    
-                    if data_ready:
-                        break
-                    
-                    if waited % 5 == 0 and waited > 0:
-                        logger.info(f"Waiting for data at offset {start}: {waited}s elapsed, pieces={len(pieces_needed)}")
-                    
-                    await asyncio.sleep(0.3)  # Check more frequently (300ms vs 500ms)
-                    waited += 0.3
-                
-                if waited >= max_wait_secs:
-                    logger.error(f"Timeout waiting for data at offset {start}-{end} after {max_wait_secs}s")
-                    return
-                
-                # Stream data from file
-                with open(video_path, 'rb') as f:
-                    f.seek(start)
-                    remaining = chunk_size
-                    while remaining > 0:
-                        read_size = min(remaining, 128 * 1024)  # 128KB chunks for better throughput
-                        data = f.read(read_size)
-                        if not data:
-                            # Data not yet written - wait briefly and retry
-                            await asyncio.sleep(0.2)
-                            data = f.read(read_size)
-                            if not data:
-                                break
-                        remaining -= len(data)
-                        yield data
-            except Exception as e:
-                logger.error(f"Range stream error: {e}")
-        
-        return StreamingResponse(
-            range_generator(),
-            status_code=206,
-            headers={
-                "Content-Range": f"bytes {start}-{end}/{file_size}",
-                "Accept-Ranges": "bytes",
-                "Content-Length": str(chunk_size),
-                "Content-Type": content_type,
-                "Access-Control-Allow-Origin": "*",
-            },
-            media_type=content_type,
-        )
-            
+    except httpx.ConnectError:
+        logger.error("torrent-stream server not reachable")
+        raise HTTPException(status_code=503, detail="Streaming server unavailable")
+    except httpx.ReadTimeout:
+        logger.error(f"torrent-stream timeout for {info_hash[:8]} - data not available")
+        raise HTTPException(status_code=504, detail="Stream timeout - try a different source")
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error streaming video: {e}")
+        logger.error(f"Stream error for {info_hash[:8]}: {e}")
         raise HTTPException(status_code=503, detail=f"Stream unavailable: {str(e)}")
 
 # ==================== STREAM PROXY ====================

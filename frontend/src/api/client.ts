@@ -729,9 +729,13 @@ export const api = {
       const response = await apiClient.get(`/api/stream/status/${infoHash}`);
       return response.data;
     },
-    prewarm: async (infoHash: string): Promise<{ status: string }> => {
+    prewarm: async (infoHash: string, sources?: string[]): Promise<{ status: string }> => {
       try {
-        const response = await apiClient.post(`/api/stream/prewarm/${infoHash}`);
+        const body: any = {};
+        if (sources && sources.length > 0) {
+          body.sources = sources;
+        }
+        const response = await apiClient.post(`/api/stream/prewarm/${infoHash}`, body);
         return response.data;
       } catch (err) {
         // Prewarm is fire-and-forget, don't throw

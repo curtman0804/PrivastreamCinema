@@ -430,7 +430,8 @@ export default function DetailsScreen() {
       if (topStream?.infoHash && topStream.infoHash !== prewarmedRef.current) {
         prewarmedRef.current = topStream.infoHash;
         console.log(`[PREWARM] Pre-warming top English stream: ${topStream.infoHash} (${topStream.title || topStream.name})`);
-        api.stream.prewarm(topStream.infoHash);
+        // Pass tracker sources from Torrentio for better peer discovery during prewarm
+        api.stream.prewarm(topStream.infoHash, topStream.sources || []);
       }
     }
   }, [streams, isLoadingStreams]);
