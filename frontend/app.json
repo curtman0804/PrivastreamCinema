@@ -23,10 +23,8 @@
         "resizeMode": "contain",
         "backgroundColor": "#000000"
       },
-      "edgeToEdgeEnabled": false,
       "package": "com.privastream.cinema",
-      "allowBackup": false,
-      "usesCleartextTraffic": true
+      "allowBackup": false
     },
     "web": {
       "bundler": "metro",
@@ -45,17 +43,10 @@
           "enableFullScreenImage_legacy": true
         }
       ],
-      [
-        "react-native-google-cast",
-        {
-          "receiverAppId": "CC1AD845"
-        }
-      ],
       "expo-font",
       "./plugins/withTVKeyEvents",
       "./plugins/withTVLauncher",
-      "expo-video",
-      "./plugins/nodejs-mobile"
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true
