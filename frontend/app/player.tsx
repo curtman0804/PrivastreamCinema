@@ -1497,8 +1497,10 @@ export default function PlayerScreen() {
             console.log(`[PLAYER] Stream READY in ${elapsedSec.toFixed(1)}s! Peers: ${peerCount}, FileSize: ${(videoFileSizeRef.current / 1024 / 1024).toFixed(1)}MB. Setting video URL.`);
             videoRetryCountRef.current = 0;
             setStreamUrl(videoUrl);
-            // Keep polling for progress updates but don't set URL again
-            return;
+            // CRITICAL: Continue polling to keep the torrent engine alive!
+            // The torrent-stream server destroys engines after 5 min of inactivity.
+            // We must keep polling /status to update the engine's _lastAccess timestamp.
+            // DON'T return here - fall through to schedule keep-alive polling below.
           }
           
           if (status.status === 'not_found' || status.status === 'invalid') {
@@ -1542,8 +1544,11 @@ export default function PlayerScreen() {
             return;
           }
           
-          // Poll every 500ms for fast response
-          pollIntervalRef.current = setTimeout(pollStatus, 500) as any;
+          // CRITICAL: Keep polling to keep the torrent engine alive!
+          // Poll fast (500ms) during initial buffering, slower (10s) after video URL is set.
+          // This prevents the torrent-stream engine from being destroyed after 5 min of inactivity.
+          const pollInterval = videoUrlSet ? 10000 : 500;
+          pollIntervalRef.current = setTimeout(pollStatus, pollInterval) as any;
         } catch (err) {
           console.error('Status poll error:', err);
           pollIntervalRef.current = setTimeout(pollStatus, 1500) as any;
