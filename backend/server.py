@@ -3616,6 +3616,41 @@ async def seek_stream(info_hash: str, request: Request):
 
 # Old WebTorrent-specific video proxy removed - now using unified stream_video endpoint
 
+@api_router.post("/stream/prefetch/{info_hash}")
+async def prefetch_stream(info_hash: str, request: Request):
+    """Pre-fetch pieces at a byte position before seeking.
+    
+    This is how we achieve Stremio-like seeking:
+    1. Frontend calls this endpoint with the target byte position
+    2. We tell torrent-stream to prioritize and download those pieces
+    3. We wait until the pieces are available (or timeout)
+    4. Return 'ready' so the frontend can safely tell the player to seek
+    """
+    try:
+        body = await request.json()
+        position_bytes = body.get("position_bytes", 0)
+        
+        # Call torrent-stream prefetch endpoint
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=35.0, write=5.0, pool=5.0)) as client:
+            resp = await client.post(
+                f"http://localhost:8002/prefetch/{info_hash}",
+                json={"position_bytes": position_bytes}
+            )
+            
+            if resp.status_code == 200:
+                result = resp.json()
+                logger.info(f"Prefetch result for {info_hash[:8]} at byte {position_bytes}: {result.get('status')}, wait={result.get('wait_ms', 0)}ms")
+                return result
+            else:
+                logger.warning(f"Prefetch failed: {resp.status_code}")
+                return {"status": "error", "message": "Prefetch failed"}
+    except httpx.ReadTimeout:
+        logger.warning(f"Prefetch timeout for {info_hash[:8]} at byte {position_bytes}")
+        return {"status": "timeout", "message": "Pieces not yet available, try seeking anyway"}
+    except Exception as e:
+        logger.error(f"Prefetch error: {e}")
+        return {"status": "error", "message": str(e)}
+
 @api_router.get("/stream/video/{info_hash}")
 @api_router.head("/stream/video/{info_hash}")
 async def stream_video(

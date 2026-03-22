@@ -768,6 +768,18 @@ export const api = {
         return { status: 'failed' };
       }
     },
+
+    prefetch: async (infoHash: string, positionBytes: number): Promise<{ status: string; wait_ms?: number }> => {
+      try {
+        const response = await apiClient.post(`/api/stream/prefetch/${infoHash}`, {
+          position_bytes: positionBytes,
+        }, { timeout: 35000 }); // 35s to allow piece download
+        return response.data;
+      } catch (err) {
+        console.log('[PREFETCH] Error:', err);
+        return { status: 'error' };
+      }
+    },
   },
   watchProgress: {
     // Get all continue watching items

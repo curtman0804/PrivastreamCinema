@@ -862,75 +862,98 @@ export default function PlayerScreen() {
     }
   };
 
+  // Helper to calculate byte position from time position
+  const calculateBytePosition = (timeMs: number): number => {
+    if (duration <= 0) return 0;
+    const totalDurationSec = duration / 1000;
+    const seekTimeSec = timeMs / 1000;
+    let fileSize = videoFileSizeRef.current;
+    if (!fileSize || fileSize <= 0) {
+      const estimatedBitrate = 5 * 1024 * 1024 / 8;
+      fileSize = estimatedBitrate * totalDurationSec;
+    }
+    return Math.floor((seekTimeSec / totalDurationSec) * fileSize);
+  };
+
+  // PREFETCH-THEN-SEEK: Download pieces at target position BEFORE seeking
+  // This is exactly how Stremio handles seeking - it buffers the target first
+  const prefetchAndSeek = async (targetMs: number) => {
+    if (!videoRef.current) return;
+    
+    const clampedPosition = Math.max(0, Math.min(duration, targetMs));
+    
+    // Show rebuffering spinner immediately
+    isSeekingRef.current = true;
+    lastSeekPositionRef.current = clampedPosition;
+    setIsRebuffering(true);
+    showControlsWithTimeout();
+    
+    if (infoHash && duration > 0) {
+      const positionBytes = calculateBytePosition(clampedPosition);
+      
+      console.log(`[PLAYER] Prefetching pieces at byte ${positionBytes} before seeking to ${(clampedPosition/1000).toFixed(1)}s...`);
+      
+      // Step 1: Tell backend to prefetch pieces (waits up to 30s for pieces to download)
+      try {
+        const prefetchResult = await api.stream.prefetch(infoHash, positionBytes);
+        console.log(`[PLAYER] Prefetch result: ${prefetchResult.status}, wait=${prefetchResult.wait_ms || 0}ms`);
+        
+        if (prefetchResult.status === 'ready') {
+          // Step 2: Pieces are ready! Now safely seek
+          console.log(`[PLAYER] Pieces ready, seeking to ${(clampedPosition/1000).toFixed(1)}s`);
+          try {
+            await videoRef.current.setPositionAsync(clampedPosition);
+          } catch (e) {
+            console.log('[PLAYER] setPositionAsync failed after prefetch:', e);
+          }
+        } else {
+          // Timeout or error - try seeking anyway (might still work with partial data)
+          console.log(`[PLAYER] Prefetch ${prefetchResult.status}, seeking anyway...`);
+          try {
+            await videoRef.current.setPositionAsync(clampedPosition);
+          } catch (e) {
+            console.log('[PLAYER] setPositionAsync failed:', e);
+          }
+        }
+      } catch (e) {
+        // Prefetch call failed - seek anyway
+        console.log('[PLAYER] Prefetch call failed, seeking directly:', e);
+        try {
+          await videoRef.current.setPositionAsync(clampedPosition);
+        } catch (e2) {
+          console.log('[PLAYER] Direct seek also failed:', e2);
+        }
+      }
+      
+      // Also tell libtorrent to reprioritize (belt and suspenders)
+      api.stream.seek(infoHash, positionBytes).catch(() => {});
+    } else {
+      // No infoHash (direct URL) - just seek directly
+      try {
+        await videoRef.current.setPositionAsync(clampedPosition);
+      } catch (e) {
+        console.log('[PLAYER] Direct seek failed:', e);
+      }
+    }
+    
+    // Clear seeking state after a delay
+    setTimeout(() => {
+      isSeekingRef.current = false;
+    }, 5000);
+  };
+
   // Seek to position (for progress bar interaction)
   const seekToPosition = async (percentage: number) => {
     if (videoRef.current && duration > 0) {
       const newPosition = Math.floor(duration * percentage);
-      isSeekingRef.current = true;
-      lastSeekPositionRef.current = newPosition;
-      setIsRebuffering(true);
-      
-      try {
-        await videoRef.current.setPositionAsync(newPosition);
-      } catch (e) {
-        console.log('[PLAYER] Seek position failed:', e);
-      }
-      
-      // Clear seeking state after a delay to allow buffering
-      setTimeout(() => {
-        isSeekingRef.current = false;
-      }, 10000); // Give 10 seconds for data to arrive after seek
-      
-      showControlsWithTimeout();
-      
-      // Notify backend to reprioritize pieces for the seek target
-      if (infoHash) {
-        const totalDurationSec = duration / 1000;
-        const seekTimeSec = newPosition / 1000;
-        let estimatedFileSize = videoFileSizeRef.current;
-        if (!estimatedFileSize || estimatedFileSize <= 0) {
-          const estimatedBitrate = 5 * 1024 * 1024 / 8;
-          estimatedFileSize = estimatedBitrate * totalDurationSec;
-        }
-        const positionBytes = Math.floor((seekTimeSec / totalDurationSec) * estimatedFileSize);
-        api.stream.seek(infoHash, positionBytes).catch(() => {});
-      }
+      await prefetchAndSeek(newPosition);
     }
   };
 
   // Seek to absolute position in milliseconds
   const seekToMs = async (newPositionMs: number) => {
     if (videoRef.current) {
-      const clampedPosition = Math.max(0, Math.min(duration, newPositionMs));
-      isSeekingRef.current = true;
-      lastSeekPositionRef.current = clampedPosition;
-      setIsRebuffering(true);
-      
-      try {
-        await videoRef.current.setPositionAsync(clampedPosition);
-      } catch (e) {
-        console.log('[PLAYER] Seek ms failed:', e);
-      }
-      
-      // Clear seeking state after a delay to allow buffering
-      setTimeout(() => {
-        isSeekingRef.current = false;
-      }, 10000);
-      
-      showControlsWithTimeout();
-      
-      // Notify backend to reprioritize pieces for the seek target
-      if (infoHash && duration > 0) {
-        const totalDurationSec = duration / 1000;
-        const seekTimeSec = clampedPosition / 1000;
-        let estimatedFileSize = videoFileSizeRef.current;
-        if (!estimatedFileSize || estimatedFileSize <= 0) {
-          const estimatedBitrate = 5 * 1024 * 1024 / 8;
-          estimatedFileSize = estimatedBitrate * totalDurationSec;
-        }
-        const positionBytes = Math.floor((seekTimeSec / totalDurationSec) * estimatedFileSize);
-        api.stream.seek(infoHash, positionBytes).catch(() => {});
-      }
+      await prefetchAndSeek(newPositionMs);
     }
   };
 

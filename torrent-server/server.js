@@ -386,6 +386,107 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify({ status: 'destroyed' }));
   }
 
+  // POST /prefetch/:infoHash - Pre-fetch pieces at a byte position (for seeking)
+  // This is the key to fast seeking - we download pieces BEFORE telling the player to seek
+  if (req.method === 'POST' && parts[0] === 'prefetch' && parts[1]) {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      const engine = getEngine(parts[1]);
+      if (!engine || !engine.torrent || !engine._videoFile) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'Engine not ready' }));
+      }
+      
+      let params = {};
+      try { params = JSON.parse(body); } catch(e) {}
+      
+      const file = engine._videoFile;
+      const positionBytes = params.position_bytes || 0;
+      const pieceLength = engine.torrent.pieceLength;
+      
+      // Calculate which pieces we need for this position
+      // We need pieces covering a ~2MB buffer at the seek position
+      const bufferSize = 2 * 1024 * 1024; // 2MB prefetch buffer
+      const startByte = Math.max(0, positionBytes);
+      const endByte = Math.min(file.length - 1, positionBytes + bufferSize);
+      
+      const startPiece = Math.floor((file.offset + startByte) / pieceLength);
+      const endPiece = Math.floor((file.offset + endByte) / pieceLength);
+      
+      console.log(`[PREFETCH] ${parts[1].substring(0, 8)} seeking to byte ${positionBytes}, pieces ${startPiece}-${endPiece}`);
+      
+      // Use file.select() to prioritize these pieces
+      // Then use createReadStream which auto-prioritizes
+      // But we also manually deselect and reselect to force priority
+      try {
+        file.deselect();
+        file.select(); // Re-select from beginning
+        // Create a read stream at the seek position - this triggers piece priority
+        const prefetchStream = file.createReadStream({ start: startByte, end: Math.min(startByte + 65536, endByte) });
+        prefetchStream.on('data', () => {}); // Consume data to trigger download
+        prefetchStream.on('end', () => {});
+        prefetchStream.on('error', () => {});
+        // Destroy after we've triggered the prioritization
+        setTimeout(() => {
+          try { prefetchStream.destroy(); } catch(e) {}
+        }, 1000);
+      } catch(e) {
+        console.log(`[PREFETCH] Priority set error (non-fatal):`, e.message);
+      }
+      
+      // Poll until pieces are available (max 30 seconds)
+      const maxWait = 30000;
+      const checkInterval = 300;
+      let waited = 0;
+      
+      const checkPieces = () => {
+        if (waited >= maxWait) {
+          // Timeout - return partial status
+          let available = 0;
+          for (let i = startPiece; i <= endPiece; i++) {
+            if (engine.bitfield.get(i)) available++;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({
+            status: 'timeout',
+            available: available,
+            needed: endPiece - startPiece + 1,
+            position_bytes: positionBytes,
+          }));
+        }
+        
+        // Check if enough pieces are available
+        let available = 0;
+        const needed = endPiece - startPiece + 1;
+        for (let i = startPiece; i <= endPiece; i++) {
+          if (engine.bitfield.get(i)) available++;
+        }
+        
+        // We need at least 3 pieces (enough for player to start buffering from this position)
+        const minPiecesNeeded = Math.min(3, needed);
+        
+        if (available >= minPiecesNeeded) {
+          console.log(`[PREFETCH] ${parts[1].substring(0, 8)} ready at byte ${positionBytes}: ${available}/${needed} pieces in ${waited}ms`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({
+            status: 'ready',
+            available: available,
+            needed: needed,
+            position_bytes: positionBytes,
+            wait_ms: waited,
+          }));
+        }
+        
+        waited += checkInterval;
+        setTimeout(checkPieces, checkInterval);
+      };
+      
+      checkPieces();
+    });
+    return;
+  }
+
   // GET /list - List all engines
   if (parsed.pathname === '/list') {
     const list = {};
