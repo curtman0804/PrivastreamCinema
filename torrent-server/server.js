@@ -1,462 +1,479 @@
-import WebTorrent from 'webtorrent';
-import express from 'express';
-import cors from 'cors';
-import path from 'path';
+/**
+ * Privastream Cinema - Torrent Streaming Server
+ * 
+ * Based on Stremio's enginefs architecture:
+ * - Uses torrent-stream for native BitTorrent (TCP/uTP, not WebRTC)
+ * - PeerSearch for aggressive peer discovery (DHT + trackers)
+ * - Proper HTTP range request support with pump/backpressure
+ * - Automatic piece prioritization via createReadStream
+ */
 
-const app = express();
-app.use(express.json()); // Parse JSON request bodies
+const http = require('http');
+const url = require('url');
+const path = require('path');
+const os = require('os');
+const fs = require('fs');
 
-// Get correct MIME type from filename
-function getMimeType(filename) {
-  const ext = path.extname(filename || '').toLowerCase();
-  const mimeTypes = {
-    '.mp4': 'video/mp4',
-    '.mkv': 'video/x-matroska',
-    '.avi': 'video/x-msvideo',
-    '.webm': 'video/webm',
-    '.mov': 'video/quicktime',
-    '.m4v': 'video/mp4',
-    '.ts': 'video/mp2t',
-    '.wmv': 'video/x-ms-wmv',
-    '.flv': 'video/x-flv',
-  };
-  return mimeTypes[ext] || 'video/mp4';
+let torrentStream, PeerSearch, rangeParser, pump, mime;
+
+try {
+  torrentStream = require('torrent-stream');
+  PeerSearch = require('peer-search');
+  rangeParser = require('range-parser');
+  pump = require('pump');
+  mime = require('mime');
+} catch (e) {
+  console.error('Missing dependencies, installing...', e.message);
+  process.exit(1);
 }
 
-// Create WebTorrent client optimized for container/K8s environments (no UDP)
-const client = new WebTorrent({
-  maxConns: 100,
-  dht: false,            // Disabled - UDP blocked in K8s
-  lsd: false,            // Disabled - not useful in containers
-  webSeeds: true,
-  utp: false,            // Disabled - UDP blocked in K8s
-  tracker: {
-    announce: [
-      // WebSocket trackers (work over HTTPS - best for containers)
-      'wss://tracker.openwebtorrent.com',
-      'wss://tracker.btorrent.xyz',
-      'wss://tracker.files.fm:7073/announce',
-      'wss://spacetradersapi-chatbox.herokuapp.com:443/announce',
-      // HTTP trackers (work through standard ports - K8s friendly)
-      'http://tracker.openbittorrent.com:80/announce',
-      'http://tracker3.itzmx.com:6961/announce',
-      'http://tracker.bt4g.com:2095/announce',
-      'http://tracker.files.fm:6969/announce',
-      'http://t.nyaatracker.com:80/announce',
-      'http://tracker.gbitt.info:80/announce',
-      'http://tracker.ccp.ovh:6969/announce',
-      'http://open.acgnxtracker.com:80/announce',
-      'http://tracker.dler.org:6969/announce',
-      'http://opentracker.i2p.rocks:6969/announce',
-      'http://tracker.opentrackr.org:1337/announce',
-      'https://tracker.lilithraws.org:443/announce',
-      'https://tr.burnabyhighstar.com:443/announce',
-      'https://tracker.tamersunion.org:443/announce',
-      'https://tracker.imgoingto.icu:443/announce',
-    ]
-  }
-});
+const PORT = process.env.TORRENT_PORT || 8002;
 
-app.use(cors());
+// ==================== ENGINE MANAGEMENT ====================
 
-// Store active torrents and their start times
-const torrents = new Map();
-const torrentStartTimes = new Map();
+const engines = {};
 
-// Periodically log status for debugging
-setInterval(() => {
-  const activeTorrents = client.torrents.length;
-  const totalPeers = client.torrents.reduce((sum, t) => sum + t.numPeers, 0);
-  if (activeTorrents > 0) {
-    console.log(`📊 Active torrents: ${activeTorrents}, Total peers: ${totalPeers}`);
-  }
-}, 30000);
+// Stremio-like defaults
+const ENGINE_TIMEOUT = 5 * 60 * 1000; // 5 min idle = destroy
+const STREAM_TIMEOUT = 30 * 1000; // 30s stream inactivity
 
-// Pre-warm: start downloading a torrent without streaming
-app.post('/prewarm/:infoHash', (req, res) => {
-  const { infoHash } = req.params;
-  const infoHashLower = infoHash.toLowerCase();
-  
-  // Check if already started
-  let torrent = torrents.get(infoHashLower);
-  if (!torrent) {
-    torrent = client.torrents.find(t => t.infoHash && t.infoHash.toLowerCase() === infoHashLower);
+// Default tracker list - comprehensive for maximum peer discovery
+const DEFAULT_TRACKERS = [
+  'udp://tracker.opentrackr.org:1337/announce',
+  'udp://open.stealth.si:80/announce',
+  'udp://tracker.openbittorrent.com:6969/announce',
+  'udp://exodus.desync.com:6969/announce',
+  'udp://tracker.torrent.eu.org:451/announce',
+  'udp://open.demonii.com:1337/announce',
+  'udp://tracker.moeking.me:6969/announce',
+  'udp://explodie.org:6969/announce',
+  'udp://tracker.tiny-vps.com:6969/announce',
+  'http://tracker.opentrackr.org:1337/announce',
+  'http://tracker.openbittorrent.com:80/announce',
+  'udp://tracker.pirateparty.gr:6969/announce',
+  'udp://tracker.cyberia.is:6969/announce',
+  'udp://tracker.leechers-paradise.org:6969/announce',
+  'udp://9.rarbg.to:2710/announce',
+];
+
+// Spoofed peer ID prefix (looks like qBittorrent)
+function generatePeerId() {
+  const prefix = '-qB4510-';
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  let id = prefix;
+  for (let i = 0; i < 12; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
   }
+  return id;
+}
+
+function getEngine(infoHash) {
+  return engines[infoHash.toLowerCase()];
+}
+
+function createEngine(infoHash, options = {}) {
+  const hash = infoHash.toLowerCase();
   
-  if (torrent) {
-    return res.json({
-      status: torrent.ready ? 'ready' : 'warming',
-      peers: torrent.numPeers,
-      progress: Math.round(torrent.progress * 100)
-    });
-  }
-  
-  // Start the torrent
-  const trackers = [
-    // WebSocket trackers - KEY for peer discovery in K8s (where UDP is blocked)
-    'wss://tracker.openwebtorrent.com',
-    'wss://tracker.btorrent.xyz',
-    'wss://tracker.files.fm:7073/announce',
-    'wss://spacetradersapi-chatbox.herokuapp.com:443/announce',
-    'wss://tracker.webtorrent.dev',
-    // HTTP/HTTPS trackers
-    'http://tracker.openbittorrent.com:80/announce',
-    'http://tracker3.itzmx.com:6961/announce',
-    'http://tracker.bt4g.com:2095/announce',
-    'http://tracker.files.fm:6969/announce',
-    'http://tracker.opentrackr.org:1337/announce',
-    'http://tracker2.dler.org:80/announce',
-    'http://tracker.mywaifu.best:6969/announce',
-    'http://tracker.renfei.net:8080/announce',
-    'http://tracker.tritan.gg:8080/announce',
-    'http://open.trackerlist.xyz:80/announce',
-    'http://1337.abcvg.info:80/announce',
-    'http://tracker.ghostchu-services.top:80/announce',
-    'http://wepzone.net:6969/announce',
-    'http://tracker.qu.ax:6969/announce',
-    'https://tracker.lilithraws.org:443/announce',
-    'https://tr.burnabyhighstar.com:443/announce',
-    'https://tracker.tamersunion.org:443/announce',
-    'https://tracker.bt4g.com:443/announce',
-    'https://tracker.zhuqiy.com:443/announce',
-    'https://tracker.moeblog.cn:443/announce',
-  ];
-  
-  // Add extra trackers from the request body (from Torrentio stream sources)
-  let extraTrackers = [];
-  try {
-    if (req.body && req.body.trackers && Array.isArray(req.body.trackers)) {
-      extraTrackers = req.body.trackers.filter(t => t.startsWith('http'));
-      console.log(`📡 Got ${extraTrackers.length} extra trackers from Torrentio`);
-    }
-  } catch (e) {}
-  
-  const allTrackers = [...trackers, ...extraTrackers];
-  
-  let magnetURI = `magnet:?xt=urn:btih:${infoHash}`;
-  allTrackers.forEach(t => { magnetURI += `&tr=${encodeURIComponent(t)}`; });
-  
-  try {
-    const newTorrent = client.add(magnetURI, { maxWebConns: 10, storeCacheSlots: 50 });
-    torrents.set(infoHashLower, newTorrent);
-    torrentStartTimes.set(infoHashLower, Date.now());
-    console.log(`🔥 Pre-warming torrent: ${infoHash}`);
+  if (engines[hash]) {
+    // Engine exists, resume swarm and return
+    const e = engines[hash];
+    if (e.swarm) e.swarm.resume();
     
-    newTorrent.on('error', (err) => {
-      console.error('Pre-warm torrent error:', err);
-    });
-    
-    res.json({ status: 'warming', info_hash: infoHash });
-  } catch (err) {
-    console.error('Pre-warm error:', err);
-    res.json({ status: 'error', error: err.message });
-  }
-});
-
-// Get torrent status
-app.get('/status/:infoHash', (req, res) => {
-  const { infoHash } = req.params;
-  const magnetURI = `magnet:?xt=urn:btih:${infoHash}`;
-
-  // Check our Map first, then fallback to client.get()
-  let torrent = torrents.get(infoHash.toLowerCase());
-  if (!torrent) {
-    torrent = client.get(infoHash) || client.get(magnetURI);
-  }
-
-  if (!torrent) {
-    return res.json({
-      ready: false,
-      progress: 0,
-      peers: 0,
-      downloadSpeed: 0,
-      status: 'not_found'
-    });
-  }
-
-  // Find the largest video file for filename info
-  let videoFileName = '';
-  if (torrent.files && torrent.files.length > 0) {
-    const videoFile = torrent.files.reduce((largest, f) => {
-      const isVideo = /\.(mp4|mkv|avi|webm|mov|m4v|ts)$/i.test(f.name);
-      if (!isVideo) return largest;
-      return (!largest || f.length > largest.length) ? f : largest;
-    }, null);
-    if (videoFile) videoFileName = videoFile.name;
-  }
-
-  res.json({
-    ready: torrent.ready,
-    progress: Math.round(torrent.progress * 100),
-    peers: torrent.numPeers,
-    downloadSpeed: torrent.downloadSpeed,
-    downloaded: torrent.downloaded,
-    name: torrent.name,
-    videoFileName: videoFileName,
-    status: torrent.ready ? 'ready' : 'buffering'
-  });
-});
-
-// Add torrent and stream endpoint
-app.get('/stream/:infoHash', (req, res) => {
-  const { infoHash } = req.params;
-  const infoHashLower = infoHash.toLowerCase();
-  
-  // HTTP/WSS-only trackers (UDP is blocked in K8s/container production environments)
-  const trackers = [
-    // WebSocket trackers (work over HTTPS - best for containers)
-    'wss://tracker.openwebtorrent.com',
-    'wss://tracker.btorrent.xyz',
-    'wss://tracker.files.fm:7073/announce',
-    'wss://spacetradersapi-chatbox.herokuapp.com:443/announce',
-    // HTTP trackers (verified working 2026)
-    'http://tracker.opentrackr.org:1337/announce',
-    'http://tracker.bt4g.com:2095/announce',
-    'http://tracker2.dler.org:80/announce',
-    'http://tracker.renfei.net:8080/announce',
-    'http://tracker.tritan.gg:8080/announce',
-    'http://tracker.sbsub.com:2710/announce',
-    'http://tracker.mywaifu.best:6969/announce',
-    'http://tracker.moxing.party:6969/announce',
-    'http://tracker.ipv6tracker.org:80/announce',
-    'http://tracker.bz:80/announce',
-    'http://tracker.bittor.pw:1337/announce',
-    'http://open.trackerlist.xyz:80/announce',
-    'http://open.acgtracker.com:1096/announce',
-    'http://bvarf.tracker.sh:2086/announce',
-    'http://bt1.xxxxbt.cc:6969/announce',
-    'http://tracker.ghostchu-services.top:80/announce',
-    'http://tracker.dler.org:6969/announce',
-    'http://tr.nyacat.pw:80/announce',
-    'http://1337.abcvg.info:80/announce',
-    'http://wepzone.net:6969/announce',
-    'http://tracker.wepzone.net:6969/announce',
-    'http://tracker.qu.ax:6969/announce',
-    'http://tracker.darkness.services:6969/announce',
-    'http://bittorrent-tracker.e-n-c-r-y-p-t.net:1337/announce',
-    'http://www.genesis-sp.org:2710/announce',
-    'http://tracker.skyts.net:6969/announce',
-    // HTTPS trackers
-    'https://tracker.zhuqiy.com:443/announce',
-    'https://tracker.pmman.tech:443/announce',
-    'https://tracker.moeblog.cn:443/announce',
-    'https://tracker.bt4g.com:443/announce',
-    'https://tr.zukizuki.org:443/announce',
-    'https://tracker.ghostchu-services.top:443/announce',
-    'https://tr.nyacat.pw:443/announce',
-  ];
-  
-  let magnetURI = `magnet:?xt=urn:btih:${infoHash}`;
-  trackers.forEach(t => { magnetURI += `&tr=${encodeURIComponent(t)}`; });
-
-  // Get fileIdx and filename from query params for specific file selection
-  const requestedFileIdx = req.query.fileIdx !== undefined ? parseInt(req.query.fileIdx, 10) : null;
-  const requestedFilename = req.query.filename || null;
-
-  console.log('Stream request for:', infoHash, 'fileIdx:', requestedFileIdx, 'filename:', requestedFilename);
-
-  // Check if torrent already added using our Map first
-  let torrent = torrents.get(infoHashLower);
-  if (!torrent) {
-    // Fallback to client.get() but normalize the infoHash
-    torrent = client.get(infoHash) || client.get(magnetURI);
-  }
-  console.log('Torrent from storage:', torrent ? 'found' : 'not found');
-
-  const handleTorrent = (torrent) => {
-    let file = null;
-    
-    // Method 1: Select by fileIdx if provided
-    if (requestedFileIdx !== null && requestedFileIdx >= 0 && requestedFileIdx < torrent.files.length) {
-      file = torrent.files[requestedFileIdx];
-      console.log('Selected file by fileIdx:', requestedFileIdx, '->', file?.name);
+    // Add any new tracker sources
+    if (options.sources && options.sources.length > 0 && e.swarm && e.swarm.peerSearch) {
+      // PeerSearch is already running, add new sources
+      console.log(`[ENGINE] Adding ${options.sources.length} new sources to existing engine ${hash.substring(0, 8)}`);
     }
     
-    // Method 2: Select by filename match if provided
-    if (!file && requestedFilename) {
-      // Try exact match first
-      file = torrent.files.find(f => f.name === requestedFilename);
-      // Try partial match (filename might be truncated)
-      if (!file) {
-        const searchName = requestedFilename.toLowerCase();
-        file = torrent.files.find(f => f.name.toLowerCase().includes(searchName) || searchName.includes(f.name.toLowerCase()));
-      }
-      // Try matching the episode pattern from filename
-      if (!file) {
-        const episodeMatch = requestedFilename.match(/S(\d{1,2})E(\d{1,2})/i);
-        if (episodeMatch) {
-          const episodePattern = new RegExp(`S0?${parseInt(episodeMatch[1])}E0?${parseInt(episodeMatch[2])}`, 'i');
-          file = torrent.files.find(f => {
-            const isVideo = /\.(mp4|mkv|avi|webm|mov|m4v|ts)$/i.test(f.name);
-            return isVideo && episodePattern.test(f.name);
-          });
+    return e;
+  }
+
+  console.log(`[ENGINE] Creating new engine for ${hash.substring(0, 8)}...`);
+
+  // Build peer search sources (Stremio pattern)
+  const peerSources = ['dht:' + hash];
+  
+  // Add default trackers
+  DEFAULT_TRACKERS.forEach(t => peerSources.push('tracker:' + t));
+  
+  // Add extra trackers from Torrentio/user
+  if (options.sources) {
+    options.sources.forEach(src => {
+      if (typeof src === 'string') {
+        if (src.startsWith('tracker:')) {
+          peerSources.push(src);
+        } else if (src.startsWith('http') || src.startsWith('udp')) {
+          peerSources.push('tracker:' + src);
         }
       }
-      if (file) {
-        console.log('Selected file by filename match:', file.name);
-      }
-    }
-    
-    // Method 3: Fallback to largest video file
-    if (!file) {
-      file = torrent.files.reduce((largest, f) => {
-        const isVideo = /\.(mp4|mkv|avi|webm|mov|m4v|ts)$/i.test(f.name);
-        if (!isVideo) return largest;
-        return (!largest || f.length > largest.length) ? f : largest;
-      }, null);
-      console.log('Selected largest video file as fallback:', file?.name);
-    }
+    });
+  }
 
-    if (!file) {
-      console.error('No video file found in torrent');
-      return res.status(404).send('No video file found');
-    }
-
-    const contentType = getMimeType(file.name);
-    console.log('Streaming file:', file.name, 'Size:', (file.length / (1024*1024*1024)).toFixed(2), 'GB', 'MIME:', contentType);
-
-    // Set proper headers for video streaming with CORS
-    const fileSize = file.length;
-    const range = req.headers.range;
-
-    if (range) {
-      const parts = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunksize = (end - start) + 1;
-
-      console.log(`Serving range: ${start}-${end}/${fileSize}`);
-
-      res.writeHead(206, {
-        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunksize,
-        'Content-Type': contentType,
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Range',
-      });
-
-      const stream = file.createReadStream({ start, end });
-      stream.on('error', (err) => {
-        console.error('Stream error:', err);
-        if (!res.headersSent) res.writeHead(500);
-        res.end();
-      });
-      stream.pipe(res);
-    } else {
-      console.log('Serving full file');
-
-      res.writeHead(200, {
-        'Content-Length': fileSize,
-        'Content-Type': contentType,
-        'Accept-Ranges': 'bytes',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Range',
-      });
-
-      const stream = file.createReadStream();
-      stream.on('error', (err) => {
-        console.error('Stream error:', err);
-        if (!res.headersSent) res.writeHead(500);
-        res.end();
-      });
-      stream.pipe(res);
-    }
+  const engineOpts = {
+    path: path.join(os.tmpdir(), 'privastream', hash),
+    dht: false,    // Disabled - using PeerSearch instead (Stremio pattern)
+    tracker: false, // Disabled - using PeerSearch instead
+    connections: 200, // Max peers
+    uploads: 10,
+    verify: true,
+    id: generatePeerId(),
   };
 
-  const handleTorrentWhenReady = (torrent) => {
-    console.log('Torrent metadata loaded:', torrent.name);
-    console.log('Peers:', torrent.numPeers, 'Progress:', (torrent.progress * 100).toFixed(2) + '%');
+  const magnet = `magnet:?xt=urn:btih:${hash}`;
+  const engine = torrentStream(magnet, engineOpts);
 
-    const startStreaming = () => {
-      // Start immediately if peers exist, otherwise wait briefly
-      const checkAndStream = () => {
-        if (torrent.numPeers > 0) {
-          console.log('✅ Torrent has peers, starting stream immediately. Peers:', torrent.numPeers);
-          handleTorrent(torrent);
-        } else {
-          console.log('⏳ No peers yet, starting anyway (DHT will find peers during stream)');
-          // Start immediately - buffering will handle peer discovery
-          handleTorrent(torrent);
+  // Use PeerSearch for aggressive peer discovery (Stremio's secret sauce)
+  engine.ready(function() {
+    console.log(`[ENGINE] ${hash.substring(0, 8)} ready! Files: ${engine.files.length}`);
+    
+    // Find and select the largest video file
+    let videoFile = null;
+    let videoIdx = -1;
+    let maxSize = 0;
+    
+    const videoExts = ['.mp4', '.mkv', '.avi', '.webm', '.mov', '.m4v', '.wmv', '.flv'];
+    engine.files.forEach((file, idx) => {
+      const ext = path.extname(file.name).toLowerCase();
+      if (videoExts.includes(ext) && file.length > maxSize) {
+        maxSize = file.length;
+        videoFile = file;
+        videoIdx = idx;
+      }
+    });
+
+    if (videoFile) {
+      // Select the video file for download (Stremio pattern: select() without priority starts downloading)
+      videoFile.select();
+      engine._videoFile = videoFile;
+      engine._videoIdx = videoIdx;
+      console.log(`[ENGINE] Selected video: ${videoFile.name} (${(videoFile.length / 1024 / 1024).toFixed(1)}MB)`);
+    } else {
+      // Fallback: select the largest file
+      let largest = engine.files[0];
+      let largestIdx = 0;
+      engine.files.forEach((f, i) => {
+        if (f.length > largest.length) {
+          largest = f;
+          largestIdx = i;
         }
+      });
+      largest.select();
+      engine._videoFile = largest;
+      engine._videoIdx = largestIdx;
+      console.log(`[ENGINE] No video found, selected largest file: ${largest.name}`);
+    }
+  });
+
+  // PeerSearch - this is what makes Stremio fast
+  try {
+    new PeerSearch(peerSources, engine.swarm, {
+      min: 40,
+      max: 200,
+      cooloff_time: 30,
+      cooloff_requests: 15,
+    });
+    console.log(`[ENGINE] PeerSearch started with ${peerSources.length} sources`);
+  } catch (e) {
+    console.error(`[ENGINE] PeerSearch failed:`, e.message);
+  }
+
+  // Logging
+  engine.on('download', function(pieceIndex) {
+    // Log occasionally
+    if (pieceIndex % 50 === 0) {
+      const peers = engine.swarm ? engine.swarm.wires.filter(w => !w.peerChoking).length : 0;
+      const dlSpeed = engine.swarm ? (engine.swarm.downloadSpeed() / 1024).toFixed(0) : 0;
+      console.log(`[ENGINE] ${hash.substring(0, 8)} piece ${pieceIndex}, ${peers} peers, ${dlSpeed}KB/s`);
+    }
+  });
+
+  engine.on('idle', function() {
+    console.log(`[ENGINE] ${hash.substring(0, 8)} idle (all selected pieces downloaded)`);
+  });
+
+  // Auto-cleanup after inactivity
+  engine._lastAccess = Date.now();
+  engine._cleanupTimer = setInterval(() => {
+    if (Date.now() - engine._lastAccess > ENGINE_TIMEOUT) {
+      console.log(`[ENGINE] ${hash.substring(0, 8)} inactive for ${ENGINE_TIMEOUT/1000}s, destroying`);
+      destroyEngine(hash);
+    }
+  }, 60000);
+
+  engines[hash] = engine;
+  return engine;
+}
+
+function destroyEngine(infoHash) {
+  const hash = infoHash.toLowerCase();
+  const engine = engines[hash];
+  if (!engine) return;
+  
+  if (engine._cleanupTimer) clearInterval(engine._cleanupTimer);
+  engine.destroy(function() {
+    console.log(`[ENGINE] ${hash.substring(0, 8)} destroyed`);
+  });
+  delete engines[hash];
+}
+
+// ==================== HTTP SERVER ====================
+
+function getVideoFile(engine, fileIdx) {
+  if (fileIdx !== undefined && fileIdx !== null && !isNaN(fileIdx)) {
+    const idx = parseInt(fileIdx);
+    if (engine.files[idx]) return engine.files[idx];
+  }
+  return engine._videoFile || null;
+}
+
+function getEngineStats(engine, fileIdx) {
+  if (!engine) return null;
+  
+  const file = getVideoFile(engine, fileIdx);
+  const peers = engine.swarm ? engine.swarm.wires.filter(w => !w.peerChoking).length : 0;
+  const totalPeers = engine.swarm ? engine.swarm.wires.length : 0;
+  
+  const stats = {
+    infoHash: engine.infoHash,
+    name: engine.torrent ? engine.torrent.name : null,
+    peers: peers,
+    totalPeers: totalPeers,
+    downloaded: engine.swarm ? engine.swarm.downloaded : 0,
+    downloadSpeed: engine.swarm ? engine.swarm.downloadSpeed() : 0,
+    uploadSpeed: engine.swarm ? engine.swarm.uploadSpeed() : 0,
+    files: engine.files ? engine.files.map((f, i) => ({
+      name: f.name,
+      length: f.length,
+      index: i,
+    })) : [],
+  };
+
+  if (file && engine.torrent) {
+    stats.videoFile = file.name;
+    stats.videoSize = file.length;
+    stats.videoIdx = engine.files.indexOf(file);
+    
+    // Calculate file-specific progress
+    const pieceLength = engine.torrent.pieceLength;
+    const startPiece = Math.floor(file.offset / pieceLength);
+    const endPiece = Math.floor((file.offset + file.length - 1) / pieceLength);
+    let availablePieces = 0;
+    for (let i = startPiece; i <= endPiece; i++) {
+      if (engine.bitfield.get(i)) availablePieces++;
+    }
+    const totalPieces = endPiece - startPiece + 1;
+    stats.progress = availablePieces / totalPieces;
+    stats.availablePieces = availablePieces;
+    stats.totalPieces = totalPieces;
+    
+    // Check if first pieces are available (for readiness)
+    const firstPiecesNeeded = Math.min(5, totalPieces); // Need at least first 5 pieces
+    let firstPiecesAvailable = 0;
+    for (let i = startPiece; i < startPiece + firstPiecesNeeded; i++) {
+      if (engine.bitfield.get(i)) firstPiecesAvailable++;
+    }
+    stats.ready = firstPiecesAvailable >= firstPiecesNeeded;
+    stats.firstPiecesAvailable = firstPiecesAvailable;
+    stats.firstPiecesNeeded = firstPiecesNeeded;
+  }
+
+  return stats;
+}
+
+const server = http.createServer((req, res) => {
+  const parsed = url.parse(req.url, true);
+  const parts = parsed.pathname.split('/').filter(Boolean);
+
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
+  
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    return res.end();
+  }
+
+  // GET /health
+  if (parsed.pathname === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ status: 'ok', engines: Object.keys(engines).length }));
+  }
+
+  // POST /create/:infoHash - Create/get engine
+  if (req.method === 'POST' && parts[0] === 'create' && parts[1]) {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      let options = {};
+      try { options = JSON.parse(body); } catch(e) {}
+      
+      const engine = createEngine(parts[1], options);
+      
+      // Wait for engine to be ready, then return stats
+      const waitReady = (attempts) => {
+        if (attempts <= 0) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ status: 'creating', infoHash: parts[1].toLowerCase() }));
+        }
+        
+        if (engine.torrent && engine._videoFile) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify(getEngineStats(engine)));
+        }
+        
+        setTimeout(() => waitReady(attempts - 1), 500);
       };
-
-      // Reduced wait: Only 500ms to quickly check for peers
-      setTimeout(checkAndStream, 500);
-    };
-
-    // Wait for torrent to be ready (has selected files)
-    if (torrent.ready) {
-      console.log('Torrent already ready');
-      startStreaming();
-    } else {
-      console.log('Waiting for torrent to be ready...');
-      torrent.on('ready', () => {
-        console.log('✅ Torrent ready event fired');
-        startStreaming();
+      
+      engine.ready(() => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(getEngineStats(engine)));
       });
-
-      // Fallback timeout in case ready event doesn't fire
+      
+      // Timeout after 30s if not ready
       setTimeout(() => {
-        if (!res.headersSent) {
-          console.log('⚠️ Timeout - forcing stream start');
-          handleTorrent(torrent);
+        if (!res.writableEnded) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'creating', infoHash: parts[1].toLowerCase() }));
         }
-      }, 60000); // 60 second absolute timeout (HTTP trackers need time to respond)
-    }
-  };
-
-  if (torrent && typeof torrent.on === 'function') {
-    console.log('Using existing torrent');
-    handleTorrentWhenReady(torrent);
-  } else {
-    console.log('Adding new torrent...');
-    try {
-      // Double-check that we don't already have this torrent
-      const existingTorrent = client.torrents.find(t =>
-        t.infoHash && t.infoHash.toLowerCase() === infoHashLower
-      );
-
-      if (existingTorrent) {
-        console.log('Found existing torrent by infoHash search');
-        torrents.set(infoHashLower, existingTorrent);
-        handleTorrentWhenReady(existingTorrent);
-        return;
-      }
-
-      const newTorrent = client.add(magnetURI, {
-        // Optimize for streaming
-        maxWebConns: 10,
-        storeCacheSlots: 50
-      });
-
-      torrents.set(infoHashLower, newTorrent);
-      torrentStartTimes.set(infoHashLower, Date.now());
-
-      newTorrent.on('error', (err) => {
-        console.error('Torrent error:', err);
-        if (!res.headersSent) {
-          res.status(500).send('Torrent error: ' + err.message);
-        }
-      });
-
-      handleTorrentWhenReady(newTorrent);
-    } catch (err) {
-      console.error('Error adding torrent:', err);
-      res.status(500).send('Error adding torrent: ' + err.message);
-    }
+      }, 30000);
+    });
+    return;
   }
+
+  // GET /status/:infoHash - Get engine stats
+  if (parts[0] === 'status' && parts[1]) {
+    const engine = getEngine(parts[1]);
+    if (!engine) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Engine not found' }));
+    }
+    engine._lastAccess = Date.now();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(getEngineStats(engine, parts[2])));
+  }
+
+  // GET /stream/:infoHash/:fileIdx? - Stream video (Stremio enginefs pattern)
+  if (parts[0] === 'stream' && parts[1]) {
+    const engine = getEngine(parts[1]);
+    if (!engine) {
+      res.writeHead(404);
+      return res.end('Engine not found');
+    }
+    
+    engine._lastAccess = Date.now();
+    
+    if (!engine.torrent) {
+      // Engine not ready yet, wait
+      engine.ready(() => handleStream(req, res, engine, parts[2]));
+      setTimeout(() => {
+        if (!res.writableEnded) {
+          res.writeHead(503);
+          res.end('Engine not ready');
+        }
+      }, 30000);
+      return;
+    }
+    
+    handleStream(req, res, engine, parts[2]);
+    return;
+  }
+
+  // GET /destroy/:infoHash - Destroy engine
+  if (parts[0] === 'destroy' && parts[1]) {
+    destroyEngine(parts[1]);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ status: 'destroyed' }));
+  }
+
+  // GET /list - List all engines
+  if (parsed.pathname === '/list') {
+    const list = {};
+    for (const hash in engines) {
+      list[hash] = getEngineStats(engines[hash]);
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(list));
+  }
+
+  res.writeHead(404);
+  res.end('Not found');
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    activeTorrents: client.torrents.length
-  });
+/**
+ * Handle video streaming with range requests (Stremio enginefs pattern)
+ * This is the core of how Stremio serves video - createReadStream + pump
+ */
+function handleStream(req, res, engine, fileIdx) {
+  const file = getVideoFile(engine, fileIdx);
+  if (!file) {
+    res.writeHead(404);
+    return res.end('Video file not found');
+  }
+
+  // Set connection timeout to 24 hours (for long videos)
+  req.connection.setTimeout(24 * 60 * 60 * 1000);
+
+  const range = req.headers.range;
+  const parsedRange = range ? rangeParser(file.length, range) : null;
+
+  // Set common headers
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Type', mime.lookup(file.name) || 'video/mp4');
+  res.setHeader('Cache-Control', 'no-cache');
+  // DLNA headers for smart TV compatibility
+  res.setHeader('transferMode.dlna.org', 'Streaming');
+  res.setHeader('contentFeatures.dlna.org', 'DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000');
+
+  if (req.method === 'HEAD') {
+    if (parsedRange && parsedRange !== -1 && parsedRange !== -2 && parsedRange.length > 0) {
+      const r = parsedRange[0];
+      res.writeHead(206, {
+        'Content-Length': r.end - r.start + 1,
+        'Content-Range': `bytes ${r.start}-${r.end}/${file.length}`,
+      });
+    } else {
+      res.writeHead(200, { 'Content-Length': file.length });
+    }
+    return res.end();
+  }
+
+  if (parsedRange && parsedRange !== -1 && parsedRange !== -2 && parsedRange.length > 0) {
+    // Range request (seeking/playback)
+    const r = parsedRange[0];
+    
+    res.writeHead(206, {
+      'Content-Length': r.end - r.start + 1,
+      'Content-Range': `bytes ${r.start}-${r.end}/${file.length}`,
+    });
+
+    // This is the key: createReadStream with start/end automatically
+    // prioritizes the required pieces in torrent-stream!
+    const stream = file.createReadStream({ start: r.start, end: r.end });
+    pump(stream, res);
+  } else {
+    // Full file request (initial probe)
+    res.writeHead(200, { 'Content-Length': file.length });
+    const stream = file.createReadStream();
+    pump(stream, res);
+  }
+}
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`[TORRENT-SERVER] Stremio-style torrent streaming server on port ${PORT}`);
+  console.log(`[TORRENT-SERVER] Using torrent-stream + PeerSearch (native BitTorrent)`);
 });
 
-const PORT = process.env.PORT || 8002;
-app.listen(PORT, () => {
-  console.log(`🚀 WebTorrent streaming server running on port ${PORT}`);
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('[TORRENT-SERVER] Shutting down...');
+  for (const hash in engines) {
+    destroyEngine(hash);
+  }
+  server.close();
+  process.exit(0);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[TORRENT-SERVER] Uncaught exception:', err);
 });

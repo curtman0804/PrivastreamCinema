@@ -3368,18 +3368,22 @@ async def start_stream(
         except Exception as e:
             logger.warning(f"libtorrent start failed (non-critical): {e}")
         
-        # ALSO start on WebTorrent server (uses WebSocket/HTTP trackers, K8s-friendly)
+        # ALSO start on torrent-stream server (Stremio-style, native BitTorrent)
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                wt_url = f"http://localhost:8002/prewarm/{info_hash}"
-                # Pass extra trackers from Torrentio to WebTorrent
-                wt_body = {}
-                if extra_trackers:
-                    wt_body["trackers"] = extra_trackers
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                wt_url = f"http://localhost:8002/create/{info_hash}"
+                # Pass tracker sources in Stremio format
+                wt_body = {"sources": []}
+                for t in extra_trackers:
+                    wt_body["sources"].append(f"tracker:{t}")
+                # Also add default DHT source
+                wt_body["sources"].append(f"dht:{info_hash}")
                 if fileIdx is not None:
                     wt_body["fileIdx"] = fileIdx
                 await client.post(wt_url, json=wt_body)
-                logger.info(f"WebTorrent pre-started for {info_hash} with {len(extra_trackers)} extra trackers")
+                logger.info(f"torrent-stream engine created for {info_hash} with {len(extra_trackers)} extra trackers")
+        except Exception as e:
+            logger.warning(f"torrent-stream start failed (non-critical): {e}")
         except Exception as e:
             logger.warning(f"WebTorrent pre-start failed (non-critical): {e}")
         
@@ -3407,16 +3411,15 @@ async def prewarm_stream(info_hash: str):
                 logger.warning(f"libtorrent prewarm failed: {e}")
                 lt_status = "failed"
         
-        # Pre-warm on WebTorrent server (fire-and-forget)
+        # Pre-warm on torrent-stream server (Stremio-style)
         wt_status = "unknown"
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                # Use the new prewarm endpoint that actually starts the torrent
-                resp = await client.post(f"http://localhost:8002/prewarm/{info_hash}")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(f"http://localhost:8002/create/{info_hash}", json={"sources": [f"dht:{info_hash}"]})
                 if resp.status_code == 200:
                     wt_data = resp.json()
-                    wt_status = wt_data.get("status", "warming")
-                    logger.info(f"WebTorrent prewarm: {info_hash} - status={wt_status}")
+                    wt_status = "ready" if wt_data.get("ready") else "warming"
+                    logger.info(f"torrent-stream prewarm: {info_hash} - status={wt_status}")
         except Exception as e:
             logger.warning(f"WebTorrent prewarm failed (non-critical): {e}")
             wt_status = "failed"
@@ -3446,12 +3449,13 @@ async def stream_status(info_hash: str):
             except Exception:
                 pass
         
-        # Check WebTorrent status
+        # Check torrent-stream status (Stremio-style engine)
         wt_peers = 0
         wt_dl_rate = 0
         wt_ready = False
         wt_progress = 0
         wt_name = ""
+        wt_video_size = 0
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:
                 wt_resp = await client.get(f"http://localhost:8002/status/{info_hash}")
@@ -3461,7 +3465,9 @@ async def stream_status(info_hash: str):
                     wt_dl_rate = wt_data.get("downloadSpeed", 0)
                     wt_ready = wt_data.get("ready", False)
                     wt_progress = wt_data.get("progress", 0)
-                    wt_name = wt_data.get("name", "")
+                    wt_name = wt_data.get("videoFile", "") or wt_data.get("name", "")
+                    wt_video_size = wt_data.get("videoSize", 0)
+                    logger.info(f"torrent-stream status for {info_hash}: ready={wt_ready}, peers={wt_peers}, progress={wt_progress:.2%}")
         except Exception:
             pass
         
@@ -3497,7 +3503,7 @@ async def stream_status(info_hash: str):
             "name": lt_data.get("video_file", "") or wt_name or "",
             "video_filename": lt_data.get("video_file", "") or wt_name or "",
             "video_file": lt_data.get("video_file", "") or wt_name or "",
-            "video_size": lt_data.get("video_size", 0),
+            "video_size": max(lt_data.get("video_size", 0), wt_video_size),
             "first_pieces_ready": lt_data.get("first_pieces_ready", False) or wt_ready,
             "last_pieces_ready": lt_data.get("last_pieces_ready", False),
             "file_ready": lt_data.get("file_ready", False) or wt_ready,
