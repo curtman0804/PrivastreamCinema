@@ -111,13 +111,32 @@ function createEngine(infoHash, options = {}) {
 
   const engineOpts = {
     path: path.join(os.tmpdir(), 'privastream', hash),
-    dht: false,    // Disabled - using PeerSearch instead (Stremio pattern)
-    tracker: false, // Disabled - using PeerSearch instead
+    dht: true,      // ENABLED - built-in DHT for maximum peer discovery
+    tracker: true,   // ENABLED - built-in tracker client
     connections: 200, // Max peers
-    uploads: 10,
+    uploads: 5,      // Low uploads to maximize download bandwidth
     verify: true,
     id: generatePeerId(),
+    // Pass ALL trackers directly to the engine
+    trackers: [...DEFAULT_TRACKERS],
   };
+
+  // Add extra trackers from Torrentio/user
+  if (options.sources) {
+    options.sources.forEach(src => {
+      if (typeof src === 'string') {
+        let trackerUrl = null;
+        if (src.startsWith('tracker:')) {
+          trackerUrl = src.substring(8);
+        } else if (src.startsWith('http') || src.startsWith('udp')) {
+          trackerUrl = src;
+        }
+        if (trackerUrl && !engineOpts.trackers.includes(trackerUrl)) {
+          engineOpts.trackers.push(trackerUrl);
+        }
+      }
+    });
+  }
 
   const magnet = `magnet:?xt=urn:btih:${hash}`;
   const engine = torrentStream(magnet, engineOpts);

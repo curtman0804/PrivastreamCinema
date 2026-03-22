@@ -1520,22 +1520,15 @@ export default function PlayerScreen() {
           }
           setDownloadProgress(smoothProgress);
           
-          // PLAY when backend has metadata and peers - don't wait for full "ready"
-          // The torrent-stream server handles buffering natively via createReadStream
-          // This is closer to how Stremio works - start player early, let it buffer
-          const canStartPlayback = (
-            !videoUrlSet && 
-            (status.status === 'ready' || 
-             (status.status === 'buffering' && peerCount > 0 && status.video_size > 0))
-          );
-          
-          if (canStartPlayback) {
+          // PLAY when backend reports READY (data actually available for streaming)
+          // Don't start on "buffering" - data needs to be downloaded first
+          if (status.status === 'ready' && !videoUrlSet) {
             videoUrlSet = true;
             // Save video file size for accurate seek calculations
             if (status.video_size) {
               videoFileSizeRef.current = status.video_size;
             }
-            console.log(`[PLAYER] Starting playback in ${elapsedSec.toFixed(1)}s! Status: ${status.status}, Peers: ${peerCount}, FileSize: ${(videoFileSizeRef.current / 1024 / 1024).toFixed(1)}MB`);
+            console.log(`[PLAYER] Stream READY in ${elapsedSec.toFixed(1)}s! Peers: ${peerCount}, FileSize: ${(videoFileSizeRef.current / 1024 / 1024).toFixed(1)}MB. Setting video URL.`);
             videoRetryCountRef.current = 0;
             setStreamUrl(videoUrl);
             // Keep polling for progress updates but don't set URL again
