@@ -12,7 +12,7 @@ import sys
 from typing import Dict, Any, Optional
 
 # Configuration
-BACKEND_URL = "http://localhost:8001"
+BACKEND_URL = "https://stream-node-build.preview.emergentagent.com"
 TORRENT_STREAM_URL = "http://localhost:8002"
 TEST_HASH = "08ada5a7a6183aae1e09d831df6748d566095a10"
 TEST_CREDENTIALS = {"username": "choyt", "password": "RFIDGuy1!"}

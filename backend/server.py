@@ -3680,27 +3680,25 @@ async def stream_video(
     request: Request,
     fileIdx: Optional[int] = None
 ):
-    """Stream video via torrent-stream (Stremio architecture).
+    """Stream video - tries torrent-stream server first, falls back to direct file serving.
     
-    This proxies directly to the torrent-stream server which handles:
-    - Range requests natively via createReadStream({start, end})
-    - Automatic piece prioritization for requested ranges
-    - Backpressure handling via pump()
+    Primary: Proxy to torrent-stream server on localhost:8002
+    Fallback: Serve the video file directly from libtorrent's download directory
     """
+    info_hash = info_hash.lower()
+    range_header = request.headers.get("range")
     
+    # === TRY TORRENT-STREAM SERVER FIRST ===
     try:
-        # Build torrent-stream URL
         ts_url = f"http://localhost:8002/stream/{info_hash}"
         if fileIdx is not None:
             ts_url += f"/{fileIdx}"
         
-        # Forward Range header from client
         headers = {}
-        range_header = request.headers.get("range")
         if range_header:
             headers["Range"] = range_header
         
-        logger.info(f"Streaming {info_hash[:8]}, range={range_header or 'none'}")
+        logger.info(f"Streaming {info_hash[:8]} via torrent-stream, range={range_header or 'none'}")
         
         # Handle HEAD requests
         if request.method == "HEAD":
@@ -3719,36 +3717,25 @@ async def stream_video(
                     headers=response_headers,
                 )
         
-        # GET: Stream the response with very long read timeout
-        # torrent-stream will block until pieces are downloaded (like Stremio)
-        # We need long timeouts because the data might not be downloaded yet
+        # GET: Stream the response
         client = httpx.AsyncClient(
-            timeout=httpx.Timeout(
-                connect=15.0,
-                read=600.0,   # 10 MINUTES read timeout - allow torrent-stream to download pieces
-                write=30.0,
-                pool=30.0
-            )
+            timeout=httpx.Timeout(connect=5.0, read=600.0, write=30.0, pool=30.0)
         )
         
         try:
             req = client.build_request("GET", ts_url, headers=headers)
             resp = await client.send(req, stream=True)
             
-            # Build response headers
             response_headers = {
                 "Access-Control-Allow-Origin": "*",
                 "Accept-Ranges": "bytes",
                 "Cache-Control": "no-store, no-cache, must-revalidate",
-                "X-Accel-Buffering": "no",  # Prevent nginx/K8s proxy buffering
+                "X-Accel-Buffering": "no",
                 "X-Content-Type-Options": "nosniff",
+                "transferMode.dlna.org": "Streaming",
+                "contentFeatures.dlna.org": "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000",
             }
             
-            # DLNA headers for TV compatibility
-            response_headers["transferMode.dlna.org"] = "Streaming"
-            response_headers["contentFeatures.dlna.org"] = "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000"
-            
-            # Copy relevant headers from torrent-stream response
             for key in ["Content-Range", "Content-Length", "Content-Type"]:
                 val = resp.headers.get(key.lower())
                 if val:
@@ -3756,7 +3743,7 @@ async def stream_video(
             
             async def streaming_proxy():
                 try:
-                    async for chunk in resp.aiter_bytes(chunk_size=256 * 1024):  # 256KB chunks for faster throughput
+                    async for chunk in resp.aiter_bytes(chunk_size=256 * 1024):
                         yield chunk
                 except Exception as e:
                     logger.error(f"Stream proxy error for {info_hash[:8]}: {e}")
@@ -3773,17 +3760,124 @@ async def stream_video(
             await client.aclose()
             raise e
             
-    except httpx.ConnectError:
-        logger.error("torrent-stream server not reachable")
-        raise HTTPException(status_code=503, detail="Streaming server unavailable")
+    except (httpx.ConnectError, httpx.ConnectTimeout):
+        logger.warning(f"torrent-stream server not reachable, trying direct file serve for {info_hash[:8]}")
+        # Fall through to direct file serving
     except httpx.ReadTimeout:
-        logger.error(f"torrent-stream timeout for {info_hash[:8]} - data not available")
-        raise HTTPException(status_code=504, detail="Stream timeout - try a different source")
+        logger.error(f"torrent-stream timeout for {info_hash[:8]}")
+        # Fall through to direct file serving
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Stream error for {info_hash[:8]}: {e}")
-        raise HTTPException(status_code=503, detail=f"Stream unavailable: {str(e)}")
+        logger.warning(f"torrent-stream error for {info_hash[:8]}: {e}, trying direct file serve")
+        # Fall through to direct file serving
+    
+    # === FALLBACK: DIRECT FILE SERVING FROM LIBTORRENT DOWNLOAD ===
+    logger.info(f"Direct file serve fallback for {info_hash[:8]}")
+    
+    status = torrent_streamer.get_status(info_hash)
+    video_path = status.get("video_path")
+    
+    if not video_path or not os.path.isfile(video_path):
+        # Try to find the file in the download directory
+        save_path = torrent_streamer.sessions.get(info_hash, {}).get('save_path', torrent_streamer.download_dir)
+        video_file = None
+        video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts'}
+        
+        for root, dirs, files in os.walk(save_path):
+            for f in files:
+                ext = os.path.splitext(f)[1].lower()
+                if ext in video_extensions:
+                    candidate = os.path.join(root, f)
+                    if video_file is None or os.path.getsize(candidate) > os.path.getsize(video_file):
+                        video_file = candidate
+        
+        if video_file:
+            video_path = video_file
+        else:
+            raise HTTPException(status_code=404, detail="Video file not found. Stream may still be downloading.")
+    
+    file_size = os.path.getsize(video_path)
+    
+    # Determine content type
+    ext = os.path.splitext(video_path)[1].lower()
+    content_type_map = {
+        '.mp4': 'video/mp4', '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo',
+        '.mov': 'video/quicktime', '.wmv': 'video/x-ms-wmv', '.flv': 'video/x-flv',
+        '.webm': 'video/webm', '.m4v': 'video/mp4', '.ts': 'video/mp2t',
+    }
+    content_type = content_type_map.get(ext, 'video/mp4')
+    
+    # Parse range header for byte-range serving
+    start = 0
+    end = file_size - 1
+    status_code = 200
+    
+    if range_header:
+        try:
+            range_spec = range_header.replace("bytes=", "").strip()
+            if range_spec.startswith("-"):
+                # Last N bytes
+                suffix_length = int(range_spec[1:])
+                start = max(0, file_size - suffix_length)
+                end = file_size - 1
+            elif range_spec.endswith("-"):
+                # From byte N to end
+                start = int(range_spec[:-1])
+                end = file_size - 1
+            else:
+                parts = range_spec.split("-")
+                start = int(parts[0])
+                end = int(parts[1]) if parts[1] else file_size - 1
+            
+            end = min(end, file_size - 1)
+            status_code = 206
+        except (ValueError, IndexError):
+            start = 0
+            end = file_size - 1
+            status_code = 200
+    
+    content_length = end - start + 1
+    
+    response_headers = {
+        "Content-Type": content_type,
+        "Content-Length": str(content_length),
+        "Accept-Ranges": "bytes",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "X-Accel-Buffering": "no",
+        "X-Content-Type-Options": "nosniff",
+        "transferMode.dlna.org": "Streaming",
+        "contentFeatures.dlna.org": "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000",
+    }
+    
+    if status_code == 206:
+        response_headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+    
+    async def file_stream_generator():
+        """Stream the video file in chunks with proper range support"""
+        chunk_size = 256 * 1024  # 256KB chunks
+        bytes_remaining = content_length
+        try:
+            with open(video_path, "rb") as f:
+                f.seek(start)
+                while bytes_remaining > 0:
+                    read_size = min(chunk_size, bytes_remaining)
+                    data = f.read(read_size)
+                    if not data:
+                        break
+                    bytes_remaining -= len(data)
+                    yield data
+        except Exception as e:
+            logger.error(f"Direct file stream error for {info_hash[:8]}: {e}")
+    
+    logger.info(f"Direct serving {info_hash[:8]}: {video_path}, range={start}-{end}/{file_size}, type={content_type}")
+    
+    return StreamingResponse(
+        file_stream_generator(),
+        status_code=status_code,
+        headers=response_headers,
+    )
 
 # ==================== STREAM PROXY ====================
 
