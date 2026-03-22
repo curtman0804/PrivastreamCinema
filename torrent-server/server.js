@@ -34,7 +34,7 @@ const PORT = process.env.TORRENT_PORT || 8002;
 const engines = {};
 
 // Stremio-like defaults
-const ENGINE_TIMEOUT = 5 * 60 * 1000; // 5 min idle = destroy
+const ENGINE_TIMEOUT = 30 * 60 * 1000; // 30 min idle = destroy (increased for safety)
 const STREAM_TIMEOUT = 30 * 1000; // 30s stream inactivity
 
 // Default tracker list - comprehensive for maximum peer discovery

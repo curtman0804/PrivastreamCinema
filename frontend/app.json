@@ -4,7 +4,7 @@
     "slug": "privastreamcinema",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/images/icon-v3.png",
+    "icon": "./assets/images/icon-v4.png",
     "scheme": "privastreamcinema",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,8 +14,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon-foreground-v3.png",
-        "monochromeImage": "./assets/images/adaptive-icon-monochrome-v3.png",
+        "foregroundImage": "./assets/images/adaptive-icon-foreground-v4.png",
+        "monochromeImage": "./assets/images/adaptive-icon-monochrome-v4.png",
         "backgroundColor": "#000000"
       },
       "splash": {
