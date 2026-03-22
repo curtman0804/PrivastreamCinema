@@ -39,34 +39,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as NavigationBar from 'expo-navigation-bar';
 
-// Local torrent streaming engine (runs on device via nodejs-mobile, like Stremio)
-let LocalNodejs: any = null;
-const LOCAL_PORT = 8088;
-const LOCAL_BASE_URL = `http://localhost:${LOCAL_PORT}`;
-let localEngineRunning = false;
-
-try {
-  LocalNodejs = require('nodejs-mobile-react-native').default;
-  // Start Node.js if not already started
-  if (!localEngineRunning) {
-    LocalNodejs.start('main.js');
-    localEngineRunning = true;
-    LocalNodejs.channel.addListener('message', (msg: string) => {
-      try {
-        const data = JSON.parse(msg);
-        if (data.type === 'server_ready') {
-          console.log(`[LOCAL-ENGINE] Server ready on port ${data.port}`);
-          localEngineRunning = true;
-        } else if (data.type === 'engine_ready') {
-          console.log(`[LOCAL-ENGINE] Engine ready: ${data.fileName}`);
-        }
-      } catch (e) {}
-    });
-    console.log('[LOCAL-ENGINE] Node.js runtime starting...');
-  }
-} catch (e) {
-  console.log('[LOCAL-ENGINE] nodejs-mobile not available, using cloud backend');
-}
+// Cloud streaming engine (uses torrent-stream + PeerSearch on server, same libraries as Stremio)
 
 // Check if running on TV
 const isTV = Platform.isTV || Platform.OS === 'android';
@@ -87,20 +60,7 @@ let GoogleCast: any = null;
 let useCastState: any = null;
 let useRemoteMediaClient: any = null;
 let CastState: any = null;
-
-if (Platform.OS !== 'web') {
-  try {
-    const googleCastModule = require('react-native-google-cast');
-    CastButton = googleCastModule.CastButton;
-    GoogleCast = googleCastModule.default;
-    useCastState = googleCastModule.useCastState;
-    useRemoteMediaClient = googleCastModule.useRemoteMediaClient;
-    CastState = googleCastModule.CastState;
-    console.log('[CAST] Google Cast module loaded successfully');
-  } catch (e) {
-    console.log('[CAST] Google Cast not available (expected in Expo Go/web)');
-  }
-}
+// Google Cast disabled - package removed for build compatibility
 
 const { width, height } = Dimensions.get('window');
 
@@ -1475,36 +1435,13 @@ export default function PlayerScreen() {
       // Show immediate feedback - set initial progress so user sees the bar start filling
       setDownloadProgress(5);
       
-      // Start the torrent on cloud backend
+      // Start the torrent on cloud backend (uses torrent-stream + PeerSearch, same as Stremio)
       await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources);
       
-      // Also start on local engine if available (Stremio-like local streaming)
-      let useLocalEngine = false;
-      if (LocalNodejs && localEngineRunning) {
-        try {
-          // Create engine on local Node.js server running on device
-          const localCreateUrl = `${LOCAL_BASE_URL}/create/${infoHash}`;
-          const localBody = { sources: streamSources || [] };
-          const localResp = await fetch(localCreateUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(localBody),
-          });
-          if (localResp.ok) {
-            useLocalEngine = true;
-            console.log('[PLAYER] Local torrent engine created!');
-          }
-        } catch (e) {
-          console.log('[PLAYER] Local engine not available, using cloud');
-        }
-      }
+      // Get the video URL from cloud streaming backend
+      const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
       
-      // Get the video URL - LOCAL (localhost) if available, CLOUD (api proxy) if not
-      const videoUrl = useLocalEngine 
-        ? `${LOCAL_BASE_URL}/stream/${infoHash}` 
-        : api.stream.getVideoUrl(infoHash, validFileIdx);
-      
-      console.log(`[PLAYER] Video URL: ${useLocalEngine ? 'LOCAL' : 'CLOUD'} - ${videoUrl}`);
+      console.log(`[PLAYER] Video URL: CLOUD - ${videoUrl}`);
       let pollCount = 0;
       let smoothProgress = 5; // Start at 5% for immediate visual feedback
       let videoUrlSet = false;
