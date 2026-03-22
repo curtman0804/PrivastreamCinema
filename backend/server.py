@@ -15,7 +15,13 @@ import hashlib
 import jwt
 import httpx
 import asyncio
-import libtorrent as lt
+try:
+    import libtorrent as lt
+    LIBTORRENT_AVAILABLE = True
+except ImportError:
+    lt = None
+    LIBTORRENT_AVAILABLE = False
+    logging.warning("libtorrent not available - streaming via torrent-stream server only")
 import threading
 import time
 import tempfile
@@ -225,72 +231,64 @@ class TorrentStreamer:
         ]
         logger.info(f"TorrentStreamer initialized with {len(self.trackers)} HTTP trackers. Download dir: {self.download_dir}")
         
-        # Create ONE shared libtorrent session - optimized for K8s (TCP ONLY)
-        settings = {
-            'listen_interfaces': '0.0.0.0:6881,[::]:6881,0.0.0.0:6891,[::]:6891',
-            # === NETWORK PROTOCOL SETTINGS ===
-            # ENABLE DHT - even if UDP is partially blocked, some DHT traffic may get through
-            # This gives us access to the largest peer discovery network
-            'enable_dht': True,
-            'enable_lsd': True,              # Local service discovery
-            'enable_upnp': False,             # UPnP not useful in K8s
-            'enable_natpmp': False,           # NAT-PMP not useful in K8s
-            'enable_outgoing_tcp': True,      # TCP is our primary transport
-            'enable_incoming_tcp': True,      # Accept incoming TCP connections
-            'enable_outgoing_utp': True,      # Enable uTP - might work partially
-            'enable_incoming_utp': True,      # Enable uTP - might work partially
-            # DHT bootstrap nodes - these help discover peers via distributed hash table
-            'dht_bootstrap_nodes': 'router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,dht.aelitis.com:6881,router.bitcomet.com:6881,dht.libtorrent.org:25401',
-            # === TRACKER SETTINGS (critical for HTTP-only mode) ===
-            'announce_to_all_trackers': True,  # Hit ALL trackers for max peer discovery
-            'announce_to_all_tiers': True,
-            'tracker_completion_timeout': 30,  # Wait for tracker response
-            'tracker_receive_timeout': 10,     # Timeout receiving tracker data
-            'stop_tracker_timeout': 1,         # Don't wait long when stopping
-            'min_announce_interval': 30,       # Re-announce frequently
-            # === CONNECTION SPEED SETTINGS ===
-            'connection_speed': 500,          # Connections per second (practical limit)
-            'connections_limit': 2000,        # Total connections
-            'download_rate_limit': 0,         # Unlimited download
-            'upload_rate_limit': 2 * 1024 * 1024,  # 2MB/s upload
-            'unchoke_slots_limit': 64,
-            'max_peerlist_size': 10000,
-            # === PEER TIMEOUT SETTINGS ===
-            'peer_connect_timeout': 5,        # Fast peer connect timeout
-            'handshake_timeout': 5,
-            'torrent_connect_boost': 200,     # Extra connection slots for new torrents
-            'peer_timeout': 30,
-            'inactivity_timeout': 30,
-            'request_timeout': 10,            # Timeout for individual piece requests
-            # === DISK/CACHE SETTINGS ===
-            'cache_size': 4096,               # 16MB cache
-            'disk_io_read_mode': 0,
-            'disk_io_write_mode': 0,
-            'aio_threads': 8,
-            # === REQUEST PIPELINE ===
-            'request_queue_time': 3,
-            'max_out_request_queue': 2000,
-            'whole_pieces_threshold': 5,
-            'max_allowed_in_request_queue': 4000,
-            # === BUFFER SETTINGS ===
-            'send_buffer_watermark': 1024 * 1024,
-            'send_buffer_watermark_factor': 200,
-            'recv_socket_buffer_size': 2 * 1024 * 1024,
-            'send_socket_buffer_size': 2 * 1024 * 1024,
-            # === ALGORITHM SETTINGS ===
-            'mixed_mode_algorithm': 0,        # Prefer TCP (only transport we have)
-            'rate_limit_ip_overhead': False,
-            'allow_multiple_connections_per_ip': True,
-            'seed_choking_algorithm': 1,      # Fastest upload to help swarm
-            'choking_algorithm': 1,           # Optimize for downloading
-            'max_rejects': 10,
-            'smooth_connects': False,         # Connect as fast as possible
-            'always_send_user_agent': True,
-            'no_connect_privileged_ports': False,
-        }
-        self.lt_session = lt.session(settings)
-        
-        logger.info("Shared libtorrent session started (DHT+TCP+uTP enabled, full peer discovery)")
+        self.lt_session = None
+        if LIBTORRENT_AVAILABLE:
+            # Create ONE shared libtorrent session - optimized for K8s (TCP ONLY)
+            settings = {
+                'listen_interfaces': '0.0.0.0:6881,[::]:6881,0.0.0.0:6891,[::]:6891',
+                'enable_dht': True,
+                'enable_lsd': True,
+                'enable_upnp': False,
+                'enable_natpmp': False,
+                'enable_outgoing_tcp': True,
+                'enable_incoming_tcp': True,
+                'enable_outgoing_utp': True,
+                'enable_incoming_utp': True,
+                'dht_bootstrap_nodes': 'router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,dht.aelitis.com:6881,router.bitcomet.com:6881,dht.libtorrent.org:25401',
+                'announce_to_all_trackers': True,
+                'announce_to_all_tiers': True,
+                'tracker_completion_timeout': 30,
+                'tracker_receive_timeout': 10,
+                'stop_tracker_timeout': 1,
+                'min_announce_interval': 30,
+                'connection_speed': 500,
+                'connections_limit': 2000,
+                'download_rate_limit': 0,
+                'upload_rate_limit': 2 * 1024 * 1024,
+                'unchoke_slots_limit': 64,
+                'max_peerlist_size': 10000,
+                'peer_connect_timeout': 5,
+                'handshake_timeout': 5,
+                'torrent_connect_boost': 200,
+                'peer_timeout': 30,
+                'inactivity_timeout': 30,
+                'request_timeout': 10,
+                'cache_size': 4096,
+                'disk_io_read_mode': 0,
+                'disk_io_write_mode': 0,
+                'aio_threads': 8,
+                'request_queue_time': 3,
+                'max_out_request_queue': 2000,
+                'whole_pieces_threshold': 5,
+                'max_allowed_in_request_queue': 4000,
+                'send_buffer_watermark': 1024 * 1024,
+                'send_buffer_watermark_factor': 200,
+                'recv_socket_buffer_size': 2 * 1024 * 1024,
+                'send_socket_buffer_size': 2 * 1024 * 1024,
+                'mixed_mode_algorithm': 0,
+                'rate_limit_ip_overhead': False,
+                'allow_multiple_connections_per_ip': True,
+                'seed_choking_algorithm': 1,
+                'choking_algorithm': 1,
+                'max_rejects': 10,
+                'smooth_connects': False,
+                'always_send_user_agent': True,
+                'no_connect_privileged_ports': False,
+            }
+            self.lt_session = lt.session(settings)
+            logger.info("Shared libtorrent session started (DHT+TCP+uTP enabled, full peer discovery)")
+        else:
+            logger.warning("libtorrent not available - streaming via torrent-stream server only")
     
     def _evict_oldest(self):
         """Remove the oldest session to make room for new ones"""
@@ -305,7 +303,20 @@ class TorrentStreamer:
         """Get or create a torrent handle using the shared session"""
         info_hash = info_hash.lower()
         
-        if info_hash in self.sessions:
+        if not LIBTORRENT_AVAILABLE or self.lt_session is None:
+            # Return a stub session when libtorrent not available
+            if info_hash not in self.sessions:
+                self.sessions[info_hash] = {
+                    'session': None,
+                    'handle': None,
+                    'created': time.time(),
+                    'video_file': None,
+                    'video_path': None,
+                    'save_path': self.download_dir,
+                }
+            return self.sessions[info_hash]
+        
+        if info_hash in self.sessions and self.sessions[info_hash].get('handle'):
             # Add extra trackers to existing session if provided
             if extra_trackers:
                 handle = self.sessions[info_hash]['handle']
@@ -366,7 +377,19 @@ class TorrentStreamer:
             return {"status": "not_found"}
         
         data = self.sessions[info_hash]
-        handle = data['handle']
+        handle = data.get('handle')
+        
+        if not LIBTORRENT_AVAILABLE or handle is None:
+            # When libtorrent is not available, return minimal status
+            # The torrent-stream server handles the actual streaming
+            return {
+                "status": "delegated",
+                "progress": 0,
+                "peers": 0,
+                "download_rate": 0,
+                "ready": False,
+                "engine": "torrent-stream-only"
+            }
         
         if not handle.is_valid():
             return {"status": "invalid"}
@@ -604,10 +627,11 @@ class TorrentStreamer:
         if info_hash in self.sessions:
             try:
                 data = self.sessions[info_hash]
-                try:
-                    data['session'].remove_torrent(data['handle'])
-                except Exception:
-                    pass
+                if LIBTORRENT_AVAILABLE and data.get('session') and data.get('handle'):
+                    try:
+                        data['session'].remove_torrent(data['handle'])
+                    except Exception:
+                        pass
                 # Clean up ALL files in the torrent's download subdirectory
                 save_path = data.get('save_path', '')
                 if save_path and os.path.exists(save_path):
