@@ -83,3 +83,7 @@ frontend/node_modules/nodejs-mobile-react-native/ios/NodeMobile.xcframework/ios-
 # Environment files
 *.env
 *.env.*
+-e 
+# Environment files
+*.env
+*.env.*
