@@ -12,7 +12,13 @@ const getBaseUrl = () => {
   // Use environment variable for backend URL (works across preview and production)
   const envUrl = process.env.EXPO_PUBLIC_BACKEND_URL 
     || Constants.expoConfig?.extra?.backendUrl;
-  return envUrl || '';
+  
+  // HARDCODED FALLBACK - ensures native apps always have a valid URL
+  const fallbackUrl = 'https://torrent-playback-fix.preview.emergentagent.com';
+  
+  const finalUrl = envUrl || fallbackUrl;
+  console.log('[API] Using backend URL:', finalUrl);
+  return finalUrl;
 };
 
 const BASE_URL = getBaseUrl();
