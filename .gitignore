@@ -79,3 +79,7 @@ agenthub/agents/youtube/db
 # Mobile development
 android-sdk/
 frontend/node_modules/nodejs-mobile-react-native/ios/NodeMobile.xcframework/ios-arm64_x86_64-simulator/NodeMobile.framework/NodeMobile
+-e 
+# Environment files
+*.env
+*.env.*
