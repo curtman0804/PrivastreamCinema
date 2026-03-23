@@ -2,7 +2,7 @@
   "expo": {
     "name": "Privastream Cinema",
     "slug": "privastreamcinema",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "orientation": "default",
     "icon": "./assets/images/icon-v4.png",
     "scheme": "privastreamcinema",
