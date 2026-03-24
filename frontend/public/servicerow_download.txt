@@ -26,7 +26,6 @@ interface ServiceRowProps {
   contentType: 'movies' | 'series' | 'channels';
   items: ContentItem[];
   onItemPress: (item: ContentItem) => void;
-  onItemFocus?: (item: ContentItem) => void;
   onSectionFocus?: () => void;
   isFirstRow?: boolean;
 }
@@ -37,7 +36,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   contentType,
   items: initialItems,
   onItemPress,
-  onItemFocus,
   onSectionFocus,
   isFirstRow = false,
 }) => {
@@ -110,12 +108,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
 
     onSectionFocus?.();
-    
-    // Pre-fetch meta data for the focused item
-    const focusedItem = validItems[index];
-    if (focusedItem && onItemFocus) {
-      onItemFocus(focusedItem);
-    }
 
     if (isTV && flatListRef.current && isNavigatingInRowRef.current) {
       // HORIZONTAL NAVIGATION — apply smooth 1-card scroll
@@ -132,7 +124,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     if (index >= totalRef.current - 15 && hasMoreRef.current) {
       fetchMore();
     }
-  }, [onSectionFocus, onItemFocus, validItems, fetchMore, itemTotalWidth, isTV]);
+  }, [onSectionFocus, fetchMore, itemTotalWidth, isTV]);
 
   // Card blur handler — detect when user leaves this row
   const handleCardBlur = useCallback(() => {
