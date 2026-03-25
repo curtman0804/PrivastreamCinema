@@ -1536,8 +1536,9 @@ export default function PlayerScreen() {
             return;
           }
           
-          // Give up after 2 minutes total
-          if (elapsedSec > 120) {
+          // Give up after 2 minutes total - BUT ONLY if video hasn't started playing yet
+          // Once videoUrlSet is true, the player is handling playback - don't timeout
+          if (elapsedSec > 120 && !videoUrlSet) {
             setError('Stream is too slow. Try a different stream with more seeders.');
             setIsLoading(false);
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);

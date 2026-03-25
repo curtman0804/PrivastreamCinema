@@ -215,12 +215,14 @@ export default function DiscoverScreen() {
 
   // Handle removing item from continue watching
   const handleRemoveFromContinueWatching = async (item: WatchProgress) => {
-    try {
-      await api.watchProgress.delete(item.content_id);
-      setContinueWatching(prev => prev.filter(i => i.content_id !== item.content_id));
-    } catch (err) {
+    // Optimistic update - remove from UI immediately for instant feedback
+    setContinueWatching(prev => prev.filter(i => i.content_id !== item.content_id));
+    
+    // Then delete from server in background (don't await)
+    api.watchProgress.delete(item.content_id).catch(err => {
       console.log('[Discover] Error removing from continue watching:', err);
-    }
+      // Optionally: restore the item if delete fails
+    });
   };
 
   // Render a continue watching item (Stremio style)
