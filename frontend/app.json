@@ -2,9 +2,9 @@
   "expo": {
     "name": "Privastream Cinema",
     "slug": "privastreamcinema",
-    "version": "1.5.6",
+    "version": "1.5.7",
     "orientation": "default",
-    "icon": "./assets/images/icon-v4.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "privastreamcinema",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,8 +14,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon-foreground-v4.png",
-        "monochromeImage": "./assets/images/adaptive-icon-monochrome-v4.png",
+        "foregroundImage": "./assets/images/adaptive-icon-foreground.png",
+        "monochromeImage": "./assets/images/adaptive-icon-monochrome.png",
         "backgroundColor": "#000000"
       },
       "splash": {

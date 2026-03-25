@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   findNodeHandle,
   Platform,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -73,6 +74,7 @@ export default function DiscoverScreen() {
   }, []);
 
   // Re-fetch continue watching when screen comes into focus (with 30s cooldown)
+  // Use InteractionManager to defer fetch until after navigation animation completes
   useFocusEffect(
     useCallback(() => {
       // Skip re-fetch if data was loaded less than 30 seconds ago
@@ -81,7 +83,11 @@ export default function DiscoverScreen() {
       if (timeSinceLastFetch < 30000 && continueWatching.length >= 0) {
         return;
       }
-      fetchContinueWatching();
+      // Defer API call until after navigation/animations complete for smoother UX
+      const handle = InteractionManager.runAfterInteractions(() => {
+        fetchContinueWatching();
+      });
+      return () => handle.cancel();
     }, [fetchContinueWatching, continueWatching.length])
   );
 
