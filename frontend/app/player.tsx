@@ -1637,7 +1637,6 @@ export default function PlayerScreen() {
                     overflow: 'hidden',
                     transition: 'width 0.3s ease',
                   }}>
-                    {/* This image must match the PARENT container size, not the clip container */}
                     <img 
                       src={logo}
                       alt={title || 'Loading'}
@@ -1675,29 +1674,55 @@ export default function PlayerScreen() {
                 </View>
               )
             ) : (
-              // Fallback to text title if no logo
+              // Fallback to text title if no logo - with fill effect
               Platform.OS === 'web' ? (
                 <div style={{
                   position: 'relative',
                   width: '100%',
                   textAlign: 'center',
                 }}>
+                  {/* Background text - faded */}
                   <h1 style={{
-                    fontSize: 42,
+                    fontSize: 48,
                     fontWeight: 800,
                     margin: 0,
                     padding: 0,
-                    letterSpacing: 2,
-                    background: `linear-gradient(90deg, #FFFFFF ${downloadProgress || 0}%, rgba(255,255,255,0.2) ${downloadProgress || 0}%)`,
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    transition: 'background 0.3s ease',
+                    letterSpacing: 3,
+                    textTransform: 'uppercase',
+                    color: 'rgba(255,255,255,0.15)',
                   }}>
                     {title || 'Loading...'}
                   </h1>
+                  {/* Filled text overlay - clips from left based on progress */}
+                  <div style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%`,
+                    height: '100%',
+                    overflow: 'hidden',
+                    transition: 'width 0.3s ease',
+                    display: 'flex',
+                    justifyContent: 'center',
+                  }}>
+                    <h1 style={{
+                      fontSize: 48,
+                      fontWeight: 800,
+                      margin: 0,
+                      padding: 0,
+                      letterSpacing: 3,
+                      textTransform: 'uppercase',
+                      color: '#FFFFFF',
+                      whiteSpace: 'nowrap',
+                      width: '100vw',
+                      textAlign: 'center',
+                    }}>
+                      {title || 'Loading...'}
+                    </h1>
+                  </div>
                 </div>
               ) : (
+                // Native: Text title with fill effect
                 <View style={styles.titleWrapper}>
                   <Text style={[styles.titleUnfilled, !infoHash && { opacity: 1 }]} numberOfLines={1} adjustsFontSizeToFit>
                     {title || 'Loading...'}
@@ -1710,7 +1735,6 @@ export default function PlayerScreen() {
                         { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }
                       ]}
                     >
-                      {/* Inner container matches full parent width so text position aligns with unfilled */}
                       <View style={{ width: Dimensions.get('window').width - 48, alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                         <Text style={styles.titleFilled} numberOfLines={1}>
                           {title || 'Loading...'}
@@ -1872,9 +1896,8 @@ export default function PlayerScreen() {
                 ref={videoRef}
                 source={{ 
                   uri: streamUrl,
-                  // CRITICAL: Forces ExoPlayer to use HLS media source for redirect URLs
-                  // Without this, URLs without .m3u8 extension (like redirects) fail
-                  overrideFileExtensionAndroid: (isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true') ? 'm3u8' : undefined,
+                  // Help ExoPlayer detect format - important for MKV/x265 streams
+                  overrideFileExtensionAndroid: (isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true') ? 'm3u8' : 'mp4',
                   headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                   },

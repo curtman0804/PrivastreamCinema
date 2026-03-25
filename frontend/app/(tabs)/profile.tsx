@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { useAuthStore } from '../../src/store/authStore';
 import { colors } from '../../src/styles/colors';
 
@@ -84,7 +85,7 @@ export default function ProfileScreen() {
             <MenuItem
               icon="information-circle-outline"
               title="About"
-              subtitle="Version 1.0.0"
+              subtitle={`Version ${Constants.expoConfig?.version || '1.0.0'}`}
               isTV={isTV}
             />
           </View>
