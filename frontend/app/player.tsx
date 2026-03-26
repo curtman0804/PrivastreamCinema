@@ -1490,12 +1490,15 @@ export default function PlayerScreen() {
           // Don't start on "buffering" - data needs to be downloaded first
           if (status.status === 'ready' && !videoUrlSet) {
             videoUrlSet = true;
+            // Set progress to 100% immediately when ready
+            setDownloadProgress(100);
             // Save video file size for accurate seek calculations
             if (status.video_size) {
               videoFileSizeRef.current = status.video_size;
             }
             console.log(`[PLAYER] Stream READY in ${elapsedSec.toFixed(1)}s! Peers: ${peerCount}, FileSize: ${(videoFileSizeRef.current / 1024 / 1024).toFixed(1)}MB. Setting video URL.`);
             videoRetryCountRef.current = 0;
+            // Start playback immediately
             setStreamUrl(videoUrl);
             // CRITICAL: Continue polling to keep the torrent engine alive!
             // The torrent-stream server destroys engines after 5 min of inactivity.
