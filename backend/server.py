@@ -26,8 +26,14 @@ import threading
 import time
 import tempfile
 import shutil
+import subprocess
+import signal
+import atexit
 
 ROOT_DIR = Path(__file__).parent
+
+# Global reference to torrent-server subprocess
+_torrent_server_process: Optional[subprocess.Popen] = None
 load_dotenv(ROOT_DIR / '.env')
 
 # JWT Secret
@@ -794,11 +800,76 @@ def get_fallback_manifest(url: str) -> Optional[Dict]:
     return None
 
 
-# ==================== INIT DEFAULT ADMIN ====================
+# ==================== INIT DEFAULT ADMIN & TORRENT SERVER ====================
+
+def start_torrent_server():
+    """Start the torrent-stream server as a subprocess"""
+    global _torrent_server_process
+    
+    torrent_server_dir = Path(__file__).parent.parent / 'torrent-server'
+    server_js = torrent_server_dir / 'server.js'
+    
+    if not server_js.exists():
+        logger.warning(f"Torrent server not found at {server_js}")
+        return False
+    
+    # Check if node_modules exists, if not install
+    node_modules = torrent_server_dir / 'node_modules'
+    if not node_modules.exists():
+        logger.info("Installing torrent-server dependencies...")
+        try:
+            subprocess.run(
+                ['npm', 'install', '--production'],
+                cwd=str(torrent_server_dir),
+                check=True,
+                capture_output=True,
+                timeout=120
+            )
+            logger.info("Torrent-server dependencies installed")
+        except Exception as e:
+            logger.error(f"Failed to install torrent-server dependencies: {e}")
+            return False
+    
+    # Start the server
+    try:
+        env = os.environ.copy()
+        env['PORT'] = '8002'
+        env['NODE_ENV'] = 'production'
+        
+        _torrent_server_process = subprocess.Popen(
+            ['node', str(server_js)],
+            cwd=str(torrent_server_dir),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        logger.info(f"Started torrent-server (PID: {_torrent_server_process.pid}) on port 8002")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to start torrent-server: {e}")
+        return False
+
+def stop_torrent_server():
+    """Stop the torrent-server subprocess"""
+    global _torrent_server_process
+    if _torrent_server_process:
+        logger.info(f"Stopping torrent-server (PID: {_torrent_server_process.pid})")
+        try:
+            _torrent_server_process.terminate()
+            _torrent_server_process.wait(timeout=5)
+        except:
+            _torrent_server_process.kill()
+        _torrent_server_process = None
+
+# Register cleanup on exit
+atexit.register(stop_torrent_server)
 
 @app.on_event("startup")
 async def create_default_admin():
-    """Create default admin user if not exists"""
+    """Create default admin user if not exists and start torrent server"""
+    # Start torrent server first
+    start_torrent_server()
+    
     existing = await db.users.find_one({"username": "choyt"})
     if not existing:
         admin_user = User(
@@ -4395,4 +4466,5 @@ app.add_middleware(
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    stop_torrent_server()
     client.close()
