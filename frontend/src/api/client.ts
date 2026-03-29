@@ -14,7 +14,7 @@ const getBaseUrl = () => {
     || Constants.expoConfig?.extra?.backendUrl;
   
   // HARDCODED FALLBACK - ensures native apps always have a valid URL
-  const fallbackUrl = 'https://torrent-playback-fix.preview.emergentagent.com';
+  const fallbackUrl = 'https://app-generator-262.preview.emergentagent.com';
   
   const finalUrl = envUrl || fallbackUrl;
   console.log('[API] Using backend URL:', finalUrl);
@@ -760,7 +760,7 @@ export const api = {
       
       // Fallback: Use our backend's dual-engine video endpoint
       // HARDCODED FALLBACK to ensure native apps always work
-      const fallbackUrl = 'https://torrent-playback-fix.preview.emergentagent.com';
+      const fallbackUrl = 'https://app-generator-262.preview.emergentagent.com';
       const baseUrl = Platform.OS === 'web' ? '' : (process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || fallbackUrl);
       const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
       console.log('[API] getVideoUrl using baseUrl:', baseUrl);

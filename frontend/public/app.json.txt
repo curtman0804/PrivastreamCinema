@@ -63,7 +63,7 @@
       "eas": {
         "projectId": "734879b5-3cae-4195-b064-cc0c7617b7ae"
       },
-      "backendUrl": "https://torrent-playback-fix.preview.emergentagent.com"
+      "backendUrl": "https://app-generator-262.preview.emergentagent.com"
     },
     "owner": "choyt"
   }

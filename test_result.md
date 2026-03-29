@@ -171,7 +171,7 @@ backend:
           • ✅ 16 peers discovered showing good torrent health
           
           🚀 20MB BUFFERING THRESHOLD FULLY VERIFIED AND WORKING!
-          Backend https://torrent-playback-fix.preview.emergentagent.com with 20MB buffering is production-ready.
+          Backend https://app-generator-262.preview.emergentagent.com with 20MB buffering is production-ready.
           All specific review request checks passed with perfect results. The new 20MB threshold
           provides substantial buffering for smooth video playback without early stalls.
 
@@ -248,7 +248,7 @@ backend:
           • ✅ HEAD requests return proper headers
           
           🚀 CRITICAL VIDEO STREAMING FLOW FULLY VERIFIED AND WORKING!
-          Backend https://torrent-playback-fix.preview.emergentagent.com with video streaming is production-ready.
+          Backend https://app-generator-262.preview.emergentagent.com with video streaming is production-ready.
           All specific review request checks passed with perfect results. The video streaming functionality
           provides excellent performance for video players with proper HTTP range support.
       - working: true
@@ -626,7 +626,7 @@ backend:
           • POST /api/stream/start/{infoHash}: ✅ Returns {"status": "started"} correctly
           • GET /api/stream/status/{infoHash}: ✅ Returns status "ready" with 8 peers after 2s
           • GET /api/stream/video/{infoHash} with Range header: ✅ Returns 206 with video/x-matroska content (65536 bytes)
-          • Public URL access via https://torrent-playback-fix.preview.emergentagent.com/api/stream/video/{infoHash}: ✅ Working correctly
+          • Public URL access via https://app-generator-262.preview.emergentagent.com/api/stream/video/{infoHash}: ✅ Working correctly
           
           🏥 INFRASTRUCTURE:
           • Torrent server at localhost:8002/health: ✅ Returns healthy status with active torrents
@@ -660,7 +660,7 @@ backend:
           • e) GET END of file Range:{fileSize-200000}-{fileSize} → ✅ Returns 206 within 0.08s (target <30s)
           • f) GET Range:0-524287 → ✅ Returns 206 Partial Content (0.08s)
           
-          🌐 PUBLIC URL: https://torrent-playback-fix.preview.emergentagent.com/api/stream/video/{infoHash}
+          🌐 PUBLIC URL: https://app-generator-262.preview.emergentagent.com/api/stream/video/{infoHash}
           • ✅ Returns 206 with Range header (0.06s) - WORKING PERFECTLY
           
           🎬 DISCOVER CONTENT: GET /api/content/discover-organized
@@ -768,7 +768,7 @@ agent_communication:
       • ✅ 16 peers discovered showing good torrent health
       
       🚀 20MB BUFFERING THRESHOLD FULLY VERIFIED AND WORKING!
-      Backend https://torrent-playback-fix.preview.emergentagent.com with 20MB buffering is production-ready.
+      Backend https://app-generator-262.preview.emergentagent.com with 20MB buffering is production-ready.
       All specific review request checks passed with perfect results. The new 20MB threshold
       provides substantial buffering for smooth video playback without early stalls.
 
@@ -836,7 +836,7 @@ agent_communication:
       • ✅ HEAD requests return proper headers
       
       🚀 CRITICAL VIDEO STREAMING FLOW FULLY VERIFIED AND WORKING!
-      Backend https://torrent-playback-fix.preview.emergentagent.com with video streaming is production-ready.
+      Backend https://app-generator-262.preview.emergentagent.com with video streaming is production-ready.
       All specific review request checks passed with perfect results. The video streaming functionality
       provides excellent performance for video players with proper HTTP range support.
   - agent: "testing"
@@ -1305,7 +1305,7 @@ agent_communication:
       • e) GET END Range:{fileSize-200000}-{fileSize} → ✅ 206 within 0.08s (target <30s) 
       • f) GET Range:0-524287 → ✅ 206 Partial Content (0.08s)
       
-      5️⃣ PUBLIC URL: https://torrent-playback-fix.preview.emergentagent.com/api/stream/video/{infoHash}?fileIdx=0
+      5️⃣ PUBLIC URL: https://app-generator-262.preview.emergentagent.com/api/stream/video/{infoHash}?fileIdx=0
       • ✅ Returns 206 with Range header (0.06s) - PERFECT
       
       6️⃣ DISCOVER CONTENT: GET /api/content/discover-organized with Bearer

@@ -360,7 +360,7 @@ export default function DetailsScreen() {
     
     const buildFallbackUrls = async (): Promise<string[]> => {
       const authToken = await AsyncStorage.getItem('auth_token');
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://torrent-playback-fix.preview.emergentagent.com';
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://app-generator-262.preview.emergentagent.com';
       
       return streams
         .filter(s => s !== stream)
@@ -409,7 +409,7 @@ export default function DetailsScreen() {
       const authToken = await AsyncStorage.getItem('auth_token');
       const separator = stream.url.includes('?') ? '&' : '?';
       const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://torrent-playback-fix.preview.emergentagent.com';
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://app-generator-262.preview.emergentagent.com';
       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
       
       // Build fallback URLs - include other proxy streams + direct URLs
@@ -466,7 +466,7 @@ export default function DetailsScreen() {
       
       // For live TV streams, also include proxy URLs as additional fallbacks
       if (type === 'tv') {
-        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://torrent-playback-fix.preview.emergentagent.com';
+        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://app-generator-262.preview.emergentagent.com';
         const authToken = await AsyncStorage.getItem('auth_token');
         
         // Add proxy URLs for all streams as fallbacks
