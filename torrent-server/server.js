@@ -38,7 +38,18 @@ const ENGINE_TIMEOUT = 30 * 60 * 1000; // 30 min idle = destroy (increased for s
 const STREAM_TIMEOUT = 30 * 1000; // 30s stream inactivity
 
 // Default tracker list - comprehensive for maximum peer discovery
+// IMPORTANT: HTTP trackers work in K8s environments where UDP is blocked
 const DEFAULT_TRACKERS = [
+  // HTTP trackers (work in restricted environments like K8s)
+  'http://tracker.opentrackr.org:1337/announce',
+  'http://tracker.openbittorrent.com:80/announce',
+  'http://tracker.files.fm:6969/announce',
+  'http://tracker.bt4g.com:2095/announce',
+  'http://open.acgnxtracker.com:80/announce',
+  'http://tracker.gbitt.info:80/announce',
+  'http://tracker.mywaifu.best:6969/announce',
+  'http://tracker-udp.gbitt.info:80/announce',
+  // UDP trackers (may not work in K8s but good for local/direct connections)
   'udp://tracker.opentrackr.org:1337/announce',
   'udp://open.stealth.si:80/announce',
   'udp://tracker.openbittorrent.com:6969/announce',
@@ -48,12 +59,8 @@ const DEFAULT_TRACKERS = [
   'udp://tracker.moeking.me:6969/announce',
   'udp://explodie.org:6969/announce',
   'udp://tracker.tiny-vps.com:6969/announce',
-  'http://tracker.opentrackr.org:1337/announce',
-  'http://tracker.openbittorrent.com:80/announce',
   'udp://tracker.pirateparty.gr:6969/announce',
   'udp://tracker.cyberia.is:6969/announce',
-  'udp://tracker.leechers-paradise.org:6969/announce',
-  'udp://9.rarbg.to:2710/announce',
 ];
 
 // Spoofed peer ID prefix (looks like qBittorrent)

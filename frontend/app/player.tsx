@@ -1519,9 +1519,9 @@ export default function PlayerScreen() {
             return;
           }
           
-          // Auto-switch stream after 35 seconds with no peers (give DHT time to discover)
-          if (elapsedSec > 35 && !hadPeersOnce && !videoUrlSet) {
-            console.log('[PLAYER] No peers after 35s, auto-trying next stream');
+          // Auto-switch stream after 60 seconds with no peers (give DHT time to discover)
+          if (elapsedSec > 60 && !hadPeersOnce && !videoUrlSet) {
+            console.log('[PLAYER] No peers after 60s, auto-trying next stream');
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
             // Try next fallback stream
             if (fallbackUrls && fallbackUrls.length > currentStreamIndex + 1) {
@@ -1533,8 +1533,8 @@ export default function PlayerScreen() {
               setStreamUrl(nextUrl);
               return;
             }
-            // No more fallbacks - show error
-            setError('No peers found for any stream. The content may be unavailable.');
+            // No more fallbacks - show error with helpful message
+            setError('No peers found. This content may have no active seeders. Try a different stream or content.');
             setIsLoading(false);
             return;
           }
