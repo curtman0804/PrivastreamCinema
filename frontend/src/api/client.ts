@@ -10,15 +10,16 @@ const getBaseUrl = () => {
     return '';
   }
   // Use environment variable for backend URL (works across preview and production)
+  // Emergent auto-updates app.json backendUrl during deployment
   const envUrl = process.env.EXPO_PUBLIC_BACKEND_URL 
     || Constants.expoConfig?.extra?.backendUrl;
   
-  // HARDCODED FALLBACK - ensures native apps always have a valid URL
-  const fallbackUrl = 'https://app-generator-262.preview.emergentagent.com';
+  if (!envUrl) {
+    console.warn('[API] No backend URL configured - check EXPO_PUBLIC_BACKEND_URL or app.json');
+  }
   
-  const finalUrl = envUrl || fallbackUrl;
-  console.log('[API] Using backend URL:', finalUrl);
-  return finalUrl;
+  console.log('[API] Using backend URL:', envUrl || 'none');
+  return envUrl || '';
 };
 
 const BASE_URL = getBaseUrl();
@@ -759,9 +760,8 @@ export const api = {
       }
       
       // Fallback: Use our backend's dual-engine video endpoint
-      // HARDCODED FALLBACK to ensure native apps always work
-      const fallbackUrl = 'https://app-generator-262.preview.emergentagent.com';
-      const baseUrl = Platform.OS === 'web' ? '' : (process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || fallbackUrl);
+      // Emergent auto-updates app.json backendUrl during deployment
+      const baseUrl = Platform.OS === 'web' ? '' : (process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '');
       const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
       console.log('[API] getVideoUrl using baseUrl:', baseUrl);
       return `${baseUrl}/api/stream/video/${infoHash}${params}`;
