@@ -79,6 +79,4 @@ agenthub/agents/youtube/db
 android-sdk/
 frontend/node_modules/nodejs-mobile-react-native/ios/NodeMobile.xcframework/ios-arm64_x86_64-simulator/NodeMobile.framework/NodeMobile
 
-# Environment files
-*.env
-*.env.*
+# Note: .env files are NOT ignored as they are needed for Emergent deployment
