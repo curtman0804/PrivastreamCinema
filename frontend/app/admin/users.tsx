@@ -83,14 +83,24 @@ export default function AdminUsersScreen() {
   }, []);
 
   const handleAddUser = async () => {
-    if (!formData.username.trim() || !formData.password.trim()) {
+    const trimmedUsername = formData.username.trim();
+    const trimmedPassword = formData.password.trim();
+    const trimmedEmail = formData.email.trim();
+    
+    if (!trimmedUsername || !trimmedPassword) {
       Alert.alert('Error', 'Username and password are required');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await api.admin.createUser(formData);
+      // Send trimmed data to ensure no whitespace issues
+      await api.admin.createUser({
+        username: trimmedUsername,
+        password: trimmedPassword,
+        email: trimmedEmail || undefined,
+        is_admin: formData.is_admin,
+      });
       Alert.alert('Success', 'User created successfully');
       setShowAddModal(false);
       setFormData({ username: '', password: '', email: '', is_admin: false });
@@ -423,6 +433,9 @@ function UserFormModal({
                   onFocus={() => setUsernameFocused(true)}
                   onBlur={() => setUsernameFocused(false)}
                   autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="off"
+                  textContentType="none"
                   returnKeyType="next"
                   onSubmitEditing={() => passwordRef.current?.focus()}
                   blurOnSubmit={false}
@@ -445,6 +458,10 @@ function UserFormModal({
                   onFocus={() => setPasswordFocused(true)}
                   onBlur={() => setPasswordFocused(false)}
                   secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="off"
+                  textContentType="none"
                   returnKeyType="next"
                   onSubmitEditing={() => emailRef.current?.focus()}
                   blurOnSubmit={false}
