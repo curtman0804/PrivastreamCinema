@@ -73,19 +73,17 @@ export default function DiscoverScreen() {
     fetchContinueWatching();
   }, []);
 
-  // Re-fetch continue watching when screen comes into focus (with 30s cooldown)
-  // Use InteractionManager to defer fetch until after navigation animation completes
+  // Re-fetch discover data AND continue watching when screen comes into focus
+  // This ensures newly installed addons show up immediately
   useFocusEffect(
     useCallback(() => {
-      // Skip re-fetch if data was loaded less than 30 seconds ago
-      // This prevents the delay when pressing back from Details page
       const timeSinceLastFetch = Date.now() - lastCWFetchTime.current;
       if (timeSinceLastFetch < 30000 && continueWatching.length >= 0) {
         return;
       }
-      // Defer API call until after navigation/animations complete for smoother UX
       const handle = InteractionManager.runAfterInteractions(() => {
         fetchContinueWatching();
+        fetchDiscover(true); // Force refresh so new addon catalogs appear
       });
       return () => handle.cancel();
     }, [fetchContinueWatching, continueWatching.length])
@@ -289,11 +287,12 @@ export default function DiscoverScreen() {
             </Text>
           </View>
 
-          {/* Scrollable Content */}
+          {/* Scrollable Content — ScrollView for smooth scrolling, rows are individually optimized */}
           <ScrollView
             ref={scrollViewRef}
             style={styles.scrollView}
             showsVerticalScrollIndicator={false}
+            scrollEventThrottle={16}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -303,7 +302,7 @@ export default function DiscoverScreen() {
               />
             }
           >
-          {/* Continue Watching Section - Stremio style */}
+          {/* Continue Watching Section */}
           {continueWatching.length > 0 && (
             <View 
               style={styles.section}
@@ -317,7 +316,7 @@ export default function DiscoverScreen() {
               <FlatList
                 data={continueWatching}
                 renderItem={renderContinueWatchingItem}
-                keyExtractor={(item) => item.content_id}
+                keyExtractor={(cwItem) => cwItem.content_id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={[styles.rowContent, isTV && styles.rowContentTV]}
@@ -329,82 +328,54 @@ export default function DiscoverScreen() {
           )}
           
           {/* Content Rows from Addons */}
-          {(() => {
-            let firstRowRendered = false;
-            return Object.entries(discoverData?.services || {}).map(([serviceName, content]) => {
-            // Avoid duplicate labels - service names like "Popular Movies" already contain the type
+          {Object.entries(discoverData?.services || {}).map(([serviceName, content]) => {
             const hasMoviesInName = serviceName.toLowerCase().includes('movie');
             const hasSeriesInName = serviceName.toLowerCase().includes('series');
             const hasChannelsInName = serviceName.toLowerCase().includes('channel');
             
             return (
-            <React.Fragment key={serviceName}>
-              {content?.movies && content.movies.length > 0 && (() => {
-                const isFirst = !firstRowRendered && continueWatching.length === 0;
-                if (isFirst) firstRowRendered = true;
-                return (
-                <View
-                  onLayout={(e) => { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}
-                >
-                  <ServiceRow
-                    title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
-                    serviceName={serviceName}
-                    contentType="movies"
-                    items={content.movies}
-                    onItemPress={handleItemPress}
-                    onItemFocus={handleItemFocus}
-                    onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
-                    isFirstRow={isFirst}
-                  />
-                </View>
-                );
-              })()}
-              {content?.series && content.series.length > 0 && (() => {
-                const isFirst = !firstRowRendered && continueWatching.length === 0;
-                if (isFirst) firstRowRendered = true;
-                return (
-                <View
-                  onLayout={(e) => { sectionPositions.current[`${serviceName}-series`] = e.nativeEvent.layout.y; }}
-                >
-                  <ServiceRow
-                    title={hasSeriesInName ? serviceName : `${serviceName} Series`}
-                    serviceName={serviceName}
-                    contentType="series"
-                    items={content.series}
-                    onItemPress={handleItemPress}
-                    onItemFocus={handleItemFocus}
-                    onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
-                    isFirstRow={isFirst}
-                  />
-                </View>
-                );
-              })()}
-              {content?.channels && content.channels.length > 0 && (() => {
-                const isFirst = !firstRowRendered && continueWatching.length === 0;
-                if (isFirst) firstRowRendered = true;
-                return (
-                <View
-                  onLayout={(e) => { sectionPositions.current[`${serviceName}-channels`] = e.nativeEvent.layout.y; }}
-                >
-                  <ServiceRow
-                    title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
-                    serviceName={serviceName}
-                    contentType="channels"
-                    items={content.channels.map((ch: any) => ({
-                      ...ch,
-                      type: 'tv' as const,
-                    }))}
-                    onItemPress={handleItemPress}
-                    onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
-                    isFirstRow={isFirst}
-                  />
-                </View>
-                );
-              })()}
-            </React.Fragment>
-          );
-          });
-          })()}
+              <React.Fragment key={serviceName}>
+                {content?.movies && content.movies.length > 0 && (
+                  <View onLayout={(e) => { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}>
+                    <ServiceRow
+                      title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
+                      serviceName={serviceName}
+                      contentType="movies"
+                      items={content.movies}
+                      onItemPress={handleItemPress}
+                      onItemFocus={handleItemFocus}
+                      onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
+                    />
+                  </View>
+                )}
+                {content?.series && content.series.length > 0 && (
+                  <View onLayout={(e) => { sectionPositions.current[`${serviceName}-series`] = e.nativeEvent.layout.y; }}>
+                    <ServiceRow
+                      title={hasSeriesInName ? serviceName : `${serviceName} Series`}
+                      serviceName={serviceName}
+                      contentType="series"
+                      items={content.series}
+                      onItemPress={handleItemPress}
+                      onItemFocus={handleItemFocus}
+                      onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
+                    />
+                  </View>
+                )}
+                {content?.channels && content.channels.length > 0 && (
+                  <View onLayout={(e) => { sectionPositions.current[`${serviceName}-channels`] = e.nativeEvent.layout.y; }}>
+                    <ServiceRow
+                      title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
+                      serviceName={serviceName}
+                      contentType="channels"
+                      items={content.channels.map((ch: any) => ({ ...ch, type: 'tv' as const }))}
+                      onItemPress={handleItemPress}
+                      onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
+                    />
+                  </View>
+                )}
+              </React.Fragment>
+            );
+          })}
           <View style={styles.bottomPadding} />
         </ScrollView>
         </View>

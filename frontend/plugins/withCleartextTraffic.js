@@ -1,3 +1,17 @@
+const { withAndroidManifest } = require('@expo/config-plugins');
+
+module.exports = function withCleartextTraffic(config) {
+  return withAndroidManifest(config, async (config) => {
+    const androidManifest = config.modResults;
+    const application = androidManifest.manifest.application[0];
+    
+    // Force cleartext traffic
+    application.$['android:usesCleartextTraffic'] = 'true';
+    
+    return config;
+  });
+};
+Step 3: Update app.json to use the plugin:
 {
   "expo": {
     "name": "Privastream Cinema",
@@ -25,7 +39,8 @@
       },
       "package": "com.privastream.cinema",
       "allowBackup": false,
-      "versionCode": 21
+      "versionCode": 20,
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro",
@@ -37,8 +52,8 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/adaptive-icon.png",
-          "imageWidth": 288,
+          "image": "./assets/images/logo.png",
+          "imageWidth": 300,
           "resizeMode": "contain",
           "backgroundColor": "#000000",
           "enableFullScreenImage_legacy": true
@@ -47,14 +62,7 @@
       "expo-font",
       "./plugins/withTVKeyEvents",
       "./plugins/withTVLauncher",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "usesCleartextTraffic": true
-          }
-        }
-      ],
+      "./plugins/withCleartextTraffic",
       "expo-video"
     ],
     "experiments": {

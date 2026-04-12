@@ -11,7 +11,7 @@ import {
   FlatList,
   Image as RNImage,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import Constants from 'expo-constants';
@@ -55,7 +55,7 @@ function FocusableButton({
 }
 
 // Clickable chip for genre/cast/director - routes to search
-function ChipButton({ label, onPress }: { label: string; onPress: () => void }) {
+function ChipButton({ label, onPress, hasTVPreferredFocus = false }: { label: string; onPress: () => void; hasTVPreferredFocus?: boolean }) {
   const [isFocused, setIsFocused] = useState(false);
   return (
     <Pressable
@@ -63,6 +63,7 @@ function ChipButton({ label, onPress }: { label: string; onPress: () => void }) 
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       onPress={onPress}
+      hasTVPreferredFocus={hasTVPreferredFocus}
     >
       <Text style={[styles.chipText, isFocused && styles.chipTextFocused]}>{label}</Text>
     </Pressable>
@@ -178,8 +179,13 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
     return 2;
   };
   
-  // Sort: primary by language priority, secondary by seeders desc
+  // Sort: RD-compatible (torrent) first, then by language priority, then seeders desc
   parsed.sort((a, b) => {
+    // Torrents (infoHash) go through RD — prioritize them
+    const rdA = a.stream.infoHash ? 0 : 1;
+    const rdB = b.stream.infoHash ? 0 : 1;
+    if (rdA !== rdB) return rdA - rdB;
+    
     const langA = langPriority(a.info.language);
     const langB = langPriority(b.info.language);
     if (langA !== langB) return langA - langB;
@@ -201,6 +207,7 @@ function StreamCard({
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const { quality, source, size, seeders, language, isForeign } = parseStreamInfo(stream);
+  const isRD = !!stream.infoHash; // Torrent streams go through Real-Debrid
   
   return (
     <Pressable
@@ -209,8 +216,15 @@ function StreamCard({
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
     >
-      {/* Row 1: Source */}
-      <Text style={styles.streamSource} numberOfLines={1}>{source}</Text>
+      {/* Row 1: Source + RD badge */}
+      <View style={styles.streamSourceRow}>
+        <Text style={styles.streamSource} numberOfLines={1}>{source}</Text>
+        {isRD && (
+          <View style={styles.rdBadge}>
+            <Text style={styles.rdBadgeText}>RD</Text>
+          </View>
+        )}
+      </View>
       
       {/* Row 2: Seeds + Size */}
       <View style={styles.streamStatsRow}>
@@ -265,11 +279,15 @@ function ComingSoonPlaceholder({ width, height }: { width: number | string; heig
 function EpisodeCard({ 
   episode, 
   fallbackPoster, 
-  onPress 
+  onPress,
+  isWatched,
+  onMarkUnwatched,
 }: { 
   episode: Episode; 
   fallbackPoster?: string;
   onPress: () => void;
+  isWatched?: boolean;
+  onMarkUnwatched?: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const [thumbError, setThumbError] = useState(false);
@@ -279,19 +297,28 @@ function EpisodeCard({
     <Pressable
       style={[styles.episodeCard, isFocused && styles.episodeCardFocused]}
       onPress={onPress}
+      onLongPress={isWatched ? onMarkUnwatched : undefined}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
+      delayLongPress={600}
     >
-      {thumbUri && !thumbError ? (
-        <Image
-          source={{ uri: thumbUri }}
-          style={styles.episodeThumbnail}
-          contentFit="cover"
-          onError={() => setThumbError(true)}
-        />
-      ) : (
-        <ComingSoonPlaceholder width="100%" height={90} />
-      )}
+      <View style={{ position: 'relative' }}>
+        {thumbUri && !thumbError ? (
+          <Image
+            source={{ uri: thumbUri }}
+            style={styles.episodeThumbnail}
+            contentFit="cover"
+            onError={() => setThumbError(true)}
+          />
+        ) : (
+          <ComingSoonPlaceholder width="100%" height={90} />
+        )}
+        {isWatched && (
+          <View style={styles.watchedBadge}>
+            <Ionicons name="checkmark" size={14} color="#B8A05C" />
+          </View>
+        )}
+      </View>
       <View style={styles.episodeInfo}>
         <Text style={styles.episodeTitle} numberOfLines={2}>
           E{episode.episode}: {episode.name || `Episode ${episode.episode}`}
@@ -311,6 +338,7 @@ export default function DetailsScreen() {
     resumeEpisode,
     // Display data passed via route params for INSTANT rendering
     name: paramName, poster: paramPoster,
+    autoPlay: autoPlayParam,
   } = useLocalSearchParams<{ 
     type: string; 
     id: string;
@@ -319,6 +347,7 @@ export default function DetailsScreen() {
     resumeSeason?: string;
     resumeEpisode?: string;
     name?: string; poster?: string;
+    autoPlay?: string;
   }>();
   const router = useRouter();
   
@@ -346,6 +375,8 @@ export default function DetailsScreen() {
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
+  const [watchedEpisodes, setWatchedEpisodes] = useState<Record<string, boolean>>({});
+  const autoPlayTriggeredRef = useRef(false);
 
   const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
@@ -418,6 +449,36 @@ export default function DetailsScreen() {
       setInLibrary(!!found);
     }
   }, [content, library]);
+
+  // Load watched episodes from AsyncStorage — reload on EVERY screen focus
+  // so checkmarks appear immediately after returning from the player
+  useFocusEffect(
+    useCallback(() => {
+      const loadWatched = async () => {
+        try {
+          const data = await AsyncStorage.getItem('privastream_watched');
+          if (data) setWatchedEpisodes(JSON.parse(data));
+        } catch (e) {
+          console.log('[DETAILS] Error loading watched data:', e);
+        }
+      };
+      loadWatched();
+    }, [])
+  );
+
+  // AUTO-PLAY: When navigated from "Play Next", auto-select best stream
+  useEffect(() => {
+    if (autoPlayParam === 'true' && !autoPlayTriggeredRef.current && streams && streams.length > 0 && !isLoadingStreams) {
+      autoPlayTriggeredRef.current = true;
+      const sorted = sortStreamsByLanguage(streams);
+      const bestStream = sorted[0];
+      if (bestStream) {
+        console.log('[AUTOPLAY] Auto-selecting best stream:', bestStream.infoHash || bestStream.title);
+        // Small delay to ensure component is mounted
+        setTimeout(() => handleStreamSelect(bestStream), 300);
+      }
+    }
+  }, [streams, isLoadingStreams, autoPlayParam]);
 
   // PRE-WARM: When streams are loaded, silently pre-start the top ENGLISH torrent
   // This saves 5-10 seconds of metadata download when user taps play
@@ -556,6 +617,25 @@ export default function DetailsScreen() {
     }
     
     if (stream.infoHash) {
+      // Build fallback torrents from other available torrent streams (sorted by seeders)
+      const sortedStreams = sortStreamsByLanguage(streams);
+      const fallbackTorrents = sortedStreams
+        .filter(s => s.infoHash && s.infoHash !== stream.infoHash)
+        .slice(0, 5)
+        .map(s => ({
+          infoHash: s.infoHash,
+          fileIdx: s.fileIdx,
+          filename: s.filename || '',
+          sources: s.sources || [],
+          name: s.name || '',
+          title: s.title || '',
+        }));
+      
+      // Extract season/episode from content ID (e.g. tt123:1:2 → season=1, episode=2)
+      const idParts = (id || '').split(':');
+      const seasonNum = idParts.length >= 3 ? idParts[idParts.length - 2] : '';
+      const episodeNum = idParts.length >= 3 ? idParts[idParts.length - 1] : '';
+      
       router.push({
         pathname: '/player',
         params: { 
@@ -565,27 +645,57 @@ export default function DetailsScreen() {
           contentId: subtitleContentId,
           fileIdx: stream.fileIdx !== undefined ? String(stream.fileIdx) : '',
           filename: stream.filename || '',
+          season: seasonNum,
+          episode: episodeNum,
           backdrop: content?.background || '',
           poster: content?.poster || '',
           logo: content?.logo || '',
           sources: stream.sources ? JSON.stringify(stream.sources) : '',
+          fallbackTorrents: fallbackTorrents.length > 0 ? JSON.stringify(fallbackTorrents) : '',
           ...nextEpisodeData,
           ...resumeData,
         },
       });
     } else if (stream.url) {
-      // Build fallback URLs from all available streams with direct URLs
+      // === PRIVACY PROXY ===
+      // Route ALL direct URLs through backend's RD unrestrict proxy
+      // so the device NEVER connects to content sites (redtube, etc.)
+      // ISP only sees traffic to real-debrid.com
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
+      const authToken = await AsyncStorage.getItem('auth_token');
+      
+      // Check if URL is already a backend/proxy URL (no need to re-proxy)
+      const isAlreadyProxied = stream.url.startsWith('/api/') || 
+                                stream.url.startsWith(backendUrl) ||
+                                stream.url.includes('/api/proxy/');
+      
+      let streamUrl: string;
+      if (isAlreadyProxied) {
+        // Already going through our backend — use as-is
+        streamUrl = stream.url;
+      } else {
+        // External URL — route through RD privacy proxy
+        const encodedUrl = encodeURIComponent(stream.url);
+        const tokenParam = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
+        streamUrl = `${backendUrl}/api/proxy/unrestrict-stream?url=${encodedUrl}${tokenParam}`;
+        console.log('[DETAILS] Privacy proxy: routing through RD unrestrict');
+      }
+      
+      // Build fallback URLs — also route fallbacks through privacy proxy
       const allStreamUrls = streams
         .filter(s => s.url && !s.infoHash && s.url !== stream.url)
-        .map(s => s.url)
+        .map(s => {
+          if (!s.url) return '';
+          const isProxied = s.url.startsWith('/api/') || s.url.startsWith(backendUrl);
+          if (isProxied) return s.url;
+          const enc = encodeURIComponent(s.url);
+          const tp = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
+          return `${backendUrl}/api/proxy/unrestrict-stream?url=${enc}${tp}`;
+        })
         .filter(Boolean);
       
       // For live TV streams, also include proxy URLs as additional fallbacks
       if (type === 'tv') {
-        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
-        const authToken = await AsyncStorage.getItem('auth_token');
-        
-        // Add proxy URLs for all streams as fallbacks
         const proxyFallbacks = streams
           .filter(s => s.proxyUrl)
           .map(s => {
@@ -600,7 +710,7 @@ export default function DetailsScreen() {
       router.push({
         pathname: '/player',
         params: { 
-          directUrl: stream.url,
+          directUrl: streamUrl,
           title: contentTitle,
           isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
@@ -650,8 +760,9 @@ export default function DetailsScreen() {
 
   // Use content data for display - available immediately from store
   const displayName = content?.name || 'Loading...';
-  // ONLY use backdrop image, no poster fallback — prevents the jarring poster→backdrop switch
-  const displayPoster = content?.background || '';
+  // For episode pages, prefer the episode thumbnail as backdrop. Otherwise use series backdrop.
+  const episodeBackdrop = isEpisodePage && currentEpisode?.thumbnail ? currentEpisode.thumbnail : null;
+  const displayPoster = episodeBackdrop || content?.background || content?.poster || '';
 
   const rating = typeof content?.imdbRating === 'string' 
     ? parseFloat(content.imdbRating) 
@@ -662,14 +773,36 @@ export default function DetailsScreen() {
     <StreamCard stream={item} onPress={() => handleStreamSelect(item)} />
   );
 
+  // Mark episode as unwatched (long-press)
+  const handleMarkUnwatched = useCallback(async (contentId: string) => {
+    try {
+      const watchedKey = 'privastream_watched';
+      const existing = await AsyncStorage.getItem(watchedKey);
+      const watchedSet: Record<string, boolean> = existing ? JSON.parse(existing) : {};
+      delete watchedSet[contentId];
+      await AsyncStorage.setItem(watchedKey, JSON.stringify(watchedSet));
+      setWatchedEpisodes({ ...watchedSet });
+      console.log('[DETAILS] Unmarked as watched:', contentId);
+    } catch (e) {
+      console.log('[DETAILS] Error unmarking watched:', e);
+    }
+  }, []);
+
   // Render episode item for FlatList
-  const renderEpisodeItem = ({ item }: { item: Episode }) => (
-    <EpisodeCard 
-      episode={item} 
-      fallbackPoster={content?.poster}
-      onPress={() => handleEpisodePress(item)} 
-    />
-  );
+  const renderEpisodeItem = ({ item }: { item: Episode }) => {
+    // Check watched status using series:season:episode format
+    const epContentId = `${baseId || id}:${item.season}:${item.episode}`;
+    const epWatched = !!watchedEpisodes[epContentId];
+    return (
+      <EpisodeCard 
+        episode={item} 
+        fallbackPoster={content?.poster}
+        onPress={() => handleEpisodePress(item)}
+        isWatched={epWatched}
+        onMarkUnwatched={() => handleMarkUnwatched(epContentId)}
+      />
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -684,6 +817,14 @@ export default function DetailsScreen() {
       
       {/* Dark overlay — simple View, no LinearGradient overhead */}
       <View style={styles.gradientOverlay} />
+      
+      {/* Auto-play loading overlay */}
+      {autoPlayParam === 'true' && !autoPlayTriggeredRef.current && (
+        <View style={styles.autoPlayOverlay}>
+          <ActivityIndicator size="large" color="#B8A05C" />
+          <Text style={styles.autoPlayText}>Loading next episode...</Text>
+        </View>
+      )}
       
       {/* Content Overlay */}
       <View style={styles.contentOverlay}>
@@ -731,19 +872,16 @@ export default function DetailsScreen() {
             )}
           </View>
 
-          {/* Description - pinned under metadata */}
-          {content?.description && (
+          {/* Description - on episode pages show episode overview instead of series description */}
+          {isEpisodePage && currentEpisode?.overview ? (
+            <Text style={styles.fixedDescription} numberOfLines={4}>
+              {currentEpisode.overview}
+            </Text>
+          ) : content?.description ? (
             <Text style={styles.fixedDescription} numberOfLines={3}>
               {content.description}
             </Text>
-          )}
-
-          {/* Episode Description if applicable */}
-          {isEpisodePage && currentEpisode?.overview && (
-            <Text style={styles.fixedDescription} numberOfLines={2}>
-              {currentEpisode.overview}
-            </Text>
-          )}
+          ) : null}
 
           {/* Add to Library - under description */}
           <View style={styles.fixedActionRow}>
@@ -776,7 +914,7 @@ export default function DetailsScreen() {
               <Text style={styles.chipLabel}>Genre</Text>
               <View style={styles.chipRow}>
                 {content.genre.slice(0, 4).map((g: string, i: number) => (
-                  <ChipButton key={`genre-${i}`} label={g} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
+                  <ChipButton key={`genre-${i}`} label={g} hasTVPreferredFocus={i === 0} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
                 ))}
               </View>
             </View>
@@ -815,13 +953,14 @@ export default function DetailsScreen() {
                 showsHorizontalScrollIndicator={false}
                 style={styles.seasonSelector}
               >
-                {seasons.map((season) => (
-                  <Pressable
+                {seasons.map((season, idx) => (
+                  <FocusableButton
                     key={season}
                     style={[
                       styles.seasonButton,
                       selectedSeason === season && styles.seasonButtonActive,
                     ]}
+                    focusedStyle={styles.seasonButtonFocused}
                     onPress={() => setSelectedSeason(season)}
                   >
                     <Text style={[
@@ -830,7 +969,7 @@ export default function DetailsScreen() {
                     ]}>
                       Season {season}
                     </Text>
-                  </Pressable>
+                  </FocusableButton>
                 ))}
               </ScrollView>
               
@@ -913,6 +1052,23 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(15, 15, 17, 0.75)',
+  },
+  autoPlayOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 15, 17, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  autoPlayText: {
+    color: '#B8A05C',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
   },
   contentOverlay: {
     flex: 1,
@@ -1072,6 +1228,13 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 4,
   },
+  chipScroll: {
+    marginBottom: 4,
+  },
+  chipScrollContent: {
+    gap: 8,
+    paddingRight: 16,
+  },
   chipButton: {
     paddingHorizontal: 14,
     paddingVertical: 6,
@@ -1104,16 +1267,23 @@ const styles = StyleSheet.create({
   },
   seasonSelector: {
     marginBottom: 16,
+    paddingVertical: 4,
   },
   seasonButton: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     marginRight: 8,
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   seasonButtonActive: {
     backgroundColor: '#B8A05C',
+  },
+  seasonButtonFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
   },
   seasonButtonText: {
     color: '#AAAAAA',
@@ -1149,6 +1319,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#B8A05C',
     fontWeight: '500',
+  },
+  watchedBadge: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
   streamsSection: {
     marginBottom: 24,
@@ -1194,7 +1376,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#B8A05C',
+    flex: 1,
+  },
+  streamSourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 6,
+  },
+  rdBadge: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 6,
+  },
+  rdBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   streamStatsRow: {
     flexDirection: 'row',

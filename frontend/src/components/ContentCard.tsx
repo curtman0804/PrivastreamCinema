@@ -13,9 +13,16 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentItem, SearchResult, api } from '../api/client';
 import { colors, posterShapes } from '../styles/colors';
+import Constants from 'expo-constants';
 
 // Fallback image for missing posters
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
+
+// Build backend image proxy URL for posters that fail to load directly
+const getProxiedPosterUrl = (originalUrl: string): string => {
+  const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
+  return `${backendUrl}/api/proxy/image?url=${encodeURIComponent(originalUrl)}`;
+};
 
 
 interface ContentCardProps {
@@ -28,6 +35,7 @@ interface ContentCardProps {
   showProgress?: number;
   inLibrary?: boolean;
   onLibraryChange?: () => void;
+  watched?: boolean;
   hasTVPreferredFocus?: boolean;
   isFirstInRow?: boolean;
   isLastInRow?: boolean;
@@ -73,6 +81,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   showProgress,
   inLibrary = false,
   onLibraryChange,
+  watched = false,
   hasTVPreferredFocus = false,
   isFirstInRow = false,
   isLastInRow = false,
@@ -82,6 +91,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
   const [posterError, setPosterError] = useState(false);
+  const [useProxy, setUseProxy] = useState(false);
   const pressableRef = useRef<View>(null);
   const [selfTag, setSelfTag] = useState<number>(0);
   
@@ -202,12 +212,20 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         <View style={styles.imageWrapper}>
           {item.poster && !posterError ? (
             <Image
-              source={{ uri: item.poster }}
+              source={{ uri: useProxy ? getProxiedPosterUrl(item.poster) : item.poster }}
               style={styles.posterImage}
               contentFit="cover"
-              recyclingKey={item.id || item.imdb_id}
+              recyclingKey={`${item.id || item.imdb_id}${useProxy ? '-proxy' : ''}`}
               cachePolicy="memory-disk"
-              onError={() => setPosterError(true)}
+              onError={() => {
+                if (!useProxy && item.poster) {
+                  // First failure: retry through backend proxy (bypasses CDN hotlink blocking)
+                  setUseProxy(true);
+                } else {
+                  // Proxy also failed: show placeholder
+                  setPosterError(true);
+                }
+              }}
             />
           ) : (
             <RNImage
@@ -222,6 +240,13 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         {isInLibrary && (
           <View style={styles.libraryBadge}>
             <Ionicons name="bookmark" size={12} color={colors.textPrimary} />
+          </View>
+        )}
+        
+        {/* Watched checkmark indicator - opposite corner from library badge (Stremio-style) */}
+        {(watched || (showProgress !== undefined && showProgress >= 90)) && (
+          <View style={styles.watchedBadge}>
+            <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
           </View>
         )}
         
@@ -288,6 +313,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 4,
     padding: 4,
+  },
+  watchedBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 10,
+    padding: 1,
   },
   progressContainer: {
     position: 'absolute',

@@ -213,6 +213,8 @@ export default function PlayerScreen() {
     resumePosition,
     // Tracker sources from Torrentio (CRITICAL for peer discovery)
     sources,
+    // Fallback torrent streams for auto-retry
+    fallbackTorrents,
   } = useLocalSearchParams<{
     url?: string;
     title?: string;
@@ -234,6 +236,7 @@ export default function PlayerScreen() {
     logo?: string;
     resumePosition?: string;
     sources?: string;
+    fallbackTorrents?: string;
   }>();
   const router = useRouter();
   
@@ -290,7 +293,7 @@ export default function PlayerScreen() {
   const [isLiveTV, setIsLiveTV] = useState(false);
   const [hasAudioError, setHasAudioError] = useState(false);
   const videoRetryCountRef = useRef(0);
-  const maxVideoRetries = 15; // More retries - torrent data arrives progressively
+  const maxVideoRetries = isLive === 'true' ? 10 : directUrl ? 3 : 15; // Direct URLs fail fast, torrents need more time
   
   // Track seek state to prevent URL reset during seeking
   const isSeekingRef = useRef(false);
@@ -325,6 +328,18 @@ export default function PlayerScreen() {
   const [currentStreamIndex, setCurrentStreamIndex] = useState(-1);
   const [playbackStarted, setPlaybackStarted] = useState(false);
   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Fallback torrent streams — used when primary torrent fails (no peers, timeout)
+  interface FallbackTorrent {
+    infoHash: string;
+    fileIdx?: number;
+    filename?: string;
+    sources?: string[];
+    name?: string;
+    title?: string;
+  }
+  const [torrentFallbacks, setTorrentFallbacks] = useState<FallbackTorrent[]>([]);
+  const torrentFallbackIdxRef = useRef(0);
   
   // NO safety timeout - let the torrent download and ExoPlayer buffer naturally.
   // First-click torrents need 30-60+ seconds for metadata + initial pieces.
@@ -412,6 +427,23 @@ export default function PlayerScreen() {
         stream_filename: filename || undefined,
       });
       console.log('[PLAYER] Watch progress saved:', currentPosition / 1000, '/', totalDuration / 1000);
+      
+      // Mark as watched when >= 90% complete
+      const percentWatched = (currentPosition / totalDuration) * 100;
+      if (percentWatched >= 90 && contentId) {
+        try {
+          const watchedKey = 'privastream_watched';
+          const existing = await AsyncStorage.getItem(watchedKey);
+          const watchedSet: Record<string, boolean> = existing ? JSON.parse(existing) : {};
+          if (!watchedSet[contentId]) {
+            watchedSet[contentId] = true;
+            await AsyncStorage.setItem(watchedKey, JSON.stringify(watchedSet));
+            console.log('[PLAYER] Marked as watched:', contentId);
+          }
+        } catch (e) {
+          console.log('[PLAYER] Error saving watched status:', e);
+        }
+      }
     } catch (err) {
       console.log('[PLAYER] Failed to save watch progress:', err);
     }
@@ -627,7 +659,7 @@ export default function PlayerScreen() {
   const creditsShownRef = useRef(false); // Track if we've shown the credits popup
   
   // Credits detection settings - show popup near the end
-  const CREDITS_TIME_REMAINING_MS = 30000; // Show popup when 30 seconds remaining
+  const CREDITS_TIME_REMAINING_MS = 45000; // Show popup when 45 seconds remaining
   const CREDITS_PERCENTAGE = 0.98; // Or when 98% complete
   const MIN_DURATION_FOR_CREDITS = 180000; // Only detect credits for videos > 3 minutes
   
@@ -762,10 +794,11 @@ export default function PlayerScreen() {
           if (countdownRef.current) clearInterval(countdownRef.current);
           setShowNextEpisodeModal(false);
           
-          // Navigate to next episode
+          // Navigate to next episode with autoPlay
           console.log('[PLAYER] Countdown ended - auto-playing next episode:', nextEpisodeId);
           router.replace({
             pathname: `/details/series/${nextEpisodeId}`,
+            params: { autoPlay: 'true' },
           });
           return 0;
         }
@@ -813,9 +846,10 @@ export default function PlayerScreen() {
     
     console.log('[PLAYER] Playing next episode:', nextEpisodeId);
     
-    // Navigate to the next episode details page
+    // Navigate to the next episode details page with autoPlay
     router.replace({
       pathname: `/details/series/${nextEpisodeId}`,
+      params: { autoPlay: 'true' },
     });
   };
   
@@ -1178,11 +1212,44 @@ export default function PlayerScreen() {
           console.log('[PLAYER] Stream timeout, trying next...');
           tryNextStream();
         }
-      }, 120000); // 120 second timeout - give torrent time to buffer
+      }, 30000); // 30 second timeout per stream
     } else {
-      // No more fallback streams
-      console.log('[PLAYER] No more fallback streams available');
-      setError('Unable to play video. All streams failed to load.');
+      // No more URL fallbacks — try torrent fallbacks
+      tryNextFallbackTorrent();
+    }
+  };
+  
+  // Try next fallback TORRENT (different infoHash) when primary torrent fails
+  const tryNextFallbackTorrent = () => {
+    const idx = torrentFallbackIdxRef.current;
+    if (idx < torrentFallbacks.length) {
+      const fb = torrentFallbacks[idx];
+      torrentFallbackIdxRef.current = idx + 1;
+      console.log(`[PLAYER] Trying fallback torrent ${idx + 1}/${torrentFallbacks.length}: ${fb.infoHash?.slice(0,8)}... (${fb.name || fb.title || ''})`);
+      
+      // Reset state for new torrent
+      setStreamUrl(null);
+      setPlaybackStarted(false);
+      setError(null);
+      setIsLoading(true);
+      setLoadingStatus('Searching for streams...');
+      setDownloadProgress(0);
+      videoRetryCountRef.current = 0;
+      continuePollingRef.current = false; // Stop old polling
+      if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current);
+        clearInterval(pollIntervalRef.current);
+      }
+      
+      // Small delay then start new torrent
+      setTimeout(() => {
+        continuePollingRef.current = true;
+        startTorrentStreamWithHash(fb.infoHash, fb.fileIdx, fb.filename, fb.sources || []);
+      }, 500);
+    } else {
+      // No more fallback torrents either
+      console.log('[PLAYER] No more fallback streams or torrents available');
+      setError('Unable to play video. All streams failed. Try a different title or stream with more seeds.');
       setIsLoading(false);
     }
   };
@@ -1227,7 +1294,8 @@ export default function PlayerScreen() {
       if (playbackTimeoutRef.current) {
         clearTimeout(playbackTimeoutRef.current);
       }
-      // Set 120 second timeout for playback to start - torrent streams need time to buffer
+      // Timeout for playback to start - direct URLs fail fast, torrents need time
+      const timeoutMs = directUrl ? 15000 : 30000;
       playbackTimeoutRef.current = setTimeout(() => {
         if (!playbackStarted) {
           if (fallbackUrls.length > currentStreamIndex + 1) {
@@ -1240,7 +1308,7 @@ export default function PlayerScreen() {
             setIsLoading(false);
           }
         }
-      }, 120000); // 120 seconds for torrent buffering
+      }, 30000); // 30 seconds then try next
     }
     return () => {
       if (playbackTimeoutRef.current) {
@@ -1365,16 +1433,30 @@ export default function PlayerScreen() {
   useEffect(() => {
     continuePollingRef.current = true;
     
-    // Parse fallback streams
+    // Parse fallback streams (URL-based)
     if (fallbackStreams) {
       try {
         const parsed = JSON.parse(fallbackStreams);
         if (Array.isArray(parsed)) {
           setFallbackUrls(parsed);
-          console.log('[PLAYER] Loaded', parsed.length, 'fallback streams');
+          console.log('[PLAYER] Loaded', parsed.length, 'fallback URL streams');
         }
       } catch (e) {
         console.log('[PLAYER] Error parsing fallback streams:', e);
+      }
+    }
+    
+    // Parse fallback torrents (infoHash-based)
+    if (fallbackTorrents) {
+      try {
+        const parsed = JSON.parse(fallbackTorrents);
+        if (Array.isArray(parsed)) {
+          setTorrentFallbacks(parsed);
+          torrentFallbackIdxRef.current = 0;
+          console.log('[PLAYER] Loaded', parsed.length, 'fallback torrents');
+        }
+      } catch (e) {
+        console.log('[PLAYER] Error parsing fallback torrents:', e);
       }
     }
     
@@ -1411,39 +1493,233 @@ export default function PlayerScreen() {
   const startTorrentStream = async (retryCount = 0) => {
     if (!infoHash) return;
 
-    const MAX_RETRIES = 3;
-
     try {
       const parsedFileIdx = fileIdx && fileIdx !== '' ? parseInt(fileIdx, 10) : undefined;
       const validFileIdx = parsedFileIdx !== undefined && !isNaN(parsedFileIdx) ? parsedFileIdx : undefined;
       
-      // === STREAMING ENGINE: Local (Stremio-like) or Cloud with polling ===
-      
-      // Parse sources from navigation params (tracker URLs from Torrentio)
       let streamSources: string[] = [];
       try {
         if (sources) {
           streamSources = JSON.parse(sources);
-          console.log(`[PLAYER] Got ${streamSources.length} tracker sources from Torrentio`);
         }
-      } catch (e) {
-        console.log('[PLAYER] Could not parse sources:', e);
+      } catch (e) {}
+      
+      setDownloadProgress(5);
+      setLoadingStatus('Searching for streams...');
+      
+      // === PARALLEL RACE: Start primary + all fallbacks simultaneously ===
+      // This way the FIRST torrent to become ready wins — instant playback
+      
+      interface RaceCandidate {
+        hash: string;
+        fileIdx?: number;
+        filename?: string;
+        videoUrl: string;
+        label: string;
       }
       
-      console.log(`[PLAYER] Starting torrent with fileIdx=${validFileIdx}, filename=${filename || 'auto'} (attempt ${retryCount + 1})`);
+      const candidates: RaceCandidate[] = [{
+        hash: infoHash,
+        fileIdx: validFileIdx,
+        filename: filename || '',
+        videoUrl: api.stream.getVideoUrl(infoHash, validFileIdx),
+        label: 'Primary',
+      }];
       
-      // Show immediate feedback - set initial progress so user sees the bar start filling
+      // Add fallback torrents as race candidates
+      for (const fb of torrentFallbacks) {
+        candidates.push({
+          hash: fb.infoHash,
+          fileIdx: fb.fileIdx,
+          filename: fb.filename || '',
+          videoUrl: api.stream.getVideoUrl(fb.infoHash, fb.fileIdx),
+          label: fb.name || fb.infoHash.slice(0, 8),
+        });
+      }
+      
+      console.log(`[PLAYER] RACE: Starting ${candidates.length} torrents in parallel`);
+      
+      // Fire-and-forget start calls for ALL candidates
+      const seasonNum = season ? parseInt(season, 10) : undefined;
+      const episodeNum = episode ? parseInt(episode, 10) : undefined;
+      await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources, seasonNum, episodeNum);
+      for (const fb of torrentFallbacks) {
+        api.stream.start(fb.infoHash, fb.fileIdx, fb.filename || undefined, fb.sources || [], seasonNum, episodeNum).catch(() => {});
+      }
+      
+      // Quality ranking: higher = better
+      const qualityRank = (label: string): number => {
+        const upper = (label || '').toUpperCase();
+        if (upper.includes('4K') || upper.includes('2160')) return 4;
+        if (upper.includes('1080')) return 3;
+        if (upper.includes('720')) return 2;
+        return 1;
+      };
+      
+      // Primary (user's pick) gets highest rank so it wins if ready
+      (candidates[0] as any).quality = 99;
+      for (let i = 1; i < candidates.length; i++) {
+        (candidates[i] as any).quality = qualityRank(candidates[i].label);
+      }
+      
+      let pollCount = 0;
+      let smoothProgress = 5;
+      let winnerFound = false;
+      let startTime = Date.now();
+      const readyMap: Record<number, { videoUrl: string; videoSize: number; debridUrl?: string; peers: number }> = {};
+      let firstReadyTime = 0;
+      const GRACE_MS = 2000; // Wait 2s after first fallback ready to see if better one appears
+      
+      // Commit the best quality ready candidate
+      const commitWinner = () => {
+        if (winnerFound) return;
+        let bestIdx = -1;
+        let bestQ = -1;
+        for (const idxStr of Object.keys(readyMap)) {
+          const idx = parseInt(idxStr);
+          const q = (candidates[idx] as any).quality || 0;
+          if (q > bestQ) { bestQ = q; bestIdx = idx; }
+        }
+        if (bestIdx < 0) return;
+        
+        winnerFound = true;
+        const winner = candidates[bestIdx];
+        const info = readyMap[bestIdx];
+        setDownloadProgress(100);
+        if (info.videoSize) videoFileSizeRef.current = info.videoSize;
+        videoRetryCountRef.current = 0;
+        const finalUrl = info.debridUrl ? `http://71.9.152.146:8001${info.debridUrl}` : winner.videoUrl;
+        console.log(`[PLAYER] WINNER: ${winner.label} (q=${bestQ}) ${((Date.now()-startTime)/1000).toFixed(1)}s peers=${info.peers}`);
+        setLoadingStatus('Starting Playback...');
+        setStreamUrl(finalUrl);
+        const winHash = winner.hash;
+        pollIntervalRef.current = setTimeout(function keepAlive() {
+          if (continuePollingRef.current) {
+            api.stream.status(winHash).catch(() => {});
+            pollIntervalRef.current = setTimeout(keepAlive, 10000) as any;
+          }
+        }, 10000) as any;
+      };
+      
+      const pollRace = async () => {
+        if (!continuePollingRef.current || winnerFound) return;
+        pollCount++;
+        
+        try {
+          const elapsedSec = (Date.now() - startTime) / 1000;
+          
+          const statuses = await Promise.allSettled(
+            candidates.map(c => api.stream.status(c.hash))
+          );
+          
+          for (let i = 0; i < statuses.length; i++) {
+            const result = statuses[i];
+            if (result.status !== 'fulfilled') continue;
+            const status = result.value;
+            
+            // Real-Debrid — instant win, best possible
+            if (status.debrid_url && !readyMap[i]) {
+              readyMap[i] = { videoUrl: candidates[i].videoUrl, videoSize: status.video_size || 0, debridUrl: status.debrid_url, peers: status.peers || 0 };
+              commitWinner();
+              return;
+            }
+            
+            // Skip errored/failed candidates
+            if (status.status === 'error' || status.status === 'not_found' || status.status === 'invalid') {
+              console.log(`[PLAYER] Candidate ${candidates[i].label} failed: ${status.status}`);
+              // Mark as permanently failed so we don't keep polling it
+              (candidates[i] as any).failed = true;
+              continue;
+            }
+            
+            // Torrent ready
+            if (status.status === 'ready' && !readyMap[i]) {
+              readyMap[i] = { videoUrl: candidates[i].videoUrl, videoSize: status.video_size || 0, peers: status.peers || 0 };
+              console.log(`[PLAYER] Stream ready: ${candidates[i].label} (q=${(candidates[i] as any).quality}) ${elapsedSec.toFixed(1)}s`);
+              
+              if (!firstReadyTime) firstReadyTime = Date.now();
+              
+              // Primary stream (user's pick, q=99) — play immediately
+              if (i === 0) { commitWinner(); return; }
+            }
+          }
+          
+          // Grace period: 2s after first fallback ready → commit best quality
+          if (firstReadyTime > 0 && Date.now() - firstReadyTime >= GRACE_MS) {
+            commitWinner();
+            return;
+          }
+          
+          // Update UI
+          let bestPeers = 0;
+          let anyBuffering = false;
+          for (let i = 0; i < statuses.length; i++) {
+            if (statuses[i].status === 'fulfilled') {
+              const s = (statuses[i] as any).value;
+              bestPeers = Math.max(bestPeers, s.peers || 0);
+              if (s.status === 'buffering') anyBuffering = true;
+            }
+          }
+          
+          if (anyBuffering || bestPeers > 0) {
+            smoothProgress = Math.min(smoothProgress + 4, 85);
+            const dots = '.'.repeat((pollCount % 3) + 1);
+            setLoadingStatus(`Starting Playback${dots}`);
+          } else {
+            smoothProgress = Math.min(smoothProgress + 2, 30);
+            setLoadingStatus('Searching for streams...');
+          }
+          setPeers(bestPeers);
+          setDownloadProgress(smoothProgress);
+          
+          // Check if ALL candidates failed
+          const allFailed = candidates.every((c: any) => c.failed === true);
+          if (allFailed && Object.keys(readyMap).length === 0) {
+            console.log('[PLAYER] All candidates failed');
+            setError('All streams failed. Try different content.');
+            setIsLoading(false);
+            return;
+          }
+          
+          // Timeout: 45s total
+          if (elapsedSec > 45) {
+            if (Object.keys(readyMap).length > 0) { commitWinner(); return; }
+            setError('Streams too slow. Try different content or streams with more seeds.');
+            setIsLoading(false);
+            return;
+          }
+          
+          pollIntervalRef.current = setTimeout(pollRace, 600) as any;
+        } catch (err) {
+          console.error('[PLAYER] Race poll error:', err);
+          pollIntervalRef.current = setTimeout(pollRace, 1500) as any;
+        }
+      };
+      
+      pollRace();
+      
+    } catch (err: any) {
+      console.error('Stream start error:', err);
+      if (retryCount < 2) {
+        setTimeout(() => startTorrentStream(retryCount + 1), 2000);
+        return;
+      }
+      tryNextFallbackTorrent();
+    }
+  };
+  
+  // Start a torrent with explicit hash (for fallback torrents)
+  const startTorrentStreamWithHash = async (hash: string, fIdx?: number, fname?: string, srcs: string[] = [], retryCount = 0) => {
+    const MAX_RETRIES = 2;
+    try {
+      console.log(`[PLAYER] Starting fallback torrent: ${hash.slice(0,8)}... fileIdx=${fIdx} (attempt ${retryCount + 1})`);
       setDownloadProgress(5);
       
-      // Start the torrent on cloud backend (uses torrent-stream + PeerSearch, same as Stremio)
-      await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources);
+      await api.stream.start(hash, fIdx, fname || undefined, srcs);
+      const videoUrl = api.stream.getVideoUrl(hash, fIdx);
       
-      // Get the video URL from cloud streaming backend
-      const videoUrl = api.stream.getVideoUrl(infoHash, validFileIdx);
-      
-      console.log(`[PLAYER] Video URL: CLOUD - ${videoUrl}`);
       let pollCount = 0;
-      let smoothProgress = 5; // Start at 5% for immediate visual feedback
+      let smoothProgress = 5;
       let videoUrlSet = false;
       let hadPeersOnce = false;
       let startTime = Date.now();
@@ -1451,125 +1727,96 @@ export default function PlayerScreen() {
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
         pollCount++;
-        
         try {
-          const status = await api.stream.status(infoHash);
+          const status = await api.stream.status(hash);
           const peerCount = status.peers || 0;
           const dlRate = status.download_rate || 0;
           setPeers(peerCount);
           setDownloadSpeed(dlRate);
           if (peerCount > 0) hadPeersOnce = true;
-          
           const elapsedSec = (Date.now() - startTime) / 1000;
           
-          // Track video file size for accurate seek calculations
           if (status.video_size && status.video_size > 0) {
             videoFileSizeRef.current = status.video_size;
           }
           
-          // Smooth progress for loading bar - cap at 90%
           if (status.status === 'downloading_metadata') {
             smoothProgress = Math.min(smoothProgress + 3, 30);
-            setLoadingStatus(`Finding torrent... (${peerCount} peers)`);
+            setLoadingStatus('Searching for streams...');
           } else if (status.status === 'buffering') {
             const readyPct = status.ready_progress ?? 0;
-            const targetProgress = 30 + (readyPct / 100) * 50; // 30-80%
+            const targetProgress = 30 + (readyPct / 100) * 50;
             smoothProgress = Math.max(smoothProgress, Math.min(smoothProgress + (targetProgress - smoothProgress) * 0.3, targetProgress));
-            if (peerCount > 0) {
-              setLoadingStatus(`Buffering... ${peerCount} peers, ${formatSpeed(dlRate)}`);
-            } else {
-              setLoadingStatus(`Connecting to peers...`);
-            }
+            const dots = '.'.repeat((pollCount % 3) + 1);
+            setLoadingStatus(peerCount > 0 ? `Starting Playback${dots}` : 'Searching for streams...');
           } else if (status.status === 'ready') {
             smoothProgress = Math.min(Math.max(smoothProgress + 3, 85), 90);
-            setLoadingStatus(`Starting playback...`);
+            const dots = '.'.repeat((pollCount % 3) + 1);
+            setLoadingStatus(`Starting Playback${dots}`);
           }
           setDownloadProgress(smoothProgress);
           
-          // PLAY when backend reports READY (data actually available for streaming)
-          // Don't start on "buffering" - data needs to be downloaded first
+          // Real-Debrid instant stream
+          if (status.debrid_url && !videoUrlSet) {
+            videoUrlSet = true;
+            setDownloadProgress(100);
+            const debridVideoUrl = `http://71.9.152.146:8001${status.debrid_url}`;
+            console.log(`[PLAYER] Fallback DEBRID ready in ${elapsedSec.toFixed(1)}s!`);
+            videoRetryCountRef.current = 0;
+            setStreamUrl(debridVideoUrl);
+            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current);
+            pollIntervalRef.current = setTimeout(pollStatus, 30000);
+            return;
+          }
+          
           if (status.status === 'ready' && !videoUrlSet) {
             videoUrlSet = true;
-            // Set progress to 100% immediately when ready
             setDownloadProgress(100);
-            // Save video file size for accurate seek calculations
-            if (status.video_size) {
-              videoFileSizeRef.current = status.video_size;
-            }
-            console.log(`[PLAYER] Stream READY in ${elapsedSec.toFixed(1)}s! Peers: ${peerCount}, FileSize: ${(videoFileSizeRef.current / 1024 / 1024).toFixed(1)}MB. Setting video URL.`);
+            if (status.video_size) videoFileSizeRef.current = status.video_size;
+            console.log(`[PLAYER] Fallback stream READY in ${elapsedSec.toFixed(1)}s!`);
             videoRetryCountRef.current = 0;
-            // Start playback immediately
             setStreamUrl(videoUrl);
-            // CRITICAL: Continue polling to keep the torrent engine alive!
-            // The torrent-stream server destroys engines after 5 min of inactivity.
-            // We must keep polling /status to update the engine's _lastAccess timestamp.
-            // DON'T return here - fall through to schedule keep-alive polling below.
           }
           
           if (status.status === 'not_found' || status.status === 'invalid') {
             if (retryCount < MAX_RETRIES) {
-              console.log(`[PLAYER] Stream not found, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
               if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
-              setTimeout(() => startTorrentStream(retryCount + 1), 2000);
+              setTimeout(() => startTorrentStreamWithHash(hash, fIdx, fname, srcs, retryCount + 1), 2000);
               return;
             }
-            setError('Stream unavailable. Try selecting a different stream.');
-            setIsLoading(false);
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+            tryNextFallbackTorrent();
             return;
           }
           
-          // Auto-switch stream after 60 seconds with no peers (give DHT time to discover)
-          if (elapsedSec > 60 && !hadPeersOnce && !videoUrlSet) {
-            console.log('[PLAYER] No peers after 60s, auto-trying next stream');
+          if (elapsedSec > 15 && !hadPeersOnce && !videoUrlSet) {
+            console.log('[PLAYER] Fallback torrent: no peers after 15s');
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
-            // Try next fallback stream
-            if (fallbackUrls && fallbackUrls.length > currentStreamIndex + 1) {
-              const nextIdx = currentStreamIndex + 1;
-              setCurrentStreamIndex(nextIdx);
-              const nextUrl = fallbackUrls[nextIdx];
-              console.log(`[PLAYER] Auto-switching to stream ${nextIdx + 1}/${fallbackUrls.length}`);
-              videoRetryCountRef.current = 0;
-              setStreamUrl(nextUrl);
-              return;
-            }
-            // No more fallbacks - show error with helpful message
-            setError('No peers found. This content may have no active seeders. Try a different stream or content.');
-            setIsLoading(false);
+            tryNextFallbackTorrent();
             return;
           }
           
-          // Give up after 2 minutes total - BUT ONLY if video hasn't started playing yet
-          // Once videoUrlSet is true, the player is handling playback - don't timeout
-          if (elapsedSec > 120 && !videoUrlSet) {
-            setError('Stream is too slow. Try a different stream with more seeders.');
-            setIsLoading(false);
+          if (elapsedSec > 30 && !videoUrlSet) {
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
+            tryNextFallbackTorrent();
             return;
           }
           
-          // CRITICAL: Keep polling to keep the torrent engine alive!
-          // Poll fast (500ms) during initial buffering, slower (10s) after video URL is set.
-          // This prevents the torrent-stream engine from being destroyed after 5 min of inactivity.
           const pollInterval = videoUrlSet ? 10000 : 500;
           pollIntervalRef.current = setTimeout(pollStatus, pollInterval) as any;
         } catch (err) {
-          console.error('Status poll error:', err);
           pollIntervalRef.current = setTimeout(pollStatus, 1500) as any;
         }
       };
       
       pollStatus();
-      
     } catch (err: any) {
-      console.error('Stream start error:', err);
+      console.error('[PLAYER] Fallback torrent start error:', err);
       if (retryCount < MAX_RETRIES) {
-        console.log(`[PLAYER] Stream start failed, retrying in 3s (${retryCount + 1}/${MAX_RETRIES})...`);
-        setTimeout(() => startTorrentStream(retryCount + 1), 3000);
+        setTimeout(() => startTorrentStreamWithHash(hash, fIdx, fname, srcs, retryCount + 1), 3000);
         return;
       }
-      setError(err.message || 'Failed to start stream');
-      setIsLoading(false);
+      tryNextFallbackTorrent();
     }
   };
 
@@ -1959,8 +2206,9 @@ export default function PlayerScreen() {
                     videoRetryCountRef.current = 0; // Reset for next stream
                     tryNextStream();
                   } else {
-                    setError('Failed to play video. Please try a different stream.');
-                    setHasAudioError(true);
+                    // No URL fallbacks left — try torrent fallbacks
+                    videoRetryCountRef.current = 0;
+                    tryNextFallbackTorrent();
                   }
                 }}
               />
@@ -2185,29 +2433,38 @@ export default function PlayerScreen() {
             </Text>
             
             <View style={styles.nextEpisodeButtons}>
-              <TouchableOpacity 
-                style={styles.watchCreditsButton}
+              <Pressable 
+                style={({ pressed }) => [
+                  styles.watchCreditsButton,
+                  pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] },
+                ]}
                 onPress={dismissCreditsPopup}
               >
                 <Ionicons name="eye" size={20} color="#FFFFFF" />
                 <Text style={styles.watchCreditsButtonText}>Watch Credits</Text>
-              </TouchableOpacity>
+              </Pressable>
               
-              <TouchableOpacity 
-                style={styles.playNextButton}
+              <Pressable 
+                style={({ pressed }) => [
+                  styles.playNextButton,
+                  pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] },
+                ]}
                 onPress={playNextEpisode}
               >
                 <Ionicons name="play" size={20} color="#000" />
                 <Text style={styles.playNextButtonText}>Play Now</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
             
-            <TouchableOpacity 
-              style={styles.goBackLink}
+            <Pressable 
+              style={({ pressed }) => [
+                styles.goBackLink,
+                pressed && { opacity: 0.6 },
+              ]}
               onPress={handleGoBack}
             >
               <Text style={styles.goBackLinkText}>Go Back to Stream Selection</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -2452,7 +2709,7 @@ const styles = StyleSheet.create({
   // Subtitle display
   subtitleContainer: {
     position: 'absolute',
-    bottom: 80,
+    bottom: 30,
     left: 20,
     right: 20,
     alignItems: 'center',
