@@ -1,10 +1,11 @@
-import React, { memo, useState, useCallback, useRef, useMemo } from 'react';
+import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   useWindowDimensions,
+  InteractionManager,
 } from 'react-native';
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
@@ -20,6 +21,31 @@ const MOBILE_PADDING = 16;
 // 4 means: posters 1-5 free movement, poster 6 triggers first scroll.
 const TV_SCROLL_ANCHOR = 4;
 
+// Lazy wrapper — only mounts the real ServiceRow content after a staggered delay.
+// This prevents all horizontal FlatLists from mounting at once and blocking the JS thread.
+const LazyMount: React.FC<{ height: number; delay?: number; children: React.ReactNode }> = memo(({ height, delay = 0, children }) => {
+  const [shouldRender, setShouldRender] = useState(delay <= 0);
+  
+  useEffect(() => {
+    if (delay <= 0) {
+      setShouldRender(true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      InteractionManager.runAfterInteractions(() => {
+        setShouldRender(true);
+      });
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [delay]);
+  
+  if (!shouldRender) {
+    return <View style={{ height, backgroundColor: 'transparent' }} />;
+  }
+  
+  return <>{children}</>;
+});
+
 interface ServiceRowProps {
   title: string;
   serviceName: string;
@@ -29,6 +55,7 @@ interface ServiceRowProps {
   onItemFocus?: (item: ContentItem) => void;
   onSectionFocus?: () => void;
   isFirstRow?: boolean;
+  rowIndex?: number;
 }
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(({
@@ -40,6 +67,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   onItemFocus,
   onSectionFocus,
   isFirstRow = false,
+  rowIndex = 0,
 }) => {
   const { width: screenWidth, height } = useWindowDimensions();
   const isTV = screenWidth > height || screenWidth > 800;
@@ -171,37 +199,42 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const keyExtractor = useCallback((item: ContentItem) => 
     item.id || item.imdb_id || `${item.name}`, []);
 
+  // First 2 rows render immediately, subsequent rows stagger by 150ms each
+  const lazyDelay = rowIndex <= 1 ? 0 : (rowIndex - 1) * 150;
+
   return (
-    <View style={styles.container}>
-      <View style={[styles.header, isTV && styles.headerTV]}>
-        <Text style={[styles.title, isTV && styles.titleTV]}>
-          {title || serviceName || 'Content'}
-        </Text>
+    <LazyMount height={200} delay={lazyDelay}>
+      <View style={styles.container}>
+        <View style={[styles.header, isTV && styles.headerTV]}>
+          <Text style={[styles.title, isTV && styles.titleTV]}>
+            {title || serviceName || 'Content'}
+          </Text>
+        </View>
+        
+        <FlatList
+          ref={flatListRef}
+          horizontal
+          data={validItems}
+          extraData={validItems.length}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          getItemLayout={getItemLayout}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isTV && styles.scrollContentTV,
+          ]}
+          style={styles.flatListStyle}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          updateCellsBatchingPeriod={50}
+          windowSize={5}
+          removeClippedSubviews={true}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={3}
+        />
       </View>
-      
-      <FlatList
-        ref={flatListRef}
-        horizontal
-        data={validItems}
-        extraData={validItems.length}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        getItemLayout={getItemLayout}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          isTV && styles.scrollContentTV,
-        ]}
-        style={styles.flatListStyle}
-        initialNumToRender={10}
-        maxToRenderPerBatch={8}
-        updateCellsBatchingPeriod={50}
-        windowSize={5}
-        removeClippedSubviews={true}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={3}
-      />
-    </View>
+    </LazyMount>
   );
 });
 

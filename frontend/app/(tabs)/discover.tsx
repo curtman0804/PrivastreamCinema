@@ -328,7 +328,9 @@ export default function DiscoverScreen() {
           )}
           
           {/* Content Rows from Addons */}
-          {Object.entries(discoverData?.services || {}).map(([serviceName, content]) => {
+          {(() => {
+            let rowIdx = 0;
+            return Object.entries(discoverData?.services || {}).map(([serviceName, content]) => {
             const hasMoviesInName = serviceName.toLowerCase().includes('movie');
             const hasSeriesInName = serviceName.toLowerCase().includes('series');
             const hasChannelsInName = serviceName.toLowerCase().includes('channel');
@@ -345,6 +347,7 @@ export default function DiscoverScreen() {
                       onItemPress={handleItemPress}
                       onItemFocus={handleItemFocus}
                       onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
+                      rowIndex={rowIdx++}
                     />
                   </View>
                 )}
@@ -358,6 +361,7 @@ export default function DiscoverScreen() {
                       onItemPress={handleItemPress}
                       onItemFocus={handleItemFocus}
                       onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
+                      rowIndex={rowIdx++}
                     />
                   </View>
                 )}
@@ -370,12 +374,14 @@ export default function DiscoverScreen() {
                       items={content.channels.map((ch: any) => ({ ...ch, type: 'tv' as const }))}
                       onItemPress={handleItemPress}
                       onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
+                      rowIndex={rowIdx++}
                     />
                   </View>
                 )}
               </React.Fragment>
             );
-          })}
+          });
+          })()}
           <View style={styles.bottomPadding} />
         </ScrollView>
         </View>

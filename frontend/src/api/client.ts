@@ -724,6 +724,16 @@ export const api = {
       }
     },
   },
+  debrid: {
+    checkCache: async (hashes: string[]): Promise<{ cached: string[] }> => {
+      try {
+        const response = await apiClient.get(`/api/rd/check?hashes=${hashes.join(',')}`);
+        return response.data;
+      } catch (err) {
+        return { cached: [] };
+      }
+    },
+  },
   watchProgress: {
     getAll: async (): Promise<{ continueWatching: WatchProgress[] }> => {
       try {
