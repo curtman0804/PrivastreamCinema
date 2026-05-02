@@ -202,6 +202,7 @@ export default function PlayerScreen() {
     // Next episode data
     nextEpisodeId,
     nextEpisodeTitle,
+    nextEpisodePoster,
     seriesId,
     season,
     episode,
@@ -228,6 +229,7 @@ export default function PlayerScreen() {
     filename?: string;
     nextEpisodeId?: string;
     nextEpisodeTitle?: string;
+    nextEpisodePoster?: string;
     seriesId?: string;
     season?: string;
     episode?: string;
@@ -407,6 +409,23 @@ export default function PlayerScreen() {
     if (!force && now - lastProgressSaveRef.current < 5000) return;
     lastProgressSaveRef.current = now;
     
+    // Mark as watched in AsyncStorage FIRST — independent of API success
+    const percentWatched = (currentPosition / totalDuration) * 100;
+    if (percentWatched >= 90 && contentId) {
+      try {
+        const watchedKey = 'privastream_watched';
+        const existing = await AsyncStorage.getItem(watchedKey);
+        const watchedSet: Record<string, boolean> = existing ? JSON.parse(existing) : {};
+        if (!watchedSet[contentId]) {
+          watchedSet[contentId] = true;
+          await AsyncStorage.setItem(watchedKey, JSON.stringify(watchedSet));
+          console.log('[PLAYER] Marked as watched:', contentId);
+        }
+      } catch (e) {
+        console.log('[PLAYER] Error saving watched status:', e);
+      }
+    }
+
     try {
       await api.watchProgress.save({
         content_id: contentId,
@@ -427,23 +446,6 @@ export default function PlayerScreen() {
         stream_filename: filename || undefined,
       });
       console.log('[PLAYER] Watch progress saved:', currentPosition / 1000, '/', totalDuration / 1000);
-      
-      // Mark as watched when >= 90% complete
-      const percentWatched = (currentPosition / totalDuration) * 100;
-      if (percentWatched >= 90 && contentId) {
-        try {
-          const watchedKey = 'privastream_watched';
-          const existing = await AsyncStorage.getItem(watchedKey);
-          const watchedSet: Record<string, boolean> = existing ? JSON.parse(existing) : {};
-          if (!watchedSet[contentId]) {
-            watchedSet[contentId] = true;
-            await AsyncStorage.setItem(watchedKey, JSON.stringify(watchedSet));
-            console.log('[PLAYER] Marked as watched:', contentId);
-          }
-        } catch (e) {
-          console.log('[PLAYER] Error saving watched status:', e);
-        }
-      }
     } catch (err) {
       console.log('[PLAYER] Failed to save watch progress:', err);
     }
@@ -659,7 +661,7 @@ export default function PlayerScreen() {
   const creditsShownRef = useRef(false); // Track if we've shown the credits popup
   
   // Credits detection settings - show popup near the end
-  const CREDITS_TIME_REMAINING_MS = 45000; // Show popup when 45 seconds remaining
+  const CREDITS_TIME_REMAINING_MS = 5000; // Show popup when 5 seconds remaining
   const CREDITS_PERCENTAGE = 0.98; // Or when 98% complete
   const MIN_DURATION_FOR_CREDITS = 180000; // Only detect credits for videos > 3 minutes
   
@@ -769,11 +771,16 @@ export default function PlayerScreen() {
         showCreditsPopup();
       }
       
-      // Check if playback ended - go back if modal was dismissed
+      // Check if playback ended
       if (status.didJustFinish) {
         console.log('[PLAYER] Playback ended');
         setIsEnded(true);
-        if (!showNextEpisodeModal) {
+        // If credits popup was never shown and there's a next episode, show it NOW
+        if (nextEpisodeId && contentType === 'series' && !creditsShownRef.current && !showNextEpisodeModal) {
+          console.log('[PLAYER] Playback finished without credits popup — showing now');
+          creditsShownRef.current = true;
+          showCreditsPopup();
+        } else if (!showNextEpisodeModal) {
           // Modal was dismissed or never shown, go back
           router.back();
         }
@@ -784,7 +791,7 @@ export default function PlayerScreen() {
   // Show the credits/next episode popup
   const showCreditsPopup = useCallback(() => {
     setShowNextEpisodeModal(true);
-    setCountdown(15); // 15 seconds to decide
+    setCountdown(5); // 5 seconds to decide
     
     // Start countdown - auto-play next episode when countdown ends
     countdownRef.current = setInterval(() => {
@@ -794,11 +801,11 @@ export default function PlayerScreen() {
           if (countdownRef.current) clearInterval(countdownRef.current);
           setShowNextEpisodeModal(false);
           
-          // Navigate to next episode with autoPlay
+          // Navigate to next episode with autoPlay, passing current hash for faster resolution
           console.log('[PLAYER] Countdown ended - auto-playing next episode:', nextEpisodeId);
           router.replace({
             pathname: `/details/series/${nextEpisodeId}`,
-            params: { autoPlay: 'true' },
+            params: { autoPlay: 'true', preferHash: infoHash || '' },
           });
           return 0;
         }
@@ -847,9 +854,10 @@ export default function PlayerScreen() {
     console.log('[PLAYER] Playing next episode:', nextEpisodeId);
     
     // Navigate to the next episode details page with autoPlay
+    // Pass current infoHash so it prefers the same torrent (already cached in RD)
     router.replace({
       pathname: `/details/series/${nextEpisodeId}`,
-      params: { autoPlay: 'true' },
+      params: { autoPlay: 'true', preferHash: infoHash || '' },
     });
   };
   
@@ -2410,64 +2418,57 @@ export default function PlayerScreen() {
         </View>
       </Modal>
 
-      {/* Next Episode Modal */}
-      <Modal
-        visible={showNextEpisodeModal}
-        transparent
-        animationType="fade"
-        onRequestClose={dismissCreditsPopup}
-      >
-        <View style={styles.nextEpisodeModalOverlay}>
-          <View style={styles.nextEpisodeModal}>
-            <View style={styles.nextEpisodeHeader}>
-              <Ionicons name="play-skip-forward" size={32} color="#B8A05C" />
-              <Text style={styles.nextEpisodeTitle}>Up Next</Text>
-            </View>
-            
-            <Text style={styles.nextEpisodeInfo}>
+      {/* Next Episode - Stremio-style bottom-right mini card */}
+      {showNextEpisodeModal && (
+        <View style={styles.upNextCard}>
+          <View style={styles.upNextPosterWrap}>
+            {(nextEpisodePoster || poster) ? (
+              <Image
+                source={{ uri: (nextEpisodePoster || poster) as string }}
+                style={styles.upNextPoster}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.upNextPoster, { backgroundColor: '#222', justifyContent: 'center', alignItems: 'center' }]}>
+                <Ionicons name="tv-outline" size={24} color="#666" />
+              </View>
+            )}
+          </View>
+          <View style={styles.upNextInfo}>
+            <Text style={styles.upNextLabel}>UP NEXT</Text>
+            <Text style={styles.upNextTitle} numberOfLines={2}>
               {nextEpisodeTitle || 'Next Episode'}
             </Text>
-            
-            <Text style={styles.countdownText}>
-              Playing next episode in {countdown}s
+            <Text style={styles.upNextCountdown}>
+              Playing in {countdown}s
             </Text>
-            
-            <View style={styles.nextEpisodeButtons}>
+            <View style={styles.upNextButtons}>
               <Pressable 
-                style={({ pressed }) => [
-                  styles.watchCreditsButton,
-                  pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] },
-                ]}
-                onPress={dismissCreditsPopup}
-              >
-                <Ionicons name="eye" size={20} color="#FFFFFF" />
-                <Text style={styles.watchCreditsButtonText}>Watch Credits</Text>
-              </Pressable>
-              
-              <Pressable 
-                style={({ pressed }) => [
-                  styles.playNextButton,
-                  pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] },
-                ]}
                 onPress={playNextEpisode}
+                hasTVPreferredFocus={true}
+                style={({pressed, focused}) => [
+                  styles.upNextPlayBtn,
+                  pressed && { opacity: 0.7 },
+                  focused && { borderWidth: 2, borderColor: '#FFF', transform: [{scale: 1.1}] }
+                ]}
               >
-                <Ionicons name="play" size={20} color="#000" />
-                <Text style={styles.playNextButtonText}>Play Now</Text>
+                <Ionicons name="play" size={14} color="#000" />
+                <Text style={styles.upNextPlayText}>Play Now</Text>
+              </Pressable>
+              <Pressable 
+                onPress={dismissCreditsPopup}
+                style={({pressed, focused}) => [
+                  styles.upNextDismissBtn,
+                  pressed && { opacity: 0.7 },
+                  focused && { borderWidth: 2, borderColor: '#FFF', transform: [{scale: 1.1}] }
+                ]}
+              >
+                <Ionicons name="close" size={16} color="#FFF" />
               </Pressable>
             </View>
-            
-            <Pressable 
-              style={({ pressed }) => [
-                styles.goBackLink,
-                pressed && { opacity: 0.6 },
-              ]}
-              onPress={handleGoBack}
-            >
-              <Text style={styles.goBackLinkText}>Go Back to Stream Selection</Text>
-            </Pressable>
           </View>
         </View>
-      </Modal>
+      )}
     </View>
   );
 }
@@ -3027,103 +3028,73 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
   },
-  // Next Episode Modal
-  nextEpisodeModalOverlay: {
+  // Stremio-style Up Next card - bottom right
+  upNextCard: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 320,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(20, 20, 20, 0.95)',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#333',
+    zIndex: 9999,
+  },
+  upNextPosterWrap: {
+    width: 80,
+    height: 110,
+  },
+  upNextPoster: {
+    width: 80,
+    height: 110,
+  },
+  upNextInfo: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  nextEpisodeModal: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 16,
-    padding: 24,
-    width: '85%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  nextEpisodeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  nextEpisodeTitle: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '700',
-    marginLeft: 12,
-  },
-  nextEpisodeInfo: {
-    color: '#CCCCCC',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  countdownText: {
-    color: '#888',
-    fontSize: 14,
-    marginBottom: 24,
-  },
-  nextEpisodeButtons: {
-    flexDirection: 'row',
+    padding: 10,
     justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 16,
   },
-  watchCreditsButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#333',
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginRight: 8,
+  upNextLabel: {
+    color: '#B8A05C',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
-  watchCreditsButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  upNextTitle: {
+    color: '#FFF',
+    fontSize: 13,
     fontWeight: '600',
-    marginLeft: 8,
+    marginTop: 2,
   },
-  goBackButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#333',
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  goBackButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  goBackLink: {
-    paddingVertical: 8,
-  },
-  goBackLinkText: {
+  upNextCountdown: {
     color: '#888',
-    fontSize: 14,
-    textDecorationLine: 'underline',
+    fontSize: 11,
+    marginTop: 4,
   },
-  playNextButton: {
-    flex: 1,
+  upNextButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#B8A05C',
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginLeft: 8,
+    marginTop: 6,
+    gap: 8,
   },
-  playNextButtonText: {
+  upNextPlayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#B8A05C',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  upNextPlayText: {
     color: '#000',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  upNextDismissBtn: {
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: '#333',
   },
 });

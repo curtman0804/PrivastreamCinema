@@ -339,6 +339,7 @@ export default function DetailsScreen() {
     // Display data passed via route params for INSTANT rendering
     name: paramName, poster: paramPoster,
     autoPlay: autoPlayParam,
+    preferHash: preferHashParam,
   } = useLocalSearchParams<{ 
     type: string; 
     id: string;
@@ -348,6 +349,7 @@ export default function DetailsScreen() {
     resumeEpisode?: string;
     name?: string; poster?: string;
     autoPlay?: string;
+    preferHash?: string;
   }>();
   const router = useRouter();
   
@@ -391,18 +393,22 @@ export default function DetailsScreen() {
   }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
 
   const nextEpisode = useMemo(() => {
-    if (!isEpisodePage || !content?.videos || !episodeSeason || !episodeNumber) return null;
+    if (!isEpisodePage || !episodeSeason || !episodeNumber) return null;
     
-    const sameSeasonNext = content.videos.find(
+    // Try content.videos first, fall back to cached meta (might be cached under baseId)
+    const videos = content?.videos || (baseId ? getMetaCache(baseId)?.videos : null);
+    if (!videos) return null;
+    
+    const sameSeasonNext = videos.find(
       ep => ep.season === episodeSeason && ep.episode === episodeNumber + 1
     );
     if (sameSeasonNext) return sameSeasonNext;
     
-    const nextSeasonFirst = content.videos.find(
+    const nextSeasonFirst = videos.find(
       ep => ep.season === episodeSeason + 1 && ep.episode === 1
     );
     return nextSeasonFirst || null;
-  }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
+  }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber, baseId]);
 
   const seasons = useMemo(() => {
     if (!content?.videos) return [];
@@ -467,18 +473,39 @@ export default function DetailsScreen() {
   );
 
   // AUTO-PLAY: When navigated from "Play Next", auto-select best stream
+  // Must wait for FRESH streams to load (not stale from previous episode)
+  // Prefers same torrent hash from previous episode (already cached in RD = instant playback)
+  const streamsLoadedFreshRef = useRef(false);
   useEffect(() => {
-    if (autoPlayParam === 'true' && !autoPlayTriggeredRef.current && streams && streams.length > 0 && !isLoadingStreams) {
+    if (isLoadingStreams) {
+      streamsLoadedFreshRef.current = true; // Mark that a fresh fetch started
+    }
+    if (autoPlayParam === 'true' && !autoPlayTriggeredRef.current && streamsLoadedFreshRef.current && streams && streams.length > 0 && !isLoadingStreams) {
       autoPlayTriggeredRef.current = true;
-      const sorted = sortStreamsByLanguage(streams);
-      const bestStream = sorted[0];
+      
+      let bestStream = null;
+      
+      // First: try to find a stream with the same hash (season pack already cached in RD)
+      if (preferHashParam) {
+        bestStream = streams.find(s => s.infoHash === preferHashParam);
+        if (bestStream) {
+          console.log('[AUTOPLAY] Found preferred hash (RD cached):', preferHashParam);
+        }
+      }
+      
+      // Fallback: pick best sorted stream
+      if (!bestStream) {
+        const sorted = sortStreamsByLanguage(streams);
+        bestStream = sorted[0];
+        console.log('[AUTOPLAY] Using best sorted stream:', bestStream?.infoHash || bestStream?.title);
+      }
+      
       if (bestStream) {
-        console.log('[AUTOPLAY] Auto-selecting best stream:', bestStream.infoHash || bestStream.title);
-        // Small delay to ensure component is mounted
+        console.log('[AUTOPLAY] Auto-selecting stream for', id);
         setTimeout(() => handleStreamSelect(bestStream), 300);
       }
     }
-  }, [streams, isLoadingStreams, autoPlayParam]);
+  }, [streams, isLoadingStreams, autoPlayParam, preferHashParam, id]);
 
   // PRE-WARM: When streams are loaded, silently pre-start the top ENGLISH torrent
   // This saves 5-10 seconds of metadata download when user taps play
@@ -517,12 +544,13 @@ export default function DetailsScreen() {
       : (id as string);
     const contentTitle = currentEpisode 
       ? `S${episodeSeason}E${episodeNumber} - ${currentEpisode.name || content?.name || 'Video'}`
-      : content?.name || 'Video';
+      : (isEpisodePage ? `S${episodeSeason}E${episodeNumber} - ${content?.name || 'Loading...'}` : content?.name || 'Video');
     const cType = type as string || 'movie';
     
     const nextEpisodeData = nextEpisode ? {
       nextEpisodeId: `${baseId}:${nextEpisode.season}:${nextEpisode.episode}`,
       nextEpisodeTitle: `S${nextEpisode.season}E${nextEpisode.episode} - ${nextEpisode.name || 'Next Episode'}`,
+      nextEpisodePoster: nextEpisode.thumbnail || content?.poster || '',
       seriesId: baseId || id,
       season: String(episodeSeason),
       episode: String(episodeNumber),
