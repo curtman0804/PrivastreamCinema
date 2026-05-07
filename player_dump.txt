@@ -1,0 +1,465 @@
+TOTAL_LINES: 3166
+
+>>> nextEpisode params matches: [
+  203, 204, 205, 230,
+  231, 232, 762, 779,
+  801, 802
+]
+
+=== nextEpisode params@203 (lines 200 - 228 )===
+ 200:     fileIdx,
+ 201:     filename,
+ 202:     // Next episode data
+ 203:     nextEpisodeId,
+ 204:     nextEpisodeTitle,
+ 205:     nextEpisodePoster,
+ 206:     seriesId,
+ 207:     season,
+ 208:     episode,
+ 209:     // Visual assets
+ 210:     backdrop,
+ 211:     poster,
+ 212:     logo,
+ 213:     // Resume position (from continue watching)
+ 214:     resumePosition,
+ 215:     // Tracker sources from Torrentio (CRITICAL for peer discovery)
+ 216:     sources,
+ 217:     // Fallback torrent streams for auto-retry
+ 218:     fallbackTorrents,
+ 219:   } = useLocalSearchParams<{
+ 220:     url?: string;
+ 221:     title?: string;
+ 222:     infoHash?: string;
+ 223:     directUrl?: string;
+ 224:     isLive?: string;
+ 225:     contentType?: string;
+ 226:     contentId?: string;
+ 227:     fallbackStreams?: string;
+ 228:     fileIdx?: string;
+
+=== nextEpisode params@204 (lines 201 - 229 )===
+ 201:     filename,
+ 202:     // Next episode data
+ 203:     nextEpisodeId,
+ 204:     nextEpisodeTitle,
+ 205:     nextEpisodePoster,
+ 206:     seriesId,
+ 207:     season,
+ 208:     episode,
+ 209:     // Visual assets
+ 210:     backdrop,
+ 211:     poster,
+ 212:     logo,
+ 213:     // Resume position (from continue watching)
+ 214:     resumePosition,
+ 215:     // Tracker sources from Torrentio (CRITICAL for peer discovery)
+ 216:     sources,
+ 217:     // Fallback torrent streams for auto-retry
+ 218:     fallbackTorrents,
+ 219:   } = useLocalSearchParams<{
+ 220:     url?: string;
+ 221:     title?: string;
+ 222:     infoHash?: string;
+ 223:     directUrl?: string;
+ 224:     isLive?: string;
+ 225:     contentType?: string;
+ 226:     contentId?: string;
+ 227:     fallbackStreams?: string;
+ 228:     fileIdx?: string;
+ 229:     filename?: string;
+
+=== nextEpisode params@205 (lines 202 - 230 )===
+ 202:     // Next episode data
+ 203:     nextEpisodeId,
+ 204:     nextEpisodeTitle,
+ 205:     nextEpisodePoster,
+ 206:     seriesId,
+ 207:     season,
+ 208:     episode,
+ 209:     // Visual assets
+ 210:     backdrop,
+ 211:     poster,
+ 212:     logo,
+ 213:     // Resume position (from continue watching)
+ 214:     resumePosition,
+ 215:     // Tracker sources from Torrentio (CRITICAL for peer discovery)
+ 216:     sources,
+ 217:     // Fallback torrent streams for auto-retry
+ 218:     fallbackTorrents,
+ 219:   } = useLocalSearchParams<{
+ 220:     url?: string;
+ 221:     title?: string;
+ 222:     infoHash?: string;
+ 223:     directUrl?: string;
+ 224:     isLive?: string;
+ 225:     contentType?: string;
+ 226:     contentId?: string;
+ 227:     fallbackStreams?: string;
+ 228:     fileIdx?: string;
+ 229:     filename?: string;
+ 230:     nextEpisodeId?: string;
+
+>>> useLocalSearchParams matches: [ 31, 219 ]
+
+=== useLocalSearchParams@31 (lines 28 - 56 )===
+  28:   console.log('[TV] TV event handlers not available');
+  29: }
+  30: import { SafeAreaView } from 'react-native-safe-area-context';
+  31: import { useLocalSearchParams, useRouter } from 'expo-router';
+  32: import { Ionicons } from '@expo/vector-icons';
+  33: import { api } from '../src/api/client';
+  34: import * as ScreenOrientation from 'expo-screen-orientation';
+  35: import Constants from 'expo-constants';
+  36: import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+  37: import { Modal, FlatList } from 'react-native';
+  38: import AsyncStorage from '@react-native-async-storage/async-storage';
+  39: import { useKeepAwake } from 'expo-keep-awake';
+  40: import * as NavigationBar from 'expo-navigation-bar';
+  41: 
+  42: // Cloud streaming engine (uses torrent-stream + PeerSearch on server, same libraries as Stremio)
+  43: 
+  44: // Check if running on TV
+  45: const isTV = Platform.isTV || Platform.OS === 'android';
+  46: 
+  47: // Conditionally import WebView only on native (fallback for HLS)
+  48: let WebView: any = null;
+  49: if (Platform.OS !== 'web') {
+  50:   try {
+  51:     WebView = require('react-native-webview').WebView;
+  52:   } catch (e) {
+  53:     console.log('WebView not available');
+  54:   }
+  55: }
+  56: 
+
+=== useLocalSearchParams@219 (lines 216 - 244 )===
+ 216:     sources,
+ 217:     // Fallback torrent streams for auto-retry
+ 218:     fallbackTorrents,
+ 219:   } = useLocalSearchParams<{
+ 220:     url?: string;
+ 221:     title?: string;
+ 222:     infoHash?: string;
+ 223:     directUrl?: string;
+ 224:     isLive?: string;
+ 225:     contentType?: string;
+ 226:     contentId?: string;
+ 227:     fallbackStreams?: string;
+ 228:     fileIdx?: string;
+ 229:     filename?: string;
+ 230:     nextEpisodeId?: string;
+ 231:     nextEpisodeTitle?: string;
+ 232:     nextEpisodePoster?: string;
+ 233:     seriesId?: string;
+ 234:     season?: string;
+ 235:     episode?: string;
+ 236:     backdrop?: string;
+ 237:     poster?: string;
+ 238:     logo?: string;
+ 239:     resumePosition?: string;
+ 240:     sources?: string;
+ 241:     fallbackTorrents?: string;
+ 242:   }>();
+ 243:   const router = useRouter();
+ 244:   
+
+>>> initial loading state matches: [
+   287,  308,  326,
+   705,  706, 1215,
+  1223, 1306, 1319,
+  1896
+]
+
+=== initial loading state@287 (lines 284 - 312 )===
+ 284:     }
+ 285:   }, [resumePosition]);
+ 286:   
+ 287:   const [isLoading, setIsLoading] = useState(true);
+ 288:   const [isRebuffering, setIsRebuffering] = useState(false); // Shows spinner during seek/rebuffer
+ 289:   const [error, setError] = useState<string | null>(null);
+ 290:   const [loadingStatus, setLoadingStatus] = useState('');
+ 291:   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+ 292:   const [downloadProgress, setDownloadProgress] = useState(0);
+ 293:   const [peers, setPeers] = useState(0);
+ 294:   const [downloadSpeed, setDownloadSpeed] = useState(0);
+ 295:   const [isLiveTV, setIsLiveTV] = useState(false);
+ 296:   const [hasAudioError, setHasAudioError] = useState(false);
+ 297:   const videoRetryCountRef = useRef(0);
+ 298:   const maxVideoRetries = isLive === 'true' ? 10 : directUrl ? 3 : 15; // Direct URLs fail fast, torrents need more time
+ 299:   
+ 300:   // Track seek state to prevent URL reset during seeking
+ 301:   const isSeekingRef = useRef(false);
+ 302:   const lastSeekPositionRef = useRef<number>(0);
+ 303:   
+ 304:   // Stremio-style breathing zoom animation for loading title
+ 305:   const breatheAnim = useRef(new Animated.Value(1)).current;
+ 306:   
+ 307:   useEffect(() => {
+ 308:     if (isLoading && !error) {
+ 309:       const breathe = Animated.loop(
+ 310:         Animated.sequence([
+ 311:           Animated.timing(breatheAnim, {
+ 312:             toValue: 1.06,
+
+=== initial loading state@308 (lines 305 - 333 )===
+ 305:   const breatheAnim = useRef(new Animated.Value(1)).current;
+ 306:   
+ 307:   useEffect(() => {
+ 308:     if (isLoading && !error) {
+ 309:       const breathe = Animated.loop(
+ 310:         Animated.sequence([
+ 311:           Animated.timing(breatheAnim, {
+ 312:             toValue: 1.06,
+ 313:             duration: 2000,
+ 314:             useNativeDriver: true,
+ 315:           }),
+ 316:           Animated.timing(breatheAnim, {
+ 317:             toValue: 0.96,
+ 318:             duration: 2000,
+ 319:             useNativeDriver: true,
+ 320:           }),
+ 321:         ])
+ 322:       );
+ 323:       breathe.start();
+ 324:       return () => breathe.stop();
+ 325:     }
+ 326:   }, [isLoading, error]);
+ 327:   
+ 328:   // Fallback streams for auto-retry
+ 329:   const [fallbackUrls, setFallbackUrls] = useState<string[]>([]);
+ 330:   const [currentStreamIndex, setCurrentStreamIndex] = useState(-1);
+ 331:   const [playbackStarted, setPlaybackStarted] = useState(false);
+ 332:   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+ 333:   
+
+=== initial loading state@326 (lines 323 - 351 )===
+ 323:       breathe.start();
+ 324:       return () => breathe.stop();
+ 325:     }
+ 326:   }, [isLoading, error]);
+ 327:   
+ 328:   // Fallback streams for auto-retry
+ 329:   const [fallbackUrls, setFallbackUrls] = useState<string[]>([]);
+ 330:   const [currentStreamIndex, setCurrentStreamIndex] = useState(-1);
+ 331:   const [playbackStarted, setPlaybackStarted] = useState(false);
+ 332:   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+ 333:   
+ 334:   // Fallback torrent streams — used when primary torrent fails (no peers, timeout)
+ 335:   interface FallbackTorrent {
+ 336:     infoHash: string;
+ 337:     fileIdx?: number;
+ 338:     filename?: string;
+ 339:     sources?: string[];
+ 340:     name?: string;
+ 341:     title?: string;
+ 342:   }
+ 343:   const [torrentFallbacks, setTorrentFallbacks] = useState<FallbackTorrent[]>([]);
+ 344:   const torrentFallbackIdxRef = useRef(0);
+ 345:   
+ 346:   // NO safety timeout - let the torrent download and ExoPlayer buffer naturally.
+ 347:   // First-click torrents need 30-60+ seconds for metadata + initial pieces.
+ 348:   // The loading screen (breathing zoom + fill) provides good UX during this wait.
+ 349:   // ExoPlayer's onError handler + retry mechanism handles actual failures.
+ 350:   // The user can always press back to cancel if they don't want to wait.
+ 351:   
+
+>>> loading UI matches: [
+  1897, 1902,
+  1908, 1911,
+  2561, 2570,
+  2684
+]
+
+=== loading UI@1897 (lines 1894 - 1922 )===
+1894: 
+1895:       {/* Stremio-Style Loading Screen */}
+1896:       {isLoading && !error && (
+1897:         <View style={styles.stremioLoadingContainer}>
+1898:           {/* Backdrop Image */}
+1899:           {(backdrop || poster) && (
+1900:             <Image
+1901:               source={{ uri: backdrop || poster }}
+1902:               style={styles.loadingBackdrop}
+1903:               blurRadius={Platform.OS === 'web' ? 0 : 3}
+1904:             />
+1905:           )}
+1906:           
+1907:           {/* Dark Overlay */}
+1908:           <View style={styles.loadingDarkOverlay} />
+1909:           
+1910:           {/* Content */}
+1911:           <View style={styles.loadingContent}>
+1912:             {/* Logo/Title as Loading Bar - Stremio Style with Breathing Zoom + Fill */}
+1913:             <Animated.View style={{ transform: [{ scale: breatheAnim }], alignItems: 'center', width: '100%' }}>
+1914:             {logo ? (
+1915:               // Use the actual movie logo image with fill effect
+1916:               Platform.OS === 'web' ? (
+1917:                 <div style={{
+1918:                   position: 'relative',
+1919:                   width: '70%',
+1920:                   maxWidth: 500,
+1921:                   height: 100,
+1922:                 }}>
+
+=== loading UI@1902 (lines 1899 - 1927 )===
+1899:           {(backdrop || poster) && (
+1900:             <Image
+1901:               source={{ uri: backdrop || poster }}
+1902:               style={styles.loadingBackdrop}
+1903:               blurRadius={Platform.OS === 'web' ? 0 : 3}
+1904:             />
+1905:           )}
+1906:           
+1907:           {/* Dark Overlay */}
+1908:           <View style={styles.loadingDarkOverlay} />
+1909:           
+1910:           {/* Content */}
+1911:           <View style={styles.loadingContent}>
+1912:             {/* Logo/Title as Loading Bar - Stremio Style with Breathing Zoom + Fill */}
+1913:             <Animated.View style={{ transform: [{ scale: breatheAnim }], alignItems: 'center', width: '100%' }}>
+1914:             {logo ? (
+1915:               // Use the actual movie logo image with fill effect
+1916:               Platform.OS === 'web' ? (
+1917:                 <div style={{
+1918:                   position: 'relative',
+1919:                   width: '70%',
+1920:                   maxWidth: 500,
+1921:                   height: 100,
+1922:                 }}>
+1923:                   {/* Background logo - faded */}
+1924:                   <img 
+1925:                     src={logo}
+1926:                     alt={title || 'Loading'}
+1927:                     style={{
+
+=== loading UI@1908 (lines 1905 - 1933 )===
+1905:           )}
+1906:           
+1907:           {/* Dark Overlay */}
+1908:           <View style={styles.loadingDarkOverlay} />
+1909:           
+1910:           {/* Content */}
+1911:           <View style={styles.loadingContent}>
+1912:             {/* Logo/Title as Loading Bar - Stremio Style with Breathing Zoom + Fill */}
+1913:             <Animated.View style={{ transform: [{ scale: breatheAnim }], alignItems: 'center', width: '100%' }}>
+1914:             {logo ? (
+1915:               // Use the actual movie logo image with fill effect
+1916:               Platform.OS === 'web' ? (
+1917:                 <div style={{
+1918:                   position: 'relative',
+1919:                   width: '70%',
+1920:                   maxWidth: 500,
+1921:                   height: 100,
+1922:                 }}>
+1923:                   {/* Background logo - faded */}
+1924:                   <img 
+1925:                     src={logo}
+1926:                     alt={title || 'Loading'}
+1927:                     style={{
+1928:                       position: 'absolute',
+1929:                       left: 0,
+1930:                       top: 0,
+1931:                       width: '100%',
+1932:                       height: '100%',
+1933:                       objectFit: 'contain',
+
+>>> playback start matches: [
+  273, 282, 720, 732,
+  739, 747, 958, 960,
+  966, 968
+]
+
+=== playback start@273 (lines 270 - 298 )===
+ 270:   console.log(`[PLAYER] Route params - resumePosition: "${resumePosition}", parsed: ${parsedResumePosition}`);
+ 271:   
+ 272:   const [pendingResumePosition, setPendingResumePosition] = useState<number | null>(parsedResumePosition);
+ 273:   const hasResumedRef = useRef(false); // Track if we've already attempted resume
+ 274:   
+ 275:   // Update pending resume position when route param changes
+ 276:   useEffect(() => {
+ 277:     if (resumePosition) {
+ 278:       const parsed = parseFloat(resumePosition);
+ 279:       if (!isNaN(parsed) && parsed > 0) {
+ 280:         console.log(`[PLAYER] Setting pending resume position from route param: ${parsed}s`);
+ 281:         setPendingResumePosition(parsed);
+ 282:         hasResumedRef.current = false; // Reset resume flag
+ 283:       }
+ 284:     }
+ 285:   }, [resumePosition]);
+ 286:   
+ 287:   const [isLoading, setIsLoading] = useState(true);
+ 288:   const [isRebuffering, setIsRebuffering] = useState(false); // Shows spinner during seek/rebuffer
+ 289:   const [error, setError] = useState<string | null>(null);
+ 290:   const [loadingStatus, setLoadingStatus] = useState('');
+ 291:   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+ 292:   const [downloadProgress, setDownloadProgress] = useState(0);
+ 293:   const [peers, setPeers] = useState(0);
+ 294:   const [downloadSpeed, setDownloadSpeed] = useState(0);
+ 295:   const [isLiveTV, setIsLiveTV] = useState(false);
+ 296:   const [hasAudioError, setHasAudioError] = useState(false);
+ 297:   const videoRetryCountRef = useRef(0);
+ 298:   const maxVideoRetries = isLive === 'true' ? 10 : directUrl ? 3 : 15; // Direct URLs fail fast, torrents need more time
+
+=== playback start@282 (lines 279 - 307 )===
+ 279:       if (!isNaN(parsed) && parsed > 0) {
+ 280:         console.log(`[PLAYER] Setting pending resume position from route param: ${parsed}s`);
+ 281:         setPendingResumePosition(parsed);
+ 282:         hasResumedRef.current = false; // Reset resume flag
+ 283:       }
+ 284:     }
+ 285:   }, [resumePosition]);
+ 286:   
+ 287:   const [isLoading, setIsLoading] = useState(true);
+ 288:   const [isRebuffering, setIsRebuffering] = useState(false); // Shows spinner during seek/rebuffer
+ 289:   const [error, setError] = useState<string | null>(null);
+ 290:   const [loadingStatus, setLoadingStatus] = useState('');
+ 291:   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+ 292:   const [downloadProgress, setDownloadProgress] = useState(0);
+ 293:   const [peers, setPeers] = useState(0);
+ 294:   const [downloadSpeed, setDownloadSpeed] = useState(0);
+ 295:   const [isLiveTV, setIsLiveTV] = useState(false);
+ 296:   const [hasAudioError, setHasAudioError] = useState(false);
+ 297:   const videoRetryCountRef = useRef(0);
+ 298:   const maxVideoRetries = isLive === 'true' ? 10 : directUrl ? 3 : 15; // Direct URLs fail fast, torrents need more time
+ 299:   
+ 300:   // Track seek state to prevent URL reset during seeking
+ 301:   const isSeekingRef = useRef(false);
+ 302:   const lastSeekPositionRef = useRef<number>(0);
+ 303:   
+ 304:   // Stremio-style breathing zoom animation for loading title
+ 305:   const breatheAnim = useRef(new Animated.Value(1)).current;
+ 306:   
+ 307:   useEffect(() => {
+
+=== playback start@720 (lines 717 - 745 )===
+ 717:       
+ 718:       // Resume from saved position if coming from "Continue Watching"
+ 719:       // This runs on every status update until successful
+ 720:       if (pendingResumePosition && pendingResumePosition > 0 && !hasResumedRef.current && videoRef.current) {
+ 721:         const resumeMs = pendingResumePosition * 1000;
+ 722:         const totalDuration = status.durationMillis || 0;
+ 723:         const currentPos = status.positionMillis || 0;
+ 724:         
+ 725:         console.log(`[PLAYER] Resume check: pending=${pendingResumePosition}s, current=${currentPos/1000}s, duration=${totalDuration/1000}s`);
+ 726:         
+ 727:         // Only attempt resume if we have duration info
+ 728:         if (totalDuration > 0) {
+ 729:           // Check if position is past 95%, then don't resume (start from beginning)
+ 730:           if (resumeMs >= totalDuration * 0.95) {
+ 731:             console.log(`[PLAYER] Resume position past 95%, not resuming`);
+ 732:             hasResumedRef.current = true;
+ 733:             setPendingResumePosition(null);
+ 734:           } else {
+ 735:             const positionDiff = Math.abs(currentPos - resumeMs);
+ 736:             // If we're more than 3 seconds away from target, seek
+ 737:             if (positionDiff > 3000) {
+ 738:               console.log(`[PLAYER] Seeking to resume position: ${pendingResumePosition}s`);
+ 739:               videoRef.current.setPositionAsync(resumeMs).then(() => {
+ 740:                 console.log(`[PLAYER] Seek completed to ${pendingResumePosition}s`);
+ 741:               }).catch((err) => {
+ 742:                 console.log(`[PLAYER] Seek failed:`, err);
+ 743:               });
+ 744:             } else {
+ 745:               // We're at or near the target position, mark as resumed
+
+>>> back navigation matches: []

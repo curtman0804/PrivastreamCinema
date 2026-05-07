@@ -687,9 +687,6 @@ const currentEpisodeMeta = type === 'series' ? {
 const nextEpisodeData = nextEpisode ? {
   nextEpisodeId: `${baseId}:${nextEpisode.season}:${nextEpisode.episode}`,
   nextEpisodeTitle: `S${nextEpisode.season}E${nextEpisode.episode} - ${nextEpisode.name || 'Next Episode'}`,
-  // PATCH v2: player.tsx consumes `nextEpisodePoster`, not `nextEpisodeBackdrop`.
-  // Send the EPISODE thumbnail so the Up Next overlay shows the right image.
-  nextEpisodePoster: nextEpisode.thumbnail || content?.background || '',
   nextEpisodeBackdrop: nextEpisode.thumbnail || content?.background || '',
 } : {};
     
@@ -996,10 +993,9 @@ const nextEpisodeData = nextEpisode ? {
         <View style={styles.autoPlayOverlay}>
           {/* Full-screen series backdrop (blurred). Priority: loaded content
               backdrop (the real series art) → passed-in backdrop param → poster. */}
-          {/* PATCH v2: prefer EPISODE backdrop so transition into player loading is seamless */}
-          {(currentEpisode?.thumbnail || nextBackdropParam || content?.background || content?.poster || nextPosterParam) && (
+          {(content?.background || content?.poster || nextBackdropParam || nextPosterParam) && (
             <RNImage
-              source={{ uri: (currentEpisode?.thumbnail || nextBackdropParam || content?.background || content?.poster || nextPosterParam) as string }}
+              source={{ uri: (content?.background || nextBackdropParam || content?.poster || nextPosterParam) as string }}
               style={StyleSheet.absoluteFillObject}
               blurRadius={8}
               resizeMode="cover"

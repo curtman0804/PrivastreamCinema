@@ -386,8 +386,6 @@ export default function DetailsScreen() {
     // Display data passed via route params for INSTANT rendering
     name: paramName, poster: paramPoster,
     autoPlay: autoPlayParam,
-    selectedSeason: paramSelectedSeason,
-    selectedEpisode: paramSelectedEpisode,
     nextTitle: nextTitleParam,
     nextPoster: nextPosterParam,
     nextBackdrop: nextBackdropParam,
@@ -403,44 +401,7 @@ export default function DetailsScreen() {
     nextTitle?: string;
     nextPoster?: string;
     nextBackdrop?: string;
-    selectedSeason?: string;
-    selectedEpisode?: string;
   }>();
-
-  // === ANDROID-TV BACK BUTTON FIX =========================================
-  // Hardware back from any episode-details page teleports straight to the
-  // SERIES ROOT page (with selectedSeason / selectedEpisode set) regardless
-  // of how polluted the navigation stack got from auto-binge-watching.
-  const goToSeriesRootWithFocus = useCallback(() => {
-    const idStr = (id as string) || '';
-    if (!idStr.includes(':')) return false;
-    const parts = idStr.split(':');
-    const baseIdLocal = parts[0] || idStr;
-    const s = parts[1] || '';
-    const e = parts[2] || '';
-    try {
-      if (typeof (router as any).dismissAll === 'function') (router as any).dismissAll();
-    } catch (_) {}
-    setTimeout(() => {
-      router.push({
-        pathname: `/details/${type}/${baseIdLocal}`,
-        params: { selectedSeason: s, selectedEpisode: e },
-      });
-    }, 30);
-    return true;
-  }, [id, type, router]);
-
-  const handleBack = useCallback(() => {
-    if (!goToSeriesRootWithFocus()) router.back();
-  }, [goToSeriesRootWithFocus, router]);
-
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => goToSeriesRootWithFocus());
-    return () => sub.remove();
-  }, [goToSeriesRootWithFocus]);
-  // ========================================================================
-
-
   const router = useRouter();
   
   // Use zustand SELECTORS — only re-render when these specific fields change
@@ -531,16 +492,10 @@ export default function DetailsScreen() {
   }, [id, type]);
 
   useEffect(() => {
-    if (seasons.length === 0) return;
-    const fromParam = paramSelectedSeason ? parseInt(paramSelectedSeason as string, 10) : NaN;
-    if (!isNaN(fromParam) && seasons.includes(fromParam)) {
-      if (selectedSeason !== fromParam) setSelectedSeason(fromParam);
-      return;
-    }
-    if (!seasons.includes(selectedSeason)) {
+    if (seasons.length > 0 && !seasons.includes(selectedSeason)) {
       setSelectedSeason(seasons[0]);
     }
-  }, [seasons, paramSelectedSeason]);
+  }, [seasons]);
 
   // Hardware back (Firestick remote / Android back) — when the user reached
   // this detail page via Play-Next autoplay, intercept back so they go to
@@ -687,10 +642,6 @@ const currentEpisodeMeta = type === 'series' ? {
 const nextEpisodeData = nextEpisode ? {
   nextEpisodeId: `${baseId}:${nextEpisode.season}:${nextEpisode.episode}`,
   nextEpisodeTitle: `S${nextEpisode.season}E${nextEpisode.episode} - ${nextEpisode.name || 'Next Episode'}`,
-  // PATCH v2: player.tsx consumes `nextEpisodePoster`, not `nextEpisodeBackdrop`.
-  // Send the EPISODE thumbnail so the Up Next overlay shows the right image.
-  nextEpisodePoster: nextEpisode.thumbnail || content?.background || '',
-  nextEpisodeBackdrop: nextEpisode.thumbnail || content?.background || '',
 } : {};
     
     const shouldResume = resumePosition && parseFloat(resumePosition) > 0 && (
@@ -772,7 +723,7 @@ const nextEpisodeData = nextEpisode ? {
           contentType: cType,
           contentId: subtitleContentId,
           fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks, ...directFallbacks]),
-          backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+          backdrop: content?.background || '',
           poster: content?.poster || '',
           logo: content?.logo || '',
           ...currentEpisodeMeta,
@@ -818,7 +769,7 @@ const nextEpisodeData = nextEpisode ? {
           // from the previous episode's player so the loading screen ALWAYS has
           // a backdrop/poster/logo — even when navigating fast via auto-play
           // before Cinemeta has populated `content`.
-          backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || nextBackdropParam || '',
+          backdrop: content?.background || nextBackdropParam || '',
           poster: content?.poster || nextPosterParam || '',
           logo: content?.logo || '',
           sources: stream.sources ? JSON.stringify(stream.sources) : '',
@@ -888,7 +839,7 @@ const nextEpisodeData = nextEpisode ? {
           contentType: cType,
           contentId: subtitleContentId,
           fallbackStreams: allStreamUrls.length > 0 ? JSON.stringify(allStreamUrls) : '',
-          backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+          backdrop: content?.background || '',
           poster: content?.poster || '',
           logo: content?.logo || '',
           ...currentEpisodeMeta,
@@ -996,10 +947,9 @@ const nextEpisodeData = nextEpisode ? {
         <View style={styles.autoPlayOverlay}>
           {/* Full-screen series backdrop (blurred). Priority: loaded content
               backdrop (the real series art) → passed-in backdrop param → poster. */}
-          {/* PATCH v2: prefer EPISODE backdrop so transition into player loading is seamless */}
-          {(currentEpisode?.thumbnail || nextBackdropParam || content?.background || content?.poster || nextPosterParam) && (
+          {(content?.background || content?.poster || nextBackdropParam || nextPosterParam) && (
             <RNImage
-              source={{ uri: (currentEpisode?.thumbnail || nextBackdropParam || content?.background || content?.poster || nextPosterParam) as string }}
+              source={{ uri: (content?.background || nextBackdropParam || content?.poster || nextPosterParam) as string }}
               style={StyleSheet.absoluteFillObject}
               blurRadius={8}
               resizeMode="cover"
@@ -1044,7 +994,14 @@ const nextEpisodeData = nextEpisode ? {
         <FocusableButton 
           style={styles.backButton}
           focusedStyle={styles.backButtonFocused}
-          onPress={handleBack}
+          onPress={() => {
+            // If reached via autoPlay, go to series page (not previous episode)
+            if (autoPlayParam === 'true' && baseId && type === 'series') {
+              router.replace({ pathname: `/details/series/${baseId}` });
+            } else {
+              router.back();
+            }
+          }}
         >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </FocusableButton>

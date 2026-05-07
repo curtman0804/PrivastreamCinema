@@ -1,0 +1,463 @@
+TOTAL: 1716
+
+=== 650-770 (nextEpisodeData + handoff) ===
+ 650:       }
+ 651:     }
+ 652:   }, [streams, isLoadingStreams]);
+ 653: 
+ 654:   const loadContent = async () => {
+ 655:     try {
+ 656:       const contentId = isEpisodePage ? baseId : id;
+ 657:       const data = await api.content.getMeta(type!, contentId!);
+ 658:       // Cache the meta data for instant re-access
+ 659:       if (contentId) setMetaCache(contentId, data);
+ 660:       setContent(data);
+ 661:     } catch (error) {
+ 662:       console.log('Failed to fetch meta:', error);
+ 663:       // Keep using the initial content from params — already set
+ 664:     }
+ 665:     setIsLoadingContent(false);
+ 666:   };
+ 667: 
+ 668:   const handleStreamSelect = async (stream: Stream) => {
+ 669:     const subtitleContentId = isEpisodePage 
+ 670:       ? `${baseId}:${episodeSeason}:${episodeNumber}`
+ 671:       : (id as string);
+ 672:     const contentTitle = currentEpisode 
+ 673:       ? `S${episodeSeason}E${episodeNumber} - ${currentEpisode.name || content?.name || 'Video'}`
+ 674:       : (nextTitleParam ? String(nextTitleParam) : (isEpisodePage ? `S${episodeSeason}E${episodeNumber} - ${content?.name || 'Loading...'}` : content?.name || 'Video'));
+ 675:     const cType = type as string || 'movie';
+ 676:     
+ 677:     // Always pass current-episode metadata for series content so the
+ 678: // player's loading screen can render "S3E6 - Rest and Ricklaxation"
+ 679: // with the correct backdrop, regardless of whether there's a next ep.
+ 680: const currentEpisodeMeta = type === 'series' ? {
+ 681:   seriesId: baseId || id,
+ 682:   season: String(episodeSeason),
+ 683:   episode: String(episodeNumber),
+ 684:   episodeName: currentEpisode?.name || '',
+ 685: } : {};
+ 686: 
+ 687: const nextEpisodeData = nextEpisode ? {
+ 688:   nextEpisodeId: `${baseId}:${nextEpisode.season}:${nextEpisode.episode}`,
+ 689:   nextEpisodeTitle: `S${nextEpisode.season}E${nextEpisode.episode} - ${nextEpisode.name || 'Next Episode'}`,
+ 690:   nextEpisodeBackdrop: nextEpisode.thumbnail || content?.background || '',
+ 691: } : {};
+ 692:     
+ 693:     const shouldResume = resumePosition && parseFloat(resumePosition) > 0 && (
+ 694:       (type === 'movie' && !resumeEpisodeId) ||
+ 695:       (type === 'series' && resumeEpisodeId === subtitleContentId)
+ 696:     );
+ 697:     const resumeData = shouldResume ? { resumePosition } : {};
+ 698:     
+ 699:     const buildFallbackUrls = async (): Promise<string[]> => {
+ 700:       const authToken = await AsyncStorage.getItem('auth_token');
+ 701:       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
+ 702:       
+ 703:       return streams
+ 704:         .filter(s => s !== stream)
+ 705:         .filter(s => s.url && s.url.startsWith('/api/proxy/'))
+ 706:         .slice(0, 5)
+ 707:         .map(s => {
+ 708:           const separator = s.url!.includes('?') ? '&' : '?';
+ 709:           const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
+ 710:           return `${backendUrl}${s.url}${tokenParam}`;
+ 711:         });
+ 712:     };
+ 713:     
+ 714:     try {
+ 715:       await AsyncStorage.setItem('currentPlaying', JSON.stringify({
+ 716:         contentType: cType,
+ 717:         contentId: id,
+ 718:         title: contentTitle,
+ 719:       }));
+ 720:     } catch (e) {
+ 721:       console.log('[DETAILS] Error saving to AsyncStorage:', e);
+ 722:     }
+ 723:     
+ 724:     // Handle external URLs - route them to the internal player
+ 725:     if (stream.externalUrl || stream.requiresWebView) {
+ 726:       const streamUrl = stream.externalUrl || stream.url;
+ 727:       console.log('[DETAILS] Playing external URL in internal player:', streamUrl);
+ 728:       router.push({
+ 729:         pathname: '/player',
+ 730:         params: { 
+ 731:           directUrl: streamUrl,
+ 732:           title: contentTitle,
+ 733:           isLive: 'false',
+ 734:           contentType: cType,
+ 735:           contentId: subtitleContentId,
+ 736:           backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+ 737:           poster: content?.poster || '',
+ 738:           logo: content?.logo || '',
+ 739:           ...currentEpisodeMeta,
+ 740:           ...nextEpisodeData,
+ 741:           ...resumeData,
+ 742:         },
+ 743:       });
+ 744:       return;
+ 745:     }
+ 746:     
+ 747:     if (stream.url && stream.url.startsWith('/api/proxy/')) {
+ 748:       const authToken = await AsyncStorage.getItem('auth_token');
+ 749:       const separator = stream.url.includes('?') ? '&' : '?';
+ 750:       const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
+ 751:       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
+ 752:       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
+ 753:       
+ 754:       // Build fallback URLs - include other proxy streams + direct URLs
+ 755:       const fallbacks = await buildFallbackUrls();
+ 756:       
+ 757:       // Also include direct URLs from USAATV streams as fallbacks
+ 758:       const directFallbacks = streams
+ 759:         .filter(s => s !== stream && (s.directUrl || (s.url && !s.url.startsWith('/api/proxy/'))))
+ 760:         .map(s => s.directUrl || s.url)
+ 761:         .filter(Boolean);
+ 762:       
+ 763:       router.push({
+ 764:         pathname: '/player',
+ 765:         params: { 
+ 766:           directUrl: absoluteUrl,
+ 767:           title: contentTitle,
+ 768:           isLive: type === 'tv' ? 'true' : 'false',
+ 769:           contentType: cType,
+ 770:           contentId: subtitleContentId,
+
+=== 770-880 ===
+ 770:           contentId: subtitleContentId,
+ 771:           fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks, ...directFallbacks]),
+ 772:           backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+ 773:           poster: content?.poster || '',
+ 774:           logo: content?.logo || '',
+ 775:           ...currentEpisodeMeta,
+ 776:           ...nextEpisodeData,
+ 777:           ...resumeData,
+ 778:         },
+ 779:       });
+ 780:       return;
+ 781:     }
+ 782:     
+ 783:     if (stream.infoHash) {
+ 784:       // Build fallback torrents from other available torrent streams (sorted by seeders)
+ 785:       const sortedStreams = sortStreamsByLanguage(streams);
+ 786:       const fallbackTorrents = sortedStreams
+ 787:         .filter(s => s.infoHash && s.infoHash !== stream.infoHash)
+ 788:         .slice(0, 5)
+ 789:         .map(s => ({
+ 790:           infoHash: s.infoHash,
+ 791:           fileIdx: s.fileIdx,
+ 792:           filename: s.filename || '',
+ 793:           sources: s.sources || [],
+ 794:           name: s.name || '',
+ 795:           title: s.title || '',
+ 796:         }));
+ 797:       
+ 798:       // Extract season/episode from content ID (e.g. tt123:1:2 → season=1, episode=2)
+ 799:       const idParts = (id || '').split(':');
+ 800:       const seasonNum = idParts.length >= 3 ? idParts[idParts.length - 2] : '';
+ 801:       const episodeNum = idParts.length >= 3 ? idParts[idParts.length - 1] : '';
+ 802:       
+ 803:       router.push({
+ 804:         pathname: '/player',
+ 805:         params: { 
+ 806:           infoHash: stream.infoHash,
+ 807:           title: contentTitle,
+ 808:           contentType: cType,
+ 809:           contentId: subtitleContentId,
+ 810:           fileIdx: stream.fileIdx !== undefined ? String(stream.fileIdx) : '',
+ 811:           filename: stream.filename || '',
+ 812:           season: seasonNum,
+ 813:           episode: episodeNum,
+ 814:           // Prefer loaded content metadata, but fall back to carried-over params
+ 815:           // from the previous episode's player so the loading screen ALWAYS has
+ 816:           // a backdrop/poster/logo — even when navigating fast via auto-play
+ 817:           // before Cinemeta has populated `content`.
+ 818:           backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || nextBackdropParam || '',
+ 819:           poster: content?.poster || nextPosterParam || '',
+ 820:           logo: content?.logo || '',
+ 821:           sources: stream.sources ? JSON.stringify(stream.sources) : '',
+ 822:           fallbackTorrents: fallbackTorrents.length > 0 ? JSON.stringify(fallbackTorrents) : '',
+ 823:           ...currentEpisodeMeta,
+ 824:           ...nextEpisodeData,
+ 825:           ...resumeData,
+ 826:         },
+ 827:       });
+ 828:     } else if (stream.url) {
+ 829:       // === PRIVACY PROXY ===
+ 830:       // Route ALL direct URLs through backend's RD unrestrict proxy
+ 831:       // so the device NEVER connects to content sites (redtube, etc.)
+ 832:       // ISP only sees traffic to real-debrid.com
+ 833:       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
+ 834:       const authToken = await AsyncStorage.getItem('auth_token');
+ 835:       
+ 836:       // Check if URL is already a backend/proxy URL (no need to re-proxy)
+ 837:       const isAlreadyProxied = stream.url.startsWith('/api/') || 
+ 838:                                 stream.url.startsWith(backendUrl) ||
+ 839:                                 stream.url.includes('/api/proxy/');
+ 840:       
+ 841:       let streamUrl: string;
+ 842:       if (isAlreadyProxied) {
+ 843:         // Already going through our backend — use as-is
+ 844:         streamUrl = stream.url;
+ 845:       } else {
+ 846:         // External URL — route through RD privacy proxy
+ 847:         const encodedUrl = encodeURIComponent(stream.url);
+ 848:         const tokenParam = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
+ 849:         streamUrl = `${backendUrl}/api/proxy/unrestrict-stream?url=${encodedUrl}${tokenParam}`;
+ 850:         console.log('[DETAILS] Privacy proxy: routing through RD unrestrict');
+ 851:       }
+ 852:       
+ 853:       // Build fallback URLs — also route fallbacks through privacy proxy
+ 854:       const allStreamUrls = streams
+ 855:         .filter(s => s.url && !s.infoHash && s.url !== stream.url)
+ 856:         .map(s => {
+ 857:           if (!s.url) return '';
+ 858:           const isProxied = s.url.startsWith('/api/') || s.url.startsWith(backendUrl);
+ 859:           if (isProxied) return s.url;
+ 860:           const enc = encodeURIComponent(s.url);
+ 861:           const tp = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
+ 862:           return `${backendUrl}/api/proxy/unrestrict-stream?url=${enc}${tp}`;
+ 863:         })
+ 864:         .filter(Boolean);
+ 865:       
+ 866:       // For live TV streams, also include proxy URLs as additional fallbacks
+ 867:       if (type === 'tv') {
+ 868:         const proxyFallbacks = streams
+ 869:           .filter(s => s.proxyUrl)
+ 870:           .map(s => {
+ 871:             const tokenParam = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
+ 872:             return `${backendUrl}${s!.proxyUrl}${tokenParam}`;
+ 873:           })
+ 874:           .filter(Boolean);
+ 875:         
+ 876:         allStreamUrls.push(...proxyFallbacks);
+ 877:       }
+ 878:       
+ 879:       router.push({
+ 880:         pathname: '/player',
+
+=== 880-1000 ===
+ 880:         pathname: '/player',
+ 881:         params: { 
+ 882:           directUrl: streamUrl,
+ 883:           title: contentTitle,
+ 884:           isLive: type === 'tv' ? 'true' : 'false',
+ 885:           contentType: cType,
+ 886:           contentId: subtitleContentId,
+ 887:           fallbackStreams: allStreamUrls.length > 0 ? JSON.stringify(allStreamUrls) : '',
+ 888:           backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+ 889:           poster: content?.poster || '',
+ 890:           logo: content?.logo || '',
+ 891:           ...currentEpisodeMeta,
+ 892:           ...nextEpisodeData,
+ 893:           ...resumeData,
+ 894:         },
+ 895:       });
+ 896:     }
+ 897:   };
+ 898: 
+ 899:   const handleEpisodePress = (episode: Episode) => {
+ 900:     const episodeId = `${baseId || id}:${episode.season}:${episode.episode}`;
+ 901:     router.push({
+ 902:       pathname: `/details/${type}/${episodeId}`,
+ 903:     });
+ 904:   };
+ 905: 
+ 906:   const toggleLibrary = async () => {
+ 907:     if (!content) return;
+ 908:     try {
+ 909:       if (inLibrary) {
+ 910:         await api.library.remove(type!, content.id);
+ 911:         setInLibrary(false);
+ 912:       } else {
+ 913:         await api.library.add({
+ 914:           id: content.id,
+ 915:           imdb_id: content.imdb_id || content.id,
+ 916:           name: content.name,
+ 917:           type: type as 'movie' | 'series',
+ 918:           poster: content.poster,
+ 919:           year: content.year,
+ 920:           imdbRating: typeof content.imdbRating === 'string' ? parseFloat(content.imdbRating) : content.imdbRating,
+ 921:         });
+ 922:         setInLibrary(true);
+ 923:       }
+ 924:       // Refresh library immediately so the Library tab updates in real-time
+ 925:       fetchLibrary(true);
+ 926:     } catch (error) {
+ 927:       console.log('Failed to toggle library:', error);
+ 928:     }
+ 929:   };
+ 930: 
+ 931:   // Use content data for display - available immediately from store
+ 932:   const displayName = content?.name || 'Loading...';
+ 933:   // For episode pages, prefer the episode thumbnail as backdrop. Otherwise use series backdrop.
+ 934:   const episodeBackdrop = isEpisodePage && currentEpisode?.thumbnail ? currentEpisode.thumbnail : null;
+ 935:   const displayPoster = episodeBackdrop || content?.background || content?.poster || '';
+ 936: 
+ 937:   const rating = typeof content?.imdbRating === 'string' 
+ 938:     ? parseFloat(content.imdbRating) 
+ 939:     : content?.imdbRating;
+ 940: 
+ 941:   // Render stream item for FlatList
+ 942:   const renderStreamItem = ({ item }: { item: Stream }) => (
+ 943:     <StreamCard stream={item} onPress={() => handleStreamSelect(item)} />
+ 944:   );
+ 945: 
+ 946:   // Mark episode as unwatched (long-press)
+ 947:   const handleMarkUnwatched = useCallback(async (contentId: string) => {
+ 948:     try {
+ 949:       const watchedKey = 'privastream_watched';
+ 950:       const existing = await AsyncStorage.getItem(watchedKey);
+ 951:       const watchedSet: Record<string, boolean> = existing ? JSON.parse(existing) : {};
+ 952:       delete watchedSet[contentId];
+ 953:       await AsyncStorage.setItem(watchedKey, JSON.stringify(watchedSet));
+ 954:       setWatchedEpisodes({ ...watchedSet });
+ 955:       console.log('[DETAILS] Unmarked as watched:', contentId);
+ 956:     } catch (e) {
+ 957:       console.log('[DETAILS] Error unmarking watched:', e);
+ 958:     }
+ 959:   }, []);
+ 960: 
+ 961:   // Render episode item for FlatList
+ 962:   const renderEpisodeItem = ({ item }: { item: Episode }) => {
+ 963:     // Check watched status using series:season:episode format
+ 964:     const epContentId = `${baseId || id}:${item.season}:${item.episode}`;
+ 965:     const epWatched = !!watchedEpisodes[epContentId];
+ 966:     return (
+ 967:       <EpisodeCard 
+ 968:         episode={item} 
+ 969:         fallbackPoster={content?.poster}
+ 970:         onPress={() => handleEpisodePress(item)}
+ 971:         isWatched={epWatched}
+ 972:         onMarkUnwatched={() => handleMarkUnwatched(epContentId)}
+ 973:       />
+ 974:     );
+ 975:   };
+ 976: 
+ 977:   return (
+ 978:     <View style={styles.container}>
+ 979:       {/* Background Image — lightweight RN Image, no expo-image overhead */}
+ 980:       {displayPoster ? (
+ 981:         <RNImage
+ 982:           source={{ uri: displayPoster }}
+ 983:           style={styles.backgroundImage}
+ 984:           resizeMode="cover"
+ 985:         />
+ 986:       ) : null}
+ 987:       
+ 988:       {/* Dark overlay — simple View, no LinearGradient overhead */}
+ 989:       <View style={styles.gradientOverlay} />
+ 990:       
+ 991:       {/* Auto-play loading — Stremio-style cinematic transition */}
+ 992:       {autoPlayParam === 'true' && !autoPlayTriggeredRef.current && (
+ 993:         <View style={styles.autoPlayOverlay}>
+ 994:           {/* Full-screen series backdrop (blurred). Priority: loaded content
+ 995:               backdrop (the real series art) → passed-in backdrop param → poster. */}
+ 996:           {(content?.background || content?.poster || nextBackdropParam || nextPosterParam) && (
+ 997:             <RNImage
+ 998:               source={{ uri: (content?.background || nextBackdropParam || content?.poster || nextPosterParam) as string }}
+ 999:               style={StyleSheet.absoluteFillObject}
+1000:               blurRadius={8}
+
+=== 1000-1100 ===
+1000:               blurRadius={8}
+1001:               resizeMode="cover"
+1002:             />
+1003:           )}
+1004:           {/* Dark overlay for legibility */}
+1005:           <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.65)' }]} />
+1006: 
+1007:           {/* Centered content: series logo / name, episode, animated progress */}
+1008:           <View style={{ alignItems: 'center', justifyContent: 'center', flex: 1, paddingHorizontal: 32 }}>
+1009:             {content?.logo ? (
+1010:               <RNImage
+1011:                 source={{ uri: content.logo }}
+1012:                 style={{ width: 280, height: 90, marginBottom: 20 }}
+1013:                 resizeMode="contain"
+1014:               />
+1015:             ) : (
+1016:               <Text style={{ color: '#FFF', fontSize: 32, fontWeight: '800', textAlign: 'center', marginBottom: 16, letterSpacing: 0.5 }}>
+1017:                 {content?.name || ''}
+1018:               </Text>
+1019:             )}
+1020: 
+1021:             <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '600', textAlign: 'center', marginBottom: 6 }}>
+1022:               {nextTitleParam ? String(nextTitleParam) : (currentEpisode?.name || `Episode ${episodeNumber}`)}
+1023:             </Text>
+1024:             <Text style={{ color: '#B8A05C', fontSize: 14, fontWeight: '600', marginBottom: 36, letterSpacing: 1 }}>
+1025:               S{episodeSeason} E{episodeNumber}
+1026:             </Text>
+1027: 
+1028:             {/* Indeterminate animated loading bar */}
+1029:             <AutoPlayLoadingBar />
+1030:             <Text style={{ color: '#CCC', fontSize: 13, marginTop: 14, fontWeight: '500' }}>
+1031:               Loading next episode...
+1032:             </Text>
+1033:           </View>
+1034:         </View>
+1035:       )}
+1036:       
+1037:       {/* Content Overlay */}
+1038:       <View style={styles.contentOverlay}>
+1039:         {/* Back Button - floats over everything */}
+1040:         <FocusableButton 
+1041:           style={styles.backButton}
+1042:           focusedStyle={styles.backButtonFocused}
+1043:           onPress={handleBack}
+1044:         >
+1045:           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+1046:         </FocusableButton>
+1047: 
+1048:         {/* Fixed Title Area - never moves */}
+1049:         <View style={styles.fixedTitleArea}>
+1050:           <View style={styles.titleSection}>
+1051:             {content?.logo ? (
+1052:               <Image
+1053:                 source={{ uri: content.logo }}
+1054:                 style={styles.logoImage}
+1055:                 contentFit="contain"
+1056:               />
+1057:             ) : (
+1058:               <Text style={styles.title}>{displayName}</Text>
+1059:             )}
+1060:             
+1061:             {isEpisodePage && currentEpisode && (
+1062:               <Text style={styles.episodeSubtitle}>
+1063:                 S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
+1064:               </Text>
+1065:             )}
+1066:           </View>
+1067: 
+1068:           <View style={styles.metaRow}>
+1069:             {rating && rating > 0 && (
+1070:               <View style={styles.imdbBadge}>
+1071:                 <Text style={styles.imdbLabel}>IMDb</Text>
+1072:                 <Text style={styles.imdbRating}>{rating.toFixed(1)}</Text>
+1073:               </View>
+1074:             )}
+1075:             {content?.year && (
+1076:               <Text style={styles.metaText}>{content.year}</Text>
+1077:             )}
+1078:             {content?.runtime && (
+1079:               <Text style={styles.metaText}>{content.runtime}</Text>
+1080:             )}
+1081:           </View>
+1082: 
+1083:           {/* Description - on episode pages show episode overview instead of series description */}
+1084:           {isEpisodePage && currentEpisode?.overview ? (
+1085:             <Text style={styles.fixedDescription} numberOfLines={4}>
+1086:               {currentEpisode.overview}
+1087:             </Text>
+1088:           ) : content?.description ? (
+1089:             <Text style={styles.fixedDescription} numberOfLines={3}>
+1090:               {content.description}
+1091:             </Text>
+1092:           ) : null}
+1093: 
+1094:           {/* Add to Library - under description */}
+1095:           <View style={styles.fixedActionRow}>
+1096:             <FocusableButton 
+1097:               style={styles.libraryButton}
+1098:               focusedStyle={styles.libraryButtonFocused}
+1099:               onPress={toggleLibrary}
+1100:             >

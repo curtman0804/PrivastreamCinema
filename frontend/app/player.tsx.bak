@@ -15,7 +15,6 @@ import {
   Pressable,
   DeviceEventEmitter,
   findNodeHandle,
-  BackHandler,
 } from 'react-native';
 
 // Safe TV event handler imports - these may not exist in all RN versions
@@ -242,41 +241,6 @@ export default function PlayerScreen() {
     fallbackTorrents?: string;
   }>();
   const router = useRouter();
-
-  // ============================================================
-  // BACK_BUTTON_INTERCEPTOR_V2 (Stremio-style binge-stack killer)
-  // ONE hardware-back press from the player → land on the CURRENT
-  // episode's info page. Pops the entire stack of player+details
-  // entries that built up while binge-watching.
-  // ============================================================
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    const onBackPress = () => {
-      try {
-        let target: string | null = null;
-        if (seriesId && season && episode) {
-          target = `/details/series/${seriesId}:${season}:${episode}`;
-        } else if (contentId) {
-          const cid = String(contentId);
-          const base = cid.includes(':') ? cid.split(':')[0] : cid;
-          target = `/details/${(contentType as string) || 'movie'}/${base}`;
-        }
-        if (target) {
-          // Pop any stacked binge-watch screens, then land on episode info
-          try { (router as any).dismissAll && (router as any).dismissAll(); } catch (_) {}
-          router.replace(target as any);
-        } else {
-          router.back();
-        }
-      } catch (_) {
-        try { router.back(); } catch (__) {}
-      }
-      return true; // consume — prevent default OS pop
-    };
-    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => { try { sub.remove(); } catch (_) {} };
-  }, [seriesId, season, episode, contentId, contentType]);
-
   
   // Hide navigation bar on Android for immersive video experience
   useEffect(() => {

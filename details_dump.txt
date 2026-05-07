@@ -1,0 +1,133 @@
+TOTAL_LINES: 1716
+
+=== nextEpisode (lines 480 - 510 )===
+ 480:     return content.videos.find(
+ 481:       ep => ep.season === episodeSeason && ep.episode === episodeNumber
+ 482:     );
+ 483:   }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber]);
+ 484: 
+ 485:   const nextEpisode = useMemo(() => {
+ 486:     if (!isEpisodePage || !episodeSeason || !episodeNumber) return null;
+ 487:     
+ 488:     // Try content.videos first, fall back to cached meta (might be cached under baseId)
+ 489:     const videos = content?.videos || (baseId ? getMetaCache(baseId)?.videos : null);
+ 490:     if (!videos) return null;
+ 491:     
+ 492:     const sameSeasonNext = videos.find(
+ 493:       ep => ep.season === episodeSeason && ep.episode === episodeNumber + 1
+ 494:     );
+ 495:     if (sameSeasonNext) return sameSeasonNext;
+ 496:     
+ 497:     const nextSeasonFirst = videos.find(
+ 498:       ep => ep.season === episodeSeason + 1 && ep.episode === 1
+ 499:     );
+ 500:     return nextSeasonFirst || null;
+ 501:   }, [isEpisodePage, content?.videos, episodeSeason, episodeNumber, baseId]);
+ 502: 
+ 503:   const seasons = useMemo(() => {
+ 504:     if (!content?.videos) return [];
+ 505:     const seasonSet = new Set(content.videos.map(ep => ep.season).filter(s => s > 0));
+ 506:     return Array.from(seasonSet).sort((a, b) => a - b);
+ 507:   }, [content?.videos]);
+ 508: 
+ 509:   const episodesForSeason = useMemo(() => {
+ 510:     if (!content?.videos) return [];
+
+=== BackHandler|router\.back|navigation\.goBack (lines 11 - 41 )===
+  11:   Linking,
+  12:   FlatList,
+  13:   Image as RNImage,
+  14:   Animated,
+  15:   Easing,
+  16:   BackHandler,
+  17:   Platform,
+  18: } from 'react-native';
+  19: import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+  20: import { Ionicons } from '@expo/vector-icons';
+  21: import { Image } from 'expo-image';
+  22: import Constants from 'expo-constants';
+  23: import { useContentStore, getMetaCache, setMetaCache } from '../../../src/store/contentStore';
+  24: 
+  25: // Fallback image for missing posters
+  26: const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
+  27: 
+  28: import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
+  29: import AsyncStorage from '@react-native-async-storage/async-storage';
+  30: 
+  31: const { width, height } = Dimensions.get('window');
+  32: 
+  33: // Stremio-style animated indeterminate loading bar. Renders a thin gold
+  34: // segment that slides across a dark track. Pure Animated.Value so it runs
+  35: // on the native thread and doesn't stutter on Firestick.
+  36: function AutoPlayLoadingBar() {
+  37:   const translateX = useRef(new Animated.Value(-100)).current;
+  38: 
+  39:   useEffect(() => {
+  40:     const loop = Animated.loop(
+  41:       Animated.sequence([
+
+=== isLoading|ActivityIndicator|LoadingScreen (lines 4 - 34 )===
+   4:   Text,
+   5:   StyleSheet,
+   6:   ScrollView,
+   7:   Pressable,
+   8:   TouchableOpacity,
+   9:   ActivityIndicator,
+  10:   Dimensions,
+  11:   Linking,
+  12:   FlatList,
+  13:   Image as RNImage,
+  14:   Animated,
+  15:   Easing,
+  16:   BackHandler,
+  17:   Platform,
+  18: } from 'react-native';
+  19: import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+  20: import { Ionicons } from '@expo/vector-icons';
+  21: import { Image } from 'expo-image';
+  22: import Constants from 'expo-constants';
+  23: import { useContentStore, getMetaCache, setMetaCache } from '../../../src/store/contentStore';
+  24: 
+  25: // Fallback image for missing posters
+  26: const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
+  27: 
+  28: import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
+  29: import AsyncStorage from '@react-native-async-storage/async-storage';
+  30: 
+  31: const { width, height } = Dimensions.get('window');
+  32: 
+  33: // Stremio-style animated indeterminate loading bar. Renders a thin gold
+  34: // segment that slides across a dark track. Pure Animated.Value so it runs
+
+=== series_poster|seriesPoster|episode_poster|episodeBackdrop|nextEpisodeBackdrop (lines 685 - 715 )===
+ 685: } : {};
+ 686: 
+ 687: const nextEpisodeData = nextEpisode ? {
+ 688:   nextEpisodeId: `${baseId}:${nextEpisode.season}:${nextEpisode.episode}`,
+ 689:   nextEpisodeTitle: `S${nextEpisode.season}E${nextEpisode.episode} - ${nextEpisode.name || 'Next Episode'}`,
+ 690:   nextEpisodeBackdrop: nextEpisode.thumbnail || content?.background || '',
+ 691: } : {};
+ 692:     
+ 693:     const shouldResume = resumePosition && parseFloat(resumePosition) > 0 && (
+ 694:       (type === 'movie' && !resumeEpisodeId) ||
+ 695:       (type === 'series' && resumeEpisodeId === subtitleContentId)
+ 696:     );
+ 697:     const resumeData = shouldResume ? { resumePosition } : {};
+ 698:     
+ 699:     const buildFallbackUrls = async (): Promise<string[]> => {
+ 700:       const authToken = await AsyncStorage.getItem('auth_token');
+ 701:       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
+ 702:       
+ 703:       return streams
+ 704:         .filter(s => s !== stream)
+ 705:         .filter(s => s.url && s.url.startsWith('/api/proxy/'))
+ 706:         .slice(0, 5)
+ 707:         .map(s => {
+ 708:           const separator = s.url!.includes('?') ? '&' : '?';
+ 709:           const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
+ 710:           return `${backendUrl}${s.url}${tokenParam}`;
+ 711:         });
+ 712:     };
+ 713:     
+ 714:     try {
+ 715:       await AsyncStorage.setItem('currentPlaying', JSON.stringify({
