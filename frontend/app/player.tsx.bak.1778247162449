@@ -339,21 +339,6 @@ export default function PlayerScreen() {
   
   // Stremio-style breathing zoom animation for loading title
   const breatheAnim = useRef(new Animated.Value(1)).current;
-
-  // PATCH_V8_LOADBAR_ANIM — sliding gold bar for unified loading screen
-  const loadingBarAnim = useRef(new Animated.Value(-120)).current;
-  useEffect(() => {
-    if (!isLoading || error) return;
-    const w = Dimensions.get('window').width;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(loadingBarAnim, { toValue: w * 0.6, duration: 1400, useNativeDriver: true }),
-        Animated.timing(loadingBarAnim, { toValue: -120, duration: 0, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => { try { loop.stop(); } catch (_) {} };
-  }, [isLoading, error]);
   
   useEffect(() => {
     if (isLoading && !error) {
@@ -984,23 +969,13 @@ export default function PlayerScreen() {
   const prefetchAndSeek = async (targetMs: number) => {
     if (!videoRef.current) return;
     
-    // PATCH_V7_SAFE_CLAMP — keep at least 5s away from the very end so a long
-    // drag past the duration doesn't fire ExoPlayer's end-of-video reset.
-    const safeMax = duration > 5000 ? duration - 5000 : Math.max(0, duration - 1);
-    const clampedPosition = Math.max(0, Math.min(safeMax, targetMs));
+    const clampedPosition = Math.max(0, Math.min(duration, targetMs));
     
     // Show rebuffering spinner immediately
     isSeekingRef.current = true;
     lastSeekPositionRef.current = clampedPosition;
     setIsRebuffering(true);
     showControlsWithTimeout();
-
-    // PATCH_V7_KILL_TIMEOUT_ON_SEEK — a user-initiated seek must NOT trigger tryNextStream.
-    // Cancel the 30s 'no playback yet' timeout that may still be armed.
-    if (playbackTimeoutRef.current) {
-      try { clearTimeout(playbackTimeoutRef.current); } catch (_) {}
-      playbackTimeoutRef.current = null;
-    }
     
     if (infoHash && duration > 0) {
       const positionBytes = calculateBytePosition(clampedPosition);
@@ -1679,7 +1654,7 @@ export default function PlayerScreen() {
         videoRetryCountRef.current = 0;
         const finalUrl = info.debridUrl ? `http://71.9.152.146:8001${info.debridUrl}` : winner.videoUrl;
         console.log(`[PLAYER] WINNER: ${winner.label} (q=${bestQ}) ${((Date.now()-startTime)/1000).toFixed(1)}s peers=${info.peers}`);
-        setLoadingStatus('');
+        setLoadingStatus('Starting Playback...');
         setStreamUrl(finalUrl);
         const winHash = winner.hash;
         pollIntervalRef.current = setTimeout(function keepAlive() {
@@ -1753,7 +1728,7 @@ export default function PlayerScreen() {
           if (anyBuffering || bestPeers > 0) {
             smoothProgress = Math.min(smoothProgress + 4, 85);
             const dots = '.'.repeat((pollCount % 3) + 1);
-            setLoadingStatus('');
+            setLoadingStatus(`Starting Playback${dots}`);
           } else {
             smoothProgress = Math.min(smoothProgress + 2, 30);
             setLoadingStatus('Searching for streams...');
@@ -1865,11 +1840,11 @@ export default function PlayerScreen() {
             const targetProgress = 30 + (readyPct / 100) * 50;
             smoothProgress = Math.max(smoothProgress, Math.min(smoothProgress + (targetProgress - smoothProgress) * 0.3, targetProgress));
             const dots = '.'.repeat((pollCount % 3) + 1);
-            setLoadingStatus('');
+            setLoadingStatus(peerCount > 0 ? `Starting Playback${dots}` : 'Searching for streams...');
           } else if (status.status === 'ready') {
             smoothProgress = Math.min(Math.max(smoothProgress + 3, 85), 90);
             const dots = '.'.repeat((pollCount % 3) + 1);
-            setLoadingStatus('');
+            setLoadingStatus(`Starting Playback${dots}`);
           }
           setDownloadProgress(smoothProgress);
           
@@ -1953,87 +1928,185 @@ export default function PlayerScreen() {
     <View style={styles.container}>
       <StatusBar hidden />
 
-            {/* PATCH_V8_UNIFIED_LOADING — unified loading screen (matches autoplay overlay) */}
+      {/* Stremio-Style Loading Screen */}
       {isLoading && !error && (
         <View style={styles.stremioLoadingContainer}>
-          {/* Backdrop with blur — same image the autoplay overlay used */}
-          {(backdrop || poster) ? (
+          {/* Backdrop Image */}
+          {(backdrop || poster) && (
             <Image
               source={{ uri: backdrop || poster }}
               style={styles.loadingBackdrop}
-              blurRadius={Platform.OS === 'web' ? 0 : 8}
+              blurRadius={Platform.OS === 'web' ? 0 : 3}
             />
-          ) : null}
-
-          {/* Dark overlay for legibility */}
+          )}
+          
+          {/* Dark Overlay */}
           <View style={styles.loadingDarkOverlay} />
-
-          {/* Centered content — series logo + episode title + thin gold bar */}
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
+          
+          {/* Content */}
+          <View style={styles.loadingContent}>
+            {/* Logo/Title as Loading Bar - Stremio Style with Breathing Zoom + Fill */}
+            <Animated.View style={{ transform: [{ scale: breatheAnim }], alignItems: 'center', width: '100%' }}>
             {logo ? (
-              <Image
-                source={{ uri: logo }}
-                style={{ width: 280, height: 90, marginBottom: 18 }}
-                resizeMode="contain"
-              />
-            ) : null}
-
-            {title ? (
-              <Text
-                style={{
-                  color: '#FFFFFF',
-                  fontSize: 22,
-                  fontWeight: '700',
+              // Use the actual movie logo image with fill effect
+              Platform.OS === 'web' ? (
+                <div style={{
+                  position: 'relative',
+                  width: '70%',
+                  maxWidth: 500,
+                  height: 100,
+                }}>
+                  {/* Background logo - faded */}
+                  <img 
+                    src={logo}
+                    alt={title || 'Loading'}
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      opacity: 0.2,
+                    }}
+                  />
+                  {/* Filled portion - clips from left based on progress */}
+                  <div style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%`,
+                    height: '100%',
+                    overflow: 'hidden',
+                    transition: 'width 0.3s ease',
+                  }}>
+                    <img 
+                      src={logo}
+                      alt={title || 'Loading'}
+                      style={{
+                        display: 'block',
+                        height: '100%',
+                        width: 'auto',
+                        minWidth: 'calc(70vw)',
+                        maxWidth: '500px',
+                        objectFit: 'contain',
+                        objectPosition: 'left center',
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                // Native: Logo with overlay fill effect
+                <View style={styles.logoWrapper}>
+                  <Image
+                    source={{ uri: logo }}
+                    style={[styles.logoUnfilled, !infoHash && { opacity: 1 }]}
+                    resizeMode="contain"
+                  />
+                  {infoHash && (
+                  <View style={[styles.logoFillClip, { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }]}>
+                    <View style={{ width: Dimensions.get('window').width * 0.8, maxWidth: 500, height: '100%' }}>
+                      <Image
+                        source={{ uri: logo }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="contain"
+                      />
+                    </View>
+                  </View>
+                  )}
+                </View>
+              )
+            ) : (
+              // Fallback to text title if no logo - with fill effect
+              Platform.OS === 'web' ? (
+                <div style={{
+                  position: 'relative',
+                  width: '100%',
                   textAlign: 'center',
-                  marginBottom: 28,
-                  paddingHorizontal: 16,
-                  letterSpacing: 0.3,
-                }}
-                numberOfLines={2}
-              >
-                {title}
-              </Text>
+                }}>
+                  {/* Background text - faded */}
+                  <h1 style={{
+                    fontSize: 48,
+                    fontWeight: 800,
+                    margin: 0,
+                    padding: 0,
+                    letterSpacing: 3,
+                    textTransform: 'uppercase',
+                    color: 'rgba(255,255,255,0.15)',
+                  }}>
+                    {title || 'Loading...'}
+                  </h1>
+                  {/* Filled text overlay - clips from left based on progress */}
+                  <div style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%`,
+                    height: '100%',
+                    overflow: 'hidden',
+                    transition: 'width 0.3s ease',
+                    display: 'flex',
+                    justifyContent: 'center',
+                  }}>
+                    <h1 style={{
+                      fontSize: 48,
+                      fontWeight: 800,
+                      margin: 0,
+                      padding: 0,
+                      letterSpacing: 3,
+                      textTransform: 'uppercase',
+                      color: '#FFFFFF',
+                      whiteSpace: 'nowrap',
+                      width: '100vw',
+                      textAlign: 'center',
+                    }}>
+                      {title || 'Loading...'}
+                    </h1>
+                  </div>
+                </div>
+              ) : (
+                // Native: Text title with fill effect
+                <View style={styles.titleWrapper}>
+                  <Text style={[styles.titleUnfilled, !infoHash && { opacity: 1 }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {title || 'Loading...'}
+                  </Text>
+                  {infoHash && (
+                  <View style={styles.titleFillContainer}>
+                    <View 
+                      style={[
+                        styles.titleFillClip, 
+                        { width: `${Math.min(Math.max(downloadProgress || 0, 0), 100)}%` }
+                      ]}
+                    >
+                      <View style={{ width: Dimensions.get('window').width - 48, alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <Text style={styles.titleFilled} numberOfLines={1}>
+                          {title || 'Loading...'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  )}
+                </View>
+              )
+            )}
+            </Animated.View>
+            
+            {/* Loading status for torrent streams - shows peer/speed info */}
+            {infoHash && loadingStatus ? (
+              <View style={{ marginTop: 24, alignItems: 'center' }}>
+                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '500' }}>{loadingStatus}</Text>
+              </View>
             ) : null}
-
-            {/* Indeterminate sliding gold bar */}
-            <View
-              style={{
-                width: Math.min(Dimensions.get('window').width * 0.6, 480),
-                height: 3,
-                backgroundColor: 'rgba(255,255,255,0.15)',
-                borderRadius: 2,
-                overflow: 'hidden',
-              }}
-            >
-              <Animated.View
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  width: 120,
-                  height: '100%',
-                  backgroundColor: '#B8A05C',
-                  borderRadius: 2,
-                  transform: [{ translateX: loadingBarAnim }],
-                }}
-              />
-            </View>
-
-            <Text
-              style={{
-                color: 'rgba(255,255,255,0.7)',
-                fontSize: 13,
-                marginTop: 16,
-                fontWeight: '500',
-                letterSpacing: 0.5,
-              }}
-            >
-              Loading…
-            </Text>
+            
+            {/* Minimal loading indicator - no text, just a subtle spinner below the title */}
+            {!infoHash && (
+              <View style={{ marginTop: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#B8A05C" />
+              </View>
+            )}
           </View>
         </View>
       )}
-          
 
       {/* Error */}
       {error && (

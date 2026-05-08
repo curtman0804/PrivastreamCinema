@@ -17,7 +17,6 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { useNavigation, CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import Constants from 'expo-constants';
@@ -412,10 +411,7 @@ export default function DetailsScreen() {
   // Hardware back from any episode-details page teleports straight to the
   // SERIES ROOT page (with selectedSeason / selectedEpisode set) regardless
   // of how polluted the navigation stack got from auto-binge-watching.
-  const navigation = useNavigation();
-
   const goToSeriesRootWithFocus = useCallback(() => {
-    // PATCH_V6_NAV_RESET — atomically resets stack, kills binge pollution
     const idStr = (id as string) || '';
     if (!idStr.includes(':')) return false;
     const parts = idStr.split(':');
@@ -423,33 +419,16 @@ export default function DetailsScreen() {
     const s = parts[1] || '';
     const e = parts[2] || '';
     try {
-      // Wipe the inner stack and replace with ONLY the series_root entry.
-      // Back from series_root then cleanly exits to the parent tabs navigator.
-      // PATCH_V7_HOME_TAB — keep (tabs) base so back from series root lands on home
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 1,
-          routes: [
-            { name: '(tabs)' },
-            {
-              name: 'details/[type]/[id]',
-              params: { type: type as string, id: baseIdLocal, selectedSeason: s, selectedEpisode: e },
-            },
-          ],
-        }) as any
-      );
-    } catch (_) {
-      // Fallback to old push-based behavior if navigation.reset throws
-      try { if (typeof (router as any).dismissAll === 'function') (router as any).dismissAll(); } catch (__) {}
-      setTimeout(() => {
-        router.push({
-          pathname: `/details/${type}/${baseIdLocal}`,
-          params: { selectedSeason: s, selectedEpisode: e },
-        });
-      }, 30);
-    }
+      if (typeof (router as any).dismissAll === 'function') (router as any).dismissAll();
+    } catch (_) {}
+    setTimeout(() => {
+      router.push({
+        pathname: `/details/${type}/${baseIdLocal}`,
+        params: { selectedSeason: s, selectedEpisode: e },
+      });
+    }, 30);
     return true;
-  }, [id, type, router, navigation]);
+  }, [id, type, router]);
 
   const handleBack = useCallback(() => {
     if (!goToSeriesRootWithFocus()) router.back();

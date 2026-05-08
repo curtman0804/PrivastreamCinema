@@ -425,12 +425,10 @@ export default function DetailsScreen() {
     try {
       // Wipe the inner stack and replace with ONLY the series_root entry.
       // Back from series_root then cleanly exits to the parent tabs navigator.
-      // PATCH_V7_HOME_TAB — keep (tabs) base so back from series root lands on home
       navigation.dispatch(
         CommonActions.reset({
-          index: 1,
+          index: 0,
           routes: [
-            { name: '(tabs)' },
             {
               name: 'details/[type]/[id]',
               params: { type: type as string, id: baseIdLocal, selectedSeason: s, selectedEpisode: e },
