@@ -335,10 +335,6 @@ export default function PlayerScreen() {
   
   // Track seek state to prevent URL reset during seeking
   const isSeekingRef = useRef(false);
-  // PATCH_V10_SEEK_GUARDS — track pre-seek position so we can rewind on seek failure,
-  // plus a cooldown timestamp so onError storms after a failed seek do not reset the stream.
-  const preSeekPositionMsRef = useRef<number>(0);
-  const seekCooldownUntilRef = useRef<number>(0);
   const lastSeekPositionRef = useRef<number>(0);
   
   // Stremio-style breathing zoom animation for loading title
@@ -996,8 +992,6 @@ export default function PlayerScreen() {
     // Show rebuffering spinner immediately
     isSeekingRef.current = true;
     lastSeekPositionRef.current = clampedPosition;
-    // PATCH_V10_SNAPSHOT — capture pre-seek position so onError can rewind us if the seek fails
-    try { preSeekPositionMsRef.current = positionRef.current || 0; } catch (_) { preSeekPositionMsRef.current = 0; }
     setIsRebuffering(true);
     showControlsWithTimeout();
 
@@ -2205,31 +2199,15 @@ export default function PlayerScreen() {
                         // After 3 retries during seek, give up and let it play from wherever it is
                         videoRetryCountRef.current += 1;
                         if (videoRetryCountRef.current > 3) {
-                          // PATCH_V10_REWIND_ON_GIVEUP — rewind to pre-seek position and arm
-                          // cooldown so subsequent onError events do not trigger tryNextStream.
                           isSeekingRef.current = false;
                           videoRetryCountRef.current = 0;
                           setIsRebuffering(false);
-                          seekCooldownUntilRef.current = Date.now() + 10000;
-                          if (videoRef.current && preSeekPositionMsRef.current > 0) {
-                            try {
-                              await videoRef.current.setPositionAsync(preSeekPositionMsRef.current);
-                              console.log('[PLAYER] Seek failed — rewound to pre-seek position', preSeekPositionMsRef.current);
-                            } catch (_) {}
-                          }
                         }
                       }
                     }, 2000);
                     return;
                   }
                   
-                  // PATCH_V10_COOLDOWN_GUARD — if a seek just failed, ignore the onError storm.
-                  // ExoPlayer keeps emitting errors at the bad position; we already rewound.
-                  if (Date.now() < seekCooldownUntilRef.current) {
-                    console.log('[PLAYER] post-seek cooldown active, ignoring onError');
-                    return;
-                  }
-
                   // Retry aggressively - torrent data arrives progressively, each retry may succeed
                   if (videoRetryCountRef.current < maxVideoRetries) {
                     videoRetryCountRef.current += 1;

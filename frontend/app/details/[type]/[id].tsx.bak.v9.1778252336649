@@ -131,11 +131,6 @@ function parseStreamInfo(stream: Stream) {
   else if (name.includes('1080') || title.includes('1080')) quality = '1080p';
   else if (name.includes('720') || title.includes('720')) quality = '720p';
   else if (name.toUpperCase().includes('HD') && !name.toUpperCase().includes('SD')) quality = 'HD';
-
-  // PATCH_V9_CODEC_DETECTION — Firestick decodes H.264/AVC reliably; HEVC/x265 stutters or shows black frames
-  const isHEVC = combined.includes('HEVC') || combined.includes('X265') || combined.includes('H265') || combined.includes('H.265');
-  // HDR / Dolby Vision / 10-bit produce wrong colors on SDR Firestick → avoid when possible
-  const isHDR = combined.includes('HDR') || combined.includes('DOLBY VISION') || combined.includes('DOLBYVISION') || combined.includes('DV.') || combined.includes(' DV ') || combined.includes('10BIT') || combined.includes('10-BIT') || combined.includes('10 BIT');
   
   // Extract source
   let source = stream.addon || 'Unknown';
@@ -217,7 +212,7 @@ function parseStreamInfo(stream: Stream) {
   if (HAS_ENGLISH && isForeign) language = 'MULTI';
   if (HAS_ENGLISH && !isForeign) language = 'ENG';
   
-  return { quality, source, size, seeders, title, language, isForeign, isHEVC, isHDR };
+  return { quality, source, size, seeders, title, language, isForeign };
 }
 
 // Sort streams: English first (by seeds desc), then other languages (by seeds desc)
@@ -240,24 +235,17 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
   // This was the root cause of "all streams failed" after RD premium expired —
   // the previous sort put infoHash streams FIRST, so every Play click tried RD
   // (which 403'd) instead of a cached Premiumize URL that would have played instantly.
-  // PATCH_V9_SCORED_SORT — produces a stable, consistent best pick across every episode.
-  // English+quality dominate; codec/HDR penalties keep Firestick happy; direct URL is
-  // a tiebreaker (instant Premiumize) that never overrides quality.
-  const QUALITY_PTS: Record<string, number> = { '4K': 80, '1080p': 60, '720p': 40, 'HD': 20, 'SD': 0 };
-  const computeScore = (info: ReturnType<typeof parseStreamInfo>, stream: Stream): number => {
-    let s = 0;
-    if (info.language === 'ENG') s += 1000;
-    else if (info.language === 'MULTI') s += 900;
-    else s += 100;
-    s += QUALITY_PTS[info.quality] || 0;
-    if (!info.isHEVC) s += 30;
-    if (!info.isHDR) s += 20;
-    if (stream.url) s += 50;
-    const sd = info.seeders || 0;
-    if (sd > 0) s += Math.min(Math.log10(sd) * 5, 20);
-    return s;
-  };
-  parsed.sort((a, b) => computeScore(b.info, b.stream) - computeScore(a.info, a.stream));
+  parsed.sort((a, b) => {
+    const directA = a.stream.url ? 0 : 1;
+    const directB = b.stream.url ? 0 : 1;
+    if (directA !== directB) return directA - directB;
+
+    const langA = langPriority(a.info.language);
+    const langB = langPriority(b.info.language);
+    if (langA !== langB) return langA - langB;
+    if (a.info.language !== b.info.language) return a.info.language.localeCompare(b.info.language);
+    return (b.info.seeders || 0) - (a.info.seeders || 0);
+  });
 
   return parsed.map(p => p.stream);
 }
