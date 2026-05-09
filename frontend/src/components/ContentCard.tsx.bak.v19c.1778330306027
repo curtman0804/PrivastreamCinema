@@ -12,7 +12,6 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentItem, SearchResult, api } from '../api/client';
-import { useContentStore } from '../store/contentStore'; // PATCH_V19C_FOCUS_PREFETCH
 import { colors, posterShapes } from '../styles/colors';
 import Constants from 'expo-constants';
 
@@ -125,38 +124,14 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     }
   }, [isFirstInRow, isLastInRow]);
 
-  // PATCH_V19C_FOCUS_PREFETCH — schedule a stream prefetch ~800ms after focus so
-  // flicking rows on the D-pad doesn't fire dozens of network requests.
-  const _prefetchTimerRef = useRef<any>(null);
-
   const handleFocus = useCallback(() => {
     setIsFocused(true);
     onCardFocus?.();
-    // Schedule prefetch
-    if (_prefetchTimerRef.current) clearTimeout(_prefetchTimerRef.current);
-    _prefetchTimerRef.current = setTimeout(() => {
-      _prefetchTimerRef.current = null;
-      try {
-        const _itemAny: any = item;
-        const _type: string | undefined = _itemAny?.type || (_itemAny?.imdb_id ? 'movie' : undefined);
-        const _id: string | undefined = _itemAny?.imdb_id || _itemAny?.id;
-        if (_type && _id) {
-          const _store: any = useContentStore.getState();
-          if (typeof _store.prefetchStreams === 'function') {
-            _store.prefetchStreams(_type, _id);
-          }
-        }
-      } catch { /* prefetch is best-effort */ }
-    }, 800);
-  }, [onCardFocus, item]);
+  }, [onCardFocus]);
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
     onCardBlur?.();
-    if (_prefetchTimerRef.current) {
-      clearTimeout(_prefetchTimerRef.current);
-      _prefetchTimerRef.current = null;
-    }
   }, [onCardBlur]);
 
   const handleLongPress = useCallback(async () => {

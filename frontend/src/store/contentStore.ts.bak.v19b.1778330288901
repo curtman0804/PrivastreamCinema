@@ -1,5 +1,4 @@
-import { create } from 'zustand'; // PATCH_V19B_ALL_DONE
-import AsyncStorage from '@react-native-async-storage/async-storage'; // PATCH_V19B_DISK_HELPERS
+import { create } from 'zustand';
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
 import { getCached, setCache, CACHE_DURATIONS } from '../utils/cache';
 
@@ -14,29 +13,6 @@ export const getMetaCache = (key: string) => _metaCache[key] || null;
 export const setMetaCache = (key: string, data: ContentItem) => { _metaCache[key] = data; };
 export const getStreamsCache = (key: string) => _streamsCache[key] || null;
 export const setStreamsCache = (key: string, data: Stream[]) => { _streamsCache[key] = data; };
-
-// PATCH_V19B_DISK_HELPERS — AsyncStorage-backed persistent cache (6h TTL).
-const STREAMS_DISK_TTL_MS = 6 * 60 * 60 * 1000;
-const STREAMS_DISK_KEY = (key: string) => '@streamsCache:' + key;
-const _pendingPrefetches = new Set<string>();
-
-async function loadStreamsFromDisk(key: string): Promise<Stream[] | null> {
-  try {
-    const raw = await AsyncStorage.getItem(STREAMS_DISK_KEY(key));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.time || !Array.isArray(parsed.streams)) return null;
-    if (Date.now() - parsed.time > STREAMS_DISK_TTL_MS) return null;
-    return parsed.streams as Stream[];
-  } catch { return null; }
-}
-
-async function saveStreamsToDisk(key: string, streams: Stream[]): Promise<void> {
-  try {
-    if (!streams || streams.length === 0) return;
-    await AsyncStorage.setItem(STREAMS_DISK_KEY(key), JSON.stringify({ time: Date.now(), streams }));
-  } catch { /* swallow — disk cache is best-effort */ }
-}
 
 interface CurrentPlaying {
   contentType: string;
@@ -71,8 +47,6 @@ interface ContentState {
   search: (query: string) => Promise<void>;
   loadMoreSearch: () => Promise<void>;
   fetchStreams: (type: string, id: string) => Promise<Stream[]>;
-  // PATCH_V19B_INTERFACE
-  prefetchStreams: (type: string, id: string) => Promise<void>;
   addToLibrary: (item: ContentItem) => Promise<void>;
   removeFromLibrary: (type: string, id: string) => Promise<void>;
   clearSearch: () => void;
@@ -226,50 +200,28 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   fetchStreams: async (type: string, id: string) => {
-    // PATCH_V19B_FETCHSTREAMS_BODY — memory cache → disk cache → network
     const cacheKey = `${type}/${id}`;
-
-    // 1. Memory cache — instant
+    
+    // CHECK CACHE FIRST — instant return if we have data
     const cached = getStreamsCache(cacheKey);
     if (cached && cached.length > 0) {
       set({ streams: cached, isLoadingStreams: false, error: null });
       return cached;
     }
-
-    // 2. AsyncStorage disk cache — ~10ms
+    
     set({ isLoadingStreams: true, streams: [], error: null });
-    const diskCached = await loadStreamsFromDisk(cacheKey);
-    if (diskCached && diskCached.length > 0) {
-      setStreamsCache(cacheKey, diskCached);
-      set({ streams: diskCached, isLoadingStreams: false, error: null });
-      return diskCached;
-    }
-
-    // 3. Network with throttled progressive updates (max 1 set per 150ms)
+    
     try {
-      let _v19LastSet = 0;
-      let _v19PendingTimer: any = null;
-      let _v19PendingStreams: Stream[] = [];
-      const flushPending = () => {
-        if (_v19PendingStreams.length === 0) return;
-        _v19LastSet = Date.now();
-        set({ streams: _v19PendingStreams, isLoadingStreams: false });
-        _v19PendingStreams = [];
-      };
+      // Progressive loading: show streams as each source responds
       const result = await api.addons.getAllStreams(type, id, (partialStreams: Stream[]) => {
-        _v19PendingStreams = partialStreams;
-        const elapsed = Date.now() - _v19LastSet;
-        if (elapsed >= 150) {
-          if (_v19PendingTimer) { clearTimeout(_v19PendingTimer); _v19PendingTimer = null; }
-          flushPending();
-        } else if (!_v19PendingTimer) {
-          _v19PendingTimer = setTimeout(() => { _v19PendingTimer = null; flushPending(); }, 150 - elapsed);
+        set({ streams: partialStreams });
+        if (partialStreams.length > 0) {
+          set({ isLoadingStreams: false });
         }
       });
-      if (_v19PendingTimer) { clearTimeout(_v19PendingTimer); _v19PendingTimer = null; }
       const allStreams = result.streams || [];
+      // Cache the result for instant re-access
       setStreamsCache(cacheKey, allStreams);
-      saveStreamsToDisk(cacheKey, allStreams); // fire-and-forget
       set({ streams: allStreams, isLoadingStreams: false });
       return allStreams;
     } catch (error: any) {
@@ -277,31 +229,6 @@ export const useContentStore = create<ContentState>((set, get) => ({
       set({ streams: [], isLoadingStreams: false });
       return [];
     }
-  },
-
-  // PATCH_V19B_PREFETCH_IMPL — warm the cache without touching visible state.
-  // Used by ContentCard on poster focus so by the time the user clicks,
-  // streams are already in memory + disk cache.
-  prefetchStreams: async (type: string, id: string) => {
-    const cacheKey = `${type}/${id}`;
-    if (getStreamsCache(cacheKey)) return;
-    if (_pendingPrefetches.has(cacheKey)) return;
-    _pendingPrefetches.add(cacheKey);
-    try {
-      // Try disk first to avoid an unnecessary network round-trip
-      const diskCached = await loadStreamsFromDisk(cacheKey);
-      if (diskCached && diskCached.length > 0) {
-        setStreamsCache(cacheKey, diskCached);
-        return;
-      }
-      const result = await api.addons.getAllStreams(type, id);
-      const allStreams = result.streams || [];
-      if (allStreams.length > 0) {
-        setStreamsCache(cacheKey, allStreams);
-        saveStreamsToDisk(cacheKey, allStreams);
-      }
-    } catch { /* prefetch is best-effort */ }
-    finally { _pendingPrefetches.delete(cacheKey); }
   },
 
   addToLibrary: async (item: ContentItem) => {

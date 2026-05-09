@@ -15,9 +15,6 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        // PATCH_V14B_FREEZE_ON_BLUR_TABS
-        freezeOnBlur: true,
-        lazy: true,
         headerShown: false,
         tabBarStyle: [
           styles.tabBar,

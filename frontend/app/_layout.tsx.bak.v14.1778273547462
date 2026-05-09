@@ -1,6 +1,4 @@
 import React from 'react';
-import { enableFreeze } from 'react-native-screens'; // PATCH_V14_FREEZE_IMPORT
-enableFreeze(true);
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -11,7 +9,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <View style={{ flex: 1, backgroundColor: '#0c0c0c' }}>
         <StatusBar style="light" />
-        <Stack screenOptions={{ headerShown: false, animation: 'none', freezeOnBlur: true /* PATCH_V14_FREEZE_ON_BLUR_STACK */ }} />
+        <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
       </View>
     </SafeAreaProvider>
   );

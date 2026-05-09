@@ -27,26 +27,6 @@ import { Image as RNImage } from 'react-native';
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
-// PATCH_V15B_LAZYMOUNT_COMPONENT
-// Defers child mounting by `delay` ms then waits for the next idle window
-// (InteractionManager) before rendering. Used to stagger discover service
-// rows so the JS thread is not pegged with N FlatLists on cold start.
-function LazyMount({ delay, children, placeholder }: { delay: number; children: React.ReactNode; placeholder?: React.ReactNode }) {
-  const [shouldMount, setShouldMount] = useState(delay <= 0);
-  useEffect(() => {
-    if (delay <= 0) return;
-    let cancelled = false;
-    const t = setTimeout(() => {
-      InteractionManager.runAfterInteractions(() => {
-        if (!cancelled) setShouldMount(true);
-      });
-    }, delay);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [delay]);
-  if (!shouldMount) return (placeholder ?? null) as any;
-  return <>{children}</>;
-}
-
 export default function DiscoverScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
@@ -359,7 +339,7 @@ export default function DiscoverScreen() {
             const hasChannelsInName = serviceName.toLowerCase().includes('channel');
             
             return (
-              <LazyMount key={serviceName} delay={(rowIdx++) * 60} placeholder={<View style={{ height: 240 }} />}> {/* PATCH_V15B_LAZYMOUNT_USAGE */}
+              <React.Fragment key={serviceName}>
                 {content?.movies && content.movies.length > 0 && (
                   <View onLayout={(e) => { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}>
                     <ServiceRow
@@ -401,7 +381,7 @@ export default function DiscoverScreen() {
                     />
                   </View>
                 )}
-              </LazyMount>
+              </React.Fragment>
             );
           });
           })()}

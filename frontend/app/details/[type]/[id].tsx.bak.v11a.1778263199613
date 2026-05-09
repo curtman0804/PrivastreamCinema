@@ -120,18 +120,7 @@ function ChipButton({ label, onPress, hasTVPreferredFocus = false }: { label: st
 
 
 // Parse stream info helper - used by StreamCard and sorting
-// PATCH_V11A_PARSE_CACHE — module-level cache so each Stream object is parsed exactly once.
-const _parseStreamInfoCache = new WeakMap<Stream, any>();
-// PATCH_V19A_PARSE_CACHE — module-level WeakMap cache for parseStreamInfo.
-const _parseStreamInfoCache = new WeakMap<Stream, any>();
-
 function parseStreamInfo(stream: Stream) {
-  {
-    const _v19Cached = _parseStreamInfoCache.get(stream);
-    if (_v19Cached) return _v19Cached;
-  }
-  const _cached = _parseStreamInfoCache.get(stream);
-  if (_cached) return _cached;
   const name = stream.name || '';
   const title = stream.title || '';
   const combined = `${name} ${title}`.toUpperCase();
@@ -147,22 +136,6 @@ function parseStreamInfo(stream: Stream) {
   const isHEVC = combined.includes('HEVC') || combined.includes('X265') || combined.includes('H265') || combined.includes('H.265');
   // HDR / Dolby Vision / 10-bit produce wrong colors on SDR Firestick → avoid when possible
   const isHDR = combined.includes('HDR') || combined.includes('DOLBY VISION') || combined.includes('DOLBYVISION') || combined.includes('DV.') || combined.includes(' DV ') || combined.includes('10BIT') || combined.includes('10-BIT') || combined.includes('10 BIT');
-
-  // PATCH_V12_COMMENTARY_DETECT — exclude commentary tracks (creator/director/audio commentary).
-  // Heavy penalty in computeScore guarantees these sink to the bottom of the list.
-  const isCommentary = (
-    combined.includes('COMMENTARY') ||
-    combined.includes('COMM TRACK') ||
-    combined.includes('COMM-TRACK') ||
-    combined.includes('CREATOR COMM') ||
-    combined.includes('DIRECTOR COMM') ||
-    combined.includes('WRITER COMM') ||
-    combined.includes('WRITERS COMM') ||
-    combined.includes('WITH COMM') ||
-    combined.includes('AUDIO COMM') ||
-    /\[\s*COMM[^\]]*\]/.test(combined) ||
-    /\bCOMM\.\b/.test(combined)
-  );
   
   // Extract source
   let source = stream.addon || 'Unknown';
@@ -244,33 +217,11 @@ function parseStreamInfo(stream: Stream) {
   if (HAS_ENGLISH && isForeign) language = 'MULTI';
   if (HAS_ENGLISH && !isForeign) language = 'ENG';
   
-  // PATCH_V11A_PARSE_CACHE_SET
-  const _result = { quality, source, size, seeders, title, language, isForeign, isHEVC, isHDR, isCommentary };
-  _parseStreamInfoCache.set(stream, _result);
-  const _v19Result = _result;
-  _parseStreamInfoCache.set(stream, _v19Result);
-  return _v19Result;
+  return { quality, source, size, seeders, title, language, isForeign, isHEVC, isHDR };
 }
 
 // Sort streams: English first (by seeds desc), then other languages (by seeds desc)
 function sortStreamsByLanguage(streams: Stream[]): Stream[] {
-  // PATCH_V16A_COMMENTARY_SINK — local commentary detector. Independent of V12/V9.
-  // Tested: 'Commentary', 'Audio Commentary', 'Director Commentary',
-  // 'Creator Comm', '[COMM]', 'Comm.', 'with commentary', etc.
-  const _isCommentaryStream = (s: any): boolean => {
-    const t = (((s?.title || '') + ' ' + (s?.name || '')).toUpperCase());
-    if (!t) return false;
-    if (t.includes('COMMENTARY')) return true;
-    if (t.includes('CREATOR COMM')) return true;
-    if (t.includes('DIRECTOR COMM')) return true;
-    if (t.includes('WRITERS COMM') || t.includes('WRITER COMM')) return true;
-    if (t.includes('WITH COMM')) return true;
-    if (t.includes('AUDIO COMM')) return true;
-    if (t.includes('COMM TRACK') || t.includes('COMM-TRACK') || t.includes('COMM.TRACK')) return true;
-    if (/\[\s*COMM[^\]]*\]/.test(t)) return true;
-    if (/\bCOMM\.\s/.test(t)) return true;
-    return false;
-  };
   // Parse all stream info first
   const parsed = streams.map(s => ({ stream: s, info: parseStreamInfo(s) }));
 
@@ -295,18 +246,6 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
   const QUALITY_PTS: Record<string, number> = { '4K': 80, '1080p': 60, '720p': 40, 'HD': 20, 'SD': 0 };
   const computeScore = (info: ReturnType<typeof parseStreamInfo>, stream: Stream): number => {
     let s = 0;
-    // PATCH_V12_COMMENTARY_PENALTY — guarantee commentary tracks rank LAST
-    if (info.isCommentary) s -= 2000;
-    // PATCH_V18_BLURAY_SERIES_PENALTY — Blu-ray rips of series often have creator commentary as the
-    // DEFAULT audio track (R&M, Family Guy, Rick & Morty, etc.). expo-av can't
-    // switch tracks, so we deprioritize series Blu-rays in favor of WEB-DL/WEBRip
-    // which come from streaming services that never include commentary.
-    {
-      const _t18 = ((stream.title || '') + ' ' + (stream.name || '')).toUpperCase();
-      const _isSeriesEp = /S\d{1,2}E\d{1,2}\b/i.test(_t18) || /\b\d{1,2}X\d{1,2}\b/i.test(_t18);
-      const _isBluRayLike = _t18.includes('BLURAY') || _t18.includes('BLU-RAY') || _t18.includes('BDRIP') || _t18.includes('BD-RIP') || _t18.includes('REMUX');
-      if (_isSeriesEp && _isBluRayLike) s -= 300;
-    }
     if (info.language === 'ENG') s += 1000;
     else if (info.language === 'MULTI') s += 900;
     else s += 100;
@@ -320,21 +259,11 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
   };
   parsed.sort((a, b) => computeScore(b.info, b.stream) - computeScore(a.info, a.stream));
 
-  // PATCH_V16A_COMMENTARY_SINK — partition commentary tracks to the end of the result.
-  // Whatever score-based sort ran above, commentary always sinks last so
-  // the Play button (sorted[0]) and auto-play never select a commentary
-  // track even if it scored highest by language/quality/seeders.
-  const _sorted = parsed.map(p => p.stream);
-  const _nonComm: Stream[] = [];
-  const _comm: Stream[] = [];
-  for (const s of _sorted) {
-    if (_isCommentaryStream(s)) _comm.push(s); else _nonComm.push(s);
-  }
-  return [..._nonComm, ..._comm];
+  return parsed.map(p => p.stream);
 }
 
-// Stream Card Component - 3-row vertical layout (PATCH_V19A_STREAMCARD_MEMO React.memo)
-const StreamCard = React.memo(function StreamCardInner({ 
+// Stream Card Component - 3-row vertical layout
+function StreamCard({ 
   stream, 
   onPress 
 }: { 
@@ -342,7 +271,7 @@ const StreamCard = React.memo(function StreamCardInner({
   onPress: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-  const { quality, source, size, seeders, language, isForeign, isCommentary } = parseStreamInfo(stream);
+  const { quality, source, size, seeders, language, isForeign } = parseStreamInfo(stream);
   const isRD = !!stream.infoHash; // Torrent streams go through Real-Debrid
   
   return (
@@ -352,12 +281,6 @@ const StreamCard = React.memo(function StreamCardInner({
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
     >
-      {/* PATCH_V18_TOPRIGHT_BUBBLE — gold chat-bubble at top-right when stream is commentary */}
-      {isCommentary && (
-        <View style={styles.commentaryBadgeTopRight} pointerEvents="none">
-          <Ionicons name="chatbubble" size={12} color="#B8A05C" />
-        </View>
-      )}
       {/* Row 1: Source */}
       <View style={styles.streamSourceRow}>
         <Text style={styles.streamSource} numberOfLines={1}>{source}</Text>
@@ -399,7 +322,7 @@ const StreamCard = React.memo(function StreamCardInner({
       </View>
     </Pressable>
   );
-});
+}
 
 // Episode Card Component
 // Placeholder component for missing posters/thumbnails
@@ -558,8 +481,6 @@ export default function DetailsScreen() {
   const streams = useContentStore(s => s.streams);
   const isLoadingStreams = useContentStore(s => s.isLoadingStreams);
   const fetchStreams = useContentStore(s => s.fetchStreams);
-  // PATCH_V19A_SORTED_MEMO — memoize the sorted streams list.
-  const sortedStreams = useMemo(() => sortStreamsByLanguage(streams), [streams]);
   const library = useContentStore(s => s.library);
   const fetchLibrary = useContentStore(s => s.fetchLibrary);
   
@@ -1317,7 +1238,8 @@ const nextEpisodeData = nextEpisode ? {
                 {!isLoadingStreams && streams.length > 0 && (
                   <FocusableButton
                     onPress={() => {
-                      if (sortedStreams[0]) handleStreamSelect(sortedStreams[0]);
+                      const sorted = sortStreamsByLanguage(streams);
+                      if (sorted[0]) handleStreamSelect(sorted[0]);
                     }}
                     style={styles.playButton}
                     focusedStyle={styles.playButtonFocused}
@@ -1345,7 +1267,7 @@ const nextEpisodeData = nextEpisode ? {
                 </View>
               ) : (
                 <FlatList
-                  data={sortedStreams}
+                  data={sortStreamsByLanguage(streams)}
                   renderItem={renderStreamItem}
                   keyExtractor={(item, index) => `${item.infoHash || item.url || index}`}
                   horizontal
@@ -1827,38 +1749,5 @@ const styles = StyleSheet.create({
   defaultFocused: {
     borderColor: '#B8A05C',
     borderWidth: 2,
-  },
-  // PATCH_V13_BADGE_STYLES
-  commentaryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,140,0,0.18)',
-    borderColor: '#FF8C00',
-    borderWidth: 1,
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  commentaryBadgeText: {
-    color: '#FF8C00',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  // PATCH_V18_TOPRIGHT_BUBBLE_STYLE
-  commentaryBadgeTopRight: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    zIndex: 10,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    borderWidth: 1,
-    borderColor: '#B8A05C',
-    borderRadius: 10,
-    paddingHorizontal: 4,
-    paddingVertical: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
