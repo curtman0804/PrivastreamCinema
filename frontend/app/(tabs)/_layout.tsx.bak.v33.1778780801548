@@ -6,14 +6,21 @@ import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
-  // PATCH_V34_ROOT_SILENT_NO_OP — back at root does NOTHING visible.
-    // No toast (invisible on TV anyway), no exit, just absorb the press.
-    // Use HOME button on the remote to leave the app.
-    useEffect(() => {
-      if (Platform.OS !== "android") return;
-      const sub = BackHandler.addEventListener("hardwareBackPress", () => true);
-      return () => { try { sub.remove(); } catch (_) {} };
-    }, []);
+  // PATCH_V32_DOUBLE_BACK_TO_EXIT — back-from-root shows toast, second back exits
+  const _v32LastBackRef = useRef<number>(0);
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      const now = Date.now();
+      if (now - _v32LastBackRef.current < 2000) {
+        return false; // 2nd press within 2s → let Android exit
+      }
+      _v32LastBackRef.current = now;
+      try { ToastAndroid.show("Press back again to exit", ToastAndroid.SHORT); } catch (_) {}
+      return true; // consume the 1st press
+    });
+    return () => { try { sub.remove(); } catch (_) {} };
+  }, []);
 
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();

@@ -544,17 +544,7 @@ export default function DetailsScreen() {
   }, [goToSeriesRootWithFocus, router]);
 
   useEffect(() => {
-    // PATCH_V34_DETAILS_BACK — back ALWAYS does something visible:
-    //   1. Series-episode page → goToSeriesRootWithFocus() handles it (returns true)
-    //   2. Movies / series-roots → router.back() to previous screen
-    //   3. Deep-linked (empty stack) → fall back to Discover tab
-    //   4. ALWAYS return true so Android can't force-exit
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      try { if (goToSeriesRootWithFocus()) return true; } catch (_) {}
-      try { router.back(); return true; } catch (_) {}
-      try { router.replace('/(tabs)/discover'); } catch (_) {}
-      return true;
-    });
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => goToSeriesRootWithFocus());
     return () => sub.remove();
   }, [goToSeriesRootWithFocus]);
   // ========================================================================

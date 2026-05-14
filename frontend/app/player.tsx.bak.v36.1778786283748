@@ -278,13 +278,7 @@ export default function PlayerScreen() {
       }
       return true; // consume — prevent default OS pop
     };
-    // PATCH_V36_PLAYER_NATIVE_BACK — let expo-router's stack navigator pop natively.
-    // Returning false delegates the back press to the navigator's default,
-    // which simply pops the player off the stack and reveals details underneath.
-    // No custom routing here = no chance to over-pop or duplicate screens.
-    // Progress-save on exit lives in a separate useEffect cleanup, so unmount-
-    // driven save still happens regardless of how the player closes.
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => false);
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => { try { sub.remove(); } catch (_) {} };
   }, [seriesId, season, episode, contentId, contentType]);
 

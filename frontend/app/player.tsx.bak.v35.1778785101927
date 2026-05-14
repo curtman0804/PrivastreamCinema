@@ -264,12 +264,7 @@ export default function PlayerScreen() {
         if (target) {
           // Pop any stacked binge-watch screens, then land on episode info
           try { (router as any).dismissAll && (router as any).dismissAll(); } catch (_) {}
-          // PATCH_V35_BACK_POP_PREFER — pop player first; replace only as deep-link fallback
-          if (router.canGoBack && router.canGoBack()) {
-            router.back();
-          } else {
-            router.replace(target as any);
-          }
+          router.replace(target as any);
         } else {
           router.back();
         }
@@ -278,13 +273,7 @@ export default function PlayerScreen() {
       }
       return true; // consume — prevent default OS pop
     };
-    // PATCH_V36_PLAYER_NATIVE_BACK — let expo-router's stack navigator pop natively.
-    // Returning false delegates the back press to the navigator's default,
-    // which simply pops the player off the stack and reveals details underneath.
-    // No custom routing here = no chance to over-pop or duplicate screens.
-    // Progress-save on exit lives in a separate useEffect cleanup, so unmount-
-    // driven save still happens regardless of how the player closes.
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => false);
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => { try { sub.remove(); } catch (_) {} };
   }, [seriesId, season, episode, contentId, contentType]);
 

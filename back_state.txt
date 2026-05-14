@@ -1,0 +1,362 @@
+# show_back_state.js — read-only
+# generated: 2026-05-14T18:35:28.364Z
+
+======================================================================
+  details  →  frontend\app\details\[type]\[id].tsx
+======================================================================
+  lines: 1863   eol: CRLF
+
+  -- BackHandler.addEventListener (+25 lines context) (2 hits) --
+    [L547]
+    L 545    
+    L 546      useEffect(() => {
+    L 547 >>     const sub = BackHandler.addEventListener('hardwareBackPress', () => goToSeriesRootWithFocus());
+    L 548        return () => sub.remove();
+    L 549      }, [goToSeriesRootWithFocus]);
+    L 550      // ========================================================================
+    L 551    
+    L 552    
+    L 553      const router = useRouter();
+    L 554      
+    L 555      // Use zustand SELECTORS — only re-render when these specific fields change
+    L 556      // This prevents re-renders from unrelated store changes (discover data, addons, etc.)
+    L 557      const streams = useContentStore(s => s.streams);
+    L 558      const isLoadingStreams = useContentStore(s => s.isLoadingStreams);
+    L 559      const fetchStreams = useContentStore(s => s.fetchStreams);
+    L 560      // PATCH_V19A_SORTED_MEMO — memoize the sorted streams list.
+    L 561      const sortedStreams = useMemo(() => sortStreamsByLanguage(streams), [streams]);
+    L 562      const library = useContentStore(s => s.library);
+    L 563      const fetchLibrary = useContentStore(s => s.fetchLibrary);
+    L 564      
+    L 565      const id = rawId ? decodeURIComponent(rawId) : rawId;
+    L 566      
+    L 567      // Try meta cache first (instant), then route params, then bare minimum
+    L 568      const cachedMeta = id ? getMetaCache(id) : null;
+    L 569      const initialContent: ContentItem = cachedMeta || {
+    L 570        id: id!,
+    L 571        imdb_id: id,
+    L 572        name: paramName || '',
+    ----
+    [L666]
+    L 664          return true; // swallow the default back nav
+    L 665        };
+    L 666 >>     const sub = BackHandler.addEventListener('hardwareBackPress', handler);
+    L 667        return () => sub.remove();
+    L 668      }, [autoPlayParam, type, baseId]);
+    L 669    
+    L 670      useEffect(() => {
+    L 671        if (content && library) {
+    L 672          const contentList = type === 'movie' ? library.movies : library.series;
+    L 673          const found = contentList?.some(
+    L 674            (item) => item.id === content.id || item.imdb_id === content.id
+    L 675          );
+    L 676          setInLibrary(!!found);
+    L 677        }
+    L 678      }, [content, library]);
+    L 679    
+    L 680      // Load watched episodes from AsyncStorage — reload on EVERY screen focus
+    L 681      // so checkmarks appear immediately after returning from the player
+    L 682      useFocusEffect(
+    L 683        useCallback(() => {
+    L 684          const loadWatched = async () => {
+    L 685            try {
+    L 686              const data = await AsyncStorage.getItem('privastream_watched');
+    L 687              if (data) setWatchedEpisodes(JSON.parse(data));
+    L 688            } catch (e) {
+    L 689              console.log('[DETAILS] Error loading watched data:', e);
+    L 690            }
+    L 691          };
+    ----
+
+  -- router.back / router.replace (3 hits) --
+    [L543]
+    L 543 >>     if (!goToSeriesRootWithFocus()) router.back();
+    L 544      }, [goToSeriesRootWithFocus, router]);
+    L 545    
+    ----
+    [L663]
+    L 663 >>       router.replace({ pathname: `/details/series/${baseId}` });
+    L 664          return true; // swallow the default back nav
+    L 665        };
+    ----
+    [L708]
+    L 708 >>   // Expo Router uses router.replace() between episodes which re-renders this
+    L 709      // component instead of unmounting it — so refs persist and would otherwise
+    L 710      // block the second/third/Nth auto-transition. Resetting here makes every
+    ----
+
+  -- handleBack / onBackPress definitions (1 hit) --
+    [L542]
+    L 542 >>   const handleBack = useCallback(() => {
+    L 543        if (!goToSeriesRootWithFocus()) router.back();
+    L 544      }, [goToSeriesRootWithFocus, router]);
+    L 545    
+    L 546      useEffect(() => {
+    L 547        const sub = BackHandler.addEventListener('hardwareBackPress', () => goToSeriesRootWithFocus());
+    L 548        return () => sub.remove();
+    L 549      }, [goToSeriesRootWithFocus]);
+    L 550      // ========================================================================
+    ----
+
+  -- PATCH_V* markers present (17 hits) --
+    [L123]
+    L 123 >> // PATCH_V11A_PARSE_CACHE — module-level cache so each Stream object is parsed exactly once.
+    ----
+    [L124]
+    L 124 >> // PATCH_V19A_PARSE_CACHE — module-level WeakMap cache for parseStreamInfo.
+    ----
+    [L145]
+    L 145 >>   // PATCH_V9_CODEC_DETECTION — Firestick decodes H.264/AVC reliably; HEVC/x265 stutters or shows black frames
+    ----
+    [L150]
+    L 150 >>   // PATCH_V12_COMMENTARY_DETECT — exclude commentary tracks (creator/director/audio commentary).
+    ----
+    [L246]
+    L 246 >>   // PATCH_V11A_PARSE_CACHE_SET
+    ----
+    [L256]
+    L 256 >>   // PATCH_V16A_COMMENTARY_SINK — local commentary detector. Independent of V12/V9.
+    ----
+    [L291]
+    L 291 >>   // PATCH_V9_SCORED_SORT — produces a stable, consistent best pick across every episode.
+    ----
+    [L297]
+    L 297 >>     // PATCH_V12_COMMENTARY_PENALTY — guarantee commentary tracks rank LAST
+    ----
+    [L299]
+    L 299 >>     // PATCH_V18_BLURAY_SERIES_PENALTY — Blu-ray rips of series often have creator commentary as the
+    ----
+    [L322]
+    L 322 >>   // PATCH_V16A_COMMENTARY_SINK — partition commentary tracks to the end of the result.
+    ----
+    [L335]
+    L 335 >> // Stream Card Component - 3-row vertical layout (PATCH_V19A_STREAMCARD_MEMO React.memo)
+    ----
+    [L354]
+    L 354 >>       {/* PATCH_V18_TOPRIGHT_BUBBLE — gold chat-bubble at top-right when stream is commentary */}
+    ----
+    [L506]
+    L 506 >>     // PATCH_V6_NAV_RESET — atomically resets stack, kills binge pollution
+    ----
+    [L516]
+    L 516 >>       // PATCH_V7_HOME_TAB — keep (tabs) base so back from series root lands on home
+    ----
+    [L560]
+    L 560 >>   // PATCH_V19A_SORTED_MEMO — memoize the sorted streams list.
+    ----
+    [L1830]
+    L1830 >>   // PATCH_V13_BADGE_STYLES
+    ----
+    [L1848]
+    L1848 >>   // PATCH_V18_TOPRIGHT_BUBBLE_STYLE
+    ----
+
+  -- react-native import (to confirm BackHandler is imported) (1 hit) --
+    [L18]
+    L  18 >> } from 'react-native';
+    ----
+
+======================================================================
+  player  →  frontend\app\player.tsx
+======================================================================
+  lines: 3151   eol: CRLF
+
+  -- BackHandler.addEventListener (+25 lines context) (1 hit) --
+    [L276]
+    L 274          return true; // consume — prevent default OS pop
+    L 275        };
+    L 276 >>     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    L 277        return () => { try { sub.remove(); } catch (_) {} };
+    L 278      }, [seriesId, season, episode, contentId, contentType]);
+    L 279    
+    L 280      
+    L 281      // Hide navigation bar on Android for immersive video experience
+    L 282      useEffect(() => {
+    L 283        const setupImmersiveMode = async () => {
+    L 284          if (Platform.OS === 'android') {
+    L 285            try {
+    L 286              await NavigationBar.setVisibilityAsync('hidden');
+    L 287              await NavigationBar.setBehaviorAsync('overlay-swipe');
+    L 288            } catch (e) {
+    L 289              console.log('Could not hide navigation bar:', e);
+    L 290            }
+    L 291          }
+    L 292        };
+    L 293        
+    L 294        setupImmersiveMode();
+    L 295        
+    L 296        return () => {
+    L 297          // Restore navigation bar when leaving player
+    L 298          if (Platform.OS === 'android') {
+    L 299            NavigationBar.setVisibilityAsync('visible').catch(() => {});
+    L 300          }
+    L 301        };
+    ----
+
+  -- router.back / router.replace (10 hits) --
+    [L267]
+    L 267 >>           router.replace(target as any);
+    L 268            } else {
+    L 269              router.back();
+    ----
+    [L269]
+    L 269 >>           router.back();
+    L 270            }
+    L 271          } catch (_) {
+    ----
+    [L272]
+    L 272 >>         try { router.back(); } catch (__) {}
+    L 273          }
+    L 274          return true; // consume — prevent default OS pop
+    ----
+    [L840]
+    L 840 >>           router.back();
+    L 841            }
+    L 842          }
+    ----
+    [L882]
+    L 882 >>           router.replace({
+    L 883                pathname: `/details/series/${nextEpisodeId}`,
+    L 884                params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '', nextPoster: (nextEpisodePoster || poster || '') as string, nextBackdrop: (backdrop || '') as string },
+    ----
+    [L900]
+    L 900 >>       router.back();
+    L 901        }
+    L 902      }, [nextEpisodeId, contentType, router, showNextEpisodeModal, showCreditsPopup]);
+    ----
+    [L926]
+    L 926 >>       router.back();
+    L 927          return;
+    L 928        }
+    ----
+    [L936]
+    L 936 >>     router.replace({
+    L 937          pathname: `/details/series/${nextEpisodeId}`,
+    L 938          params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '' },
+    ----
+    [L950]
+    L 950 >>     router.back();
+    L 951      };
+    L 952      
+    ----
+    [L1955]
+    L1955 >>     router.back();
+    L1956      };
+    L1957    
+    ----
+
+  -- handleBack / onBackPress definitions (2 hits) --
+    [L254]
+    L 254 >>     const onBackPress = () => {
+    L 255          try {
+    L 256            let target: string | null = null;
+    L 257            if (seriesId && season && episode) {
+    L 258              target = `/details/series/${seriesId}:${season}:${episode}`;
+    L 259            } else if (contentId) {
+    L 260              const cid = String(contentId);
+    L 261              const base = cid.includes(':') ? cid.split(':')[0] : cid;
+    L 262              target = `/details/${(contentType as string) || 'movie'}/${base}`;
+    ----
+    [L1954]
+    L1954 >>   const handleBack = () => {
+    L1955        router.back();
+    L1956      };
+    L1957    
+    L1958      return (
+    L1959        <View style={styles.container}>
+    L1960          <StatusBar hidden />
+    L1961    
+    L1962                {/* PATCH_V8_UNIFIED_LOADING — unified loading screen (matches autoplay overlay) */}
+    ----
+
+  -- PATCH_V* markers present (8 hits) --
+    [L338]
+    L 338 >>   // PATCH_V10_SEEK_GUARDS — track pre-seek position so we can rewind on seek failure,
+    ----
+    [L347]
+    L 347 >>   // PATCH_V8_LOADBAR_ANIM — sliding gold bar for unified loading screen
+    ----
+    [L991]
+    L 991 >>     // PATCH_V7_SAFE_CLAMP — keep at least 5s away from the very end so a long
+    ----
+    [L999]
+    L 999 >>     // PATCH_V10_SNAPSHOT — capture pre-seek position so onError can rewind us if the seek fails
+    ----
+    [L1004]
+    L1004 >>     // PATCH_V7_KILL_TIMEOUT_ON_SEEK — a user-initiated seek must NOT trigger tryNextStream.
+    ----
+    [L1962]
+    L1962 >>             {/* PATCH_V8_UNIFIED_LOADING — unified loading screen (matches autoplay overlay) */}
+    ----
+    [L2208]
+    L2208 >>                           // PATCH_V10_REWIND_ON_GIVEUP — rewind to pre-seek position and arm
+    ----
+    [L2226]
+    L2226 >>                   // PATCH_V10_COOLDOWN_GUARD — if a seek just failed, ignore the onError storm.
+    ----
+
+  -- react-native import (to confirm BackHandler is imported) (2 hits) --
+    [L19]
+    L  19 >> } from 'react-native';
+    ----
+    [L38]
+    L  38 >> import { Modal, FlatList } from 'react-native';
+    ----
+
+======================================================================
+  layout  →  frontend\app\(tabs)\_layout.tsx
+======================================================================
+  lines: 171   eol: CRLF
+
+  -- BackHandler.addEventListener (+25 lines context) (1 hit) --
+    [L13]
+    L  11      useEffect(() => {
+    L  12        if (Platform.OS !== "android") return;
+    L  13 >>     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+    L  14          const now = Date.now();
+    L  15          if (now - _v32LastBackRef.current < 2000) {
+    L  16            return false; // 2nd press within 2s → let Android exit
+    L  17          }
+    L  18          _v32LastBackRef.current = now;
+    L  19          try { ToastAndroid.show("Press back again to exit", ToastAndroid.SHORT); } catch (_) {}
+    L  20          return true; // consume the 1st press
+    L  21        });
+    L  22        return () => { try { sub.remove(); } catch (_) {} };
+    L  23      }, []);
+    L  24    
+    L  25      const insets = useSafeAreaInsets();
+    L  26      const { width, height } = useWindowDimensions();
+    L  27      const isTV = width > height || width > 800;
+    L  28      
+    L  29      const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 20 : 10);
+    L  30      const tabBarHeight = isTV ? 80 : 65 + bottomPadding;
+    L  31    
+    L  32      return (
+    L  33        <Tabs
+    L  34          screenOptions={{
+    L  35            // PATCH_V14B_FREEZE_ON_BLUR_TABS
+    L  36            freezeOnBlur: true,
+    L  37            lazy: true,
+    L  38            headerShown: false,
+    ----
+
+  -- router.back / router.replace (0 hits) --
+    (none)
+
+  -- handleBack / onBackPress definitions (0 hits) --
+    (none)
+
+  -- PATCH_V* markers present (2 hits) --
+    [L9]
+    L   9 >>   // PATCH_V32_DOUBLE_BACK_TO_EXIT — back-from-root shows toast, second back exits
+    ----
+    [L35]
+    L  35 >>         // PATCH_V14B_FREEZE_ON_BLUR_TABS
+    ----
+
+  -- react-native import (to confirm BackHandler is imported) (1 hit) --
+    [L5]
+    L   5 >> import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid } from 'react-native';
+    ----
+
+# done.

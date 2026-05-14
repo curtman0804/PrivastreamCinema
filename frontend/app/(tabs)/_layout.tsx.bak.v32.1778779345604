@@ -1,20 +1,10 @@
 import React, { useState } from 'react';
-import { useEffect, useRef } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid } from 'react-native';
+import { StyleSheet, Platform, View, useWindowDimensions, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
-  // PATCH_V34_ROOT_SILENT_NO_OP — back at root does NOTHING visible.
-    // No toast (invisible on TV anyway), no exit, just absorb the press.
-    // Use HOME button on the remote to leave the app.
-    useEffect(() => {
-      if (Platform.OS !== "android") return;
-      const sub = BackHandler.addEventListener("hardwareBackPress", () => true);
-      return () => { try { sub.remove(); } catch (_) {} };
-    }, []);
-
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
