@@ -121,14 +121,8 @@ function ChipButton({ label, onPress, hasTVPreferredFocus = false }: { label: st
 
 // Parse stream info helper - used by StreamCard and sorting
 // PATCH_V11A_PARSE_CACHE — module-level cache so each Stream object is parsed exactly once.
-// PATCH_V19A_PARSE_CACHE — module-level WeakMap cache for parseStreamInfo.
 const _parseStreamInfoCache = new WeakMap<Stream, any>();
-
 function parseStreamInfo(stream: Stream) {
-  {
-    const _v19Cached = _parseStreamInfoCache.get(stream);
-    if (_v19Cached) return _v19Cached;
-  }
   const _cached = _parseStreamInfoCache.get(stream);
   if (_cached) return _cached;
   const name = stream.name || '';
@@ -246,9 +240,7 @@ function parseStreamInfo(stream: Stream) {
   // PATCH_V11A_PARSE_CACHE_SET
   const _result = { quality, source, size, seeders, title, language, isForeign, isHEVC, isHDR, isCommentary };
   _parseStreamInfoCache.set(stream, _result);
-  const _v19Result = _result;
-  _parseStreamInfoCache.set(stream, _v19Result);
-  return _v19Result;
+  return _result;
 }
 
 // Sort streams: English first (by seeds desc), then other languages (by seeds desc)
@@ -332,8 +324,8 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
   return [..._nonComm, ..._comm];
 }
 
-// Stream Card Component - 3-row vertical layout (PATCH_V19A_STREAMCARD_MEMO React.memo)
-const StreamCard = React.memo(function StreamCardInner({ 
+// Stream Card Component - 3-row vertical layout
+function StreamCard({ 
   stream, 
   onPress 
 }: { 
@@ -398,7 +390,10 @@ const StreamCard = React.memo(function StreamCardInner({
       </View>
     </Pressable>
   );
-});
+}
+
+// PATCH_V21_STREAMCARD_MEMO — memoized wrapper so cards skip re-render when stream identity is stable
+const StreamCardMemo = React.memo(StreamCard);
 
 // Episode Card Component
 // Placeholder component for missing posters/thumbnails
@@ -557,7 +552,7 @@ export default function DetailsScreen() {
   const streams = useContentStore(s => s.streams);
   const isLoadingStreams = useContentStore(s => s.isLoadingStreams);
   const fetchStreams = useContentStore(s => s.fetchStreams);
-  // PATCH_V19A_SORTED_MEMO — memoize the sorted streams list.
+  // PATCH_V20_SORTED_MEMO — memoize sorted streams; sort runs only when streams identity changes
   const sortedStreams = useMemo(() => sortStreamsByLanguage(streams), [streams]);
   const library = useContentStore(s => s.library);
   const fetchLibrary = useContentStore(s => s.fetchLibrary);
@@ -1054,7 +1049,7 @@ const nextEpisodeData = nextEpisode ? {
 
   // Render stream item for FlatList
   const renderStreamItem = ({ item }: { item: Stream }) => (
-    <StreamCard stream={item} onPress={() => handleStreamSelect(item)} />
+    <StreamCardMemo stream={item} onPress={() => handleStreamSelect(item)} />
   );
 
   // Mark episode as unwatched (long-press)

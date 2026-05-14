@@ -1,0 +1,663 @@
+# diagnose_autoplay.js — read-only
+# generated: 2026-05-14T14:35:56.098Z
+
+======================================================================
+  details/[type]/[id].tsx — Play button + auto-pick + nav-to-player
+======================================================================
+
+  -- any literal mention of /player or "player" pathname (4 matches) --
+    [L848]
+    L 847          router.push({
+    L 848 >>         pathname: '/player',
+    L 849            params: { 
+    L 850              directUrl: streamUrl,
+    L 851              title: contentTitle,
+    L 852              isLive: 'false',
+    L 853              contentType: cType,
+    ----
+    [L883]
+    L 882          router.push({
+    L 883 >>         pathname: '/player',
+    L 884            params: { 
+    L 885              directUrl: absoluteUrl,
+    L 886              title: contentTitle,
+    L 887              isLive: type === 'tv' ? 'true' : 'false',
+    L 888              contentType: cType,
+    ----
+    [L923]
+    L 922          router.push({
+    L 923 >>         pathname: '/player',
+    L 924            params: { 
+    L 925              infoHash: stream.infoHash,
+    L 926              title: contentTitle,
+    L 927              contentType: cType,
+    L 928              contentId: subtitleContentId,
+    ----
+    [L999]
+    L 998          router.push({
+    L 999 >>         pathname: '/player',
+    L1000            params: { 
+    L1001              directUrl: streamUrl,
+    L1002              title: contentTitle,
+    L1003              isLive: type === 'tv' ? 'true' : 'false',
+    L1004              contentType: cType,
+    ----
+
+  -- any router.<verb>( call (15 matches) --
+    [L528]
+    L 528 >>         router.push({
+    L 529              pathname: `/details/${type}/${baseIdLocal}`,
+    L 530              params: { selectedSeason: s, selectedEpisode: e },
+    L 531            });
+    L 532          }, 30);
+    ----
+    [L538]
+    L 538 >>     if (!goToSeriesRootWithFocus()) router.back();
+    L 539      }, [goToSeriesRootWithFocus, router]);
+    L 540    
+    L 541      useEffect(() => {
+    L 542        // PATCH_V29_BACK_NAV — never let Android back close the app from details.
+    ----
+    [L544]
+    L 544 >>     // - Movies/series-roots: call router.back() explicitly
+    L 545        // - Empty back stack (deep link): fall back to Discover tab
+    L 546        // - ALWAYS return true so Android cannot exit the app from here
+    L 547        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+    L 548          try { if (goToSeriesRootWithFocus()) return true; } catch { /* fall through */ }
+    ----
+    [L549]
+    L 549 >>       try { router.back(); return true; } catch { /* no back history */ }
+    L 550          try { router.replace('/(tabs)/discover'); } catch { /* last resort: ignore */ }
+    L 551          return true;
+    L 552        });
+    L 553        return () => sub.remove();
+    ----
+    [L550]
+    L 550 >>       try { router.replace('/(tabs)/discover'); } catch { /* last resort: ignore */ }
+    L 551          return true;
+    L 552        });
+    L 553        return () => sub.remove();
+    L 554      }, [goToSeriesRootWithFocus]);
+    ----
+    [L668]
+    L 668 >>       router.replace({ pathname: `/details/series/${baseId}` });
+    L 669          return true; // swallow the default back nav
+    L 670        };
+    L 671        const sub = BackHandler.addEventListener('hardwareBackPress', handler);
+    L 672        return () => sub.remove();
+    ----
+    [L713]
+    L 713 >>   // Expo Router uses router.replace() between episodes which re-renders this
+    L 714      // component instead of unmounting it — so refs persist and would otherwise
+    L 715      // block the second/third/Nth auto-transition. Resetting here makes every
+    L 716      // new id behave like a fresh mount.
+    L 717      useEffect(() => {
+    ----
+    [L847]
+    L 847 >>       router.push({
+    L 848            pathname: '/player',
+    L 849            params: { 
+    L 850              directUrl: streamUrl,
+    L 851              title: contentTitle,
+    ----
+    [L882]
+    L 882 >>       router.push({
+    L 883            pathname: '/player',
+    L 884            params: { 
+    L 885              directUrl: absoluteUrl,
+    L 886              title: contentTitle,
+    ----
+    [L922]
+    L 922 >>       router.push({
+    L 923            pathname: '/player',
+    L 924            params: { 
+    L 925              infoHash: stream.infoHash,
+    L 926              title: contentTitle,
+    ----
+    [L998]
+    L 998 >>       router.push({
+    L 999            pathname: '/player',
+    L1000            params: { 
+    L1001              directUrl: streamUrl,
+    L1002              title: contentTitle,
+    ----
+    [L1020]
+    L1020 >>     router.push({
+    L1021          pathname: `/details/${type}/${episodeId}`,
+    L1022        });
+    L1023      };
+    L1024    
+    ----
+    ... (3 more match(es) suppressed)
+
+  -- autoplay / playStream / handlePlay / startStream / onPlay / playFirst (3 matches) --
+    [L472]
+    L 471        name: paramName, poster: paramPoster,
+    L 472 >>     autoPlay: autoPlayParam,
+    L 473        selectedSeason: paramSelectedSeason,
+    L 474        selectedEpisode: paramSelectedEpisode,
+    L 475        nextTitle: nextTitleParam,
+    L 476        nextPoster: nextPosterParam,
+    L 477        nextBackdrop: nextBackdropParam,
+    ----
+    [L486]
+    L 485        name?: string; poster?: string;
+    L 486 >>     autoPlay?: string;
+    L 487        nextTitle?: string;
+    L 488        nextPoster?: string;
+    L 489        nextBackdrop?: string;
+    L 490        selectedSeason?: string;
+    L 491        selectedEpisode?: string;
+    ----
+    [L662]
+    L 661      // Hardware back (Firestick remote / Android back) — when the user reached
+    L 662 >>   // this detail page via Play-Next autoplay, intercept back so they go to
+    L 663      // the episodes list (series root) instead of the previous episode's page.
+    L 664      // Matches Stremio: back from next-up screen = back to the show, not to EP-N-1.
+    L 665      useEffect(() => {
+    L 666        if (autoPlayParam !== 'true' || type !== 'series' || !baseId) return;
+    L 667        const handler = () => {
+    ----
+
+  -- Play button JSX (Pressable/TouchableOpacity ... "Play") (5 matches) --
+    [L106]
+    L 106 >> function ChipButton({ label, onPress, hasTVPreferredFocus = false }: { label: string; onPress: () => void; hasTVPreferredFocus?: boolean }) {
+    L 107      const [isFocused, setIsFocused] = useState(false);
+    L 108      return (
+    ----
+    [L1245]
+    L1245 >>                   <ChipButton key={`genre-${i}`} label={g} hasTVPreferredFocus={i === 0} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
+    L1246                    ))}
+    L1247                  </View>
+    ----
+    [L1257]
+    L1257 >>                   <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d } })} />
+    L1258                    ))}
+    L1259                  </View>
+    ----
+    [L1269]
+    L1269 >>                   <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c } })} />
+    L1270                    ))}
+    L1271                  </View>
+    ----
+    [L1330]
+    L1330 >>                     <Text style={styles.playButtonText}>Play</Text>
+    L1331                      </FocusableButton>
+    L1332                    )}
+    ----
+
+  -- onPress= handlers (13 matches) --
+    [L95]
+    L  95 >>       onPress={onPress}
+    L  96          onFocus={() => setIsFocused(true)}
+    L  97          onBlur={() => setIsFocused(false)}
+    L  98          disabled={disabled}
+    ----
+    [L113]
+    L 113 >>       onPress={onPress}
+    L 114          hasTVPreferredFocus={hasTVPreferredFocus}
+    L 115        >
+    L 116          <Text style={[styles.chipText, isFocused && styles.chipTextFocused]}>{label}</Text>
+    ----
+    [L342]
+    L 342 >>       onPress={onPress}
+    L 343          onFocus={() => setIsFocused(true)}
+    L 344          onBlur={() => setIsFocused(false)}
+    L 345        >
+    ----
+    [L430]
+    L 430 >>       onPress={onPress}
+    L 431          onLongPress={isWatched ? onMarkUnwatched : undefined}
+    L 432          onFocus={() => setIsFocused(true)}
+    L 433          onBlur={() => setIsFocused(false)}
+    ----
+    [L1062]
+    L1062 >>     <StreamCardMemo stream={item} onPress={() => handleStreamSelect(item)} />
+    L1063      );
+    L1064    
+    L1065      // Mark episode as unwatched (long-press)
+    ----
+    [L1089]
+    L1089 >>         onPress={() => handleEpisodePress(item)}
+    L1090            isWatched={epWatched}
+    L1091            onMarkUnwatched={() => handleMarkUnwatched(epContentId)}
+    L1092          />
+    ----
+    [L1163]
+    L1163 >>           onPress={handleBack}
+    L1164            >
+    L1165              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+    L1166            </FocusableButton>
+    ----
+    [L1219]
+    L1219 >>               onPress={toggleLibrary}
+    L1220                >
+    L1221                  <Ionicons 
+    L1222                    name={inLibrary ? "checkmark" : "add"} 
+    ----
+    [L1245]
+    L1245 >>                   <ChipButton key={`genre-${i}`} label={g} hasTVPreferredFocus={i === 0} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
+    L1246                    ))}
+    L1247                  </View>
+    L1248                </View>
+    ----
+    [L1257]
+    L1257 >>                   <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d } })} />
+    L1258                    ))}
+    L1259                  </View>
+    L1260                </View>
+    ----
+    [L1269]
+    L1269 >>                   <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c } })} />
+    L1270                    ))}
+    L1271                  </View>
+    L1272                </View>
+    ----
+    [L1292]
+    L1292 >>                     onPress={() => setSelectedSeason(season)}
+    L1293                      >
+    L1294                        <Text style={[
+    L1295                          styles.seasonButtonText,
+    ----
+    ... (1 more match(es) suppressed)
+
+  -- stream sort / rank / filter (14 matches) --
+    [L312]
+    L 312 >>   parsed.sort((a, b) => computeScore(b.info, b.stream) - computeScore(a.info, a.stream));
+    L 313    
+    L 314      // PATCH_V16A_COMMENTARY_SINK — partition commentary tracks to the end of the result.
+    L 315      // Whatever score-based sort ran above, commentary always sinks last so
+    L 316      // the Play button (sorted[0]) and auto-play never select a commentary
+    L 317      // track even if it scored highest by language/quality/seeders.
+    ----
+    [L621]
+    L 621 >>     const seasonSet = new Set(content.videos.map(ep => ep.season).filter(s => s > 0));
+    L 622        return Array.from(seasonSet).sort((a, b) => a - b);
+    L 623      }, [content?.videos]);
+    L 624    
+    L 625      const episodesForSeason = useMemo(() => {
+    L 626        if (!content?.videos) return [];
+    ----
+    [L622]
+    L 622 >>     return Array.from(seasonSet).sort((a, b) => a - b);
+    L 623      }, [content?.videos]);
+    L 624    
+    L 625      const episodesForSeason = useMemo(() => {
+    L 626        if (!content?.videos) return [];
+    L 627        return content.videos
+    ----
+    [L628]
+    L 628 >>       .filter(ep => ep.season === selectedSeason)
+    L 629          .sort((a, b) => a.episode - b.episode);
+    L 630      }, [content?.videos, selectedSeason]);
+    L 631    
+    L 632      useEffect(() => {
+    L 633        // If we have cached meta with background, skip the meta fetch entirely
+    ----
+    [L629]
+    L 629 >>       .sort((a, b) => a.episode - b.episode);
+    L 630      }, [content?.videos, selectedSeason]);
+    L 631    
+    L 632      useEffect(() => {
+    L 633        // If we have cached meta with background, skip the meta fetch entirely
+    L 634        const hasCachedMeta = cachedMeta && cachedMeta.background;
+    ----
+    [L823]
+    L 823 >>         .filter(s => s !== stream)
+    L 824            .filter(s => s.url && s.url.startsWith('/api/proxy/'))
+    L 825            .slice(0, 5)
+    L 826            .map(s => {
+    L 827              const separator = s.url!.includes('?') ? '&' : '?';
+    L 828              const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
+    ----
+    [L824]
+    L 824 >>         .filter(s => s.url && s.url.startsWith('/api/proxy/'))
+    L 825            .slice(0, 5)
+    L 826            .map(s => {
+    L 827              const separator = s.url!.includes('?') ? '&' : '?';
+    L 828              const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
+    L 829              return `${backendUrl}${s.url}${tokenParam}`;
+    ----
+    [L878]
+    L 878 >>         .filter(s => s !== stream && (s.directUrl || (s.url && !s.url.startsWith('/api/proxy/'))))
+    L 879            .map(s => s.directUrl || s.url)
+    L 880            .filter(Boolean);
+    L 881          
+    L 882          router.push({
+    L 883            pathname: '/player',
+    ----
+    [L880]
+    L 880 >>         .filter(Boolean);
+    L 881          
+    L 882          router.push({
+    L 883            pathname: '/player',
+    L 884            params: { 
+    L 885              directUrl: absoluteUrl,
+    ----
+    [L906]
+    L 906 >>         .filter(s => s.infoHash && s.infoHash !== stream.infoHash)
+    L 907            .slice(0, 5)
+    L 908            .map(s => ({
+    L 909              infoHash: s.infoHash,
+    L 910              fileIdx: s.fileIdx,
+    L 911              filename: s.filename || '',
+    ----
+    [L974]
+    L 974 >>         .filter(s => s.url && !s.infoHash && s.url !== stream.url)
+    L 975            .map(s => {
+    L 976              if (!s.url) return '';
+    L 977              const isProxied = s.url.startsWith('/api/') || s.url.startsWith(backendUrl);
+    L 978              if (isProxied) return s.url;
+    L 979              const enc = encodeURIComponent(s.url);
+    ----
+    [L983]
+    L 983 >>         .filter(Boolean);
+    L 984          
+    L 985          // For live TV streams, also include proxy URLs as additional fallbacks
+    L 986          if (type === 'tv') {
+    L 987            const proxyFallbacks = streams
+    L 988              .filter(s => s.proxyUrl)
+    ----
+    ... (2 more match(es) suppressed)
+
+  -- debrid / premiumize / cached / direct HTTPS hints (50 matches) --
+    [L105]
+    L 105 >> // Clickable chip for genre/cast/director - routes to search
+    L 106    function ChipButton({ label, onPress, hasTVPreferredFocus = false }: { label: string; onPress: () => void; hasTVPreferredFocus?: boolean }) {
+    L 107      const [isFocused, setIsFocused] = useState(false);
+    ----
+    [L126]
+    L 126 >>   const _cached = _parseStreamInfoCache.get(stream);
+    L 127      if (_cached) return _cached;
+    L 128      const name = stream.name || '';
+    ----
+    [L127]
+    L 127 >>   if (_cached) return _cached;
+    L 128      const name = stream.name || '';
+    L 129      const title = stream.title || '';
+    ----
+    [L144]
+    L 144 >>   // PATCH_V12_COMMENTARY_DETECT — exclude commentary tracks (creator/director/audio commentary).
+    L 145      // Heavy penalty in computeScore guarantees these sink to the bottom of the list.
+    L 146      const isCommentary = (
+    ----
+    [L151]
+    L 151 >>     combined.includes('DIRECTOR COMM') ||
+    L 152        combined.includes('WRITER COMM') ||
+    L 153        combined.includes('WRITERS COMM') ||
+    ----
+    [L249]
+    L 249 >>   // Tested: 'Commentary', 'Audio Commentary', 'Director Commentary',
+    L 250      // 'Creator Comm', '[COMM]', 'Comm.', 'with commentary', etc.
+    L 251      const _isCommentaryStream = (s: any): boolean => {
+    ----
+    [L256]
+    L 256 >>     if (t.includes('DIRECTOR COMM')) return true;
+    L 257        if (t.includes('WRITERS COMM') || t.includes('WRITER COMM')) return true;
+    L 258        if (t.includes('WITH COMM')) return true;
+    ----
+    [L276]
+    L 276 >>   //   1. Streams with a DIRECT URL (debrid-cached, e.g. Premiumize) — instant play
+    L 277      //   2. Streams with infoHash only (uncached torrent, needs debrid resolve or BT)
+    L 278      //   3. Within each group: ENG → MULTI → other languages, then higher seeders first
+    ----
+    [L277]
+    L 277 >>   //   2. Streams with infoHash only (uncached torrent, needs debrid resolve or BT)
+    L 278      //   3. Within each group: ENG → MULTI → other languages, then higher seeders first
+    L 279      //
+    ----
+    [L282]
+    L 282 >>   // (which 403'd) instead of a cached Premiumize URL that would have played instantly.
+    L 283      // PATCH_V9_SCORED_SORT — produces a stable, consistent best pick across every episode.
+    L 284      // English+quality dominate; codec/HDR penalties keep Firestick happy; direct URL is
+    ----
+    [L284]
+    L 284 >>   // English+quality dominate; codec/HDR penalties keep Firestick happy; direct URL is
+    L 285      // a tiebreaker (instant Premiumize) that never overrides quality.
+    L 286      const QUALITY_PTS: Record<string, number> = { '4K': 80, '1080p': 60, '720p': 40, 'HD': 20, 'SD': 0 };
+    ----
+    [L285]
+    L 285 >>   // a tiebreaker (instant Premiumize) that never overrides quality.
+    L 286      const QUALITY_PTS: Record<string, number> = { '4K': 80, '1080p': 60, '720p': 40, 'HD': 20, 'SD': 0 };
+    L 287      const computeScore = (info: ReturnType<typeof parseStreamInfo>, stream: Stream): number => {
+    ----
+    ... (38 more match(es) suppressed)
+
+  -- stream.url / stream.streamUrl / stream.behaviorHints (16 matches) --
+    [L307]
+    L 307 >>     if (stream.url) s += 50;
+    L 308        const sd = info.seeders || 0;
+    ----
+    [L337]
+    L 337 >>   const isRD = !!stream.infoHash; // Torrent streams go through Real-Debrid
+    L 338      
+    ----
+    [L845]
+    L 845 >>       const streamUrl = stream.externalUrl || stream.url;
+    L 846          console.log('[DETAILS] Playing external URL in internal player:', streamUrl);
+    ----
+    [L866]
+    L 866 >>     if (stream.url && stream.url.startsWith('/api/proxy/')) {
+    L 867          const authToken = await AsyncStorage.getItem('auth_token');
+    ----
+    [L868]
+    L 868 >>       const separator = stream.url.includes('?') ? '&' : '?';
+    L 869          const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
+    ----
+    [L871]
+    L 871 >>       const absoluteUrl = `${backendUrl}${stream.url}${tokenParam}`;
+    L 872          
+    ----
+    [L902]
+    L 902 >>     if (stream.infoHash) {
+    L 903          // Build fallback torrents from other available torrent streams (sorted by seeders)
+    ----
+    [L906]
+    L 906 >>         .filter(s => s.infoHash && s.infoHash !== stream.infoHash)
+    L 907            .slice(0, 5)
+    ----
+    [L925]
+    L 925 >>           infoHash: stream.infoHash,
+    L 926              title: contentTitle,
+    ----
+    [L947]
+    L 947 >>     } else if (stream.url) {
+    L 948          // === PRIVACY PROXY ===
+    ----
+    [L956]
+    L 956 >>       const isAlreadyProxied = stream.url.startsWith('/api/') || 
+    L 957                                    stream.url.startsWith(backendUrl) ||
+    ----
+    [L957]
+    L 957 >>                                 stream.url.startsWith(backendUrl) ||
+    L 958                                    stream.url.includes('/api/proxy/');
+    ----
+    ... (4 more match(es) suppressed)
+
+======================================================================
+  player.tsx — does it always init the torrent stack, or only for magnets?
+======================================================================
+
+  -- http(s) URL detection / startsWith("http") (0 matches) --
+    (none)
+
+  -- torrent server init / addTorrent / streamFromTorrent (12 matches) --
+    [L219]
+    L 219 >>     fallbackTorrents,
+    L 220      } = useLocalSearchParams<{
+    L 221        url?: string;
+    ----
+    [L242]
+    L 242 >>     fallbackTorrents?: string;
+    L 243      }>();
+    L 244      const router = useRouter();
+    ----
+    [L1354]
+    L1354 >>         startTorrentStreamWithHash(fb.infoHash, fb.fileIdx, fb.filename, fb.sources || []);
+    L1355          }, 500);
+    L1356        } else {
+    ----
+    [L1557]
+    L1557 >>     if (fallbackTorrents) {
+    L1558          try {
+    L1559            const parsed = JSON.parse(fallbackTorrents);
+    ----
+    [L1559]
+    L1559 >>         const parsed = JSON.parse(fallbackTorrents);
+    L1560            if (Array.isArray(parsed)) {
+    L1561              setTorrentFallbacks(parsed);
+    ----
+    [L1585]
+    L1585 >>       startTorrentStream();
+    L1586        } else {
+    L1587          setError('No stream source provided');
+    ----
+    [L1600]
+    L1600 >>   const startTorrentStream = async (retryCount = 0) => {
+    L1601        if (!infoHash) return;
+    L1602    
+    ----
+    [L1815]
+    L1815 >>                 startTorrentStream(retryCount + 1);
+    L1816                  }, 800);
+    L1817                  return;
+    ----
+    [L1836]
+    L1836 >>         setTimeout(() => startTorrentStream(retryCount + 1), 2000);
+    L1837            return;
+    L1838          }
+    ----
+    [L1844]
+    L1844 >>   const startTorrentStreamWithHash = async (hash: string, fIdx?: number, fname?: string, srcs: string[] = [], retryCount = 0) => {
+    L1845        const MAX_RETRIES = 2;
+    L1846        try {
+    ----
+    [L1916]
+    L1916 >>               setTimeout(() => startTorrentStreamWithHash(hash, fIdx, fname, srcs, retryCount + 1), 2000);
+    L1917                  return;
+    L1918                }
+    ----
+    [L1948]
+    L1948 >>         setTimeout(() => startTorrentStreamWithHash(hash, fIdx, fname, srcs, retryCount + 1), 3000);
+    L1949            return;
+    L1950          }
+    ----
+
+  -- initial setStreamUrl / from param (9 matches) --
+    [L1307]
+    L1307 >>       setStreamUrl(fallbackUrls[nextIndex]);
+    L1308          setPlaybackStarted(false);
+    L1309          setError(null);
+    ----
+    [L1338]
+    L1338 >>       setStreamUrl(null);
+    L1339          setPlaybackStarted(false);
+    L1340          setError(null);
+    ----
+    [L1574]
+    L1574 >>       setStreamUrl(directUrl);
+    L1575          if (isLive === 'true') {
+    L1576            // For live TV, keep loading state until video actually starts playing
+    ----
+    [L1582]
+    L1582 >>       setStreamUrl(url);
+    L1583          setIsLoading(false);
+    L1584        } else if (infoHash) {
+    ----
+    [L1698]
+    L1698 >>         setStreamUrl(finalUrl);
+    L1699            const winHash = winner.hash;
+    L1700            pollIntervalRef.current = setTimeout(function keepAlive() {
+    ----
+    [L1898]
+    L1898 >>             setStreamUrl(debridVideoUrl);
+    L1899                if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current);
+    L1900                pollIntervalRef.current = setTimeout(pollStatus, 30000);
+    ----
+    [L1910]
+    L1910 >>             setStreamUrl(videoUrl);
+    L1911              }
+    L1912              
+    ----
+    [L2251]
+    L2251 >>                     setStreamUrl(null);
+    L2252                        setTimeout(() => {
+    L2253                          setStreamUrl(currentUrl);
+    ----
+    [L2253]
+    L2253 >>                       setStreamUrl(currentUrl);
+    L2254                        }, delay);
+    L2255                      } else if (fallbackUrls.length > currentStreamIndex + 1) {
+    ----
+
+  -- directUrl param usage (11 matches) --
+    [L195]
+    L 195 >>     directUrl, 
+    L 196        isLive, 
+    ----
+    [L224]
+    L 224 >>     directUrl?: string;
+    L 225        isLive?: string;
+    ----
+    [L343]
+    L 343 >>   const maxVideoRetries = isLive === 'true' ? 10 : directUrl ? 3 : 15; // Direct URLs fail fast, torrents need more time
+    L 344      
+    ----
+    [L508]
+    L 508 >>         stream_url: directUrl || url || undefined,
+    L 509            stream_file_idx: fileIdx ? parseInt(fileIdx) : undefined,
+    ----
+    [L516]
+    L 516 >>   }, [contentId, contentType, title, poster, backdrop, logo, season, episode, seriesId, isLive, infoHash, directUrl, url, fileIdx, filename]);
+    L 517      
+    ----
+    [L538]
+    L 538 >>           stream_url: directUrl || url || undefined,
+    L 539              stream_file_idx: fileIdx ? parseInt(fileIdx) : undefined,
+    ----
+    [L544]
+    L 544 >>   }, [contentId, contentType, title, poster, backdrop, logo, season, episode, seriesId, isLive, infoHash, directUrl, url, fileIdx, filename]);
+    L 545      
+    ----
+    [L1405]
+    L1405 >>       const timeoutMs = directUrl ? 15000 : 30000;
+    L1406          playbackTimeoutRef.current = setTimeout(() => {
+    ----
+    [L1573]
+    L1573 >>     if (directUrl) {
+    L1574          setStreamUrl(directUrl);
+    ----
+    [L1574]
+    L1574 >>       setStreamUrl(directUrl);
+    L1575          if (isLive === 'true') {
+    ----
+    [L1598]
+    L1598 >>   }, [url, infoHash, directUrl, isLive, fallbackStreams]);
+    L1599    
+    ----
+
+======================================================================
+  contentStore.ts — Stream type shape (what fields can we filter on?)
+======================================================================
+
+  -- Stream interface / type (0 matches) --
+    (none)
+
+  -- sortStreams / rankStreams in store (0 matches) --
+    (none)
+
+======================================================================
+  SUMMARY for V31
+======================================================================
+  After you paste this back, V31 will:
+   1. Add a helper `pickBestStream(streams)` that prefers:
+         a) Premiumize cached HTTPS (direct)
+         b) within that, 1080p > 720p > 4K > other (Firestick-safe)
+         c) tie-break by smallest reasonable file size (faster to start)
+         d) if NO cached after 2 s, fall back to highest-seed raw torrent
+   2. Have the Play button call pickBestStream() with that 2 s window
+      instead of grabbing whatever's at index 0.
+   3. Pass a `directUrl` param to player when the pick is HTTPS,
+      so player.tsx can skip torrent setup entirely.
+
+# done.

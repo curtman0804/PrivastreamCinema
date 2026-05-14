@@ -121,6 +121,7 @@ function ChipButton({ label, onPress, hasTVPreferredFocus = false }: { label: st
 
 // Parse stream info helper - used by StreamCard and sorting
 // PATCH_V11A_PARSE_CACHE — module-level cache so each Stream object is parsed exactly once.
+const _parseStreamInfoCache = new WeakMap<Stream, any>();
 // PATCH_V19A_PARSE_CACHE — module-level WeakMap cache for parseStreamInfo.
 const _parseStreamInfoCache = new WeakMap<Stream, any>();
 

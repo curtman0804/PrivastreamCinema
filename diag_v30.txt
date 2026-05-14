@@ -1,0 +1,566 @@
+# diagnose_player_cleanup.js — read-only
+# generated: 2026-05-14T13:22:04.465Z
+# cwd: C:\Users\Curtm\PrivastreamCinema
+
+======================================================================
+  FILE META
+======================================================================
+  player : frontend\app\player.tsx
+    lines      : 3151
+    line ending: LF
+    size       : 110373 bytes
+  store  : frontend\src\store\contentStore.ts
+    lines      : 322
+    line ending: CRLF
+    size       : 12399 bytes
+  details: frontend\app\details\[type]\[id].tsx
+    lines      : 1873
+    line ending: LF
+    size       : 65542 bytes
+
+======================================================================
+  player.tsx — useEffect lifecycle, cleanup, unmount paths
+======================================================================
+
+  -- useEffect openings (18 matches) --
+    [L121]
+    L 121 >>   useEffect(() => {
+    L 122        const timer = setTimeout(() => {
+    ----
+    [L252]
+    L 252 >>   useEffect(() => {
+    L 253        if (Platform.OS !== 'android') return;
+    ----
+    [L282]
+    L 282 >>   useEffect(() => {
+    L 283        const setupImmersiveMode = async () => {
+    ----
+    [L312]
+    L 312 >>   useEffect(() => {
+    L 313        if (resumePosition) {
+    ----
+    [L349]
+    L 349 >>   useEffect(() => {
+    L 350        if (!isLoading || error) return;
+    ----
+    [L362]
+    L 362 >>   useEffect(() => {
+    L 363        if (isLoading && !error) {
+    ----
+    [L510]
+    L 510 >>   useEffect(() => {
+    L 511        return () => {
+    ----
+    [L601]
+    L 601 >>   useEffect(() => {
+    L 602        if (GoogleCast && Platform.OS !== 'web') {
+    ----
+    [L688]
+    L 688 >>   useEffect(() => {
+    L 689        if (subtitleCues.length > 0) {
+    ----
+    [L703]
+    L 703 >>   useEffect(() => {
+    L 704        if (selectedSubtitle) {
+    ----
+    [L954]
+    L 954 >>   useEffect(() => {
+    L 955        return () => {
+    ----
+    [L1104]
+    L1104 >>   useEffect(() => {
+    L1105        if (Platform.OS !== 'android') return;
+    ----
+    [L1281]
+    L1281 >>   useEffect(() => {
+    L1282        if (streamUrl && !error && !isLoading) {
+    ----
+    [L1372]
+    L1372 >>   useEffect(() => {
+    L1373        if (showControls && streamUrl && !isLoading) {
+    ----
+    [L1389]
+    L1389 >>   useEffect(() => {
+    L1390        if (streamUrl && !playbackStarted) {
+    ----
+    [L1473]
+    L1473 >>   useEffect(() => {
+    L1474        const lockLandscape = async () => {
+    ----
+    [L1495]
+    L1495 >>   useEffect(() => {
+    L1496        let isMounted = true;
+    ----
+    [L1531]
+    L1531 >>   useEffect(() => {
+    L1532        continuePollingRef.current = true;
+    ----
+
+  -- useEffect cleanup arrows (return () => ...) (14 matches) --
+    [L134]
+    L 133        }, 200);
+    L 134 >>     return () => clearTimeout(timer);
+    L 135      }, []);
+    L 136      
+    L 137      const percentage = duration > 0 ? (position / duration) * 100 : 0;
+    ----
+    [L277]
+    L 276        const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    L 277 >>     return () => { try { sub.remove(); } catch (_) {} };
+    L 278      }, [seriesId, season, episode, contentId, contentType]);
+    L 279    
+    L 280      
+    ----
+    [L296]
+    L 295        
+    L 296 >>     return () => {
+    L 297          // Restore navigation bar when leaving player
+    L 298          if (Platform.OS === 'android') {
+    L 299            NavigationBar.setVisibilityAsync('visible').catch(() => {});
+    ----
+    [L359]
+    L 358        loop.start();
+    L 359 >>     return () => { try { loop.stop(); } catch (_) {} };
+    L 360      }, [isLoading, error]);
+    L 361      
+    L 362      useEffect(() => {
+    ----
+    [L379]
+    L 378          breathe.start();
+    L 379 >>       return () => breathe.stop();
+    L 380        }
+    L 381      }, [isLoading, error]);
+    L 382      
+    ----
+    [L511]
+    L 510      useEffect(() => {
+    L 511 >>     return () => {
+    L 512          // Save current progress on exit
+    L 513          if (currentPositionRef.current > 0 && currentDurationRef.current > 0 && contentId && contentType && isLive !== 'true') {
+    L 514            console.log('[PLAYER] Saving progress on exit:', currentPositionRef.current / 1000, 's');
+    ----
+    [L955]
+    L 954      useEffect(() => {
+    L 955 >>     return () => {
+    L 956          if (countdownRef.current) {
+    L 957            clearInterval(countdownRef.current);
+    L 958          }
+    ----
+    [L1219]
+    L1218        
+    L1219 >>     return () => {
+    L1220          subscription.remove();
+    L1221          if (tvEventHandler) {
+    L1222            try { tvEventHandler.disable(); } catch (e) {}
+    ----
+    [L1285]
+    L1284        }
+    L1285 >>     return () => {
+    L1286          if (controlsTimeoutRef.current) {
+    L1287            clearTimeout(controlsTimeoutRef.current);
+    L1288          }
+    ----
+    [L1381]
+    L1380        }
+    L1381 >>     return () => {
+    L1382          if (controlsTimeoutRef.current) {
+    L1383            clearTimeout(controlsTimeoutRef.current);
+    L1384          }
+    ----
+    [L1411]
+    L1410        }
+    L1411 >>     return () => {
+    L1412          if (playbackTimeoutRef.current) {
+    L1413            clearTimeout(playbackTimeoutRef.current);
+    L1414          }
+    ----
+    [L1486]
+    L1485        
+    L1486 >>     return () => {
+    L1487          // Unlock orientation when leaving player
+    L1488          if (Platform.OS !== 'web') {
+    L1489            ScreenOrientation.unlockAsync().catch(() => {});
+    ----
+    [L1524]
+    L1523        
+    L1524 >>     return () => {
+    L1525          isMounted = false;
+    L1526          clearTimeout(timeout);
+    L1527        };
+    ----
+    [L1582]
+    L1581    
+    L1582 >>     return () => {
+    L1583          continuePollingRef.current = false;
+    L1584          if (pollIntervalRef.current) {
+    L1585            clearTimeout(pollIntervalRef.current);
+    ----
+
+  -- player.remove / player.release / player.pause / player.unload (4 matches) --
+    [L277]
+    L 277 >>     return () => { try { sub.remove(); } catch (_) {} };
+    L 278      }, [seriesId, season, episode, contentId, contentType]);
+    ----
+    [L359]
+    L 359 >>     return () => { try { loop.stop(); } catch (_) {} };
+    L 360      }, [isLoading, error]);
+    ----
+    [L379]
+    L 379 >>       return () => breathe.stop();
+    L 380        }
+    ----
+    [L1220]
+    L1220 >>       subscription.remove();
+    L1221          if (tvEventHandler) {
+    ----
+
+  -- router.back / router.replace / router.push (10 matches) --
+    [L267]
+    L 267 >>           router.replace(target as any);
+    L 268            } else {
+    ----
+    [L269]
+    L 269 >>           router.back();
+    L 270            }
+    ----
+    [L272]
+    L 272 >>         try { router.back(); } catch (__) {}
+    L 273          }
+    ----
+    [L840]
+    L 840 >>           router.back();
+    L 841            }
+    ----
+    [L882]
+    L 882 >>           router.replace({
+    L 883                pathname: `/details/series/${nextEpisodeId}`,
+    ----
+    [L900]
+    L 900 >>       router.back();
+    L 901        }
+    ----
+    [L926]
+    L 926 >>       router.back();
+    L 927          return;
+    ----
+    [L936]
+    L 936 >>     router.replace({
+    L 937          pathname: `/details/series/${nextEpisodeId}`,
+    ----
+    [L950]
+    L 950 >>     router.back();
+    L 951      };
+    ----
+    [L1955]
+    L1955 >>     router.back();
+    L1956      };
+    ----
+
+  -- store reads in player (22 matches) --
+    [L218]
+    L 218 >>     // Fallback torrent streams for auto-retry
+    ----
+    [L383]
+    L 383 >>   // Fallback streams for auto-retry
+    ----
+    [L385]
+    L 385 >>   const [currentStreamIndex, setCurrentStreamIndex] = useState(-1);
+    ----
+    [L389]
+    L 389 >>   // Fallback torrent streams — used when primary torrent fails (no peers, timeout)
+    ----
+    [L1294]
+    L1294 >>     if (fallbackUrls.length > currentStreamIndex + 1) {
+    ----
+    [L1295]
+    L1295 >>       const nextIndex = currentStreamIndex + 1;
+    ----
+    [L1297]
+    L1297 >>       setCurrentStreamIndex(nextIndex);
+    ----
+    [L1333]
+    L1333 >>       setLoadingStatus('Searching for streams...');
+    ----
+    [L1349]
+    L1349 >>       console.log('[PLAYER] No more fallback streams or torrents available');
+    ----
+    [L1350]
+    L1350 >>       setError('Unable to play video. All streams failed. Try a different title or stream with more seeds.');
+    ----
+    [L1399]
+    L1399 >>           if (fallbackUrls.length > currentStreamIndex + 1) {
+    ----
+    [L1403]
+    L1403 >>             // No more fallback streams - show error to user
+    ----
+    [L1404]
+    L1404 >>             console.log('[PLAYER] Playback timeout - no more fallback streams');
+    ----
+    [L1534]
+    L1534 >>     // Parse fallback streams (URL-based)
+    ----
+    [L1540]
+    L1540 >>           console.log('[PLAYER] Loaded', parsed.length, 'fallback URL streams');
+    ----
+    [L1543]
+    L1543 >>         console.log('[PLAYER] Error parsing fallback streams:', e);
+    ----
+    [L1606]
+    L1606 >>       setLoadingStatus('Searching for streams...');
+    ----
+    [L1638]
+    L1638 >>       //   - made "all streams failed" happen when any one errored
+    ----
+    [L1765]
+    L1765 >>             setLoadingStatus('Searching for streams...');
+    ----
+    [L1868]
+    L1868 >>             setLoadingStatus('Searching for streams...');
+    ----
+    [L2175]
+    L2175 >>                   // Help ExoPlayer detect format - important for MKV/x265 streams
+    ----
+    [L2246]
+    L2246 >>                   } else if (fallbackUrls.length > currentStreamIndex + 1) {
+    ----
+
+  -- contentStore imports (0 matches) --
+    (none)
+
+  -- export default / function Player (1 match) --
+    [L187]
+    L 187 >> export default function PlayerScreen() {
+    ----
+
+======================================================================
+  contentStore.ts — state shape + playback-related actions
+======================================================================
+
+  -- state fields (isLoadingStreams, streams, currentStream, error, …) (12 matches) --
+    [L34]
+    L  34 >>   streams: Stream[];
+    ----
+    [L42]
+    L  42 >>   isLoadingStreams: boolean;
+    ----
+    [L43]
+    L  43 >>   error: string | null;
+    ----
+    [L71]
+    L  71 >>   streams: [],
+    ----
+    [L77]
+    L  77 >>   isLoadingStreams: false,
+    ----
+    [L78]
+    L  78 >>   error: null,
+    ----
+    [L231]
+    L 231 >>       set({ streams: cached, isLoadingStreams: false, error: null });
+    ----
+    [L239]
+    L 239 >>       set({ streams: _v24Disk, isLoadingStreams: false, error: null });
+    ----
+    [L243]
+    L 243 >>     set({ isLoadingStreams: true, streams: [], error: null });
+    ----
+    [L250]
+    L 250 >>           set({ isLoadingStreams: false });
+    ----
+    [L257]
+    L 257 >>       set({ streams: allStreams, isLoadingStreams: false });
+    ----
+    [L261]
+    L 261 >>       set({ streams: [], isLoadingStreams: false });
+    ----
+
+  -- action signatures (22 matches) --
+    [L44]
+    L  44 >>   setSelectedItem: (item: ContentItem | null) => void;
+    L  45      fetchDiscover: (forceRefresh?: boolean) => Promise<void>;
+    ----
+    [L45]
+    L  45 >>   fetchDiscover: (forceRefresh?: boolean) => Promise<void>;
+    L  46      fetchAddons: (forceRefresh?: boolean) => Promise<void>;
+    ----
+    [L46]
+    L  46 >>   fetchAddons: (forceRefresh?: boolean) => Promise<void>;
+    L  47      fetchLibrary: (forceRefresh?: boolean) => Promise<void>;
+    ----
+    [L47]
+    L  47 >>   fetchLibrary: (forceRefresh?: boolean) => Promise<void>;
+    L  48      search: (query: string) => Promise<void>;
+    ----
+    [L50]
+    L  50 >>   fetchStreams: (type: string, id: string) => Promise<Stream[]>;
+    L  51      prefetchStreams: (type: string, id: string) => Promise<void>; // PATCH_V25_PREFETCH
+    ----
+    [L54]
+    L  54 >>   clearSearch: () => void;
+    L  55      setCurrentPlaying: (info: CurrentPlaying | null) => void;
+    ----
+    [L55]
+    L  55 >>   setCurrentPlaying: (info: CurrentPlaying | null) => void;
+    L  56      resetStore: () => void;
+    ----
+    [L56]
+    L  56 >>   resetStore: () => void;
+    L  57    }
+    ----
+    [L105]
+    L 105 >>   setSelectedItem: (item: ContentItem | null) => {
+    L 106        set({ selectedItem: item });
+    ----
+    [L109]
+    L 109 >>   resetStore: () => {
+    L 110        set(initialState);
+    ----
+    [L113]
+    L 113 >>   fetchDiscover: async (forceRefresh = false) => {
+    L 114        const currentData = get().discoverData;
+    ----
+    [L125]
+    L 125 >>           setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
+    L 126            }).catch(err => {
+    ----
+    [L138]
+    L 138 >>         setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
+    L 139          }).catch(err => {
+    ----
+    [L148]
+    L 148 >>       setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
+    L 149        } catch (error: any) {
+    ----
+    [L155]
+    L 155 >>   fetchAddons: async (forceRefresh = false) => {
+    L 156        set({ isLoadingAddons: true, error: null });
+    ----
+    [L166]
+    L 166 >>   fetchLibrary: async (forceRefresh = false) => {
+    L 167        set({ isLoadingLibrary: true, error: null });
+    ----
+    [L225]
+    L 225 >>   fetchStreams: async (type: string, id: string) => {
+    L 226        const cacheKey = `${type}/${id}`;
+    ----
+    [L238]
+    L 238 >>       setStreamsCache(cacheKey, _v24Disk);
+    L 239          set({ streams: _v24Disk, isLoadingStreams: false, error: null });
+    ----
+    [L255]
+    L 255 >>       setStreamsCache(cacheKey, allStreams);
+    L 256          saveStreamsToDisk(cacheKey, allStreams); // PATCH_V24_DISK_CACHE — persist for next session, fire-and-forget
+    ----
+    [L287]
+    L 287 >>         setStreamsCache(cacheKey, allStreams);
+    L 288            try { if (typeof saveStreamsToDisk === 'function') saveStreamsToDisk(cacheKey, allStreams); } catch {}
+    ----
+    [L314]
+    L 314 >>   clearSearch: () => {
+    L 315        set({ searchResults: [], searchMovies: [], searchSeries: [], searchHasMore: false, searchSkip: 0, currentSearchQuery: '' });
+    ----
+    [L318]
+    L 318 >>   setCurrentPlaying: (info: CurrentPlaying | null) => {
+    L 319        set({ currentPlaying: info });
+    ----
+
+  -- fetchStreams body — what gets reset on entry (2 matches) --
+    [L243]
+    L 242    
+    L 243 >>     set({ isLoadingStreams: true, streams: [], error: null });
+    L 244        
+    L 245        try {
+    L 246          // Progressive loading: show streams as each source responds
+    L 247          const result = await api.addons.getAllStreams(type, id, (partialStreams: Stream[]) => {
+    L 248            set({ streams: partialStreams });
+    L 249            if (partialStreams.length > 0) {
+    ----
+    [L250]
+    L 249            if (partialStreams.length > 0) {
+    L 250 >>           set({ isLoadingStreams: false });
+    L 251            }
+    L 252          });
+    L 253          const allStreams = result.streams || [];
+    L 254          // Cache the result for instant re-access
+    L 255          setStreamsCache(cacheKey, allStreams);
+    L 256          saveStreamsToDisk(cacheKey, allStreams); // PATCH_V24_DISK_CACHE — persist for next session, fire-and-forget
+    ----
+
+  -- create<...> type (top of store) (1 match) --
+    [L102]
+    L 102 >> export const useContentStore = create<ContentState>((set, get) => ({
+    L 103      ...initialState,
+    L 104    
+    L 105      setSelectedItem: (item: ContentItem | null) => {
+    L 106        set({ selectedItem: item });
+    L 107      },
+    L 108    
+    L 109      resetStore: () => {
+    L 110        set(initialState);
+    L 111      },
+    L 112    
+    L 113      fetchDiscover: async (forceRefresh = false) => {
+    L 114        const currentData = get().discoverData;
+    L 115        
+    L 116        // Try to load from persistent cache instantly (first open after app restart)
+    L 117        if (!currentData && !forceRefresh) {
+    L 118          const cached = await getCached<DiscoverResponse>('discover_data');
+    L 119          if (cached) {
+    L 120            console.log('[ContentStore] Loaded discover from cache instantly');
+    L 121            set({ discoverData: cached, isLoadingDiscover: false });
+    L 122            // Still refresh in background
+    L 123            api.content.getDiscover().then(data => {
+    L 124              set({ discoverData: data });
+    L 125              setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
+    L 126            }).catch(err => {
+    L 127              console.log('[ContentStore] Background refresh error:', err);
+    L 128            });
+    L 129            return;
+    L 130          }
+    L 131        }
+    L 132        
+    ----
+
+  -- any reset / clear in store (4 matches) --
+    [L54]
+    L  54 >>   clearSearch: () => void;
+    L  55      setCurrentPlaying: (info: CurrentPlaying | null) => void;
+    ----
+    [L56]
+    L  56 >>   resetStore: () => void;
+    L  57    }
+    ----
+    [L109]
+    L 109 >>   resetStore: () => {
+    L 110        set(initialState);
+    ----
+    [L314]
+    L 314 >>   clearSearch: () => {
+    L 315        set({ searchResults: [], searchMovies: [], searchSeries: [], searchHasMore: false, searchSkip: 0, currentSearchQuery: '' });
+    ----
+
+======================================================================
+  details/[type]/[id].tsx — how playback is launched
+======================================================================
+
+  -- router.push('/player' …) (0 matches) --
+    (none)
+
+  -- setCurrentStream / playStream / fetchStreams calls in details (1 match) --
+    [L645]
+    L 645 >>       fetchStreams(type, id);
+    L 646        }
+    ----
+
+======================================================================
+  SUMMARY for V30 anchor choice
+======================================================================
+  Look at the output above and tell me (or just paste it back):
+    1. Does contentStore.ts have a `resetStreams` / `resetPlayback` action? (Y/N)
+    2. Does player.tsx already have a `return () => { ... }` cleanup
+       inside any useEffect? (Y/N)
+    3. Line number of the first useEffect in player.tsx? (it will be V30 anchor)
+    4. Confirm: state field names are exactly
+         isLoadingStreams, streams, currentStream  (Y/N — correct any spelling)
+
+# done.
