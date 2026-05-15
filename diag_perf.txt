@@ -1,0 +1,491 @@
+# diagnose_perf.js — read-only
+# generated: 2026-05-15T12:19:07.333Z
+
+========================================================================
+  discover.tsx — D-pad navigation root cause hunt
+========================================================================
+  lines: 795   eol: CRLF
+
+  -- FlatList / FlashList props (windowSize, virtualization, snapToInterval, ...) (7 hits) --
+    [L10]
+    L  10 >>   FlatList,
+    ----
+    [L336]
+    L 336 >>               <FlatList
+    ----
+    [L339]
+    L 339 >>                 keyExtractor={(cwItem) => cwItem.content_id}
+    ----
+    [L343]
+    L 343 >>                 removeClippedSubviews={true}
+    ----
+    [L344]
+    L 344 >>                 windowSize={5}
+    ----
+    [L345]
+    L 345 >>                 initialNumToRender={3}
+    ----
+    [L347]
+    L 347 >>                 maxToRenderPerBatch={3}
+    ----
+
+  -- focus / onFocus / hasTVPreferredFocus / nextFocus / focusable (3 hits) --
+    [L423]
+    L 423 >>       onFocus={() => setIsFocused(true)}
+    L 424          onBlur={() => setIsFocused(false)}
+    ----
+    [L492]
+    L 492 >>           onFocus={handleXFocus}
+    L 493              onBlur={() => setXFocused(false)}
+    ----
+    [L517]
+    L 517 >>         onFocus={handleFocus}
+    L 518            onBlur={() => setIsFocused(false)}
+    ----
+
+  -- useEffect / useMemo / useCallback hooks (15 hits) --
+    [L35]
+    L  35 >>   const [shouldMount, setShouldMount] = useState(delay <= 0);
+    ----
+    [L36]
+    L  36 >>   useEffect(() => {
+    ----
+    [L64]
+    L  64 >>   const [refreshing, setRefreshing] = useState(false);
+    ----
+    [L66]
+    L  66 >>   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+    ----
+    [L77]
+    L  77 >>   const fetchContinueWatching = useCallback(async () => {
+    ----
+    [L90]
+    L  90 >>   useEffect(() => {
+    ----
+    [L99]
+    L  99 >>     useCallback(() => {
+    ----
+    [L113]
+    L 113 >>   const hasContent = useMemo(() => {
+    ----
+    [L123]
+    L 123 >>   const onRefresh = useCallback(async () => {
+    ----
+    [L134]
+    L 134 >>   const handleSectionFocus = useCallback((sectionKey: string) => {
+    ----
+    [L155]
+    L 155 >>   const handleItemFocus = useCallback((item: ContentItem) => {
+    ----
+    [L418]
+    L 418 >>   const [isFocused, setIsFocused] = useState(false);
+    ----
+    [L451]
+    L 451 >>   const [isFocused, setIsFocused] = useState(false);
+    ----
+    [L452]
+    L 452 >>   const [xFocused, setXFocused] = useState(false);
+    ----
+    [L461]
+    L 461 >>   useEffect(() => {
+    ----
+
+  -- PATCH_V* markers (sediment audit) (3 hits) --
+    [L30]
+    L  30 >> // PATCH_V15B_LAZYMOUNT_COMPONENT
+    ----
+    [L346]
+    L 346 >>                 // PATCH_V14B_CW_VIRT
+    ----
+    [L362]
+    L 362 >>               <LazyMount key={serviceName} delay={(rowIdx++) * 60} placeholder={<View style={{ height: 240 }} />}> {/* PATCH_V15B_LAZYMOUNT_USAGE */}
+    ----
+
+  -- expensive sync calls (sort, filter, map chains, JSON.parse) (1 hit) --
+    [L237]
+    L 237 >>     setContinueWatching(prev => prev.filter(i => i.content_id !== item.content_id));
+    ----
+
+========================================================================
+  ContentCard.tsx — per-poster focus/render cost
+========================================================================
+  lines: 389   eol: CRLF
+
+  -- React.memo / memo comparator / arePropsEqual (1 hit) --
+    [L299]
+    L 299 >> export const ContentCard = memo(ContentCardComponent);
+    L 300    
+    L 301    const styles = StyleSheet.create({
+    L 302      container: {
+    L 303        marginRight: 16,
+    L 304        marginBottom: 2,
+    ----
+
+  -- Animated / withTiming / withSpring / focus animations (0 hits) --
+    (none)
+
+  -- Image / FastImage / source / uri loading (5 hits) --
+    [L10]
+    L  10 >>   Image as RNImage,
+    ----
+    [L12]
+    L  12 >> import { Image } from 'expo-image';
+    ----
+    [L236]
+    L 236 >>         {/* Image or Placeholder */}
+    ----
+    [L239]
+    L 239 >>             <Image
+    ----
+    [L244]
+    L 244 >>               cachePolicy="memory-disk"
+    ----
+
+  -- onFocus / focus handlers in card (5 hits) --
+    [L40]
+    L  40 >>   hasTVPreferredFocus?: boolean;
+    L  41      isFirstInRow?: boolean;
+    L  42      isLastInRow?: boolean;
+    L  43      onCardBlur?: () => void;
+    ----
+    [L86]
+    L  86 >>   hasTVPreferredFocus = false,
+    L  87      isFirstInRow = false,
+    L  88      isLastInRow = false,
+    L  89      onCardBlur,
+    ----
+    [L218]
+    L 218 >>       onFocus={handleFocus}
+    L 219          onBlur={handleBlur}
+    L 220          onLayout={handleLayout}
+    L 221          android_ripple={null}
+    ----
+    [L219]
+    L 219 >>       onBlur={handleBlur}
+    L 220          onLayout={handleLayout}
+    L 221          android_ripple={null}
+    L 222          hasTVPreferredFocus={hasTVPreferredFocus}
+    ----
+    [L222]
+    L 222 >>       hasTVPreferredFocus={hasTVPreferredFocus}
+    L 223          {...focusTrapProps}
+    L 224          style={[styles.container, { width: cardWidth }]}
+    L 225          accessible={true}
+    ----
+
+  -- PATCH_V* markers (2 hits) --
+    [L15]
+    L  15 >> import { useContentStore } from '../store/contentStore'; // PATCH_V19C_FOCUS_PREFETCH
+    ----
+    [L128]
+    L 128 >>   // PATCH_V19C_FOCUS_PREFETCH — schedule a stream prefetch ~800ms after focus so
+    ----
+
+========================================================================
+  ServiceRow.tsx — horizontal row scroll cost
+========================================================================
+  lines: 282   eol: CRLF
+
+  -- FlatList / FlashList virtualization props (15 hits) --
+    [L6]
+    L   6 >>   FlatList,
+    ----
+    [L25]
+    L  25 >> // This prevents all horizontal FlatLists from mounting at once and blocking the JS thread.
+    ----
+    [L87]
+    L  87 >>   const flatListRef = useRef<FlatList>(null);
+    ----
+    [L156]
+    L 156 >>     // Mark this row as active for horizontal navigation
+    ----
+    [L180]
+    L 180 >>   const getItemLayout = useCallback((_data: any, index: number) => ({
+    ----
+    [L199]
+    L 199 >>   const keyExtractor = useCallback((item: ContentItem) => 
+    ----
+    [L214]
+    L 214 >>         <FlatList
+    ----
+    [L216]
+    L 216 >>           horizontal
+    ----
+    [L220]
+    L 220 >>           keyExtractor={keyExtractor}
+    ----
+    [L221]
+    L 221 >>           getItemLayout={getItemLayout}
+    ----
+    [L228]
+    L 228 >>           initialNumToRender={6}
+    ----
+    [L229]
+    L 229 >>           maxToRenderPerBatch={6}
+    ----
+    [L231]
+    L 231 >>           windowSize={5}
+    ----
+    [L232]
+    L 232 >>           removeClippedSubviews={true}
+    ----
+    [L233]
+    L 233 >>           onEndReached={handleEndReached}
+    ----
+
+  -- scrollToIndex / scrollToOffset / onItemFocus / onScroll (6 hits) --
+    [L55]
+    L  55 >>   onItemFocus?: (item: ContentItem) => void;
+    L  56      onSectionFocus?: () => void;
+    L  57      isFirstRow?: boolean;
+    L  58      rowIndex?: number;
+    ----
+    [L67]
+    L  67 >>   onItemFocus,
+    L  68      onSectionFocus,
+    L  69      isFirstRow = false,
+    L  70      rowIndex = 0,
+    ----
+    [L144]
+    L 144 >>     if (focusedItem && onItemFocus) {
+    L 145          onItemFocus(focusedItem);
+    L 146        }
+    L 147    
+    ----
+    [L145]
+    L 145 >>       onItemFocus(focusedItem);
+    L 146        }
+    L 147    
+    L 148        if (isTV && flatListRef.current && isNavigatingInRowRef.current) {
+    ----
+    [L151]
+    L 151 >>       flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
+    L 152        }
+    L 153        // If isNavigatingInRowRef is false, user entered from another row via up/down
+    L 154        // → DON'T scroll, just let the selector land where Android TV placed it
+    ----
+    [L163]
+    L 163 >>   }, [onSectionFocus, onItemFocus, validItems, fetchMore, itemTotalWidth, isTV]);
+    L 164    
+    L 165      // Card blur handler — detect when user leaves this row
+    L 166      const handleCardBlur = useCallback(() => {
+    ----
+
+  -- PATCH_V* markers (0 hits) --
+    (none)
+
+========================================================================
+  details mount — what runs on poster→details click
+========================================================================
+  lines: 1873
+
+  -- useEffect blocks (the body kicks off on mount) (9 hits) --
+    [L40]
+    L  40 >>   useEffect(() => {
+    L  41        const loop = Animated.loop(
+    L  42          Animated.sequence([
+    L  43            Animated.timing(translateX, {
+    ----
+    [L546]
+    L 546 >>   useEffect(() => {
+    L 547        // PATCH_V34_DETAILS_BACK — back ALWAYS does something visible:
+    L 548        //   1. Series-episode page → goToSeriesRootWithFocus() handles it (returns true)
+    L 549        //   2. Movies / series-roots → router.back() to previous screen
+    ----
+    [L637]
+    L 637 >>   useEffect(() => {
+    L 638        // If we have cached meta with background, skip the meta fetch entirely
+    L 639        const hasCachedMeta = cachedMeta && cachedMeta.background;
+    L 640        if (!hasCachedMeta) {
+    ----
+    [L654]
+    L 654 >>   useEffect(() => {
+    L 655        if (seasons.length === 0) return;
+    L 656        const fromParam = paramSelectedSeason ? parseInt(paramSelectedSeason as string, 10) : NaN;
+    L 657        if (!isNaN(fromParam) && seasons.includes(fromParam)) {
+    ----
+    [L670]
+    L 670 >>   useEffect(() => {
+    L 671        if (autoPlayParam !== 'true' || type !== 'series' || !baseId) return;
+    L 672        const handler = () => {
+    L 673          router.replace({ pathname: `/details/series/${baseId}` });
+    ----
+    [L680]
+    L 680 >>   useEffect(() => {
+    L 681        if (content && library) {
+    L 682          const contentList = type === 'movie' ? library.movies : library.series;
+    L 683          const found = contentList?.some(
+    ----
+    [L722]
+    L 722 >>   useEffect(() => {
+    L 723        if (id && id !== lastAutoPlayIdRef.current) {
+    L 724          lastAutoPlayIdRef.current = id;
+    L 725          autoPlayTriggeredRef.current = false;
+    ----
+    [L731]
+    L 731 >>   useEffect(() => {
+    L 732        if (isLoadingStreams) {
+    L 733          streamsLoadedFreshRef.current = true;
+    L 734        }
+    ----
+    [L761]
+    L 761 >>   useEffect(() => {
+    L 762        if (streams && streams.length > 0 && !isLoadingStreams) {
+    L 763          // Find the best English stream to prewarm (highest seeders)
+    L 764          const sorted = sortStreamsByLanguage(streams);
+    ----
+
+  -- useFocusEffect (re-runs on every focus, suspect for slow nav) (2 hits) --
+    [L19]
+    L  19 >> import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+    L  20    import { useNavigation, CommonActions } from '@react-navigation/native';
+    L  21    import { Ionicons } from '@expo/vector-icons';
+    L  22    import { Image } from 'expo-image';
+    L  23    import Constants from 'expo-constants';
+    ----
+    [L692]
+    L 692 >>   useFocusEffect(
+    L 693        useCallback(() => {
+    L 694          const loadWatched = async () => {
+    L 695            try {
+    L 696              const data = await AsyncStorage.getItem('privastream_watched');
+    ----
+
+  -- fetchStreams / fetchMeta / api.* calls (mount-time IO) (5 hits) --
+    [L569]
+    L 569 >>   const fetchStreams = useContentStore(s => s.fetchStreams);
+    L 570      // PATCH_V19A_SORTED_MEMO — memoize the sorted streams list.
+    L 571      const sortedStreams = useMemo(() => sortStreamsByLanguage(streams), [streams]);
+    ----
+    [L650]
+    L 650 >>       fetchStreams(type, id);
+    L 651        }
+    L 652      }, [id, type]);
+    ----
+    [L778]
+    L 778 >>       const data = await api.content.getMeta(type!, contentId!);
+    L 779          // Cache the meta data for instant re-access
+    L 780          if (contentId) setMetaCache(contentId, data);
+    ----
+    [L1034]
+    L1034 >>         await api.library.remove(type!, content.id);
+    L1035            setInLibrary(false);
+    L1036          } else {
+    ----
+    [L1037]
+    L1037 >>         await api.library.add({
+    L1038              id: content.id,
+    L1039              imdb_id: content.imdb_id || content.id,
+    ----
+
+  -- expensive ops near top of component (sort/filter/parseStreamInfo) (14 hits) --
+    [L124]
+    L 124 >> // PATCH_V19A_PARSE_CACHE — module-level WeakMap cache for parseStreamInfo.
+    L 125    const _parseStreamInfoCache = new WeakMap<Stream, any>();
+    ----
+    [L127]
+    L 127 >> function parseStreamInfo(stream: Stream) {
+    L 128      {
+    ----
+    [L151]
+    L 151 >>   // Heavy penalty in computeScore guarantees these sink to the bottom of the list.
+    L 152      const isCommentary = (
+    ----
+    [L255]
+    L 255 >> function sortStreamsByLanguage(streams: Stream[]): Stream[] {
+    L 256      // PATCH_V16A_COMMENTARY_SINK — local commentary detector. Independent of V12/V9.
+    ----
+    [L274]
+    L 274 >>   const parsed = streams.map(s => ({ stream: s, info: parseStreamInfo(s) }));
+    L 275    
+    ----
+    [L295]
+    L 295 >>   const computeScore = (info: ReturnType<typeof parseStreamInfo>, stream: Stream): number => {
+    L 296        let s = 0;
+    ----
+    [L320]
+    L 320 >>   parsed.sort((a, b) => computeScore(b.info, b.stream) - computeScore(a.info, a.stream));
+    L 321    
+    ----
+    [L344]
+    L 344 >>   const { quality, source, size, seeders, language, isForeign, isCommentary } = parseStreamInfo(stream);
+    L 345      const isRD = !!stream.infoHash; // Torrent streams go through Real-Debrid
+    ----
+    [L571]
+    L 571 >>   const sortedStreams = useMemo(() => sortStreamsByLanguage(streams), [streams]);
+    L 572      const library = useContentStore(s => s.library);
+    ----
+    [L697]
+    L 697 >>           if (data) setWatchedEpisodes(JSON.parse(data));
+    L 698            } catch (e) {
+    ----
+    ... 4 more suppressed
+
+========================================================================
+  contentStore.ts — discover cache shape
+========================================================================
+
+  -- discover cache + persistent cache patterns (19 hits) --
+    [L4]
+    L   4 >> import { getCached, setCache, CACHE_DURATIONS } from '../utils/cache';
+    L   5    
+    ----
+    [L48]
+    L  48 >>   discoverData: DiscoverResponse | null;
+    L  49      addons: Addon[];
+    ----
+    [L60]
+    L  60 >>   isLoadingDiscover: boolean;
+    L  61      isLoadingAddons: boolean;
+    ----
+    [L68]
+    L  68 >>   fetchDiscover: (forceRefresh?: boolean) => Promise<void>;
+    L  69      fetchAddons: (forceRefresh?: boolean) => Promise<void>;
+    ----
+    [L84]
+    L  84 >>   discoverData: null,
+    L  85      addons: [],
+    ----
+    [L96]
+    L  96 >>   isLoadingDiscover: false,
+    L  97      isLoadingAddons: false,
+    ----
+    [L116]
+    L 116 >>   fetchDiscover: async (forceRefresh = false) => {
+    L 117        const currentData = get().discoverData;
+    ----
+    [L117]
+    L 117 >>     const currentData = get().discoverData;
+    L 118        
+    ----
+    [L121]
+    L 121 >>       const cached = await getCached<DiscoverResponse>('discover_data');
+    L 122          if (cached) {
+    ----
+    [L124]
+    L 124 >>         set({ discoverData: cached, isLoadingDiscover: false });
+    L 125            // Still refresh in background
+    ----
+    ... 9 more suppressed
+
+  -- PATCH_V* markers in store (6 hits) --
+    [L1]
+    L   1 >> import { create } from 'zustand'; // PATCH_V19B_ALL_DONE
+    ----
+    [L2]
+    L   2 >> import AsyncStorage from '@react-native-async-storage/async-storage'; // PATCH_V19B_DISK_HELPERS
+    ----
+    [L18]
+    L  18 >> // PATCH_V19B_DISK_HELPERS — AsyncStorage-backed persistent cache (6h TTL).
+    ----
+    [L74]
+    L  74 >>   // PATCH_V19B_INTERFACE
+    ----
+    [L229]
+    L 229 >>     // PATCH_V19B_FETCHSTREAMS_BODY — memory cache → disk cache → network
+    ----
+    [L282]
+    L 282 >>   // PATCH_V19B_PREFETCH_IMPL — warm the cache without touching visible state.
+    ----
+
+# done.

@@ -26,8 +26,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         // PATCH_V14B_FREEZE_ON_BLUR_TABS
-        // PATCH_V40_NO_FREEZE — keep Discover mounted; back returns instantly.
-        freezeOnBlur: false,
+        freezeOnBlur: true,
         lazy: true,
         headerShown: false,
         tabBarStyle: [

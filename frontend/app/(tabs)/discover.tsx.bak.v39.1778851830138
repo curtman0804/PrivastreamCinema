@@ -359,7 +359,7 @@ export default function DiscoverScreen() {
             const hasChannelsInName = serviceName.toLowerCase().includes('channel');
             
             return (
-              <LazyMount key={serviceName} delay={0} /* PATCH_V39_NO_STAGGER — no stagger; FlatList handles deferral */ placeholder={<View style={{ height: 240 }} />}> {/* PATCH_V15B_LAZYMOUNT_USAGE */}
+              <LazyMount key={serviceName} delay={(rowIdx++) * 60} placeholder={<View style={{ height: 240 }} />}> {/* PATCH_V15B_LAZYMOUNT_USAGE */}
                 {content?.movies && content.movies.length > 0 && (
                   <View onLayout={(e) => { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}>
                     <ServiceRow

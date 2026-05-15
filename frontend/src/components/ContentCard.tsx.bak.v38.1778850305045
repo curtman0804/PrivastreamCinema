@@ -154,10 +154,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         if (_type && _id) {
           const _store: any = useContentStore.getState();
           if (typeof _store.prefetchStreams === 'function') {
-            // V38_V19C_KILL — V19C focus prefetch disabled. Was hammering the backend
-            // during rapid D-pad nav across posters → laggy. The handoff explicitly
-            // said this should be rolled back. To re-enable: uncomment the next line.
-            // _store.prefetchStreams(_type, _id);
+            _store.prefetchStreams(_type, _id);
           }
         }
       } catch { /* prefetch is best-effort */ }

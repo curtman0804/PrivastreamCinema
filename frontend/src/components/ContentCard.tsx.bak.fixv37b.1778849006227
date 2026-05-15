@@ -137,6 +137,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   //   below. Original V19C comment was:
 // PATCH_V19C_FOCUS_PREFETCH — schedule a stream prefetch ~800ms after focus so
+
+  if (false) /* PATCH_V37_KILL_V19C_PREFETCH short-circuit — see comments above */
   // flicking rows on the D-pad doesn't fire dozens of network requests.
   const _prefetchTimerRef = useRef<any>(null);
 
@@ -154,10 +156,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         if (_type && _id) {
           const _store: any = useContentStore.getState();
           if (typeof _store.prefetchStreams === 'function') {
-            // V38_V19C_KILL — V19C focus prefetch disabled. Was hammering the backend
-            // during rapid D-pad nav across posters → laggy. The handoff explicitly
-            // said this should be rolled back. To re-enable: uncomment the next line.
-            // _store.prefetchStreams(_type, _id);
+            _store.prefetchStreams(_type, _id);
           }
         }
       } catch { /* prefetch is best-effort */ }

@@ -1,0 +1,583 @@
+# diagnose_mount_work.js — read-only
+# generated: 2026-05-15T13:26:51.572Z
+
+========================================================================
+  details/[type]/[id].tsx — all 9 mount useEffects + 2 useFocusEffects
+========================================================================
+
+  -- animation loop (L40 area)  (L35–L80) --
+  L  35: // segment that slides across a dark track. Pure Animated.Value so it runs
+  L  36: // on the native thread and doesn't stutter on Firestick.
+  L  37: function AutoPlayLoadingBar() {
+  L  38:   const translateX = useRef(new Animated.Value(-100)).current;
+  L  39: 
+  L  40:   useEffect(() => {
+  L  41:     const loop = Animated.loop(
+  L  42:       Animated.sequence([
+  L  43:         Animated.timing(translateX, {
+  L  44:           toValue: 260,
+  L  45:           duration: 1200,
+  L  46:           easing: Easing.inOut(Easing.ease),
+  L  47:           useNativeDriver: true,
+  L  48:         }),
+  L  49:         Animated.timing(translateX, {
+  L  50:           toValue: -100,
+  L  51:           duration: 0,
+  L  52:           useNativeDriver: true,
+  L  53:         }),
+  L  54:       ])
+  L  55:     );
+  L  56:     loop.start();
+  L  57:     return () => loop.stop();
+  L  58:   }, [translateX]);
+  L  59: 
+  L  60:   return (
+  L  61:     <View style={{ width: 260, height: 4, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 2, overflow: 'hidden' }}>
+  L  62:       <Animated.View
+  L  63:         style={{
+  L  64:           position: 'absolute',
+  L  65:           width: 100,
+  L  66:           height: 4,
+  L  67:           backgroundColor: '#B8A05C',
+  L  68:           borderRadius: 2,
+  L  69:           transform: [{ translateX }],
+  L  70:         }}
+  L  71:       />
+  L  72:     </View>
+  L  73:   );
+  L  74: }
+  L  75: 
+  L  76: // Focusable Button Component
+  L  77: function FocusableButton({ 
+  L  78:   onPress, 
+  L  79:   style, 
+  L  80:   focusedStyle,
+
+  -- V34 back handler  (L540–L560) --
+  L 540:   }, [id, type, router, navigation]);
+  L 541: 
+  L 542:   const handleBack = useCallback(() => {
+  L 543:     if (!goToSeriesRootWithFocus()) router.back();
+  L 544:   }, [goToSeriesRootWithFocus, router]);
+  L 545: 
+  L 546:   useEffect(() => {
+  L 547:     // PATCH_V34_DETAILS_BACK — back ALWAYS does something visible:
+  L 548:     //   1. Series-episode page → goToSeriesRootWithFocus() handles it (returns true)
+  L 549:     //   2. Movies / series-roots → router.back() to previous screen
+  L 550:     //   3. Deep-linked (empty stack) → fall back to Discover tab
+  L 551:     //   4. ALWAYS return true so Android can't force-exit
+  L 552:     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+  L 553:       try { if (goToSeriesRootWithFocus()) return true; } catch (_) {}
+  L 554:       try { router.back(); return true; } catch (_) {}
+  L 555:       try { router.replace('/(tabs)/discover'); } catch (_) {}
+  L 556:       return true;
+  L 557:     });
+  L 558:     return () => sub.remove();
+  L 559:   }, [goToSeriesRootWithFocus]);
+  L 560:   // ========================================================================
+
+  -- meta fetch on mount  (L630–L660) --
+  L 630:   const episodesForSeason = useMemo(() => {
+  L 631:     if (!content?.videos) return [];
+  L 632:     return content.videos
+  L 633:       .filter(ep => ep.season === selectedSeason)
+  L 634:       .sort((a, b) => a.episode - b.episode);
+  L 635:   }, [content?.videos, selectedSeason]);
+  L 636: 
+  L 637:   useEffect(() => {
+  L 638:     // If we have cached meta with background, skip the meta fetch entirely
+  L 639:     const hasCachedMeta = cachedMeta && cachedMeta.background;
+  L 640:     if (!hasCachedMeta) {
+  L 641:       // Only fetch meta for series (need episodes) or if missing background
+  L 642:       const needsMeta = type === 'series' || !content?.background;
+  L 643:       if (needsMeta) {
+  L 644:         loadContent();
+  L 645:       }
+  L 646:     }
+  L 647:     fetchLibrary();
+  L 648:     
+  L 649:     if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
+  L 650:       // PATCH_V37_DEFER_STREAMS — defer to next tick so the details page paints
+  L 651:       // instantly; streams load in the background and populate as they arrive.
+  L 652:       const _v37StreamsTimer = setTimeout(() => { try { fetchStreams(type, id); } catch (_) {} }, 0);
+  L 653:     }
+  L 654:   }, [id, type]);
+  L 655: 
+  L 656:   useEffect(() => {
+  L 657:     if (seasons.length === 0) return;
+  L 658:     const fromParam = paramSelectedSeason ? parseInt(paramSelectedSeason as string, 10) : NaN;
+  L 659:     if (!isNaN(fromParam) && seasons.includes(fromParam)) {
+  L 660:       if (selectedSeason !== fromParam) setSelectedSeason(fromParam);
+
+  -- season selection effect  (L650–L670) --
+  L 650:       // PATCH_V37_DEFER_STREAMS — defer to next tick so the details page paints
+  L 651:       // instantly; streams load in the background and populate as they arrive.
+  L 652:       const _v37StreamsTimer = setTimeout(() => { try { fetchStreams(type, id); } catch (_) {} }, 0);
+  L 653:     }
+  L 654:   }, [id, type]);
+  L 655: 
+  L 656:   useEffect(() => {
+  L 657:     if (seasons.length === 0) return;
+  L 658:     const fromParam = paramSelectedSeason ? parseInt(paramSelectedSeason as string, 10) : NaN;
+  L 659:     if (!isNaN(fromParam) && seasons.includes(fromParam)) {
+  L 660:       if (selectedSeason !== fromParam) setSelectedSeason(fromParam);
+  L 661:       return;
+  L 662:     }
+  L 663:     if (!seasons.includes(selectedSeason)) {
+  L 664:       setSelectedSeason(seasons[0]);
+  L 665:     }
+  L 666:   }, [seasons, paramSelectedSeason]);
+  L 667: 
+  L 668:   // Hardware back (Firestick remote / Android back) — when the user reached
+  L 669:   // this detail page via Play-Next autoplay, intercept back so they go to
+  L 670:   // the episodes list (series root) instead of the previous episode's page.
+
+  -- autoplay back handler  (L665–L690) --
+  L 665:     }
+  L 666:   }, [seasons, paramSelectedSeason]);
+  L 667: 
+  L 668:   // Hardware back (Firestick remote / Android back) — when the user reached
+  L 669:   // this detail page via Play-Next autoplay, intercept back so they go to
+  L 670:   // the episodes list (series root) instead of the previous episode's page.
+  L 671:   // Matches Stremio: back from next-up screen = back to the show, not to EP-N-1.
+  L 672:   useEffect(() => {
+  L 673:     if (autoPlayParam !== 'true' || type !== 'series' || !baseId) return;
+  L 674:     const handler = () => {
+  L 675:       router.replace({ pathname: `/details/series/${baseId}` });
+  L 676:       return true; // swallow the default back nav
+  L 677:     };
+  L 678:     const sub = BackHandler.addEventListener('hardwareBackPress', handler);
+  L 679:     return () => sub.remove();
+  L 680:   }, [autoPlayParam, type, baseId]);
+  L 681: 
+  L 682:   useEffect(() => {
+  L 683:     if (content && library) {
+  L 684:       const contentList = type === 'movie' ? library.movies : library.series;
+  L 685:       const found = contentList?.some(
+  L 686:         (item) => item.id === content.id || item.imdb_id === content.id
+  L 687:       );
+  L 688:       setInLibrary(!!found);
+  L 689:     }
+  L 690:   }, [content, library]);
+
+  -- library check  (L675–L700) --
+  L 675:       router.replace({ pathname: `/details/series/${baseId}` });
+  L 676:       return true; // swallow the default back nav
+  L 677:     };
+  L 678:     const sub = BackHandler.addEventListener('hardwareBackPress', handler);
+  L 679:     return () => sub.remove();
+  L 680:   }, [autoPlayParam, type, baseId]);
+  L 681: 
+  L 682:   useEffect(() => {
+  L 683:     if (content && library) {
+  L 684:       const contentList = type === 'movie' ? library.movies : library.series;
+  L 685:       const found = contentList?.some(
+  L 686:         (item) => item.id === content.id || item.imdb_id === content.id
+  L 687:       );
+  L 688:       setInLibrary(!!found);
+  L 689:     }
+  L 690:   }, [content, library]);
+  L 691: 
+  L 692:   // Load watched episodes from AsyncStorage — reload on EVERY screen focus
+  L 693:   // so checkmarks appear immediately after returning from the player
+  L 694:   useFocusEffect(
+  L 695:     useCallback(() => {
+  L 696:       const loadWatched = async () => {
+  L 697:         try {
+  L 698:           const data = await AsyncStorage.getItem('privastream_watched');
+  L 699:           if (data) setWatchedEpisodes(JSON.parse(data));
+  L 700:         } catch (e) {
+
+  -- useFocusEffect — watched episodes load  (L685–L725) --
+  L 685:       const found = contentList?.some(
+  L 686:         (item) => item.id === content.id || item.imdb_id === content.id
+  L 687:       );
+  L 688:       setInLibrary(!!found);
+  L 689:     }
+  L 690:   }, [content, library]);
+  L 691: 
+  L 692:   // Load watched episodes from AsyncStorage — reload on EVERY screen focus
+  L 693:   // so checkmarks appear immediately after returning from the player
+  L 694:   useFocusEffect(
+  L 695:     useCallback(() => {
+  L 696:       const loadWatched = async () => {
+  L 697:         try {
+  L 698:           const data = await AsyncStorage.getItem('privastream_watched');
+  L 699:           if (data) setWatchedEpisodes(JSON.parse(data));
+  L 700:         } catch (e) {
+  L 701:           console.log('[DETAILS] Error loading watched data:', e);
+  L 702:         }
+  L 703:       };
+  L 704:       loadWatched();
+  L 705:     }, [])
+  L 706:   );
+  L 707: 
+  L 708:   // AUTO-PLAY: When navigated from "Play Next", auto-select best stream from
+  L 709:   // the FRESH stream list. We deliberately do NOT carry over the previous
+  L 710:   // episode's torrent hash — Stremio doesn't either. Each episode click does
+  L 711:   // a clean Torrentio scrape and picks the best (debrid-cached, top seeded) stream.
+  L 712:   //
+  L 713:   // We wait for `content` to populate before firing — this ensures the player's
+  L 714:   // loading screen has the series backdrop/logo (not a blank black screen).
+  L 715:   const streamsLoadedFreshRef = useRef(false);
+  L 716:   const autoPlayAttemptsRef = useRef(0);
+  L 717:   const lastAutoPlayIdRef = useRef<string | null>(null);
+  L 718: 
+  L 719:   // CRITICAL: Reset the auto-play state when the episode id changes.
+  L 720:   // Expo Router uses router.replace() between episodes which re-renders this
+  L 721:   // component instead of unmounting it — so refs persist and would otherwise
+  L 722:   // block the second/third/Nth auto-transition. Resetting here makes every
+  L 723:   // new id behave like a fresh mount.
+  L 724:   useEffect(() => {
+  L 725:     if (id && id !== lastAutoPlayIdRef.current) {
+
+  -- autoplay trigger / streams loaded tracker  (L715–L740) --
+  L 715:   const streamsLoadedFreshRef = useRef(false);
+  L 716:   const autoPlayAttemptsRef = useRef(0);
+  L 717:   const lastAutoPlayIdRef = useRef<string | null>(null);
+  L 718: 
+  L 719:   // CRITICAL: Reset the auto-play state when the episode id changes.
+  L 720:   // Expo Router uses router.replace() between episodes which re-renders this
+  L 721:   // component instead of unmounting it — so refs persist and would otherwise
+  L 722:   // block the second/third/Nth auto-transition. Resetting here makes every
+  L 723:   // new id behave like a fresh mount.
+  L 724:   useEffect(() => {
+  L 725:     if (id && id !== lastAutoPlayIdRef.current) {
+  L 726:       lastAutoPlayIdRef.current = id;
+  L 727:       autoPlayTriggeredRef.current = false;
+  L 728:       streamsLoadedFreshRef.current = false;
+  L 729:       autoPlayAttemptsRef.current = 0;
+  L 730:     }
+  L 731:   }, [id]);
+  L 732: 
+  L 733:   useEffect(() => {
+  L 734:     if (isLoadingStreams) {
+  L 735:       streamsLoadedFreshRef.current = true;
+  L 736:     }
+  L 737:     if (autoPlayParam === 'true' && !autoPlayTriggeredRef.current && streamsLoadedFreshRef.current && streams && streams.length > 0 && !isLoadingStreams) {
+  L 738:       // Wait up to ~2s for content to load so backdrop/logo are populated.
+  L 739:       // Stops early as soon as content.background is present.
+  L 740:       const contentReady = !!(content && (content.background || content.poster));
+
+  -- stream prewarm  (L755–L790) --
+  L 755:         setTimeout(() => handleStreamSelect(bestStream), 200);
+  L 756:       }
+  L 757:     }
+  L 758:   }, [streams, isLoadingStreams, autoPlayParam, id, content]);
+  L 759: 
+  L 760:   // PRE-WARM: When streams are loaded, silently pre-start the top ENGLISH torrent
+  L 761:   // This saves 5-10 seconds of metadata download when user taps play
+  L 762:   const prewarmedRef = useRef<string | null>(null);
+  L 763:   useEffect(() => {
+  L 764:     if (streams && streams.length > 0 && !isLoadingStreams) {
+  L 765:       // Find the best English stream to prewarm (highest seeders)
+  L 766:       const sorted = sortStreamsByLanguage(streams);
+  L 767:       const topStream = sorted[0]; // English first, highest seeders
+  L 768:       if (topStream?.infoHash && topStream.infoHash !== prewarmedRef.current) {
+  L 769:         prewarmedRef.current = topStream.infoHash;
+  L 770:         console.log(`[PREWARM] Pre-warming top English stream: ${topStream.infoHash} (${topStream.title || topStream.name})`);
+  L 771:         // Pass tracker sources from Torrentio for better peer discovery during prewarm
+  L 772:         api.stream.prewarm(topStream.infoHash, topStream.sources || []);
+  L 773:       }
+  L 774:     }
+  L 775:   }, [streams, isLoadingStreams]);
+  L 776: 
+  L 777:   const loadContent = async () => {
+  L 778:     try {
+  L 779:       const contentId = isEpisodePage ? baseId : id;
+  L 780:       const data = await api.content.getMeta(type!, contentId!);
+  L 781:       // Cache the meta data for instant re-access
+  L 782:       if (contentId) setMetaCache(contentId, data);
+  L 783:       setContent(data);
+  L 784:     } catch (error) {
+  L 785:       console.log('Failed to fetch meta:', error);
+  L 786:       // Keep using the initial content from params — already set
+  L 787:     }
+  L 788:     setIsLoadingContent(false);
+  L 789:   };
+  L 790: 
+
+========================================================================
+  (tabs)/discover.tsx — focus effects, refresh handlers, item-focus handler
+========================================================================
+
+  -- top of TabScreen — refreshing state + fetchContinueWatching  (L60–L105) --
+  L  60:   const isLoadingDiscover = useContentStore(s => s.isLoadingDiscover);
+  L  61:   const fetchDiscover = useContentStore(s => s.fetchDiscover);
+  L  62:   const fetchAddons = useContentStore(s => s.fetchAddons);
+  L  63:   const addons = useContentStore(s => s.addons);
+  L  64:   const [refreshing, setRefreshing] = useState(false);
+  L  65:   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
+  L  66:   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+  L  67:   const scrollViewRef = useRef<ScrollView>(null);
+  L  68:   const sectionPositions = useRef<Record<string, number>>({});
+  L  69:   const lastFocusedSection = useRef<string>('');
+  L  70:   const lastCWFetchTime = useRef<number>(0);
+  L  71: 
+  L  72:   // Use same card width calculation as ContentCard for consistency
+  L  73:   const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
+  L  74:   const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
+  L  75: 
+  L  76:   // Fetch continue watching data
+  L  77:   const fetchContinueWatching = useCallback(async () => {
+  L  78:     try {
+  L  79:       setIsLoadingProgress(true);
+  L  80:       const response = await api.watchProgress.getAll();
+  L  81:       setContinueWatching(response.continueWatching || []);
+  L  82:       lastCWFetchTime.current = Date.now();
+  L  83:     } catch (err) {
+  L  84:       console.log('[Discover] Error fetching continue watching:', err);
+  L  85:     } finally {
+  L  86:       setIsLoadingProgress(false);
+  L  87:     }
+  L  88:   }, []);
+  L  89: 
+  L  90:   useEffect(() => {
+  L  91:     fetchAddons();
+  L  92:     fetchDiscover();
+  L  93:     fetchContinueWatching();
+  L  94:   }, []);
+  L  95: 
+  L  96:   // Re-fetch discover data AND continue watching when screen comes into focus
+  L  97:   // This ensures newly installed addons show up immediately
+  L  98:   useFocusEffect(
+  L  99:     useCallback(() => {
+  L 100:       const timeSinceLastFetch = Date.now() - lastCWFetchTime.current;
+  L 101:       if (timeSinceLastFetch < 30000 && continueWatching.length >= 0) {
+  L 102:         return;
+  L 103:       }
+  L 104:       const handle = InteractionManager.runAfterInteractions(() => {
+  L 105:         fetchContinueWatching();
+
+  -- useEffect + useCallback (continue watching focus refresh?)  (L85–L115) --
+  L  85:     } finally {
+  L  86:       setIsLoadingProgress(false);
+  L  87:     }
+  L  88:   }, []);
+  L  89: 
+  L  90:   useEffect(() => {
+  L  91:     fetchAddons();
+  L  92:     fetchDiscover();
+  L  93:     fetchContinueWatching();
+  L  94:   }, []);
+  L  95: 
+  L  96:   // Re-fetch discover data AND continue watching when screen comes into focus
+  L  97:   // This ensures newly installed addons show up immediately
+  L  98:   useFocusEffect(
+  L  99:     useCallback(() => {
+  L 100:       const timeSinceLastFetch = Date.now() - lastCWFetchTime.current;
+  L 101:       if (timeSinceLastFetch < 30000 && continueWatching.length >= 0) {
+  L 102:         return;
+  L 103:       }
+  L 104:       const handle = InteractionManager.runAfterInteractions(() => {
+  L 105:         fetchContinueWatching();
+  L 106:         fetchDiscover(true); // Force refresh so new addon catalogs appear
+  L 107:       });
+  L 108:       return () => handle.cancel();
+  L 109:     }, [fetchContinueWatching, continueWatching.length])
+  L 110:   );
+  L 111: 
+  L 112:   // Check if there's any content to display
+  L 113:   const hasContent = useMemo(() => {
+  L 114:     if (!discoverData?.services) return false;
+  L 115:     return Object.values(discoverData.services).some(
+
+  -- hasContent useMemo + handleSectionFocus + handleItemFocus  (L115–L165) --
+  L 115:     return Object.values(discoverData.services).some(
+  L 116:       (content: any) => 
+  L 117:         (content?.movies?.length > 0) || 
+  L 118:         (content?.series?.length > 0) || 
+  L 119:         (content?.channels?.length > 0)
+  L 120:     );
+  L 121:   }, [discoverData]);
+  L 122: 
+  L 123:   const onRefresh = useCallback(async () => {
+  L 124:     setRefreshing(true);
+  L 125:     await Promise.all([
+  L 126:       fetchAddons(),
+  L 127:       fetchDiscover(),
+  L 128:       fetchContinueWatching(),
+  L 129:     ]);
+  L 130:     setRefreshing(false);
+  L 131:   }, [fetchContinueWatching]);
+  L 132: 
+  L 133:   // Handle section focus - scroll parent to show category title
+  L 134:   const handleSectionFocus = useCallback((sectionKey: string) => {
+  L 135:     if (lastFocusedSection.current === sectionKey) return;
+  L 136:     lastFocusedSection.current = sectionKey;
+  L 137:     
+  L 138:     const sectionY = sectionPositions.current[sectionKey];
+  L 139:     if (sectionY !== undefined && scrollViewRef.current) {
+  L 140:       // Small delay to override Android TV's auto-scroll (which only shows the card, not the title)
+  L 141:       setTimeout(() => {
+  L 142:         scrollViewRef.current?.scrollTo({ y: Math.max(0, sectionY - 10), animated: true });
+  L 143:       }, 50);
+  L 144:     }
+  L 145:   }, []);
+  L 146: 
+  L 147:   // Row sync: keep all rows scrolled to the same horizontal offset
+  L 148:   // (No longer needed — removed carousel anchor scrolling)
+  L 149: 
+  L 150:   // Item width for snap scrolling
+  L 151:   const itemWidth = POSTER_WIDTH + 16;
+  L 152: 
+  L 153:   // PRE-FETCH meta on poster focus (D-pad hover) so backdrop is ready before click
+  L 154:   const prefetchingRef = useRef<Set<string>>(new Set());
+  L 155:   const handleItemFocus = useCallback((item: ContentItem) => {
+  L 156:     const id = item.imdb_id || item.id;
+  L 157:     if (!id || prefetchingRef.current.has(id) || getMetaCache(id)) return;
+  L 158:     prefetchingRef.current.add(id);
+  L 159:     // Fire-and-forget: fetch meta in background
+  L 160:     api.content.getMeta(item.type, id).then((meta) => {
+  L 161:       setMetaCache(id, meta);
+  L 162:       // Also pre-download the backdrop image so it's in expo-image disk cache
+  L 163:       if (meta.background) {
+  L 164:         Image.prefetch(meta.background);
+  L 165:       }
+
+  -- FlatList block + LazyMount wrapper  (L330–L380) --
+  L 330:             >
+  L 331:               <View style={[styles.sectionHeader, isTV && styles.sectionHeaderTV]}>
+  L 332:                 <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>
+  L 333:                   Continue Watching
+  L 334:                 </Text>
+  L 335:               </View>
+  L 336:               <FlatList
+  L 337:                 data={continueWatching}
+  L 338:                 renderItem={renderContinueWatchingItem}
+  L 339:                 keyExtractor={(cwItem) => cwItem.content_id}
+  L 340:                 horizontal
+  L 341:                 showsHorizontalScrollIndicator={false}
+  L 342:                 contentContainerStyle={[styles.rowContent, isTV && styles.rowContentTV]}
+  L 343:                 removeClippedSubviews={true}
+  L 344:                 windowSize={5}
+  L 345:                 initialNumToRender={3}
+  L 346:                 // PATCH_V14B_CW_VIRT
+  L 347:                 maxToRenderPerBatch={3}
+  L 348:                 updateCellsBatchingPeriod={50}
+  L 349:               />
+  L 350:             </View>
+  L 351:           )}
+  L 352:           
+  L 353:           {/* Content Rows from Addons */}
+  L 354:           {(() => {
+  L 355:             let rowIdx = 0;
+  L 356:             return Object.entries(discoverData?.services || {}).map(([serviceName, content]) => {
+  L 357:             const hasMoviesInName = serviceName.toLowerCase().includes('movie');
+  L 358:             const hasSeriesInName = serviceName.toLowerCase().includes('series');
+  L 359:             const hasChannelsInName = serviceName.toLowerCase().includes('channel');
+  L 360:             
+  L 361:             return (
+  L 362:               <LazyMount key={serviceName} delay={(rowIdx++) * 60} placeholder={<View style={{ height: 240 }} />}> {/* PATCH_V15B_LAZYMOUNT_USAGE */}
+  L 363:                 {content?.movies && content.movies.length > 0 && (
+  L 364:                   <View onLayout={(e) => { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}>
+  L 365:                     <ServiceRow
+  L 366:                       title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
+  L 367:                       serviceName={serviceName}
+  L 368:                       contentType="movies"
+  L 369:                       items={content.movies}
+  L 370:                       onItemPress={handleItemPress}
+  L 371:                       onItemFocus={handleItemFocus}
+  L 372:                       onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
+  L 373:                       rowIndex={rowIdx++}
+  L 374:                     />
+  L 375:                   </View>
+  L 376:                 )}
+  L 377:                 {content?.series && content.series.length > 0 && (
+  L 378:                   <View onLayout={(e) => { sectionPositions.current[`${serviceName}-series`] = e.nativeEvent.layout.y; }}>
+  L 379:                     <ServiceRow
+  L 380:                       title={hasSeriesInName ? serviceName : `${serviceName} Series`}
+
+  -- card subcomponent w/ focus state (re-render on every focus)  (L410–L470) --
+  L 410:         </View>
+  L 411:       )}
+  L 412:     </SafeAreaView>
+  L 413:   );
+  L 414: }
+  L 415: 
+  L 416: // Go To Addons Button (matches Addons page style)
+  L 417: function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
+  L 418:   const [isFocused, setIsFocused] = useState(false);
+  L 419:   
+  L 420:   return (
+  L 421:     <Pressable 
+  L 422:       onPress={() => router.push('/(tabs)/addons')}
+  L 423:       onFocus={() => setIsFocused(true)}
+  L 424:       onBlur={() => setIsFocused(false)}
+  L 425:       style={[styles.addonsButton, isFocused && styles.addonsButtonFocused]}
+  L 426:     >
+  L 427:       <Ionicons name="extension-puzzle" size={20} color={colors.primary} />
+  L 428:       <Text style={styles.addonsButtonText}>Install Addon</Text>
+  L 429:     </Pressable>
+  L 430:   );
+  L 431: }
+  L 432: 
+  L 433: // Continue Watching Item (Stremio style with play overlay and X on poster)
+  L 434: function ContinueWatchingItem({ 
+  L 435:   item, 
+  L 436:   posterWidth, 
+  L 437:   posterHeight, 
+  L 438:   isTV, 
+  L 439:   onPress, 
+  L 440:   onRemove,
+  L 441:   onSectionFocus,
+  L 442: }: { 
+  L 443:   item: WatchProgress; 
+  L 444:   posterWidth: number; 
+  L 445:   posterHeight: number; 
+  L 446:   isTV: boolean;
+  L 447:   onPress: () => void;
+  L 448:   onRemove: () => void;
+  L 449:   onSectionFocus?: () => void;
+  L 450: }) {
+  L 451:   const [isFocused, setIsFocused] = useState(false);
+  L 452:   const [xFocused, setXFocused] = useState(false);
+  L 453:   const percentWatched = item.percent_watched || 0;
+  L 454: 
+  L 455:   // Refs for explicit focus navigation between poster and X button
+  L 456:   const posterRef = useRef<View>(null);
+  L 457:   const xButtonRef = useRef<View>(null);
+  L 458:   const [posterTag, setPosterTag] = useState<number | undefined>(undefined);
+  L 459:   const [xButtonTag, setXButtonTag] = useState<number | undefined>(undefined);
+  L 460: 
+  L 461:   useEffect(() => {
+  L 462:     // Get native node handles after mount for nextFocusUp/Down wiring
+  L 463:     // findNodeHandle is not supported on web — skip entirely
+  L 464:     if (Platform.OS === 'web') return;
+  L 465:     const pTag = posterRef.current ? findNodeHandle(posterRef.current) : null;
+  L 466:     const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
+  L 467:     if (pTag) setPosterTag(pTag);
+  L 468:     if (xTag) setXButtonTag(xTag);
+  L 469:   }, []);
+  L 470: 
+
+  -- useFocusEffect blocks in discover (2 blocks) --
+  L  18: import { Image } from 'expo-image';
+  L  19: import { Ionicons } from '@expo/vector-icons';
+  L  20: import { useContentStore } from '../../src/store/contentStore';
+  --- block start ---
+  L  17: import { useRouter, useFocusEffect } from 'expo-router';
+  L  18: import { Image } from 'expo-image';
+  L  19: import { Ionicons } from '@expo/vector-icons';
+  --- block end ---
+  L 110:   );
+  L 111: 
+  L 112:   // Check if there's any content to display
+  --- block start ---
+  L  98:   useFocusEffect(
+  L  99:     useCallback(() => {
+  L 100:       const timeSinceLastFetch = Date.now() - lastCWFetchTime.current;
+  L 101:       if (timeSinceLastFetch < 30000 && continueWatching.length >= 0) {
+  L 102:         return;
+  L 103:       }
+  L 104:       const handle = InteractionManager.runAfterInteractions(() => {
+  L 105:         fetchContinueWatching();
+  L 106:         fetchDiscover(true); // Force refresh so new addon catalogs appear
+  L 107:       });
+  L 108:       return () => handle.cancel();
+  L 109:     }, [fetchContinueWatching, continueWatching.length])
+  L 110:   );
+  L 111: 
+  --- block end ---
+
+# done.

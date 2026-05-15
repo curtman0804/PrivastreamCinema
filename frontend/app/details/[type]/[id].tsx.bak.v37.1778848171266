@@ -641,16 +641,13 @@ export default function DetailsScreen() {
       // Only fetch meta for series (need episodes) or if missing background
       const needsMeta = type === 'series' || !content?.background;
       if (needsMeta) {
-        // PATCH_V39_DEFER_MOUNT_IO — defer meta fetch off the mount path
-        setTimeout(() => { try { loadContent(); } catch (_) {} }, 0);
+        loadContent();
       }
     }
-    // PATCH_V39_DEFER_MOUNT_IO — defer library fetch off the mount path
-    setTimeout(() => { try { fetchLibrary(); } catch (_) {} }, 0);
+    fetchLibrary();
+    
     if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
-      // PATCH_V37_DEFER_STREAMS — defer to next tick so the details page paints
-      // instantly; streams load in the background and populate as they arrive.
-      const _v37StreamsTimer = setTimeout(() => { try { fetchStreams(type, id); } catch (_) {} }, 0);
+      fetchStreams(type, id);
     }
   }, [id, type]);
 
