@@ -19,7 +19,6 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
-import { FlashList } from '@shopify/flash-list'; // PATCH_V54_VIRTUALIZE
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 import { getCardWidth } from '../../src/components/ContentCard';
@@ -185,29 +184,7 @@ export default function DiscoverScreen() {
     }, 350);
   }, []);
 
-  // PATCH_V54_VIRTUALIZE — progressive: 6 services first, expand after 700ms.
-  const [maxRowsV54, setMaxRowsV54] = useState(6); // PATCH_V54_FLATROWS
-  useEffect(() => {
-    const t = setTimeout(() => setMaxRowsV54(999), 700);
-    return () => clearTimeout(t);
-  }, []);
-  const flatRowsV54 = useMemo(() => {
-    const rows: any[] = [];
-    if (continueWatching.length > 0) rows.push({ key: '__cw__', kind: 'cw' });
-    let rIdx = 0;
-    Object.entries(discoverData?.services || {}).forEach(([sName, c]: any) => {
-      const lname = sName.toLowerCase();
-      const hasMov = lname.includes('movie');
-      const hasSer = lname.includes('series');
-      const hasCh  = lname.includes('channel');
-      if (c?.movies?.length > 0)   rows.push({ key: sName+'|m', kind: 'row', serviceName: sName, contentType: 'movies',   items: c.movies,   title: hasMov ? sName : sName+' Movies',   rowIdx: rIdx++ });
-      if (c?.series?.length > 0)   rows.push({ key: sName+'|s', kind: 'row', serviceName: sName, contentType: 'series',   items: c.series,   title: hasSer ? sName : sName+' Series',   rowIdx: rIdx++ });
-      if (c?.channels?.length > 0) rows.push({ key: sName+'|c', kind: 'row', serviceName: sName, contentType: 'channels', items: c.channels.map((ch:any)=>({ ...ch, type: 'tv' as const })), title: hasCh ? sName : sName+' Channels', rowIdx: rIdx++ });
-    });
-    return rows.slice(0, 1 + maxRowsV54);
-  }, [continueWatching, discoverData, maxRowsV54]);
-
-    const handleItemPress = (item: ContentItem) => {
+  const handleItemPress = (item: ContentItem) => {
     const id = item.imdb_id || item.id;
     const encodedId = encodeURIComponent(id);
     // Minimal params for instant first paint — just name + poster
@@ -349,9 +326,6 @@ export default function DiscoverScreen() {
           </View>
 
           {/* Scrollable Content — ScrollView for smooth scrolling, rows are individually optimized */}
-          {/* PATCH_V58_SCROLLVIEW — outer ScrollView with progressive render.
-               Outer FlashList caused row recycling bugs; with ~30 rows total a plain
-               ScrollView + V54's maxRowsV54 gating is the right balance. */}
           <ScrollView
             ref={scrollViewRef}
             style={styles.scrollView}
@@ -366,41 +340,91 @@ export default function DiscoverScreen() {
               />
             }
           >
-            {flatRowsV54.map((item: any) => {
-              if (item.kind === 'cw') {
-                return (
-                  <View key={item.key} style={styles.section}>
-                    <View style={[styles.sectionHeader, isTV && styles.sectionHeaderTV]}>
-                      <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>Continue Watching</Text>
-                    </View>
-                    <FlatList
-                      data={continueWatching}
-                      renderItem={renderContinueWatchingItem}
-                      keyExtractor={(cwItem) => cwItem.content_id}
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={[styles.rowContent, isTV && styles.rowContentTV]}
-                      removeClippedSubviews={true}
+          {/* Continue Watching Section */}
+          {continueWatching.length > 0 && (
+            <View 
+              style={styles.section}
+              onLayout={(e) => { sectionPositions.current['continue-watching'] = e.nativeEvent.layout.y; }}
+            >
+              <View style={[styles.sectionHeader, isTV && styles.sectionHeaderTV]}>
+                <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>
+                  Continue Watching
+                </Text>
+              </View>
+              <FlatList
+                data={continueWatching}
+                renderItem={renderContinueWatchingItem}
+                keyExtractor={(cwItem) => cwItem.content_id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={[styles.rowContent, isTV && styles.rowContentTV]}
+                removeClippedSubviews={true}
+                windowSize={5}
+                initialNumToRender={3}
+                // PATCH_V14B_CW_VIRT
+                maxToRenderPerBatch={3}
+                updateCellsBatchingPeriod={50}
+              />
+            </View>
+          )}
+          
+          {/* Content Rows from Addons */}
+          {(() => {
+            let rowIdx = 0;
+            return Object.entries(discoverData?.services || {}).map(([serviceName, content]) => {
+            const hasMoviesInName = serviceName.toLowerCase().includes('movie');
+            const hasSeriesInName = serviceName.toLowerCase().includes('series');
+            const hasChannelsInName = serviceName.toLowerCase().includes('channel');
+            
+            return (
+              <LazyMount key={serviceName} delay={0} /* PATCH_V39_NO_STAGGER — no stagger; FlatList handles deferral */ placeholder={<View style={{ height: 240 }} />}> {/* PATCH_V15B_LAZYMOUNT_USAGE */}
+                {content?.movies && content.movies.length > 0 && (
+                  <View onLayout={(e) => { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}>
+                    <ServiceRow
+                      title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
+                      serviceName={serviceName}
+                      contentType="movies"
+                      items={content.movies}
+                      onItemPress={handleItemPress}
+                      onItemFocus={handleItemFocus}
+                      onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
+                      rowIndex={rowIdx++}
                     />
                   </View>
-                );
-              }
-              return (
-                <ServiceRow
-                  key={item.key}
-                  title={item.title}
-                  serviceName={item.serviceName}
-                  contentType={item.contentType}
-                  items={item.items}
-                  onItemPress={handleItemPress}
-                  onItemFocus={item.contentType !== 'channels' ? handleItemFocus : undefined}
-                  rowIndex={item.rowIdx}
-                />
-              );
-            })}
-            <View style={styles.bottomPadding} />
-          </ScrollView>}
-          />
+                )}
+                {content?.series && content.series.length > 0 && (
+                  <View onLayout={(e) => { sectionPositions.current[`${serviceName}-series`] = e.nativeEvent.layout.y; }}>
+                    <ServiceRow
+                      title={hasSeriesInName ? serviceName : `${serviceName} Series`}
+                      serviceName={serviceName}
+                      contentType="series"
+                      items={content.series}
+                      onItemPress={handleItemPress}
+                      onItemFocus={handleItemFocus}
+                      onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
+                      rowIndex={rowIdx++}
+                    />
+                  </View>
+                )}
+                {content?.channels && content.channels.length > 0 && (
+                  <View onLayout={(e) => { sectionPositions.current[`${serviceName}-channels`] = e.nativeEvent.layout.y; }}>
+                    <ServiceRow
+                      title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
+                      serviceName={serviceName}
+                      contentType="channels"
+                      items={content.channels.map((ch: any) => ({ ...ch, type: 'tv' as const }))}
+                      onItemPress={handleItemPress}
+                      onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
+                      rowIndex={rowIdx++}
+                    />
+                  </View>
+                )}
+              </LazyMount>
+            );
+          });
+          })()}
+          <View style={styles.bottomPadding} />
+        </ScrollView>
         </View>
       )}
     </SafeAreaView>

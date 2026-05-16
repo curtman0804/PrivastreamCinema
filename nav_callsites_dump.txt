@@ -1,0 +1,638 @@
+
+================================================================
+=== FILE: frontend\app\(tabs)\discover.tsx
+================================================================
+=== TOTAL LINES: 795   CRLF: true
+
+--- ANCHORS (19) ---
+  L 173  [router.push]  router.push({
+  L 174  [details path]  pathname: `/details/${item.type}/${encodedId}`,
+  L 174  [pathname:]  pathname: `/details/${item.type}/${encodedId}`,
+  L 176  [name: item]  name: item.name || '',
+  L 177  [poster: item]  poster: item.poster || '',
+  L 185  [router.push]  router.push({
+  L 186  [pathname:]  pathname: '/player',
+  L 191  [name: item]  filename: item.stream_filename || '',
+  L 195  [poster: item]  poster: item.poster || '',
+  L 221  [router.push]  router.push({
+  L 222  [details path]  pathname: `/details/${targetType}/${encodedId}`,
+  L 222  [pathname:]  pathname: `/details/${targetType}/${encodedId}`,
+  L 224  [name: item]  name: item.title || '',
+  L 225  [poster: item]  poster: item.poster || '',
+  L 253  [onPress=]  onPress={() => handleContinueWatchingPress(item)}
+  L 422  [router.push]  onPress={() => router.push('/(tabs)/addons')}
+  L 422  [onPress=]  onPress={() => router.push('/(tabs)/addons')}
+  L 491  [onPress=]  onPress={onRemove}
+  L 516  [onPress=]  onPress={onPress}
+
+--- CONTEXT BLOCKS (±6 lines around router/details anchors) ---
+
+  >>> around L173 [router.push]:
+      167 |   }, []);
+      168 | 
+      169 |   const handleItemPress = (item: ContentItem) => {
+      170 |     const id = item.imdb_id || item.id;
+      171 |     const encodedId = encodeURIComponent(id);
+      172 |     // Minimal params for instant first paint — just name + poster
+ >>>  173 |     router.push({
+      174 |       pathname: `/details/${item.type}/${encodedId}`,
+      175 |       params: {
+      176 |         name: item.name || '',
+      177 |         poster: item.poster || '',
+      178 |       },
+      179 |     });
+      180 |   };
+      181 | 
+
+  >>> around L174 [details path]:
+      168 | 
+      169 |   const handleItemPress = (item: ContentItem) => {
+      170 |     const id = item.imdb_id || item.id;
+      171 |     const encodedId = encodeURIComponent(id);
+      172 |     // Minimal params for instant first paint — just name + poster
+      173 |     router.push({
+ >>>  174 |       pathname: `/details/${item.type}/${encodedId}`,
+      175 |       params: {
+      176 |         name: item.name || '',
+      177 |         poster: item.poster || '',
+      178 |       },
+      179 |     });
+      180 |   };
+      181 | 
+      182 |   // Handle continue watching item press
+
+  >>> around L185 [router.push]:
+      179 |     });
+      180 |   };
+      181 | 
+      182 |   // Handle continue watching item press
+      183 |   const handleContinueWatchingPress = (item: WatchProgress) => {
+      184 |     if (item.stream_info_hash || item.stream_url) {
+ >>>  185 |       router.push({
+      186 |         pathname: '/player',
+      187 |         params: {
+      188 |           infoHash: item.stream_info_hash || '',
+      189 |           directUrl: item.stream_url || '',
+      190 |           fileIdx: item.stream_file_idx != null ? String(item.stream_file_idx) : '',
+      191 |           filename: item.stream_filename || '',
+      192 |           title: item.title || '',
+      193 |           contentType: item.content_type,
+
+  >>> around L221 [router.push]:
+      215 |       if (parts.length >= 1) {
+      216 |         targetId = parts[0];
+      217 |       }
+      218 |     }
+      219 |     
+      220 |     const encodedId = encodeURIComponent(targetId);
+ >>>  221 |     router.push({
+      222 |       pathname: `/details/${targetType}/${encodedId}`,
+      223 |       params: {
+      224 |         name: item.title || '',
+      225 |         poster: item.poster || '',
+      226 |         resumeEpisodeId: item.content_type === 'series' ? item.content_id : '',
+      227 |         resumePosition: String(item.progress || 0),
+      228 |         resumeSeason: item.season !== undefined ? String(item.season) : '',
+      229 |         resumeEpisode: item.episode !== undefined ? String(item.episode) : '',
+
+  >>> around L222 [details path]:
+      216 |         targetId = parts[0];
+      217 |       }
+      218 |     }
+      219 |     
+      220 |     const encodedId = encodeURIComponent(targetId);
+      221 |     router.push({
+ >>>  222 |       pathname: `/details/${targetType}/${encodedId}`,
+      223 |       params: {
+      224 |         name: item.title || '',
+      225 |         poster: item.poster || '',
+      226 |         resumeEpisodeId: item.content_type === 'series' ? item.content_id : '',
+      227 |         resumePosition: String(item.progress || 0),
+      228 |         resumeSeason: item.season !== undefined ? String(item.season) : '',
+      229 |         resumeEpisode: item.episode !== undefined ? String(item.episode) : '',
+      230 |       },
+
+  >>> around L422 [router.push]:
+      416 | // Go To Addons Button (matches Addons page style)
+      417 | function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
+      418 |   const [isFocused, setIsFocused] = useState(false);
+      419 |   
+      420 |   return (
+      421 |     <Pressable 
+ >>>  422 |       onPress={() => router.push('/(tabs)/addons')}
+      423 |       onFocus={() => setIsFocused(true)}
+      424 |       onBlur={() => setIsFocused(false)}
+      425 |       style={[styles.addonsButton, isFocused && styles.addonsButtonFocused]}
+      426 |     >
+      427 |       <Ionicons name="extension-puzzle" size={20} color={colors.primary} />
+      428 |       <Text style={styles.addonsButtonText}>Install Addon</Text>
+      429 |     </Pressable>
+      430 |   );
+
+================================================================
+=== FILE: frontend\app\(tabs)\library.tsx
+================================================================
+=== TOTAL LINES: 479   CRLF: true
+
+--- ANCHORS (9) ---
+  L  79  [onPress=]  onPress={onRemove}
+  L 104  [onPress=]  onPress={onPress}
+  L 180  [router.push]  router.push({
+  L 181  [details path]  pathname: `/details/${item.type}/${encodedId}`,
+  L 181  [pathname:]  pathname: `/details/${item.type}/${encodedId}`,
+  L 183  [name: item]  name: item.name || '',
+  L 184  [poster: item]  poster: item.poster || '',
+  L 238  [onPress=]  onPress={() => { handleCardFocus(index); handleItemPress(item); }}
+  L 252  [onPress=]  onPress={() => setFilter(type)}
+
+--- CONTEXT BLOCKS (±6 lines around router/details anchors) ---
+
+  >>> around L180 [router.push]:
+      174 |     setRefreshing(false);
+      175 |   }, []);
+      176 | 
+      177 |   const handleItemPress = useCallback((item: ContentItem) => {
+      178 |     const id = item.imdb_id || item.id;
+      179 |     const encodedId = encodeURIComponent(id);
+ >>>  180 |     router.push({
+      181 |       pathname: `/details/${item.type}/${encodedId}`,
+      182 |       params: {
+      183 |         name: item.name || '',
+      184 |         poster: item.poster || '',
+      185 |       },
+      186 |     });
+      187 |   }, [router]);
+      188 | 
+
+  >>> around L181 [details path]:
+      175 |   }, []);
+      176 | 
+      177 |   const handleItemPress = useCallback((item: ContentItem) => {
+      178 |     const id = item.imdb_id || item.id;
+      179 |     const encodedId = encodeURIComponent(id);
+      180 |     router.push({
+ >>>  181 |       pathname: `/details/${item.type}/${encodedId}`,
+      182 |       params: {
+      183 |         name: item.name || '',
+      184 |         poster: item.poster || '',
+      185 |       },
+      186 |     });
+      187 |   }, [router]);
+      188 | 
+      189 |   const handleRemoveItem = useCallback(async (item: ContentItem) => {
+
+================================================================
+=== FILE: frontend\app\(tabs)\search.tsx
+================================================================
+=== TOTAL LINES: 197   CRLF: true
+
+--- ANCHORS (7) ---
+  L  10  [useLocalSearchPar]  import { useRouter, useLocalSearchParams } from 'expo-router';
+  L  19  [useLocalSearchPar]  const { q: queryParam } = useLocalSearchParams<{ q?: string }>();
+  L  61  [router.push]  router.push({
+  L  62  [details path]  pathname: `/details/${item.type}/${encodeURIComponent(item.id)}`,
+  L  62  [pathname:]  pathname: `/details/${item.type}/${encodeURIComponent(item.id)}`,
+  L  64  [name: item]  name: item.name || '',
+  L  65  [poster: item]  poster: item.poster || '',
+
+--- CONTEXT BLOCKS (±6 lines around router/details anchors) ---
+
+  >>> around L61 [router.push]:
+       55 |     setCurrentQuery(query);
+       56 |     setHasSearched(true);
+       57 |     await search(query);
+       58 |   }, [search, clearSearch]);
+       59 | 
+       60 |   const handleItemPress = (item: SearchResult) => {
+ >>>   61 |     router.push({
+       62 |       pathname: `/details/${item.type}/${encodeURIComponent(item.id)}`,
+       63 |       params: {
+       64 |         name: item.name || '',
+       65 |         poster: item.poster || '',
+       66 |         year: item.year ? String(item.year) : '',
+       67 |         imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+       68 |       },
+       69 |     });
+
+  >>> around L62 [details path]:
+       56 |     setHasSearched(true);
+       57 |     await search(query);
+       58 |   }, [search, clearSearch]);
+       59 | 
+       60 |   const handleItemPress = (item: SearchResult) => {
+       61 |     router.push({
+ >>>   62 |       pathname: `/details/${item.type}/${encodeURIComponent(item.id)}`,
+       63 |       params: {
+       64 |         name: item.name || '',
+       65 |         poster: item.poster || '',
+       66 |         year: item.year ? String(item.year) : '',
+       67 |         imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+       68 |       },
+       69 |     });
+       70 |   };
+
+================================================================
+=== FILE: frontend\app\search.tsx
+================================================================
+=== TOTAL LINES: 361   CRLF: true
+
+--- ANCHORS (12) ---
+  L  12  [useLocalSearchPar]  import { useLocalSearchParams, useRouter } from 'expo-router';
+  L  48  [onPress=]  onPress={onPress}
+  L  81  [onPress=]  onPress={onPress}
+  L  91  [useLocalSearchPar]  const { q } = useLocalSearchParams<{ q?: string }>();
+  L 120  [router.push]  router.push({
+  L 121  [details path]  pathname: `/details/${item.type}/${encodedId}`,
+  L 121  [pathname:]  pathname: `/details/${item.type}/${encodedId}`,
+  L 123  [name: item]  name: item.name || '',
+  L 124  [poster: item]  poster: item.poster || '',
+  L 150  [onPress=]  onPress={() => handleItemPress(item)}
+  L 165  [onPress=]  onPress={() => router.back()}
+  L 193  [onPress=]  onPress={handleSearch}
+
+--- CONTEXT BLOCKS (±6 lines around router/details anchors) ---
+
+  >>> around L120 [router.push]:
+      114 |     }
+      115 |   };
+      116 | 
+      117 |   const handleItemPress = (item: ContentItem) => {
+      118 |     const id = item.imdb_id || item.id;
+      119 |     const encodedId = encodeURIComponent(id);
+ >>>  120 |     router.push({
+      121 |       pathname: `/details/${item.type}/${encodedId}`,
+      122 |       params: {
+      123 |         name: item.name || '',
+      124 |         poster: item.poster || '',
+      125 |         background: item.background || '',
+      126 |         logo: item.logo || '',
+      127 |         year: item.year ? String(item.year) : '',
+      128 |         imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+
+  >>> around L121 [details path]:
+      115 |   };
+      116 | 
+      117 |   const handleItemPress = (item: ContentItem) => {
+      118 |     const id = item.imdb_id || item.id;
+      119 |     const encodedId = encodeURIComponent(id);
+      120 |     router.push({
+ >>>  121 |       pathname: `/details/${item.type}/${encodedId}`,
+      122 |       params: {
+      123 |         name: item.name || '',
+      124 |         poster: item.poster || '',
+      125 |         background: item.background || '',
+      126 |         logo: item.logo || '',
+      127 |         year: item.year ? String(item.year) : '',
+      128 |         imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+      129 |         description: item.description || '',
+
+================================================================
+=== FILE: frontend\app\category\[service]\[type].tsx
+================================================================
+=== TOTAL LINES: 393   CRLF: true
+
+--- ANCHORS (10) ---
+  L  13  [useLocalSearchPar]  import { useLocalSearchParams, useRouter } from 'expo-router';
+  L  52  [onPress=]  onPress={() => onPress(item)}
+  L  83  [useLocalSearchPar]  const { service, type } = useLocalSearchParams<{ service: string; type: string }>();
+  L 196  [router.push]  router.push({
+  L 197  [details path]  pathname: `/details/${item.type}/${encodedId}`,
+  L 197  [pathname:]  pathname: `/details/${item.type}/${encodedId}`,
+  L 199  [name: item]  name: item.name || '',
+  L 200  [poster: item]  poster: item.poster || '',
+  L 229  [onPress=]  onPress={handleItemPress}
+  L 260  [onPress=]  onPress={() => router.back()}
+
+--- CONTEXT BLOCKS (±6 lines around router/details anchors) ---
+
+  >>> around L196 [router.push]:
+      190 |     }
+      191 |   }, [fetchOnePage]);
+      192 | 
+      193 |   const handleItemPress = useCallback((item: ContentItem) => {
+      194 |     const id = item.imdb_id || item.id;
+      195 |     const encodedId = encodeURIComponent(id);
+ >>>  196 |     router.push({
+      197 |       pathname: `/details/${item.type}/${encodedId}`,
+      198 |       params: {
+      199 |         name: item.name || '',
+      200 |         poster: item.poster || '',
+      201 |         background: item.background || '',
+      202 |         logo: item.logo || '',
+      203 |         year: item.year ? String(item.year) : '',
+      204 |         imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+
+  >>> around L197 [details path]:
+      191 |   }, [fetchOnePage]);
+      192 | 
+      193 |   const handleItemPress = useCallback((item: ContentItem) => {
+      194 |     const id = item.imdb_id || item.id;
+      195 |     const encodedId = encodeURIComponent(id);
+      196 |     router.push({
+ >>>  197 |       pathname: `/details/${item.type}/${encodedId}`,
+      198 |       params: {
+      199 |         name: item.name || '',
+      200 |         poster: item.poster || '',
+      201 |         background: item.background || '',
+      202 |         logo: item.logo || '',
+      203 |         year: item.year ? String(item.year) : '',
+      204 |         imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+      205 |         description: item.description || '',
+
+================================================================
+=== FILE: frontend\src\components\ContentCard.tsx
+================================================================
+=== TOTAL LINES: 403   CRLF: true
+
+--- ANCHORS (2) ---
+  L 200  [poster: item]  poster: item.poster || '',
+  L 229  [onPress=]  onPress={onPress}
+
+--- CONTEXT BLOCKS (±6 lines around router/details anchors) ---
+
+================================================================
+=== FILE: frontend\app\details\[type]\[id].tsx
+================================================================
+=== TOTAL LINES: 1876   CRLF: true
+
+--- ANCHORS (40) ---
+  L  19  [useLocalSearchPar]  import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+  L  95  [onPress=]  onPress={onPress}
+  L 113  [onPress=]  onPress={onPress}
+  L 350  [onPress=]  onPress={onPress}
+  L 435  [onPress=]  onPress={onPress}
+  L 483  [useLocalSearchPar]  } = useLocalSearchParams<{
+  L 533  [router.push]  router.push({
+  L 534  [details path]  pathname: `/details/${type}/${baseIdLocal}`,
+  L 534  [pathname:]  pathname: `/details/${type}/${baseIdLocal}`,
+  L 555  [router.replace]  try { router.replace('/(tabs)/discover'); } catch (_) {}
+  L 676  [details path]  router.replace({ pathname: `/details/series/${baseId}` });
+  L 676  [router.replace]  router.replace({ pathname: `/details/series/${baseId}` });
+  L 676  [pathname:]  router.replace({ pathname: `/details/series/${baseId}` });
+  L 721  [router.replace]  // Expo Router uses router.replace() between episodes which re-renders this
+  L 855  [router.push]  router.push({
+  L 856  [pathname:]  pathname: '/player',
+  L 890  [router.push]  router.push({
+  L 891  [pathname:]  pathname: '/player',
+  L 930  [router.push]  router.push({
+  L 931  [pathname:]  pathname: '/player',
+  L1006  [router.push]  router.push({
+  L1007  [pathname:]  pathname: '/player',
+  L1028  [router.push]  router.push({
+  L1029  [details path]  pathname: `/details/${type}/${episodeId}`,
+  L1029  [pathname:]  pathname: `/details/${type}/${episodeId}`,
+  L1070  [onPress=]  <StreamCard stream={item} onPress={() => handleStreamSelect(item)} />
+  L1097  [onPress=]  onPress={() => handleEpisodePress(item)}
+  L1171  [onPress=]  onPress={handleBack}
+  L1227  [onPress=]  onPress={toggleLibrary}
+  L1253  [router.push]  <ChipButton key={`genre-${i}`} label={g} hasTVPreferredFocus={i === 0} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
+  L1253  [pathname:]  <ChipButton key={`genre-${i}`} label={g} hasTVPreferredFocus={i === 0} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
+  L1253  [onPress=]  <ChipButton key={`genre-${i}`} label={g} hasTVPreferredFocus={i === 0} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
+  L1265  [router.push]  <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d } })} />
+  L1265  [pathname:]  <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d } })} />
+  L1265  [onPress=]  <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d } })} />
+  L1277  [router.push]  <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c } })} />
+  L1277  [pathname:]  <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c } })} />
+  L1277  [onPress=]  <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c } })} />
+  L1300  [onPress=]  onPress={() => setSelectedSeason(season)}
+  L1331  [onPress=]  onPress={() => {
+
+--- CONTEXT BLOCKS (±6 lines around router/details anchors) ---
+
+  >>> around L533 [router.push]:
+      527 |         }) as any
+      528 |       );
+      529 |     } catch (_) {
+      530 |       // Fallback to old push-based behavior if navigation.reset throws
+      531 |       try { if (typeof (router as any).dismissAll === 'function') (router as any).dismissAll(); } catch (__) {}
+      532 |       setTimeout(() => {
+ >>>  533 |         router.push({
+      534 |           pathname: `/details/${type}/${baseIdLocal}`,
+      535 |           params: { selectedSeason: s, selectedEpisode: e },
+      536 |         });
+      537 |       }, 30);
+      538 |     }
+      539 |     return true;
+      540 |   }, [id, type, router, navigation]);
+      541 | 
+
+  >>> around L534 [details path]:
+      528 |       );
+      529 |     } catch (_) {
+      530 |       // Fallback to old push-based behavior if navigation.reset throws
+      531 |       try { if (typeof (router as any).dismissAll === 'function') (router as any).dismissAll(); } catch (__) {}
+      532 |       setTimeout(() => {
+      533 |         router.push({
+ >>>  534 |           pathname: `/details/${type}/${baseIdLocal}`,
+      535 |           params: { selectedSeason: s, selectedEpisode: e },
+      536 |         });
+      537 |       }, 30);
+      538 |     }
+      539 |     return true;
+      540 |   }, [id, type, router, navigation]);
+      541 | 
+      542 |   const handleBack = useCallback(() => {
+
+  >>> around L555 [router.replace]:
+      549 |     //   2. Movies / series-roots → router.back() to previous screen
+      550 |     //   3. Deep-linked (empty stack) → fall back to Discover tab
+      551 |     //   4. ALWAYS return true so Android can't force-exit
+      552 |     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      553 |       try { if (goToSeriesRootWithFocus()) return true; } catch (_) {}
+      554 |       try { router.back(); return true; } catch (_) {}
+ >>>  555 |       try { router.replace('/(tabs)/discover'); } catch (_) {}
+      556 |       return true;
+      557 |     });
+      558 |     return () => sub.remove();
+      559 |   }, [goToSeriesRootWithFocus]);
+      560 |   // ========================================================================
+      561 | 
+      562 | 
+      563 |   const router = useRouter();
+
+  >>> around L676 [details path]:
+      670 |   // this detail page via Play-Next autoplay, intercept back so they go to
+      671 |   // the episodes list (series root) instead of the previous episode's page.
+      672 |   // Matches Stremio: back from next-up screen = back to the show, not to EP-N-1.
+      673 |   useEffect(() => {
+      674 |     if (autoPlayParam !== 'true' || type !== 'series' || !baseId) return;
+      675 |     const handler = () => {
+ >>>  676 |       router.replace({ pathname: `/details/series/${baseId}` });
+      677 |       return true; // swallow the default back nav
+      678 |     };
+      679 |     const sub = BackHandler.addEventListener('hardwareBackPress', handler);
+      680 |     return () => sub.remove();
+      681 |   }, [autoPlayParam, type, baseId]);
+      682 | 
+      683 |   useEffect(() => {
+      684 |     if (content && library) {
+
+  >>> around L721 [router.replace]:
+      715 |   // loading screen has the series backdrop/logo (not a blank black screen).
+      716 |   const streamsLoadedFreshRef = useRef(false);
+      717 |   const autoPlayAttemptsRef = useRef(0);
+      718 |   const lastAutoPlayIdRef = useRef<string | null>(null);
+      719 | 
+      720 |   // CRITICAL: Reset the auto-play state when the episode id changes.
+ >>>  721 |   // Expo Router uses router.replace() between episodes which re-renders this
+      722 |   // component instead of unmounting it — so refs persist and would otherwise
+      723 |   // block the second/third/Nth auto-transition. Resetting here makes every
+      724 |   // new id behave like a fresh mount.
+      725 |   useEffect(() => {
+      726 |     if (id && id !== lastAutoPlayIdRef.current) {
+      727 |       lastAutoPlayIdRef.current = id;
+      728 |       autoPlayTriggeredRef.current = false;
+      729 |       streamsLoadedFreshRef.current = false;
+
+  >>> around L855 [router.push]:
+      849 |     }
+      850 |     
+      851 |     // Handle external URLs - route them to the internal player
+      852 |     if (stream.externalUrl || stream.requiresWebView) {
+      853 |       const streamUrl = stream.externalUrl || stream.url;
+      854 |       console.log('[DETAILS] Playing external URL in internal player:', streamUrl);
+ >>>  855 |       router.push({
+      856 |         pathname: '/player',
+      857 |         params: { 
+      858 |           directUrl: streamUrl,
+      859 |           title: contentTitle,
+      860 |           isLive: 'false',
+      861 |           contentType: cType,
+      862 |           contentId: subtitleContentId,
+      863 |           backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+
+  >>> around L890 [router.push]:
+      884 |       // Also include direct URLs from USAATV streams as fallbacks
+      885 |       const directFallbacks = streams
+      886 |         .filter(s => s !== stream && (s.directUrl || (s.url && !s.url.startsWith('/api/proxy/'))))
+      887 |         .map(s => s.directUrl || s.url)
+      888 |         .filter(Boolean);
+      889 |       
+ >>>  890 |       router.push({
+      891 |         pathname: '/player',
+      892 |         params: { 
+      893 |           directUrl: absoluteUrl,
+      894 |           title: contentTitle,
+      895 |           isLive: type === 'tv' ? 'true' : 'false',
+      896 |           contentType: cType,
+      897 |           contentId: subtitleContentId,
+      898 |           fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks, ...directFallbacks]),
+
+  >>> around L930 [router.push]:
+      924 |       
+      925 |       // Extract season/episode from content ID (e.g. tt123:1:2 → season=1, episode=2)
+      926 |       const idParts = (id || '').split(':');
+      927 |       const seasonNum = idParts.length >= 3 ? idParts[idParts.length - 2] : '';
+      928 |       const episodeNum = idParts.length >= 3 ? idParts[idParts.length - 1] : '';
+      929 |       
+ >>>  930 |       router.push({
+      931 |         pathname: '/player',
+      932 |         params: { 
+      933 |           infoHash: stream.infoHash,
+      934 |           title: contentTitle,
+      935 |           contentType: cType,
+      936 |           contentId: subtitleContentId,
+      937 |           fileIdx: stream.fileIdx !== undefined ? String(stream.fileIdx) : '',
+      938 |           filename: stream.filename || '',
+
+  >>> around L1006 [router.push]:
+     1000 |           })
+     1001 |           .filter(Boolean);
+     1002 |         
+     1003 |         allStreamUrls.push(...proxyFallbacks);
+     1004 |       }
+     1005 |       
+ >>> 1006 |       router.push({
+     1007 |         pathname: '/player',
+     1008 |         params: { 
+     1009 |           directUrl: streamUrl,
+     1010 |           title: contentTitle,
+     1011 |           isLive: type === 'tv' ? 'true' : 'false',
+     1012 |           contentType: cType,
+     1013 |           contentId: subtitleContentId,
+     1014 |           fallbackStreams: allStreamUrls.length > 0 ? JSON.stringify(allStreamUrls) : '',
+
+  >>> around L1028 [router.push]:
+     1022 |       });
+     1023 |     }
+     1024 |   };
+     1025 | 
+     1026 |   const handleEpisodePress = (episode: Episode) => {
+     1027 |     const episodeId = `${baseId || id}:${episode.season}:${episode.episode}`;
+ >>> 1028 |     router.push({
+     1029 |       pathname: `/details/${type}/${episodeId}`,
+     1030 |     });
+     1031 |   };
+     1032 | 
+     1033 |   const toggleLibrary = async () => {
+     1034 |     if (!content) return;
+     1035 |     try {
+     1036 |       if (inLibrary) {
+
+  >>> around L1029 [details path]:
+     1023 |     }
+     1024 |   };
+     1025 | 
+     1026 |   const handleEpisodePress = (episode: Episode) => {
+     1027 |     const episodeId = `${baseId || id}:${episode.season}:${episode.episode}`;
+     1028 |     router.push({
+ >>> 1029 |       pathname: `/details/${type}/${episodeId}`,
+     1030 |     });
+     1031 |   };
+     1032 | 
+     1033 |   const toggleLibrary = async () => {
+     1034 |     if (!content) return;
+     1035 |     try {
+     1036 |       if (inLibrary) {
+     1037 |         await api.library.remove(type!, content.id);
+
+  >>> around L1253 [router.push]:
+     1247 |           {/* Genre */}
+     1248 |           {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
+     1249 |             <View style={styles.chipSection}>
+     1250 |               <Text style={styles.chipLabel}>Genre</Text>
+     1251 |               <View style={styles.chipRow}>
+     1252 |                 {content.genre.slice(0, 4).map((g: string, i: number) => (
+ >>> 1253 |                   <ChipButton key={`genre-${i}`} label={g} hasTVPreferredFocus={i === 0} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
+     1254 |                 ))}
+     1255 |               </View>
+     1256 |             </View>
+     1257 |           )}
+     1258 | 
+     1259 |           {/* Director */}
+     1260 |           {content?.director && Array.isArray(content.director) && content.director.length > 0 && (
+     1261 |             <View style={styles.chipSection}>
+
+  >>> around L1265 [router.push]:
+     1259 |           {/* Director */}
+     1260 |           {content?.director && Array.isArray(content.director) && content.director.length > 0 && (
+     1261 |             <View style={styles.chipSection}>
+     1262 |               <Text style={styles.chipLabel}>Director</Text>
+     1263 |               <View style={styles.chipRow}>
+     1264 |                 {content.director.slice(0, 3).map((d: string, i: number) => (
+ >>> 1265 |                   <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d } })} />
+     1266 |                 ))}
+     1267 |               </View>
+     1268 |             </View>
+     1269 |           )}
+     1270 | 
+     1271 |           {/* Cast */}
+     1272 |           {content?.cast && Array.isArray(content.cast) && content.cast.length > 0 && (
+     1273 |             <View style={styles.chipSection}>
+
+  >>> around L1277 [router.push]:
+     1271 |           {/* Cast */}
+     1272 |           {content?.cast && Array.isArray(content.cast) && content.cast.length > 0 && (
+     1273 |             <View style={styles.chipSection}>
+     1274 |               <Text style={styles.chipLabel}>Cast</Text>
+     1275 |               <View style={styles.chipRow}>
+     1276 |                 {content.cast.slice(0, 6).map((c: string, i: number) => (
+ >>> 1277 |                   <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c } })} />
+     1278 |                 ))}
+     1279 |               </View>
+     1280 |             </View>
+     1281 |           )}
+     1282 | 
+     1283 |           {/* Season Selector for Series */}
+     1284 |           {type === 'series' && !isEpisodePage && seasons.length > 0 && (
+     1285 |             <View style={styles.seasonSection}>

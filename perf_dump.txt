@@ -1,0 +1,2091 @@
+
+================================================================
+=== [TAB_LAYOUT]  FILE: frontend\app\(tabs)\_layout.tsx
+================================================================
+=== TOTAL LINES: 165   CRLF: true
+
+    1 | import React, { useState } from 'react';
+    2 | import { useEffect, useRef } from 'react';
+    3 | import { Tabs } from 'expo-router';
+    4 | import { Ionicons } from '@expo/vector-icons';
+    5 | import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid } from 'react-native';
+    6 | import { useSafeAreaInsets } from 'react-native-safe-area-context';
+    7 | 
+    8 | export default function TabsLayout() {
+    9 |   // PATCH_V34_ROOT_SILENT_NO_OP — back at root does NOTHING visible.
+   10 |     // No toast (invisible on TV anyway), no exit, just absorb the press.
+   11 |     // Use HOME button on the remote to leave the app.
+   12 |     useEffect(() => {
+   13 |       if (Platform.OS !== "android") return;
+   14 |       const sub = BackHandler.addEventListener("hardwareBackPress", () => true);
+   15 |       return () => { try { sub.remove(); } catch (_) {} };
+   16 |     }, []);
+   17 | 
+   18 |   const insets = useSafeAreaInsets();
+   19 |   const { width, height } = useWindowDimensions();
+   20 |   const isTV = width > height || width > 800;
+   21 |   
+   22 |   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 20 : 10);
+   23 |   const tabBarHeight = isTV ? 80 : 65 + bottomPadding;
+   24 | 
+   25 |   return (
+   26 |     <Tabs
+   27 |       screenOptions={{
+   28 |         // PATCH_V14B_FREEZE_ON_BLUR_TABS
+   29 |         // PATCH_V40_NO_FREEZE — keep Discover mounted; back returns instantly.
+   30 |         freezeOnBlur: false,
+   31 |         lazy: true,
+   32 |         headerShown: false,
+   33 |         tabBarStyle: [
+   34 |           styles.tabBar,
+   35 |           isTV && styles.tabBarTV,
+   36 |           {
+   37 |             height: tabBarHeight,
+   38 |             paddingBottom: isTV ? 10 : bottomPadding,
+   39 |           }
+   40 |         ],
+   41 |         tabBarActiveTintColor: '#B8A05C',
+   42 |         tabBarInactiveTintColor: '#888888',
+   43 |         tabBarLabelStyle: [
+   44 |           styles.tabBarLabel,
+   45 |           isTV && styles.tabBarLabelTV,
+   46 |         ],
+   47 |         tabBarItemStyle: [
+   48 |           styles.tabBarItem,
+   49 |           isTV && styles.tabBarItemTV,
+   50 |         ],
+   51 |         tabBarButton: (props) => {
+   52 |           const [isFocused, setIsFocused] = useState(false);
+   53 |           return (
+   54 |             <Pressable
+   55 |               {...props}
+   56 |               onFocus={() => setIsFocused(true)}
+   57 |               onBlur={() => setIsFocused(false)}
+   58 |               style={({ focused }) => [
+   59 |                 props.style,
+   60 |                 (focused || isFocused) && styles.tabItemFocused,
+   61 |               ]}
+   62 |             />
+   63 |           );
+   64 |         },
+   65 |       }}
+   66 |     >
+   67 |       <Tabs.Screen
+   68 |         name="discover"
+   69 |         options={{
+   70 |           title: 'Discover',
+   71 |           tabBarIcon: ({ color, size, focused }) => (
+   72 |             <View style={focused && isTV ? styles.iconFocused : undefined}>
+   73 |               <Ionicons name="compass" size={isTV ? 28 : size} color={color} />
+   74 |             </View>
+   75 |           ),
+   76 |         }}
+   77 |       />
+   78 |       <Tabs.Screen
+   79 |         name="search"
+   80 |         options={{
+   81 |           title: 'Search',
+   82 |           tabBarIcon: ({ color, size, focused }) => (
+   83 |             <View style={focused && isTV ? styles.iconFocused : undefined}>
+   84 |               <Ionicons name="search" size={isTV ? 28 : size} color={color} />
+   85 |             </View>
+   86 |           ),
+   87 |         }}
+   88 |       />
+   89 |       <Tabs.Screen
+   90 |         name="library"
+   91 |         options={{
+   92 |           title: 'Library',
+   93 |           tabBarIcon: ({ color, size, focused }) => (
+   94 |             <View style={focused && isTV ? styles.iconFocused : undefined}>
+   95 |               <Ionicons name="bookmark" size={isTV ? 28 : size} color={color} />
+   96 |             </View>
+   97 |           ),
+   98 |         }}
+   99 |       />
+  100 |       <Tabs.Screen
+  101 |         name="addons"
+  102 |         options={{
+  103 |           title: 'Addons',
+  104 |           tabBarIcon: ({ color, size, focused }) => (
+  105 |             <View style={focused && isTV ? styles.iconFocused : undefined}>
+  106 |               <Ionicons name="extension-puzzle" size={isTV ? 28 : size} color={color} />
+  107 |             </View>
+  108 |           ),
+  109 |         }}
+  110 |       />
+  111 |       <Tabs.Screen
+  112 |         name="profile"
+  113 |         options={{
+  114 |           title: 'Profile',
+  115 |           tabBarIcon: ({ color, size, focused }) => (
+  116 |             <View style={focused && isTV ? styles.iconFocused : undefined}>
+  117 |               <Ionicons name="person" size={isTV ? 28 : size} color={color} />
+  118 |             </View>
+  119 |           ),
+  120 |         }}
+  121 |       />
+  122 |     </Tabs>
+  123 |   );
+  124 | }
+  125 | 
+  126 | const styles = StyleSheet.create({
+  127 |   tabBar: {
+  128 |     backgroundColor: '#1a1a1a',
+  129 |     borderTopColor: '#2a2a2a',
+  130 |     borderTopWidth: 1,
+  131 |     paddingTop: 8,
+  132 |   },
+  133 |   tabBarTV: {
+  134 |     paddingHorizontal: 40,
+  135 |     borderTopWidth: 2,
+  136 |     borderTopColor: '#333333',
+  137 |   },
+  138 |   tabBarLabel: {
+  139 |     fontSize: 11,
+  140 |     fontWeight: '600',
+  141 |   },
+  142 |   tabBarLabelTV: {
+  143 |     fontSize: 14,
+  144 |     fontWeight: '700',
+  145 |   },
+  146 |   tabBarItem: {
+  147 |     paddingVertical: 4,
+  148 |   },
+  149 |   tabBarItemTV: {
+  150 |     paddingVertical: 8,
+  151 |     paddingHorizontal: 20,
+  152 |     marginHorizontal: 10,
+  153 |     borderRadius: 8,
+  154 |   },
+  155 |   tabItemFocused: {
+  156 |     borderWidth: 2,
+  157 |     borderColor: '#B8A05C',
+  158 |     borderRadius: 8,
+  159 |     backgroundColor: 'rgba(184, 160, 92, 0.15)',
+  160 |   },
+  161 |   iconFocused: {
+  162 |     transform: [{ scale: 1.1 }],
+  163 |   },
+  164 | });
+  165 | 
+
+================================================================
+=== [ROOT_LAYOUT]  FILE: frontend\app\_layout.tsx
+================================================================
+=== TOTAL LINES: 19   CRLF: true
+
+    1 | import React from 'react';
+    2 | import { enableFreeze } from 'react-native-screens'; // PATCH_V14_FREEZE_IMPORT
+    3 | enableFreeze(true);
+    4 | import { Stack } from 'expo-router';
+    5 | import { StatusBar } from 'expo-status-bar';
+    6 | import { SafeAreaProvider } from 'react-native-safe-area-context';
+    7 | import { View } from 'react-native';
+    8 | 
+    9 | export default function RootLayout() {
+   10 |   return (
+   11 |     <SafeAreaProvider>
+   12 |       <View style={{ flex: 1, backgroundColor: '#0c0c0c' }}>
+   13 |         <StatusBar style="light" />
+   14 |         <Stack screenOptions={{ headerShown: false, animation: 'none', freezeOnBlur: true /* PATCH_V14_FREEZE_ON_BLUR_STACK */ }} />
+   15 |       </View>
+   16 |     </SafeAreaProvider>
+   17 |   );
+   18 | }
+   19 | 
+
+================================================================
+=== [DISCOVER]  FILE: frontend\app\(tabs)\discover.tsx
+================================================================
+=== TOTAL LINES: 795   CRLF: true
+
+    1 | import React, { useEffect, useCallback, useState, useMemo, useRef } from 'react';
+    2 | import {
+    3 |   View,
+    4 |   Text,
+    5 |   StyleSheet,
+    6 |   ScrollView,
+    7 |   RefreshControl,
+    8 |   ActivityIndicator,
+    9 |   Pressable,
+   10 |   FlatList,
+   11 |   useWindowDimensions,
+   12 |   findNodeHandle,
+   13 |   Platform,
+   14 |   InteractionManager,
+   15 | } from 'react-native';
+   16 | import { SafeAreaView } from 'react-native-safe-area-context';
+   17 | import { useRouter, useFocusEffect } from 'expo-router';
+   18 | import { Image } from 'expo-image';
+   19 | import { Ionicons } from '@expo/vector-icons';
+   20 | import { useContentStore } from '../../src/store/contentStore';
+   21 | import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
+   22 | import { ServiceRow } from '../../src/components/ServiceRow';
+   23 | import { ContentItem, api, WatchProgress } from '../../src/api/client';
+   24 | import { getCardWidth } from '../../src/components/ContentCard';
+   25 | import { colors } from '../../src/styles/colors';
+   26 | import { Image as RNImage } from 'react-native';
+   27 | 
+   28 | const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
+   29 | 
+   30 | // PATCH_V15B_LAZYMOUNT_COMPONENT
+   31 | // Defers child mounting by `delay` ms then waits for the next idle window
+   32 | // (InteractionManager) before rendering. Used to stagger discover service
+   33 | // rows so the JS thread is not pegged with N FlatLists on cold start.
+   34 | function LazyMount({ delay, children, placeholder }: { delay: number; children: React.ReactNode; placeholder?: React.ReactNode }) {
+   35 |   const [shouldMount, setShouldMount] = useState(delay <= 0);
+   36 |   useEffect(() => {
+   37 |     if (delay <= 0) return;
+   38 |     let cancelled = false;
+   39 |     const t = setTimeout(() => {
+   40 |       InteractionManager.runAfterInteractions(() => {
+   41 |         if (!cancelled) setShouldMount(true);
+   42 |       });
+   43 |     }, delay);
+   44 |     return () => { cancelled = true; clearTimeout(t); };
+   45 |   }, [delay]);
+   46 |   if (!shouldMount) return (placeholder ?? null) as any;
+   47 |   return <>{children}</>;
+   48 | }
+   49 | 
+   50 | export default function DiscoverScreen() {
+   51 |   const router = useRouter();
+   52 |   const { width, height } = useWindowDimensions();
+   53 |   const isTV = width > height || width > 800;
+   54 |   
+   55 |   // CRITICAL: Use zustand SELECTORS — only re-render when these specific fields change.
+   56 |   // Without selectors, the Discover page re-renders when ANY store field changes
+   57 |   // (e.g., when Details page loads streams), causing hundreds of poster images
+   58 |   // to re-render and blocking the JS thread for 3+ seconds.
+   59 |   const discoverData = useContentStore(s => s.discoverData);
+   60 |   const isLoadingDiscover = useContentStore(s => s.isLoadingDiscover);
+   61 |   const fetchDiscover = useContentStore(s => s.fetchDiscover);
+   62 |   const fetchAddons = useContentStore(s => s.fetchAddons);
+   63 |   const addons = useContentStore(s => s.addons);
+   64 |   const [refreshing, setRefreshing] = useState(false);
+   65 |   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
+   66 |   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+   67 |   const scrollViewRef = useRef<ScrollView>(null);
+   68 |   const sectionPositions = useRef<Record<string, number>>({});
+   69 |   const lastFocusedSection = useRef<string>('');
+   70 |   const lastCWFetchTime = useRef<number>(0);
+   71 | 
+   72 |   // Use same card width calculation as ContentCard for consistency
+   73 |   const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
+   74 |   const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
+   75 | 
+   76 |   // Fetch continue watching data
+   77 |   const fetchContinueWatching = useCallback(async () => {
+   78 |     try {
+   79 |       setIsLoadingProgress(true);
+   80 |       const response = await api.watchProgress.getAll();
+   81 |       setContinueWatching(response.continueWatching || []);
+   82 |       lastCWFetchTime.current = Date.now();
+   83 |     } catch (err) {
+   84 |       console.log('[Discover] Error fetching continue watching:', err);
+   85 |     } finally {
+   86 |       setIsLoadingProgress(false);
+   87 |     }
+   88 |   }, []);
+   89 | 
+   90 |   useEffect(() => {
+   91 |     fetchAddons();
+   92 |     fetchDiscover();
+   93 |     fetchContinueWatching();
+   94 |   }, []);
+   95 | 
+   96 |   // Re-fetch discover data AND continue watching when screen comes into focus
+   97 |   // This ensures newly installed addons show up immediately
+   98 |   useFocusEffect(
+   99 |     useCallback(() => {
+  100 |       const timeSinceLastFetch = Date.now() - lastCWFetchTime.current;
+  101 |       if (timeSinceLastFetch < 30000 && continueWatching.length >= 0) {
+  102 |         return;
+  103 |       }
+  104 |       const handle = InteractionManager.runAfterInteractions(() => {
+  105 |         fetchContinueWatching();
+  106 |         fetchDiscover(true); // Force refresh so new addon catalogs appear
+  107 |       });
+  108 |       return () => handle.cancel();
+  109 |     }, [fetchContinueWatching, continueWatching.length])
+  110 |   );
+  111 | 
+  112 |   // Check if there's any content to display
+  113 |   const hasContent = useMemo(() => {
+  114 |     if (!discoverData?.services) return false;
+  115 |     return Object.values(discoverData.services).some(
+  116 |       (content: any) => 
+  117 |         (content?.movies?.length > 0) || 
+  118 |         (content?.series?.length > 0) || 
+  119 |         (content?.channels?.length > 0)
+  120 |     );
+  121 |   }, [discoverData]);
+  122 | 
+  123 |   const onRefresh = useCallback(async () => {
+  124 |     setRefreshing(true);
+  125 |     await Promise.all([
+  126 |       fetchAddons(),
+  127 |       fetchDiscover(),
+  128 |       fetchContinueWatching(),
+  129 |     ]);
+  130 |     setRefreshing(false);
+  131 |   }, [fetchContinueWatching]);
+  132 | 
+  133 |   // Handle section focus - scroll parent to show category title
+  134 |   const handleSectionFocus = useCallback((sectionKey: string) => {
+  135 |     if (lastFocusedSection.current === sectionKey) return;
+  136 |     lastFocusedSection.current = sectionKey;
+  137 |     
+  138 |     const sectionY = sectionPositions.current[sectionKey];
+  139 |     if (sectionY !== undefined && scrollViewRef.current) {
+  140 |       // Small delay to override Android TV's auto-scroll (which only shows the card, not the title)
+  141 |       setTimeout(() => {
+  142 |         scrollViewRef.current?.scrollTo({ y: Math.max(0, sectionY - 10), animated: true });
+  143 |       }, 50);
+  144 |     }
+  145 |   }, []);
+  146 | 
+  147 |   // Row sync: keep all rows scrolled to the same horizontal offset
+  148 |   // (No longer needed — removed carousel anchor scrolling)
+  149 | 
+  150 |   // Item width for snap scrolling
+  151 |   const itemWidth = POSTER_WIDTH + 16;
+  152 | 
+  153 |   // PRE-FETCH meta on poster focus (D-pad hover) so backdrop is ready before click
+  154 |   const prefetchingRef = useRef<Set<string>>(new Set());
+  155 |   const handleItemFocus = useCallback((item: ContentItem) => {
+  156 |     const id = item.imdb_id || item.id;
+  157 |     if (!id || prefetchingRef.current.has(id) || getMetaCache(id)) return;
+  158 |     prefetchingRef.current.add(id);
+  159 |     // Fire-and-forget: fetch meta in background
+  160 |     api.content.getMeta(item.type, id).then((meta) => {
+  161 |       setMetaCache(id, meta);
+  162 |       // Also pre-download the backdrop image so it's in expo-image disk cache
+  163 |       if (meta.background) {
+  164 |         Image.prefetch(meta.background);
+  165 |       }
+  166 |     }).catch(() => {});
+  167 |   }, []);
+  168 | 
+  169 |   const handleItemPress = (item: ContentItem) => {
+  170 |     const id = item.imdb_id || item.id;
+  171 |     const encodedId = encodeURIComponent(id);
+  172 |     // Minimal params for instant first paint — just name + poster
+  173 |     router.push({
+  174 |       pathname: `/details/${item.type}/${encodedId}`,
+  175 |       params: {
+  176 |         name: item.name || '',
+  177 |         poster: item.poster || '',
+  178 |       },
+  179 |     });
+  180 |   };
+  181 | 
+  182 |   // Handle continue watching item press
+  183 |   const handleContinueWatchingPress = (item: WatchProgress) => {
+  184 |     if (item.stream_info_hash || item.stream_url) {
+  185 |       router.push({
+  186 |         pathname: '/player',
+  187 |         params: {
+  188 |           infoHash: item.stream_info_hash || '',
+  189 |           directUrl: item.stream_url || '',
+  190 |           fileIdx: item.stream_file_idx != null ? String(item.stream_file_idx) : '',
+  191 |           filename: item.stream_filename || '',
+  192 |           title: item.title || '',
+  193 |           contentType: item.content_type,
+  194 |           contentId: item.content_id,
+  195 |           poster: item.poster || '',
+  196 |           backdrop: item.backdrop || '',
+  197 |           logo: item.logo || '',
+  198 |           resumePosition: String(item.progress || 0),
+  199 |           season: item.season != null ? String(item.season) : '',
+  200 |           episode: item.episode != null ? String(item.episode) : '',
+  201 |           seriesId: item.series_id || '',
+  202 |         },
+  203 |       });
+  204 |       return;
+  205 |     }
+  206 |     
+  207 |     let targetId = item.content_id;
+  208 |     let targetType = item.content_type;
+  209 |     
+  210 |     if (item.series_id) {
+  211 |       targetId = item.series_id;
+  212 |       targetType = 'series';
+  213 |     } else if (item.content_type === 'series' && item.content_id.includes(':')) {
+  214 |       const parts = item.content_id.split(':');
+  215 |       if (parts.length >= 1) {
+  216 |         targetId = parts[0];
+  217 |       }
+  218 |     }
+  219 |     
+  220 |     const encodedId = encodeURIComponent(targetId);
+  221 |     router.push({
+  222 |       pathname: `/details/${targetType}/${encodedId}`,
+  223 |       params: {
+  224 |         name: item.title || '',
+  225 |         poster: item.poster || '',
+  226 |         resumeEpisodeId: item.content_type === 'series' ? item.content_id : '',
+  227 |         resumePosition: String(item.progress || 0),
+  228 |         resumeSeason: item.season !== undefined ? String(item.season) : '',
+  229 |         resumeEpisode: item.episode !== undefined ? String(item.episode) : '',
+  230 |       },
+  231 |     });
+  232 |   };
+  233 | 
+  234 |   // Handle removing item from continue watching
+  235 |   const handleRemoveFromContinueWatching = async (item: WatchProgress) => {
+  236 |     // Optimistic update - remove from UI immediately for instant feedback
+  237 |     setContinueWatching(prev => prev.filter(i => i.content_id !== item.content_id));
+  238 |     
+  239 |     // Then delete from server in background (don't await)
+  240 |     api.watchProgress.delete(item.content_id).catch(err => {
+  241 |       console.log('[Discover] Error removing from continue watching:', err);
+  242 |       // Optionally: restore the item if delete fails
+  243 |     });
+  244 |   };
+  245 | 
+  246 |   // Render a continue watching item (Stremio style)
+  247 |   const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) => (
+  248 |     <ContinueWatchingItem
+  249 |       item={item}
+  250 |       posterWidth={POSTER_WIDTH}
+  251 |       posterHeight={POSTER_HEIGHT}
+  252 |       isTV={isTV}
+  253 |       onPress={() => handleContinueWatchingPress(item)}
+  254 |       onRemove={() => handleRemoveFromContinueWatching(item)}
+  255 |       onSectionFocus={() => handleSectionFocus('continue-watching')}
+  256 |     />
+  257 |   );
+  258 | 
+  259 |   // Show loading only on initial load
+  260 |   if (isLoadingDiscover && !discoverData) {
+  261 |     return (
+  262 |       <SafeAreaView style={styles.container} edges={['top']}>
+  263 |         <View style={styles.loadingContainer}>
+  264 |           <ActivityIndicator size="large" color={colors.primary} />
+  265 |         </View>
+  266 |       </SafeAreaView>
+  267 |     );
+  268 |   }
+  269 | 
+  270 |   return (
+  271 |     <SafeAreaView style={styles.container} edges={['top']}>
+  272 |       {/* Welcome Screen - No Addons and No Continue Watching */}
+  273 |       {!hasContent && continueWatching.length === 0 && !isLoadingDiscover ? (
+  274 |         <View style={{ flex: 1 }}>
+  275 |           {/* Logo Header - always visible */}
+  276 |           <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
+  277 |             <Image
+  278 |               source={require('../../assets/images/logo_header.png')}
+  279 |               style={[styles.logoImage, isTV && styles.logoImageTV]}
+  280 |               contentFit="contain"
+  281 |             />
+  282 |             <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+  283 |               Privastream Cinema
+  284 |             </Text>
+  285 |           </View>
+  286 |           <View style={styles.welcomeContainer}>
+  287 |             <Ionicons name="extension-puzzle-outline" size={64} color={colors.primary} />
+  288 |             <Text style={[styles.welcomeTitle, isTV && styles.welcomeTitleTV]}>No Addons Installed</Text>
+  289 |             <Text style={[styles.welcomeSubtext, isTV && styles.welcomeSubtextTV]}>
+  290 |               Install addons to start streaming
+  291 |             </Text>
+  292 |             <GoToAddonsButton router={router} isTV={isTV} />
+  293 |           </View>
+  294 |         </View>
+  295 |       ) : (
+  296 |         /* Content area with fixed header */
+  297 |         <View style={{ flex: 1 }}>
+  298 |           {/* Fixed Logo Header */}
+  299 |           <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
+  300 |             <Image
+  301 |               source={require('../../assets/images/logo_header.png')}
+  302 |               style={[styles.logoImage, isTV && styles.logoImageTV]}
+  303 |               contentFit="contain"
+  304 |             />
+  305 |             <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+  306 |               Privastream Cinema
+  307 |             </Text>
+  308 |           </View>
+  309 | 
+  310 |           {/* Scrollable Content — ScrollView for smooth scrolling, rows are individually optimized */}
+  311 |           <ScrollView
+  312 |             ref={scrollViewRef}
+  313 |             style={styles.scrollView}
+  314 |             showsVerticalScrollIndicator={false}
+  315 |             scrollEventThrottle={16}
+  316 |             refreshControl={
+  317 |               <RefreshControl
+  318 |                 refreshing={refreshing}
+  319 |                 onRefresh={onRefresh}
+  320 |                 tintColor={colors.primary}
+  321 |                 colors={[colors.primary]}
+  322 |               />
+  323 |             }
+  324 |           >
+  325 |           {/* Continue Watching Section */}
+  326 |           {continueWatching.length > 0 && (
+  327 |             <View 
+  328 |               style={styles.section}
+  329 |               onLayout={(e) => { sectionPositions.current['continue-watching'] = e.nativeEvent.layout.y; }}
+  330 |             >
+  331 |               <View style={[styles.sectionHeader, isTV && styles.sectionHeaderTV]}>
+  332 |                 <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>
+  333 |                   Continue Watching
+  334 |                 </Text>
+  335 |               </View>
+  336 |               <FlatList
+  337 |                 data={continueWatching}
+  338 |                 renderItem={renderContinueWatchingItem}
+  339 |                 keyExtractor={(cwItem) => cwItem.content_id}
+  340 |                 horizontal
+  341 |                 showsHorizontalScrollIndicator={false}
+  342 |                 contentContainerStyle={[styles.rowContent, isTV && styles.rowContentTV]}
+  343 |                 removeClippedSubviews={true}
+  344 |                 windowSize={5}
+  345 |                 initialNumToRender={3}
+  346 |                 // PATCH_V14B_CW_VIRT
+  347 |                 maxToRenderPerBatch={3}
+  348 |                 updateCellsBatchingPeriod={50}
+  349 |               />
+  350 |             </View>
+  351 |           )}
+  352 |           
+  353 |           {/* Content Rows from Addons */}
+  354 |           {(() => {
+  355 |             let rowIdx = 0;
+  356 |             return Object.entries(discoverData?.services || {}).map(([serviceName, content]) => {
+  357 |             const hasMoviesInName = serviceName.toLowerCase().includes('movie');
+  358 |             const hasSeriesInName = serviceName.toLowerCase().includes('series');
+  359 |             const hasChannelsInName = serviceName.toLowerCase().includes('channel');
+  360 |             
+  361 |             return (
+  362 |               <LazyMount key={serviceName} delay={0} /* PATCH_V39_NO_STAGGER — no stagger; FlatList handles deferral */ placeholder={<View style={{ height: 240 }} />}> {/* PATCH_V15B_LAZYMOUNT_USAGE */}
+  363 |                 {content?.movies && content.movies.length > 0 && (
+  364 |                   <View onLayout={(e) => { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}>
+  365 |                     <ServiceRow
+  366 |                       title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
+  367 |                       serviceName={serviceName}
+  368 |                       contentType="movies"
+  369 |                       items={content.movies}
+  370 |                       onItemPress={handleItemPress}
+  371 |                       onItemFocus={handleItemFocus}
+  372 |                       onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
+  373 |                       rowIndex={rowIdx++}
+  374 |                     />
+  375 |                   </View>
+  376 |                 )}
+  377 |                 {content?.series && content.series.length > 0 && (
+  378 |                   <View onLayout={(e) => { sectionPositions.current[`${serviceName}-series`] = e.nativeEvent.layout.y; }}>
+  379 |                     <ServiceRow
+  380 |                       title={hasSeriesInName ? serviceName : `${serviceName} Series`}
+  381 |                       serviceName={serviceName}
+  382 |                       contentType="series"
+  383 |                       items={content.series}
+  384 |                       onItemPress={handleItemPress}
+  385 |                       onItemFocus={handleItemFocus}
+  386 |                       onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
+  387 |                       rowIndex={rowIdx++}
+  388 |                     />
+  389 |                   </View>
+  390 |                 )}
+  391 |                 {content?.channels && content.channels.length > 0 && (
+  392 |                   <View onLayout={(e) => { sectionPositions.current[`${serviceName}-channels`] = e.nativeEvent.layout.y; }}>
+  393 |                     <ServiceRow
+  394 |                       title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
+  395 |                       serviceName={serviceName}
+  396 |                       contentType="channels"
+  397 |                       items={content.channels.map((ch: any) => ({ ...ch, type: 'tv' as const }))}
+  398 |                       onItemPress={handleItemPress}
+  399 |                       onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
+  400 |                       rowIndex={rowIdx++}
+  401 |                     />
+  402 |                   </View>
+  403 |                 )}
+  404 |               </LazyMount>
+  405 |             );
+  406 |           });
+  407 |           })()}
+  408 |           <View style={styles.bottomPadding} />
+  409 |         </ScrollView>
+  410 |         </View>
+  411 |       )}
+  412 |     </SafeAreaView>
+  413 |   );
+  414 | }
+  415 | 
+  416 | // Go To Addons Button (matches Addons page style)
+  417 | function GoToAddonsButton({ router, isTV }: { router: any; isTV: boolean }) {
+  418 |   const [isFocused, setIsFocused] = useState(false);
+  419 |   
+  420 |   return (
+  421 |     <Pressable 
+  422 |       onPress={() => router.push('/(tabs)/addons')}
+  423 |       onFocus={() => setIsFocused(true)}
+  424 |       onBlur={() => setIsFocused(false)}
+  425 |       style={[styles.addonsButton, isFocused && styles.addonsButtonFocused]}
+  426 |     >
+  427 |       <Ionicons name="extension-puzzle" size={20} color={colors.primary} />
+  428 |       <Text style={styles.addonsButtonText}>Install Addon</Text>
+  429 |     </Pressable>
+  430 |   );
+  431 | }
+  432 | 
+  433 | // Continue Watching Item (Stremio style with play overlay and X on poster)
+  434 | function ContinueWatchingItem({ 
+  435 |   item, 
+  436 |   posterWidth, 
+  437 |   posterHeight, 
+  438 |   isTV, 
+  439 |   onPress, 
+  440 |   onRemove,
+  441 |   onSectionFocus,
+  442 | }: { 
+  443 |   item: WatchProgress; 
+  444 |   posterWidth: number; 
+  445 |   posterHeight: number; 
+  446 |   isTV: boolean;
+  447 |   onPress: () => void;
+  448 |   onRemove: () => void;
+  449 |   onSectionFocus?: () => void;
+  450 | }) {
+  451 |   const [isFocused, setIsFocused] = useState(false);
+  452 |   const [xFocused, setXFocused] = useState(false);
+  453 |   const percentWatched = item.percent_watched || 0;
+  454 | 
+  455 |   // Refs for explicit focus navigation between poster and X button
+  456 |   const posterRef = useRef<View>(null);
+  457 |   const xButtonRef = useRef<View>(null);
+  458 |   const [posterTag, setPosterTag] = useState<number | undefined>(undefined);
+  459 |   const [xButtonTag, setXButtonTag] = useState<number | undefined>(undefined);
+  460 | 
+  461 |   useEffect(() => {
+  462 |     // Get native node handles after mount for nextFocusUp/Down wiring
+  463 |     // findNodeHandle is not supported on web — skip entirely
+  464 |     if (Platform.OS === 'web') return;
+  465 |     const pTag = posterRef.current ? findNodeHandle(posterRef.current) : null;
+  466 |     const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
+  467 |     if (pTag) setPosterTag(pTag);
+  468 |     if (xTag) setXButtonTag(xTag);
+  469 |   }, []);
+  470 | 
+  471 |   const handleFocus = () => {
+  472 |     setIsFocused(true);
+  473 |     onSectionFocus?.();
+  474 |   };
+  475 | 
+  476 |   const handleXFocus = () => {
+  477 |     setXFocused(true);
+  478 |     onSectionFocus?.();
+  479 |   };
+  480 | 
+  481 |   const xButtonSize = isTV ? 30 : 24;
+  482 |   // Total height of the X row = button size + top padding (8px)
+  483 |   const xRowHeight = xButtonSize + 8;
+  484 |   
+  485 |   return (
+  486 |     <View style={[styles.continueItem, { width: posterWidth }]}>
+  487 |       {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
+  488 |       <View style={[styles.xButtonRow, { paddingTop: 8 }]}>
+  489 |         <Pressable
+  490 |           ref={xButtonRef}
+  491 |           onPress={onRemove}
+  492 |           onFocus={handleXFocus}
+  493 |           onBlur={() => setXFocused(false)}
+  494 |           accessible={true}
+  495 |           accessibilityRole="button"
+  496 |           accessibilityLabel={`Remove ${item.title} from Continue Watching`}
+  497 |           android_ripple={null}
+  498 |           nextFocusDown={posterTag}
+  499 |           style={[
+  500 |             styles.removeButtonOverlay,
+  501 |             { width: xButtonSize, height: xButtonSize, borderRadius: xButtonSize / 2 },
+  502 |             xFocused && styles.removeButtonOverlayFocused,
+  503 |           ]}
+  504 |         >
+  505 |           <Ionicons
+  506 |             name="close"
+  507 |             size={isTV ? 16 : 12}
+  508 |             color={xFocused ? '#fff' : 'rgba(255,255,255,0.9)'}
+  509 |           />
+  510 |         </Pressable>
+  511 |       </View>
+  512 | 
+  513 |       {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
+  514 |       <Pressable
+  515 |         ref={posterRef}
+  516 |         onPress={onPress}
+  517 |         onFocus={handleFocus}
+  518 |         onBlur={() => setIsFocused(false)}
+  519 |         android_ripple={null}
+  520 |         nextFocusUp={xButtonTag}
+  521 |         style={[
+  522 |           styles.continueImageWrapper,
+  523 |           { marginTop: -xRowHeight },
+  524 |           isFocused && styles.continueImageWrapperFocused,
+  525 |         ]}
+  526 |       >
+  527 |         <View style={[styles.continueImageContainer, { height: posterHeight }]}>
+  528 |           {(item.poster || item.backdrop) ? (
+  529 |             <Image
+  530 |               source={{ uri: item.poster || item.backdrop || '' }}
+  531 |               style={styles.continueImage}
+  532 |               contentFit="cover"
+  533 |             />
+  534 |           ) : (
+  535 |             <RNImage
+  536 |               source={NO_POSTER_IMAGE}
+  537 |               style={styles.continueImage}
+  538 |               resizeMode="cover"
+  539 |             />
+  540 |           )}
+  541 |           
+  542 |           {/* Play overlay */}
+  543 |           <View style={styles.playOverlay}>
+  544 |             <View style={styles.playButton}>
+  545 |               <Ionicons name="play" size={isTV ? 32 : 24} color={colors.textPrimary} />
+  546 |             </View>
+  547 |           </View>
+  548 |           
+  549 |           {/* Progress bar */}
+  550 |           <View style={styles.progressContainer}>
+  551 |             <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
+  552 |           </View>
+  553 |         </View>
+  554 |       </Pressable>
+  555 | 
+  556 |       {/* Title below poster */}
+  557 |       <View style={styles.continueTitleContent}>
+  558 |         <Text style={styles.continueTitleText} numberOfLines={2}>
+  559 |           {item.title}
+  560 |         </Text>
+  561 |         {item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
+  562 |           <Text style={styles.continueEpisode}>
+  563 |             S{item.season} E{item.episode}
+  564 |           </Text>
+  565 |         )}
+  566 |       </View>
+  567 |     </View>
+  568 |   );
+  569 | }
+  570 | 
+  571 | const styles = StyleSheet.create({
+  572 |   container: {
+  573 |     flex: 1,
+  574 |     backgroundColor: colors.background,
+  575 |   },
+  576 |   loadingContainer: {
+  577 |     flex: 1,
+  578 |     justifyContent: 'center',
+  579 |     alignItems: 'center',
+  580 |   },
+  581 |   scrollView: {
+  582 |     flex: 1,
+  583 |     overflow: 'visible',
+  584 |   },
+  585 |   bottomPadding: {
+  586 |     height: 100,
+  587 |   },
+  588 |   // Welcome Screen
+  589 |   welcomeContainer: {
+  590 |     flex: 1,
+  591 |     justifyContent: 'center',
+  592 |     alignItems: 'center',
+  593 |     paddingHorizontal: 40,
+  594 |   },
+  595 |   welcomeLogo: {
+  596 |     width: 200,
+  597 |     height: 100,
+  598 |     marginBottom: 24,
+  599 |   },
+  600 |   welcomeLogoTV: {
+  601 |     width: 280,
+  602 |     height: 140,
+  603 |   },
+  604 |   welcomeText: {
+  605 |     color: colors.primary,
+  606 |     fontSize: 22,
+  607 |     fontWeight: '600',
+  608 |     marginBottom: 8,
+  609 |   },
+  610 |   welcomeTextTV: {
+  611 |     fontSize: 28,
+  612 |   },
+  613 |   welcomeTitle: {
+  614 |     fontSize: 20,
+  615 |     fontWeight: '600',
+  616 |     color: colors.primary,
+  617 |     marginTop: 16,
+  618 |   },
+  619 |   welcomeTitleTV: {
+  620 |     fontSize: 24,
+  621 |   },
+  622 |   welcomeSubtext: {
+  623 |     color: colors.primary,
+  624 |     fontSize: 14,
+  625 |     textAlign: 'center',
+  626 |     marginTop: 8,
+  627 |   },
+  628 |   welcomeSubtextTV: {
+  629 |     fontSize: 16,
+  630 |   },
+  631 |   addonsButton: {
+  632 |     flexDirection: 'row',
+  633 |     alignItems: 'center',
+  634 |     backgroundColor: colors.surface,
+  635 |     paddingHorizontal: 24,
+  636 |     paddingVertical: 14,
+  637 |     borderRadius: 8,
+  638 |     gap: 8,
+  639 |     borderWidth: 3,
+  640 |     borderColor: 'transparent',
+  641 |     marginTop: 24,
+  642 |   },
+  643 |   addonsButtonFocused: {
+  644 |     borderColor: colors.primary,
+  645 |     backgroundColor: 'rgba(184, 160, 92, 0.15)',
+  646 |   },
+  647 |   addonsButtonText: {
+  648 |     color: colors.primary,
+  649 |     fontSize: 16,
+  650 |     fontWeight: '600',
+  651 |   },
+  652 |   // Section styles
+  653 |   section: {
+  654 |     marginBottom: 32,
+  655 |     overflow: 'visible',
+  656 |   },
+  657 |   sectionHeader: {
+  658 |     paddingHorizontal: 16,
+  659 |     marginBottom: 16,
+  660 |   },
+  661 |   sectionHeaderTV: {
+  662 |     paddingHorizontal: 48,
+  663 |   },
+  664 |   sectionTitle: {
+  665 |     color: colors.primary,
+  666 |     fontSize: 18,
+  667 |     fontWeight: '600',
+  668 |   },
+  669 |   sectionTitleTV: {
+  670 |     fontSize: 22,
+  671 |   },
+  672 |   rowContent: {
+  673 |     paddingHorizontal: 16,
+  674 |   },
+  675 |   rowContentTV: {
+  676 |     paddingLeft: 48,
+  677 |     paddingRight: 108,
+  678 |   },
+  679 |   // Continue watching item - Stremio style
+  680 |   continueItem: {
+  681 |     marginRight: 16,
+  682 |   },
+  683 |   // X button row - sits above poster, right-aligned
+  684 |   xButtonRow: {
+  685 |     alignItems: 'flex-end',
+  686 |     zIndex: 10,
+  687 |     paddingRight: 8,
+  688 |   },
+  689 |   continueImageWrapper: {
+  690 |     borderRadius: 6,
+  691 |     borderWidth: 3,
+  692 |     borderColor: 'transparent',
+  693 |     overflow: 'hidden',
+  694 |   },
+  695 |   continueImageWrapperFocused: {
+  696 |     borderColor: colors.primary,
+  697 |   },
+  698 |   continueImageContainer: {
+  699 |     backgroundColor: colors.backgroundLight,
+  700 |     position: 'relative',
+  701 |   },
+  702 |   continueImage: {
+  703 |     width: '100%',
+  704 |     height: '100%',
+  705 |   },
+  706 |   playOverlay: {
+  707 |     ...StyleSheet.absoluteFillObject,
+  708 |     justifyContent: 'center',
+  709 |     alignItems: 'center',
+  710 |   },
+  711 |   playButton: {
+  712 |     width: 56,
+  713 |     height: 56,
+  714 |     borderRadius: 28,
+  715 |     backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  716 |     justifyContent: 'center',
+  717 |     alignItems: 'center',
+  718 |     borderWidth: 2,
+  719 |     borderColor: colors.textPrimary,
+  720 |   },
+  721 |   progressContainer: {
+  722 |     position: 'absolute',
+  723 |     bottom: 0,
+  724 |     left: 0,
+  725 |     right: 0,
+  726 |     height: 4,
+  727 |     backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  728 |   },
+  729 |   progressBar: {
+  730 |     height: '100%',
+  731 |     backgroundColor: colors.textPrimary,
+  732 |   },
+  733 |   continueTitleText: {
+  734 |     color: colors.primary,
+  735 |     fontSize: 12,
+  736 |     fontWeight: '500',
+  737 |     textAlign: 'center',
+  738 |     paddingHorizontal: 4,
+  739 |   },
+  740 |   continueEpisode: {
+  741 |     color: colors.primaryDark,
+  742 |     fontSize: 11,
+  743 |     textAlign: 'center',
+  744 |     marginTop: 2,
+  745 |   },
+  746 |   continueTitleContent: {
+  747 |     paddingTop: 6,
+  748 |   },
+  749 |   // X button overlaid on top-right of poster
+  750 |   removeButtonOverlay: {
+  751 |     backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  752 |     justifyContent: 'center',
+  753 |     alignItems: 'center',
+  754 |     borderWidth: 2,
+  755 |     borderColor: 'transparent',
+  756 |   },
+  757 |   removeButtonOverlayFocused: {
+  758 |     borderColor: colors.primary,
+  759 |     backgroundColor: 'rgba(184, 160, 92, 0.5)',
+  760 |     transform: [{ scale: 1.2 }],
+  761 |   },
+  762 |   // Logo header
+  763 |   logoHeader: {
+  764 |     flexDirection: 'row',
+  765 |     alignItems: 'center',
+  766 |     paddingHorizontal: 16,
+  767 |     paddingTop: 8,
+  768 |     paddingBottom: 12,
+  769 |   },
+  770 |   logoHeaderTV: {
+  771 |     paddingHorizontal: 48,
+  772 |     paddingTop: 12,
+  773 |     paddingBottom: 16,
+  774 |   },
+  775 |   logoImage: {
+  776 |     width: 44,
+  777 |     height: 44,
+  778 |   },
+  779 |   logoImageTV: {
+  780 |     width: 64,
+  781 |     height: 64,
+  782 |   },
+  783 |   logoText: {
+  784 |     color: colors.primary,
+  785 |     fontSize: 18,
+  786 |     fontWeight: '700',
+  787 |     marginLeft: 10,
+  788 |     letterSpacing: 0.5,
+  789 |   },
+  790 |   logoTextTV: {
+  791 |     fontSize: 24,
+  792 |     marginLeft: 14,
+  793 |   },
+  794 | });
+  795 | 
+
+================================================================
+=== [SERVICE_ROW]  FILE: frontend\src\components\ServiceRow.tsx
+================================================================
+=== TOTAL LINES: 321   CRLF: true
+
+    1 | import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
+    2 | import {
+    3 |   View,
+    4 |   Text,
+    5 |   StyleSheet,
+    6 |   FlatList,
+    7 |   useWindowDimensions,
+    8 |   InteractionManager,
+    9 | } from 'react-native';
+   10 | import { ContentCard, getCardWidth } from './ContentCard';
+   11 | import { ContentItem } from '../api/client';
+   12 | import apiClient from '../api/client';
+   13 | import { colors } from '../styles/colors';
+   14 | 
+   15 | const ITEM_GAP = 16;
+   16 | const TV_PADDING_LEFT = 48;
+   17 | const TV_PADDING_RIGHT = 48;
+   18 | const MOBILE_PADDING = 16;
+   19 | 
+   20 | // Anchor position: the row starts scrolling once focus reaches this card index.
+   21 | // 4 means: posters 1-5 free movement, poster 6 triggers first scroll.
+   22 | const TV_SCROLL_ANCHOR = 4;
+   23 | 
+   24 | // Lazy wrapper — only mounts the real ServiceRow content after a staggered delay.
+   25 | // This prevents all horizontal FlatLists from mounting at once and blocking the JS thread.
+   26 | // PATCH_V43B_SEQUENTIAL_MOUNT — Singleton mount queue. Row N+1 only mounts after row N
+   27 | // has signaled "painted". Guarantees serial mounting; JS thread is never
+   28 | // asked to mount two FlatLists at once. Adapts to device speed.
+   29 | const mountQueue: { rowIndex: number; grant: () => void }[] = [];
+   30 | let currentMountTicket = 0;
+   31 | 
+   32 | function requestMountToken(rowIndex: number): Promise<void> {
+   33 |   return new Promise((resolve) => {
+   34 |     if (rowIndex <= currentMountTicket) {
+   35 |       resolve();
+   36 |       return;
+   37 |     }
+   38 |     mountQueue.push({ rowIndex, grant: resolve });
+   39 |     mountQueue.sort((a, b) => a.rowIndex - b.rowIndex);
+   40 |   });
+   41 | }
+   42 | 
+   43 | function releaseMountToken(rowIndex: number) {
+   44 |   if (rowIndex >= currentMountTicket) {
+   45 |     currentMountTicket = rowIndex + 1;
+   46 |   }
+   47 |   while (mountQueue.length > 0 && mountQueue[0].rowIndex <= currentMountTicket) {
+   48 |     const next = mountQueue.shift()!;
+   49 |     requestAnimationFrame(() => next.grant());
+   50 |   }
+   51 | }
+   52 | 
+   53 | const LazyMount: React.FC<{ height: number; rowIndex: number; children: React.ReactNode }> = memo(({ height, rowIndex, children }) => {
+   54 |   const [shouldRender, setShouldRender] = useState(rowIndex === 0);
+   55 |   const hasReleasedRef = useRef(false);
+   56 | 
+   57 |   useEffect(() => {
+   58 |     if (shouldRender) return;
+   59 |     let cancelled = false;
+   60 |     requestMountToken(rowIndex).then(() => {
+   61 |       if (!cancelled) setShouldRender(true);
+   62 |     });
+   63 |     return () => { cancelled = true; };
+   64 |   }, [rowIndex, shouldRender]);
+   65 | 
+   66 |   const handleLayout = useCallback(() => {
+   67 |     if (hasReleasedRef.current) return;
+   68 |     hasReleasedRef.current = true;
+   69 |     InteractionManager.runAfterInteractions(() => releaseMountToken(rowIndex));
+   70 |   }, [rowIndex]);
+   71 | 
+   72 |   useEffect(() => {
+   73 |     return () => {
+   74 |       if (!hasReleasedRef.current) {
+   75 |         hasReleasedRef.current = true;
+   76 |         releaseMountToken(rowIndex);
+   77 |       }
+   78 |     };
+   79 |   }, [rowIndex]);
+   80 | 
+   81 |   if (!shouldRender) {
+   82 |     return <View style={{ height, backgroundColor: 'transparent' }} />;
+   83 |   }
+   84 | 
+   85 |   return <View onLayout={handleLayout}>{children}</View>;
+   86 | });
+   87 | 
+   88 | interface ServiceRowProps {
+   89 |   title: string;
+   90 |   serviceName: string;
+   91 |   contentType: 'movies' | 'series' | 'channels';
+   92 |   items: ContentItem[];
+   93 |   onItemPress: (item: ContentItem) => void;
+   94 |   onItemFocus?: (item: ContentItem) => void;
+   95 |   onSectionFocus?: () => void;
+   96 |   isFirstRow?: boolean;
+   97 |   rowIndex?: number;
+   98 | }
+   99 | 
+  100 | export const ServiceRow: React.FC<ServiceRowProps> = memo(({
+  101 |   title,
+  102 |   serviceName,
+  103 |   contentType,
+  104 |   items: initialItems,
+  105 |   onItemPress,
+  106 |   onItemFocus,
+  107 |   onSectionFocus,
+  108 |   isFirstRow = false,
+  109 |   rowIndex = 0,
+  110 | }) => {
+  111 |   const { width: screenWidth, height } = useWindowDimensions();
+  112 |   const isTV = screenWidth > height || screenWidth > 800;
+  113 | 
+  114 |   const cardWidth = getCardWidth(screenWidth, isTV, 'medium');
+  115 |   const itemTotalWidth = cardWidth + ITEM_GAP;
+  116 |   const paddingLeft = isTV ? TV_PADDING_LEFT : MOBILE_PADDING;
+  117 | 
+  118 |   const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
+  119 | 
+  120 |   const skipRef = useRef(initialItems?.length || 0);
+  121 |   const hasMoreRef = useRef(true);
+  122 |   const isFetchingRef = useRef(false);
+  123 |   const lastFetchTime = useRef(0);
+  124 |   const totalRef = useRef(initialItems?.length || 0);
+  125 |   const itemCountRef = useRef(initialItems?.length || 0);
+  126 |   const flatListRef = useRef<FlatList>(null);
+  127 | 
+  128 |   // Track whether user is navigating horizontally within this row
+  129 |   const isNavigatingInRowRef = useRef(false);
+  130 |   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  131 | 
+  132 |   const validItems = useMemo(() => 
+  133 |     (allItems || []).filter(Boolean), [allItems]);
+  134 |   
+  135 |   itemCountRef.current = validItems.length;
+  136 |   
+  137 |   if (validItems.length === 0) return null;
+  138 | 
+  139 |   const fetchMore = useCallback(async () => {
+  140 |     const now = Date.now();
+  141 |     if (isFetchingRef.current || !hasMoreRef.current) return;
+  142 |     if (now - lastFetchTime.current < 2000) return;
+  143 | 
+  144 |     isFetchingRef.current = true;
+  145 |     lastFetchTime.current = now;
+  146 |     try {
+  147 |       const resp = await apiClient.get(
+  148 |         `/api/content/category/${encodeURIComponent(serviceName)}/${contentType}?skip=${skipRef.current}&limit=100`
+  149 |       );
+  150 |       const newItems: ContentItem[] = resp.data.items || [];
+  151 |       if (newItems.length > 0) {
+  152 |         setAllItems(prev => {
+  153 |           const ids = new Set(prev.map(i => i.id || i.imdb_id));
+  154 |           const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
+  155 |           const updated = [...prev, ...unique];
+  156 |           totalRef.current = updated.length;
+  157 |           return updated;
+  158 |         });
+  159 |         skipRef.current += newItems.length;
+  160 |       }
+  161 |       hasMoreRef.current = resp.data.hasMore !== undefined 
+  162 |         ? resp.data.hasMore 
+  163 |         : newItems.length >= 20;
+  164 |     } catch {
+  165 |       hasMoreRef.current = false;
+  166 |     } finally {
+  167 |       isFetchingRef.current = false;
+  168 |     }
+  169 |   }, [serviceName, contentType]);
+  170 | 
+  171 |   // Card focus handler
+  172 |   const handleCardFocus = useCallback((index: number) => {
+  173 |     // Cancel any pending blur timer — user is still in this row
+  174 |     if (blurTimerRef.current) {
+  175 |       clearTimeout(blurTimerRef.current);
+  176 |       blurTimerRef.current = null;
+  177 |     }
+  178 | 
+  179 |     onSectionFocus?.();
+  180 |     
+  181 |     // Pre-fetch meta data for the focused item
+  182 |     const focusedItem = validItems[index];
+  183 |     if (focusedItem && onItemFocus) {
+  184 |       onItemFocus(focusedItem);
+  185 |     }
+  186 | 
+  187 |     if (isTV && flatListRef.current && isNavigatingInRowRef.current) {
+  188 |       // HORIZONTAL NAVIGATION — apply smooth 1-card scroll
+  189 |       const targetOffset = Math.max(0, (index - TV_SCROLL_ANCHOR) * itemTotalWidth);
+  190 |       flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
+  191 |     }
+  192 |     // If isNavigatingInRowRef is false, user entered from another row via up/down
+  193 |     // → DON'T scroll, just let the selector land where Android TV placed it
+  194 | 
+  195 |     // Mark this row as active for horizontal navigation
+  196 |     isNavigatingInRowRef.current = true;
+  197 | 
+  198 |     // Pre-fetch when near end
+  199 |     if (index >= totalRef.current - 15 && hasMoreRef.current) {
+  200 |       fetchMore();
+  201 |     }
+  202 |   }, [onSectionFocus, onItemFocus, validItems, fetchMore, itemTotalWidth, isTV]);
+  203 | 
+  204 |   // Card blur handler — detect when user leaves this row
+  205 |   const handleCardBlur = useCallback(() => {
+  206 |     // Set timer: if no card in this row gets focus within 150ms,
+  207 |     // user has left this row (pressed up/down)
+  208 |     blurTimerRef.current = setTimeout(() => {
+  209 |       isNavigatingInRowRef.current = false;
+  210 |     }, 150);
+  211 |   }, []);
+  212 | 
+  213 |   const handleEndReached = useCallback(() => {
+  214 |     if (!isFetchingRef.current && hasMoreRef.current) {
+  215 |       fetchMore();
+  216 |     }
+  217 |   }, [fetchMore]);
+  218 | 
+  219 |   const getItemLayout = useCallback((_data: any, index: number) => ({
+  220 |     length: itemTotalWidth,
+  221 |     offset: paddingLeft + (index * itemTotalWidth),
+  222 |     index,
+  223 |   }), [itemTotalWidth, paddingLeft]);
+  224 | 
+  225 |   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
+  226 |     <ContentCard
+  227 |       item={item}
+  228 |       onPress={() => onItemPress(item)}
+  229 |       onCardFocus={() => handleCardFocus(index)}
+  230 |       onCardBlur={handleCardBlur}
+  231 |       showTitle={true}
+  232 |       hasTVPreferredFocus={isFirstRow && index === 0}
+  233 |       isFirstInRow={index === 0}
+  234 |       isLastInRow={index === itemCountRef.current - 1}
+  235 |     />
+  236 |   ), [onItemPress, handleCardFocus, handleCardBlur, isFirstRow]);
+  237 | 
+  238 |   const keyExtractor = useCallback((item: ContentItem) => 
+  239 |     item.id || item.imdb_id || `${item.name}`, []);
+  240 | 
+  241 |   // PATCH_V43B_SEQUENTIAL_MOUNT — Row 0 mounts immediately; subsequent rows mount
+  242 |   // in order after the previous row paints (signaled via onLayout).
+  243 | 
+  244 |   return (
+  245 |     <LazyMount height={200} rowIndex={rowIndex}>
+  246 |       <View style={styles.container}>
+  247 |         <View style={[styles.header, isTV && styles.headerTV]}>
+  248 |           <Text style={[styles.title, isTV && styles.titleTV]}>
+  249 |             {title || serviceName || 'Content'}
+  250 |           </Text>
+  251 |         </View>
+  252 |         
+  253 |         <FlatList
+  254 |           ref={flatListRef}
+  255 |           horizontal
+  256 |           data={validItems}
+  257 |           extraData={validItems.length}
+  258 |           renderItem={renderItem}
+  259 |           keyExtractor={keyExtractor}
+  260 |           getItemLayout={getItemLayout}
+  261 |           showsHorizontalScrollIndicator={false}
+  262 |           contentContainerStyle={[
+  263 |             styles.scrollContent,
+  264 |             isTV && styles.scrollContentTV,
+  265 |           ]}
+  266 |           style={styles.flatListStyle}
+  267 |           initialNumToRender={2} /* PATCH_V43B_SEQUENTIAL_MOUNT — first paint is 2 cards */
+  268 |           maxToRenderPerBatch={3} /* PATCH_V41_COLDSTART_BUDGET — smaller render chunks; more JS yields */
+  269 |           updateCellsBatchingPeriod={50}
+  270 |           windowSize={5}
+  271 |           removeClippedSubviews={false} /* PATCH_V43B_SEQUENTIAL_MOUNT — TV focus stability */
+  272 |           onEndReached={handleEndReached}
+  273 |           onEndReachedThreshold={3}
+  274 |         />
+  275 |       </View>
+  276 |     </LazyMount>
+  277 |   );
+  278 | });
+  279 | 
+  280 | export const MetaRow = ServiceRow;
+  281 | 
+  282 | const styles = StyleSheet.create({
+  283 |   container: {
+  284 |     marginBottom: 8,
+  285 |     overflow: 'visible',
+  286 |   },
+  287 |   header: {
+  288 |     flexDirection: 'row',
+  289 |     justifyContent: 'space-between',
+  290 |     alignItems: 'center',
+  291 |     paddingHorizontal: 16,
+  292 |     marginBottom: 8,
+  293 |   },
+  294 |   headerTV: {
+  295 |     paddingHorizontal: TV_PADDING_LEFT,
+  296 |     marginBottom: 6,
+  297 |   },
+  298 |   title: {
+  299 |     color: colors.primary,
+  300 |     fontSize: 18,
+  301 |     fontWeight: '600',
+  302 |     letterSpacing: 0.5,
+  303 |   },
+  304 |   titleTV: {
+  305 |     fontSize: 22,
+  306 |   },
+  307 |   scrollContent: {
+  308 |     paddingLeft: MOBILE_PADDING,
+  309 |     paddingRight: MOBILE_PADDING + 32,
+  310 |     paddingVertical: 4,
+  311 |   },
+  312 |   scrollContentTV: {
+  313 |     paddingLeft: TV_PADDING_LEFT,
+  314 |     paddingRight: TV_PADDING_RIGHT + 80,
+  315 |     paddingVertical: 4,
+  316 |   },
+  317 |   flatListStyle: {
+  318 |     overflow: 'visible',
+  319 |   },
+  320 | });
+  321 | 
+
+================================================================
+=== [CONTENT_CARD]  FILE: frontend\src\components\ContentCard.tsx
+================================================================
+=== TOTAL LINES: 403   CRLF: true
+
+    1 | import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
+    2 | import {
+    3 |   View,
+    4 |   StyleSheet,
+    5 |   Pressable,
+    6 |   useWindowDimensions,
+    7 |   Text,
+    8 |   Alert,
+    9 |   findNodeHandle,
+   10 |   Image as RNImage,
+   11 | } from 'react-native';
+   12 | import { Image } from 'expo-image';
+   13 | import { Ionicons } from '@expo/vector-icons';
+   14 | import { ContentItem, SearchResult, api } from '../api/client';
+   15 | import { useContentStore } from '../store/contentStore'; // PATCH_V19C_FOCUS_PREFETCH
+   16 | import { colors, posterShapes } from '../styles/colors';
+   17 | import Constants from 'expo-constants';
+   18 | 
+   19 | // Fallback image for missing posters
+   20 | const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
+   21 | 
+   22 | // Build backend image proxy URL for posters that fail to load directly
+   23 | const getProxiedPosterUrl = (originalUrl: string): string => {
+   24 |   const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
+   25 |   return `${backendUrl}/api/proxy/image?url=${encodeURIComponent(originalUrl)}`;
+   26 | };
+   27 | 
+   28 | 
+   29 | interface ContentCardProps {
+   30 |   item: ContentItem | SearchResult;
+   31 |   onPress: () => void;
+   32 |   onCardFocus?: () => void;
+   33 |   size?: 'small' | 'medium' | 'large';
+   34 |   posterShape?: 'poster' | 'landscape' | 'square';
+   35 |   showTitle?: boolean;
+   36 |   showProgress?: number;
+   37 |   inLibrary?: boolean;
+   38 |   onLibraryChange?: () => void;
+   39 |   watched?: boolean;
+   40 |   hasTVPreferredFocus?: boolean;
+   41 |   isFirstInRow?: boolean;
+   42 |   isLastInRow?: boolean;
+   43 |   onCardBlur?: () => void;
+   44 | }
+   45 | 
+   46 | export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 'medium') => {
+   47 |   if (isTV) {
+   48 |     const numCards = 6;
+   49 |     const horizontalPadding = 80;
+   50 |     const gapsBetweenCards = (numCards - 1) * 16;
+   51 |     let cardWidth = (screenWidth - horizontalPadding - gapsBetweenCards) / numCards;
+   52 |     return Math.min(cardWidth, 180);
+   53 |   } else {
+   54 |     const baseWidth = Math.min(screenWidth, 500);
+   55 |     const CARD_WIDTH = (baseWidth - 48) / 3;
+   56 |     return size === 'small' ? CARD_WIDTH * 0.85 : size === 'large' ? CARD_WIDTH * 1.15 : CARD_WIDTH;
+   57 |   }
+   58 | };
+   59 | 
+   60 | // Helper to get native tag from a ref — works on both old and new RN architectures
+   61 | const getNativeTag = (ref: any): number | null => {
+   62 |   if (!ref) return null;
+   63 |   // Try findNodeHandle (works on old architecture)
+   64 |   try {
+   65 |     const tag = findNodeHandle(ref);
+   66 |     if (tag && tag > 0) return tag;
+   67 |   } catch (_e) {}
+   68 |   // Try _nativeTag (works on both architectures)
+   69 |   if (ref._nativeTag && ref._nativeTag > 0) return ref._nativeTag;
+   70 |   // Try __nativeTag
+   71 |   if (ref.__nativeTag && ref.__nativeTag > 0) return ref.__nativeTag;
+   72 |   return null;
+   73 | };
+   74 | 
+   75 | const ContentCardComponent: React.FC<ContentCardProps> = ({
+   76 |   item,
+   77 |   onPress,
+   78 |   onCardFocus,
+   79 |   size = 'medium',
+   80 |   posterShape = 'poster',
+   81 |   showTitle = true,
+   82 |   showProgress,
+   83 |   inLibrary = false,
+   84 |   onLibraryChange,
+   85 |   watched = false,
+   86 |   hasTVPreferredFocus = false,
+   87 |   isFirstInRow = false,
+   88 |   isLastInRow = false,
+   89 |   onCardBlur,
+   90 | }) => {
+   91 |   const { width, height } = useWindowDimensions();
+   92 |   const [isFocused, setIsFocused] = useState(false);
+   93 |   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
+   94 |   const [posterError, setPosterError] = useState(false);
+   95 |   const [useProxy, setUseProxy] = useState(false);
+   96 |   const pressableRef = useRef<View>(null);
+   97 |   const [selfTag, setSelfTag] = useState<number>(0);
+   98 |   
+   99 |   const isTV = width > height || width > 800;
+  100 |   const cardWidth = getCardWidth(width, isTV, size);
+  101 |   const aspectRatio = posterShapes[posterShape];
+  102 |   const cardHeight = cardWidth * aspectRatio;
+  103 | 
+  104 |   // Get native tag via onLayout (fires after native view is fully laid out)
+  105 |   const handleLayout = useCallback(() => {
+  106 |     if ((isFirstInRow || isLastInRow) && pressableRef.current) {
+  107 |       const tag = getNativeTag(pressableRef.current);
+  108 |       if (tag && tag !== selfTag) {
+  109 |         setSelfTag(tag);
+  110 |       }
+  111 |     }
+  112 |   }, [isFirstInRow, isLastInRow, selfTag]);
+  113 | 
+  114 |   // Also try on mount and when isFirst/isLast changes
+  115 |   useEffect(() => {
+  116 |     if ((isFirstInRow || isLastInRow) && pressableRef.current) {
+  117 |       // Small delay to ensure native view is ready
+  118 |       const timer = setTimeout(() => {
+  119 |         if (pressableRef.current) {
+  120 |           const tag = getNativeTag(pressableRef.current);
+  121 |           if (tag && tag > 0) setSelfTag(tag);
+  122 |         }
+  123 |       }, 100);
+  124 |       return () => clearTimeout(timer);
+  125 |     }
+  126 |   }, [isFirstInRow, isLastInRow]);
+  127 | 
+  128 |   // PATCH_V37_KILL_V19C_PREFETCH — V19C focus prefetch DISABLED.
+  129 | 
+  130 |   //   Original reason for disable: scrolling D-pad across posters queues
+  131 | 
+  132 |   //   many delayed prefetches, hammering the backend and fragmenting the
+  133 | 
+  134 |   //   JS thread → laggy D-pad. (Matches the handoff warning verbatim.)
+  135 | 
+  136 |   //   To re-enable: remove this marker and any "if (false) {" guard added
+  137 | 
+  138 |   //   below. Original V19C comment was:
+  139 | // PATCH_V19C_FOCUS_PREFETCH — schedule a stream prefetch ~800ms after focus so
+  140 |   // flicking rows on the D-pad doesn't fire dozens of network requests.
+  141 |   const _prefetchTimerRef = useRef<any>(null);
+  142 | 
+  143 |   const handleFocus = useCallback(() => {
+  144 |     setIsFocused(true);
+  145 |     onCardFocus?.();
+  146 |     // Schedule prefetch
+  147 |     if (_prefetchTimerRef.current) clearTimeout(_prefetchTimerRef.current);
+  148 |     _prefetchTimerRef.current = setTimeout(() => {
+  149 |       _prefetchTimerRef.current = null;
+  150 |       try {
+  151 |         const _itemAny: any = item;
+  152 |         const _type: string | undefined = _itemAny?.type || (_itemAny?.imdb_id ? 'movie' : undefined);
+  153 |         const _id: string | undefined = _itemAny?.imdb_id || _itemAny?.id;
+  154 |         if (_type && _id) {
+  155 |           const _store: any = useContentStore.getState();
+  156 |           if (typeof _store.prefetchStreams === 'function') {
+  157 |             // V38_V19C_KILL — V19C focus prefetch disabled. Was hammering the backend
+  158 |             // during rapid D-pad nav across posters → laggy. The handoff explicitly
+  159 |             // said this should be rolled back. To re-enable: uncomment the next line.
+  160 |             // _store.prefetchStreams(_type, _id);
+  161 |           }
+  162 |         }
+  163 |       } catch { /* prefetch is best-effort */ }
+  164 |     }, 800);
+  165 |   }, [onCardFocus, item]);
+  166 | 
+  167 |   const handleBlur = useCallback(() => {
+  168 |     setIsFocused(false);
+  169 |     onCardBlur?.();
+  170 |     if (_prefetchTimerRef.current) {
+  171 |       clearTimeout(_prefetchTimerRef.current);
+  172 |       _prefetchTimerRef.current = null;
+  173 |     }
+  174 |   }, [onCardBlur]);
+  175 | 
+  176 |   const handleLongPress = useCallback(async () => {
+  177 |     const contentId = item.imdb_id || item.id;
+  178 |     const contentName = item.name || item.title || 'this item';
+  179 |     
+  180 |     Alert.alert(
+  181 |       isInLibrary ? 'Remove from Library?' : 'Add to Library?',
+  182 |       isInLibrary 
+  183 |         ? `Remove "${contentName}" from your library?`
+  184 |         : `Add "${contentName}" to your library?`,
+  185 |       [
+  186 |         { text: 'Cancel', style: 'cancel' },
+  187 |         {
+  188 |           text: isInLibrary ? 'Remove' : 'Add',
+  189 |           style: isInLibrary ? 'destructive' : 'default',
+  190 |           onPress: async () => {
+  191 |             try {
+  192 |               if (isInLibrary) {
+  193 |                 await api.library.remove(contentId);
+  194 |                 setIsInLibrary(false);
+  195 |               } else {
+  196 |                 await api.library.add({
+  197 |                   content_id: contentId,
+  198 |                   content_type: item.type || 'movie',
+  199 |                   name: contentName,
+  200 |                   poster: item.poster || '',
+  201 |                 });
+  202 |                 setIsInLibrary(true);
+  203 |               }
+  204 |               onLibraryChange?.();
+  205 |             } catch (error) {
+  206 |               console.log('Library error:', error);
+  207 |               Alert.alert('Error', 'Failed to update library');
+  208 |             }
+  209 |           },
+  210 |         },
+  211 |       ]
+  212 |     );
+  213 |   }, [item, isInLibrary, onLibraryChange]);
+  214 | 
+  215 |   if (!item) return null;
+  216 | 
+  217 |   // Build focus trapping props
+  218 |   const focusTrapProps: any = {};
+  219 |   if (isLastInRow && selfTag > 0) {
+  220 |     focusTrapProps.nextFocusRight = selfTag;
+  221 |   }
+  222 |   if (isFirstInRow && selfTag > 0) {
+  223 |     focusTrapProps.nextFocusLeft = selfTag;
+  224 |   }
+  225 | 
+  226 |   return (
+  227 |     <Pressable
+  228 |       ref={pressableRef}
+  229 |       onPress={onPress}
+  230 |       onLongPress={handleLongPress}
+  231 |       delayLongPress={500}
+  232 |       onFocus={handleFocus}
+  233 |       onBlur={handleBlur}
+  234 |       onLayout={handleLayout}
+  235 |       android_ripple={null}
+  236 |       hasTVPreferredFocus={hasTVPreferredFocus}
+  237 |       {...focusTrapProps}
+  238 |       style={[styles.container, { width: cardWidth }]}
+  239 |       accessible={true}
+  240 |       accessibilityRole="button"
+  241 |       accessibilityLabel={item.name || item.title || 'Content'}
+  242 |       accessibilityHint="Long press to add or remove from library"
+  243 |     >
+  244 |       {/* Poster Container - Focus border only around this */}
+  245 |       <View style={[
+  246 |         styles.posterContainer,
+  247 |         { height: cardHeight },
+  248 |         isFocused && styles.posterFocused,
+  249 |       ]}>
+  250 |         {/* Image or Placeholder */}
+  251 |         <View style={styles.imageWrapper}>
+  252 |           {item.poster && !posterError ? (
+  253 |             <Image
+  254 |               source={{ uri: useProxy ? getProxiedPosterUrl(item.poster) : item.poster }}
+  255 |               style={styles.posterImage}
+  256 |               contentFit="cover"
+  257 |               recyclingKey={`${item.id || item.imdb_id}${useProxy ? '-proxy' : ''}`}
+  258 |               cachePolicy="memory-disk"
+  259 |               onError={() => {
+  260 |                 if (!useProxy && item.poster) {
+  261 |                   // First failure: retry through backend proxy (bypasses CDN hotlink blocking)
+  262 |                   setUseProxy(true);
+  263 |                 } else {
+  264 |                   // Proxy also failed: show placeholder
+  265 |                   setPosterError(true);
+  266 |                 }
+  267 |               }}
+  268 |             />
+  269 |           ) : (
+  270 |             <RNImage
+  271 |               source={NO_POSTER_IMAGE}
+  272 |               style={styles.posterImage}
+  273 |               resizeMode="cover"
+  274 |             />
+  275 |           )}
+  276 |         </View>
+  277 |         
+  278 |         {/* Library indicator */}
+  279 |         {isInLibrary && (
+  280 |           <View style={styles.libraryBadge}>
+  281 |             <Ionicons name="bookmark" size={12} color={colors.textPrimary} />
+  282 |           </View>
+  283 |         )}
+  284 |         
+  285 |         {/* Watched checkmark indicator - opposite corner from library badge (Stremio-style) */}
+  286 |         {(watched || (showProgress !== undefined && showProgress >= 90)) && (
+  287 |           <View style={styles.watchedBadge}>
+  288 |             <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+  289 |           </View>
+  290 |         )}
+  291 |         
+  292 |         {/* Progress bar */}
+  293 |         {showProgress !== undefined && showProgress > 0 && (
+  294 |           <View style={styles.progressContainer}>
+  295 |             <View style={styles.progressBackground} />
+  296 |             <View style={[styles.progressBar, { width: `${Math.min(showProgress, 100)}%` }]} />
+  297 |           </View>
+  298 |         )}
+  299 |       </View>
+  300 |       
+  301 |       {/* Title bar - OUTSIDE poster */}
+  302 |       {showTitle && (item.name || item.title) && (
+  303 |         <View style={styles.titleContainer}>
+  304 |           <Text style={[styles.title, isTV && styles.titleTV]} numberOfLines={2}>
+  305 |             {item.name || item.title}
+  306 |           </Text>
+  307 |         </View>
+  308 |       )}
+  309 |     </Pressable>
+  310 |   );
+  311 | };
+  312 | 
+  313 | export const ContentCard = memo(ContentCardComponent);
+  314 | 
+  315 | const styles = StyleSheet.create({
+  316 |   container: {
+  317 |     marginRight: 16,
+  318 |     marginBottom: 2,
+  319 |   },
+  320 |   posterContainer: {
+  321 |     borderRadius: 6,
+  322 |     overflow: 'visible',
+  323 |     backgroundColor: colors.backgroundLight,
+  324 |     position: 'relative',
+  325 |     borderWidth: 3,
+  326 |     borderColor: 'transparent',
+  327 |   },
+  328 |   posterFocused: {
+  329 |     borderColor: colors.primary,
+  330 |   },
+  331 |   imageWrapper: {
+  332 |     width: '100%',
+  333 |     height: '100%',
+  334 |     borderRadius: 4,
+  335 |     overflow: 'hidden',
+  336 |   },
+  337 |   posterImage: {
+  338 |     width: '100%',
+  339 |     height: '100%',
+  340 |     backgroundColor: colors.backgroundLight,
+  341 |   },
+  342 |   placeholder: {
+  343 |     ...StyleSheet.absoluteFillObject,
+  344 |     justifyContent: 'center',
+  345 |     alignItems: 'center',
+  346 |     backgroundColor: colors.backgroundLight,
+  347 |   },
+  348 |   libraryBadge: {
+  349 |     position: 'absolute',
+  350 |     top: 8,
+  351 |     right: 8,
+  352 |     backgroundColor: colors.primary,
+  353 |     borderRadius: 4,
+  354 |     padding: 4,
+  355 |   },
+  356 |   watchedBadge: {
+  357 |     position: 'absolute',
+  358 |     top: 6,
+  359 |     left: 6,
+  360 |     backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  361 |     borderRadius: 10,
+  362 |     padding: 1,
+  363 |   },
+  364 |   progressContainer: {
+  365 |     position: 'absolute',
+  366 |     bottom: 12,
+  367 |     left: 12,
+  368 |     right: 12,
+  369 |     height: 4,
+  370 |     borderRadius: 4,
+  371 |     overflow: 'hidden',
+  372 |   },
+  373 |   progressBackground: {
+  374 |     position: 'absolute',
+  375 |     top: 0,
+  376 |     left: 0,
+  377 |     right: 0,
+  378 |     bottom: 0,
+  379 |     backgroundColor: colors.textPrimary,
+  380 |     opacity: 0.3,
+  381 |   },
+  382 |   progressBar: {
+  383 |     height: '100%',
+  384 |     backgroundColor: colors.textPrimary,
+  385 |     borderRadius: 4,
+  386 |   },
+  387 |   titleContainer: {
+  388 |     paddingTop: 6,
+  389 |     paddingHorizontal: 4,
+  390 |     height: 38,
+  391 |   },
+  392 |   title: {
+  393 |     color: colors.primary,
+  394 |     fontSize: 12,
+  395 |     fontWeight: '500',
+  396 |     textAlign: 'center',
+  397 |     lineHeight: 16,
+  398 |   },
+  399 |   titleTV: {
+  400 |     fontSize: 13,
+  401 |   },
+  402 | });
+  403 | 
+
+================================================================
+=== [DETAILS_HEAD]  FILE: frontend\app\details\[type]\[id].tsx
+================================================================
+=== TOTAL LINES: 1876   CRLF: true
+
+    1 | import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+    2 | import {
+    3 |   View,
+    4 |   Text,
+    5 |   StyleSheet,
+    6 |   ScrollView,
+    7 |   Pressable,
+    8 |   TouchableOpacity,
+    9 |   ActivityIndicator,
+   10 |   Dimensions,
+   11 |   Linking,
+   12 |   FlatList,
+   13 |   Image as RNImage,
+   14 |   Animated,
+   15 |   Easing,
+   16 |   BackHandler,
+   17 |   Platform,
+   18 | } from 'react-native';
+   19 | import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+   20 | import { useNavigation, CommonActions } from '@react-navigation/native';
+   21 | import { Ionicons } from '@expo/vector-icons';
+   22 | import { Image } from 'expo-image';
+   23 | import Constants from 'expo-constants';
+   24 | import { useContentStore, getMetaCache, setMetaCache } from '../../../src/store/contentStore';
+   25 | 
+   26 | // Fallback image for missing posters
+   27 | const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
+   28 | 
+   29 | import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
+   30 | import AsyncStorage from '@react-native-async-storage/async-storage';
+   31 | 
+   32 | const { width, height } = Dimensions.get('window');
+   33 | 
+   34 | // Stremio-style animated indeterminate loading bar. Renders a thin gold
+   35 | // segment that slides across a dark track. Pure Animated.Value so it runs
+   36 | // on the native thread and doesn't stutter on Firestick.
+   37 | function AutoPlayLoadingBar() {
+   38 |   const translateX = useRef(new Animated.Value(-100)).current;
+   39 | 
+   40 |   useEffect(() => {
+   41 |     const loop = Animated.loop(
+   42 |       Animated.sequence([
+   43 |         Animated.timing(translateX, {
+   44 |           toValue: 260,
+   45 |           duration: 1200,
+   46 |           easing: Easing.inOut(Easing.ease),
+   47 |           useNativeDriver: true,
+   48 |         }),
+   49 |         Animated.timing(translateX, {
+   50 |           toValue: -100,
+   51 |           duration: 0,
+   52 |           useNativeDriver: true,
+   53 |         }),
+   54 |       ])
+   55 |     );
+   56 |     loop.start();
+   57 |     return () => loop.stop();
+   58 |   }, [translateX]);
+   59 | 
+   60 |   return (
+   61 |     <View style={{ width: 260, height: 4, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 2, overflow: 'hidden' }}>
+   62 |       <Animated.View
+   63 |         style={{
+   64 |           position: 'absolute',
+   65 |           width: 100,
+   66 |           height: 4,
+   67 |           backgroundColor: '#B8A05C',
+   68 |           borderRadius: 2,
+   69 |           transform: [{ translateX }],
+   70 |         }}
+   71 |       />
+   72 |     </View>
+   73 |   );
+   74 | }
+   75 | 
+   76 | // Focusable Button Component
+   77 | function FocusableButton({ 
+   78 |   onPress, 
+   79 |   style, 
+   80 |   focusedStyle,
+   81 |   children,
+   82 |   disabled = false,
+   83 | }: {
+   84 |   onPress?: () => void;
+   85 |   style: any;
+   86 |   focusedStyle?: any;
+   87 |   children: React.ReactNode;
+   88 |   disabled?: boolean;
+   89 | }) {
+   90 |   const [isFocused, setIsFocused] = useState(false);
+   91 |   
+   92 |   return (
+   93 |     <Pressable
+   94 |       style={[style, isFocused && (focusedStyle || styles.defaultFocused)]}
+   95 |       onPress={onPress}
+   96 |       onFocus={() => setIsFocused(true)}
+   97 |       onBlur={() => setIsFocused(false)}
+   98 |       disabled={disabled}
+   99 |     >
+  100 |       {children}
+  101 |     </Pressable>
+  102 |   );
+  103 | }
+  104 | 
+  105 | // Clickable chip for genre/cast/director - routes to search
+  106 | function ChipButton({ label, onPress, hasTVPreferredFocus = false }: { label: string; onPress: () => void; hasTVPreferredFocus?: boolean }) {
+  107 |   const [isFocused, setIsFocused] = useState(false);
+  108 |   return (
+  109 |     <Pressable
+  110 |       style={[styles.chipButton, isFocused && styles.chipButtonFocused]}
+  111 |       onFocus={() => setIsFocused(true)}
+  112 |       onBlur={() => setIsFocused(false)}
+  113 |       onPress={onPress}
+  114 |       hasTVPreferredFocus={hasTVPreferredFocus}
+  115 |     >
+  116 |       <Text style={[styles.chipText, isFocused && styles.chipTextFocused]}>{label}</Text>
+  117 |     </Pressable>
+  118 |   );
+  119 | }
+  120 | 
+  121 | 
+  122 | // Parse stream info helper - used by StreamCard and sorting
+  123 | // PATCH_V11A_PARSE_CACHE — module-level cache so each Stream object is parsed exactly once.
+  124 | // PATCH_V19A_PARSE_CACHE — module-level WeakMap cache for parseStreamInfo.
+  125 | const _parseStreamInfoCache = new WeakMap<Stream, any>();
+  126 | 
+  127 | function parseStreamInfo(stream: Stream) {
+  128 |   {
+  129 |     const _v19Cached = _parseStreamInfoCache.get(stream);
+  130 |     if (_v19Cached) return _v19Cached;
+  131 |   }
+  132 |   const _cached = _parseStreamInfoCache.get(stream);
+  133 |   if (_cached) return _cached;
+  134 |   const name = stream.name || '';
+  135 |   const title = stream.title || '';
+  136 |   const combined = `${name} ${title}`.toUpperCase();
+  137 |   
+  138 |   // Extract quality
+  139 |   let quality = 'SD';
+  140 |   if (name.includes('4K') || name.includes('2160') || title.includes('2160')) quality = '4K';
+  141 |   else if (name.includes('1080') || title.includes('1080')) quality = '1080p';
+  142 |   else if (name.includes('720') || title.includes('720')) quality = '720p';
+  143 |   else if (name.toUpperCase().includes('HD') && !name.toUpperCase().includes('SD')) quality = 'HD';
+  144 | 
+  145 |   // PATCH_V9_CODEC_DETECTION — Firestick decodes H.264/AVC reliably; HEVC/x265 stutters or shows black frames
+  146 |   const isHEVC = combined.includes('HEVC') || combined.includes('X265') || combined.includes('H265') || combined.includes('H.265');
+  147 |   // HDR / Dolby Vision / 10-bit produce wrong colors on SDR Firestick → avoid when possible
+  148 |   const isHDR = combined.includes('HDR') || combined.includes('DOLBY VISION') || combined.includes('DOLBYVISION') || combined.includes('DV.') || combined.includes(' DV ') || combined.includes('10BIT') || combined.includes('10-BIT') || combined.includes('10 BIT');
+  149 | 
+  150 |   // PATCH_V12_COMMENTARY_DETECT — exclude commentary tracks (creator/director/audio commentary).
+  151 |   // Heavy penalty in computeScore guarantees these sink to the bottom of the list.
+  152 |   const isCommentary = (
+  153 |     combined.includes('COMMENTARY') ||
+  154 |     combined.includes('COMM TRACK') ||
+  155 |     combined.includes('COMM-TRACK') ||
+  156 |     combined.includes('CREATOR COMM') ||
+  157 |     combined.includes('DIRECTOR COMM') ||
+  158 |     combined.includes('WRITER COMM') ||
+  159 |     combined.includes('WRITERS COMM') ||
+  160 |     combined.includes('WITH COMM') ||
+  161 |     combined.includes('AUDIO COMM') ||
+  162 |     /\[\s*COMM[^\]]*\]/.test(combined) ||
+  163 |     /\bCOMM\.\b/.test(combined)
+  164 |   );
+  165 |   
+  166 |   // Extract source
+  167 |   let source = stream.addon || 'Unknown';
+  168 |   if (stream.provider) {
+  169 |     source = stream.provider;
+  170 |   } else if (name.includes('TPB') || name.includes('🏴‍☠️')) source = 'TPB+';
+  171 |   else if (name.includes('⚡') || name.includes('Torrentio')) source = 'Torrentio';
+  172 |   else if (name.includes('EZTV')) source = 'EZTV';
+  173 |   else if (name.includes('YTS') || name.includes('YIFY')) source = 'YTS';
+  174 |   
+  175 |   // Extract size from title
+  176 |   let size = '';
+  177 |   const sizeMatch = title.match(/💾\s*([\d.]+\s*[GM]B)/i);
+  178 |   if (sizeMatch) size = sizeMatch[1];
+  179 |   if (!size) {
+  180 |     const sizeMatch2 = title.match(/([\d.]+)\s*(GB|MB)/i);
+  181 |     if (sizeMatch2) size = `${sizeMatch2[1]} ${sizeMatch2[2].toUpperCase()}`;
+  182 |   }
+  183 |   
+  184 |   // Extract seeders
+  185 |   let seeders = stream.seeders || 0;
+  186 |   if (!seeders) {
+  187 |     const seederMatch = title.match(/👤\s*(\d+)/);
+  188 |     if (seederMatch) seeders = parseInt(seederMatch[1], 10);
+  189 |   }
+  190 |   if (!seeders) {
+  191 |     const peerMatch = title.match(/🌱\s*(\d+)/);
+  192 |     if (peerMatch) seeders = parseInt(peerMatch[1], 10);
+  193 |   }
+  194 |   
+  195 |   // Detect language
+  196 |   const FOREIGN_KEYWORDS = [
+  197 |     'FRENCH', 'TRUEFRENCH', 'VFF', 'VFQ', 'VOSTFR',
+  198 |     'SPANISH', 'LATINO', 'CASTELLANO',
+  199 |     'GERMAN', 'DEUTSCH',
+  200 |     'ITALIAN', 'ITALIANO',
+  201 |     'RUSSIAN', 'DUBBED', 'DUBLADO',
+  202 |     'PORTUGUESE', 'HINDI', 'TAMIL', 'TELUGU',
+  203 |     'KOREAN', 'JAPANESE', 'CHINESE', 'MANDARIN',
+  204 |     'TURKISH', 'ARABIC', 'POLISH', 'DUTCH', 'CZECH',
+  205 |     'THAI', 'INDONESIAN', 'VIETNAMESE', 'SWEDISH',
+  206 |     'MULTI',
+  207 |   ];
+  208 |   const FOREIGN_FLAGS = ['🇫🇷', '🇪🇸', '🇲🇽', '🇧🇷', '🇩🇪', '🇮🇹', '🇷🇺', '🇵🇹', '🇵🇱', '🇳🇱', '🇨🇳', '🇯🇵', '🇰🇷', '🇮🇳', '🇹🇷'];
+  209 |   const HAS_ENGLISH = combined.includes('ENGLISH') || combined.includes('🇬🇧') || combined.includes('🇺🇸') || combined.includes('EN/') || combined.includes('/EN');
+  210 |   
+  211 |   let language = 'ENG';
+  212 |   let isForeign = false;
+  213 |   
+  214 |   for (const kw of FOREIGN_KEYWORDS) {
+  215 |     if (combined.includes(kw)) {
+  216 |       isForeign = true;
+  217 |       if (kw.includes('FRENCH') || kw === 'VFF' || kw === 'VFQ' || kw === 'VOSTFR' || kw === 'TRUEFRENCH') language = 'FRE';
+  218 |       else if (kw.includes('SPANISH') || kw === 'LATINO' || kw === 'CASTELLANO') language = 'SPA';
+  219 |       else if (kw.includes('GERMAN') || kw === 'DEUTSCH') language = 'GER';
+  220 |       else if (kw.includes('ITALIAN') || kw === 'ITALIANO') language = 'ITA';
+  221 |       else if (kw.includes('RUSSIAN')) language = 'RUS';
+  222 |       else if (kw.includes('HINDI')) language = 'HIN';
+  223 |       else if (kw === 'DUBBED' || kw === 'DUBLADO') language = 'DUB';
+  224 |       else if (kw === 'MULTI') language = 'MULTI';
+  225 |       else language = 'OTHER';
+  226 |       break;
+  227 |     }
+  228 |   }
+  229 |   for (const flag of FOREIGN_FLAGS) {
+  230 |     if (title.includes(flag) || name.includes(flag)) {
+  231 |       isForeign = true;
+  232 |       if (flag === '🇫🇷') language = 'FRE';
+  233 |       else if (flag === '🇪🇸' || flag === '🇲🇽') language = 'SPA';
+  234 |       else if (flag === '🇩🇪') language = 'GER';
+  235 |       else if (flag === '🇮🇹') language = 'ITA';
+  236 |       else if (flag === '🇷🇺') language = 'RUS';
+  237 |       else if (flag === '🇮🇳') language = 'HIN';
+  238 |       else language = 'OTHER';
+  239 |       break;
+  240 |     }
+  241 |   }
+  242 |   
+  243 |   if (HAS_ENGLISH && isForeign) language = 'MULTI';
+  244 |   if (HAS_ENGLISH && !isForeign) language = 'ENG';
+  245 |   
+  246 |   // PATCH_V11A_PARSE_CACHE_SET
+  247 |   const _result = { quality, source, size, seeders, title, language, isForeign, isHEVC, isHDR, isCommentary };
+  248 |   _parseStreamInfoCache.set(stream, _result);
+  249 |   const _v19Result = _result;
+  250 |   _parseStreamInfoCache.set(stream, _v19Result);
+...
+(truncated — 1626 more lines)
+
+================================================================
+=== PERF FLAGS DETECTED ===
+================================================================
+
+--- [TAB_LAYOUT] (1 flags) ---
+  L  30  [freezeOnBlur]  freezeOnBlur: false,
+
+--- [ROOT_LAYOUT] (1 flags) ---
+  L  14  [freezeOnBlur]  <Stack screenOptions={{ headerShown: false, animation: 'none', freezeOnBlur: true /* PATCH_V14_FREEZE_ON_BLUR_STACK */ }} />
+
+--- [DISCOVER] (23 flags) ---
+  L 336  [FlatList]  <FlatList
+  L  67  [ScrollView]  const scrollViewRef = useRef<ScrollView>(null);
+  L 311  [ScrollView]  <ScrollView
+  L 343  [removeClippedSubviews]  removeClippedSubviews={true}
+  L 344  [windowSize]  windowSize={5}
+  L 345  [initialNumToRender]  initialNumToRender={3}
+  L 347  [maxToRenderPerBatch]  maxToRenderPerBatch={3}
+  L  14  [InteractionManager]  InteractionManager,
+  L  32  [InteractionManager]  // (InteractionManager) before rendering. Used to stagger discover service
+  L  40  [InteractionManager]  InteractionManager.runAfterInteractions(() => {
+  L 104  [InteractionManager]  const handle = InteractionManager.runAfterInteractions(() => {
+  L  17  [useFocusEffect]  import { useRouter, useFocusEffect } from 'expo-router';
+  L  98  [useFocusEffect]  useFocusEffect(
+  L 113  [useMemo]  const hasContent = useMemo(() => {
+  L  77  [useCallback]  const fetchContinueWatching = useCallback(async () => {
+  L  99  [useCallback]  useCallback(() => {
+  L 123  [useCallback]  const onRefresh = useCallback(async () => {
+  L 134  [useCallback]  const handleSectionFocus = useCallback((sectionKey: string) => {
+  L 155  [useCallback]  const handleItemFocus = useCallback((item: ContentItem) => {
+  L  18  [expo-image]  import { Image } from 'expo-image';
+  L 162  [expo-image]  // Also pre-download the backdrop image so it's in expo-image disk cache
+  L  32  [staggered mount]  // (InteractionManager) before rendering. Used to stagger discover service
+  L 362  [staggered mount]  <LazyMount key={serviceName} delay={0} /* PATCH_V39_NO_STAGGER — no stagger; FlatList handles deferral */ placeholder={<View style={{ height: 240 }} />}> {/* PATCH_V15B_LAZYMOUNT_USAGE */}
+
+--- [SERVICE_ROW] (27 flags) ---
+  L 126  [FlatList]  const flatListRef = useRef<FlatList>(null);
+  L 253  [FlatList]  <FlatList
+  L 271  [removeClippedSubviews]  removeClippedSubviews={false} /* PATCH_V43B_SEQUENTIAL_MOUNT — TV focus stability */
+  L 270  [windowSize]  windowSize={5}
+  L 267  [initialNumToRender]  initialNumToRender={2} /* PATCH_V43B_SEQUENTIAL_MOUNT — first paint is 2 cards */
+  L 268  [maxToRenderPerBatch]  maxToRenderPerBatch={3} /* PATCH_V41_COLDSTART_BUDGET — smaller render chunks; more JS yields */
+  L 219  [getItemLayout]  const getItemLayout = useCallback((_data: any, index: number) => ({
+  L 260  [getItemLayout]  getItemLayout={getItemLayout}
+  L   8  [InteractionManager]  InteractionManager,
+  L  69  [InteractionManager]  InteractionManager.runAfterInteractions(() => releaseMountToken(rowIndex));
+  L  49  [requestAnimationFrame]  requestAnimationFrame(() => next.grant());
+  L 132  [useMemo]  const validItems = useMemo(() =>
+  L  66  [useCallback]  const handleLayout = useCallback(() => {
+  L 139  [useCallback]  const fetchMore = useCallback(async () => {
+  L 172  [useCallback]  const handleCardFocus = useCallback((index: number) => {
+  L 205  [useCallback]  const handleCardBlur = useCallback(() => {
+  L 213  [useCallback]  const handleEndReached = useCallback(() => {
+  L 219  [useCallback]  const getItemLayout = useCallback((_data: any, index: number) => ({
+  L 225  [useCallback]  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
+  L 238  [useCallback]  const keyExtractor = useCallback((item: ContentItem) =>
+  L  26  [setTimeout in mount queue]  // PATCH_V43B_SEQUENTIAL_MOUNT — Singleton mount queue. Row N+1 only mounts after row N
+  L  29  [setTimeout in mount queue]  const mountQueue: { rowIndex: number; grant: () => void }[] = [];
+  L  38  [setTimeout in mount queue]  mountQueue.push({ rowIndex, grant: resolve });
+  L  39  [setTimeout in mount queue]  mountQueue.sort((a, b) => a.rowIndex - b.rowIndex);
+  L  47  [setTimeout in mount queue]  while (mountQueue.length > 0 && mountQueue[0].rowIndex <= currentMountTicket) {
+  L  48  [setTimeout in mount queue]  const next = mountQueue.shift()!;
+  L  24  [staggered mount]  // Lazy wrapper — only mounts the real ServiceRow content after a staggered delay.
+
+--- [CONTENT_CARD] (5 flags) ---
+  L 105  [useCallback]  const handleLayout = useCallback(() => {
+  L 143  [useCallback]  const handleFocus = useCallback(() => {
+  L 167  [useCallback]  const handleBlur = useCallback(() => {
+  L 176  [useCallback]  const handleLongPress = useCallback(async () => {
+  L  12  [expo-image]  import { Image } from 'expo-image';
+
+--- [DETAILS_HEAD] (27 flags) ---
+  L1313  [FlatList]  <FlatList
+  L1359  [FlatList]  <FlatList
+  L1242  [ScrollView]  <ScrollView
+  L1287  [ScrollView]  <ScrollView
+  L  19  [useFocusEffect]  import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+  L 695  [useFocusEffect]  useFocusEffect(
+  L 335  [React.memo]  // Stream Card Component - 3-row vertical layout (PATCH_V19A_STREAMCARD_MEMO React.memo)
+  L 336  [React.memo]  const StreamCard = React.memo(function StreamCardInner({
+  L 571  [useMemo]  const sortedStreams = useMemo(() => sortStreamsByLanguage(streams), [streams]);
+  L 599  [useMemo]  const currentEpisode = useMemo(() => {
+  L 606  [useMemo]  const nextEpisode = useMemo(() => {
+  L 624  [useMemo]  const seasons = useMemo(() => {
+  L 630  [useMemo]  const episodesForSeason = useMemo(() => {
+  L 505  [useCallback]  const goToSeriesRootWithFocus = useCallback(() => {
+  L 542  [useCallback]  const handleBack = useCallback(() => {
+  L 696  [useCallback]  useCallback(() => {
+  L1074  [useCallback]  const handleMarkUnwatched = useCallback(async (contentId: string) => {
+  L1106  [Image (RN core)]  {/* Background Image — lightweight RN Image, no expo-image overhead */}
+  L  22  [expo-image]  import { Image } from 'expo-image';
+  L1106  [expo-image]  {/* Background Image — lightweight RN Image, no expo-image overhead */}
+  L  35  [Animated.]  // segment that slides across a dark track. Pure Animated.Value so it runs
+  L  38  [Animated.]  const translateX = useRef(new Animated.Value(-100)).current;
+  L  41  [Animated.]  const loop = Animated.loop(
+  L  42  [Animated.]  Animated.sequence([
+  L  43  [Animated.]  Animated.timing(translateX, {
+  L  49  [Animated.]  Animated.timing(translateX, {
+  L  62  [Animated.]  <Animated.View

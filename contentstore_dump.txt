@@ -1,0 +1,373 @@
+=== FILE: frontend\src\store\contentStore.ts
+=== TOTAL LINES: 335
+=== HAS CRLF: true
+
+=== ANCHORS FOUND ===
+  L24  [try / catch / finally]  try {
+  L35  [try / catch / finally]  try {
+  L73  [fetchStreams declaration]  fetchStreams: (type: string, id: string) => Promise<Stream[]>;
+  L75  [fetchStreams declaration]  prefetchStreams: (type: string, id: string) => Promise<void>;
+  L101  [isLoadingStreams set false]  isLoadingStreams: false,
+  L148  [try / catch / finally]  try {
+  L160  [try / catch / finally]  try {
+  L171  [try / catch / finally]  try {
+  L186  [try / catch / finally]  try {
+  L210  [try / catch / finally]  try {
+  L228  [fetchStreams declaration]  fetchStreams: async (type: string, id: string) => {
+  L228  [fetchStreams call (action body)]  fetchStreams: async (type: string, id: string) => {
+  L235  [isLoadingStreams set false]  set({ streams: cached, isLoadingStreams: false, error: null });
+  L235  [set(\{ streams]  set({ streams: cached, isLoadingStreams: false, error: null });
+  L240  [isLoadingStreams set true]  set({ isLoadingStreams: true, streams: [], error: null });
+  L244  [isLoadingStreams set false]  set({ streams: diskCached, isLoadingStreams: false, error: null });
+  L244  [set(\{ streams]  set({ streams: diskCached, isLoadingStreams: false, error: null });
+  L249  [try / catch / finally]  try {
+  L256  [isLoadingStreams set false]  set({ streams: _v19PendingStreams, isLoadingStreams: false });
+  L256  [set(\{ streams]  set({ streams: _v19PendingStreams, isLoadingStreams: false });
+  L266  [setTimeout usage]  _v19PendingTimer = setTimeout(() => { _v19PendingTimer = null; flushPending(); }, 150 - elapsed);
+  L273  [isLoadingStreams set false]  set({ streams: allStreams, isLoadingStreams: false });
+  L273  [set(\{ streams]  set({ streams: allStreams, isLoadingStreams: false });
+  L277  [isLoadingStreams set false]  set({ streams: [], isLoadingStreams: false });
+  L277  [set(\{ streams]  set({ streams: [], isLoadingStreams: false });
+  L285  [fetchStreams declaration]  prefetchStreams: async (type: string, id: string) => {
+  L285  [fetchStreams call (action body)]  prefetchStreams: async (type: string, id: string) => {
+  L290  [try / catch / finally]  try {
+  L304  [try / catch / finally]  finally { _pendingPrefetches.delete(cacheKey); }
+  L308  [try / catch / finally]  try {
+  L318  [try / catch / finally]  try {
+
+=== FULL FILE WITH LINE NUMBERS ===
+   1 | import { create } from 'zustand'; // PATCH_V19B_ALL_DONE
+   2 | import AsyncStorage from '@react-native-async-storage/async-storage'; // PATCH_V19B_DISK_HELPERS
+   3 | import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
+   4 | import { getCached, setCache, CACHE_DURATIONS } from '../utils/cache';
+   5 | 
+   6 | // ============================================================
+   7 | // MODULE-LEVEL CACHES — persist across screen mounts/unmounts
+   8 | // These are NOT in zustand to avoid triggering re-renders
+   9 | // ============================================================
+  10 | const _metaCache: Record<string, ContentItem> = {};
+  11 | const _streamsCache: Record<string, Stream[]> = {};
+  12 | 
+  13 | export const getMetaCache = (key: string) => _metaCache[key] || null;
+  14 | export const setMetaCache = (key: string, data: ContentItem) => { _metaCache[key] = data; };
+  15 | export const getStreamsCache = (key: string) => _streamsCache[key] || null;
+  16 | export const setStreamsCache = (key: string, data: Stream[]) => { _streamsCache[key] = data; };
+  17 | 
+  18 | // PATCH_V19B_DISK_HELPERS — AsyncStorage-backed persistent cache (6h TTL).
+  19 | const STREAMS_DISK_TTL_MS = 6 * 60 * 60 * 1000;
+  20 | const STREAMS_DISK_KEY = (key: string) => '@streamsCache:' + key;
+  21 | const _pendingPrefetches = new Set<string>();
+  22 | 
+  23 | async function loadStreamsFromDisk(key: string): Promise<Stream[] | null> {
+  24 |   try {
+  25 |     const raw = await AsyncStorage.getItem(STREAMS_DISK_KEY(key));
+  26 |     if (!raw) return null;
+  27 |     const parsed = JSON.parse(raw);
+  28 |     if (!parsed || !parsed.time || !Array.isArray(parsed.streams)) return null;
+  29 |     if (Date.now() - parsed.time > STREAMS_DISK_TTL_MS) return null;
+  30 |     return parsed.streams as Stream[];
+  31 |   } catch { return null; }
+  32 | }
+  33 | 
+  34 | async function saveStreamsToDisk(key: string, streams: Stream[]): Promise<void> {
+  35 |   try {
+  36 |     if (!streams || streams.length === 0) return;
+  37 |     await AsyncStorage.setItem(STREAMS_DISK_KEY(key), JSON.stringify({ time: Date.now(), streams }));
+  38 |   } catch { /* swallow — disk cache is best-effort */ }
+  39 | }
+  40 | 
+  41 | interface CurrentPlaying {
+  42 |   contentType: string;
+  43 |   contentId: string;
+  44 |   title: string;
+  45 | }
+  46 | 
+  47 | interface ContentState {
+  48 |   discoverData: DiscoverResponse | null;
+  49 |   addons: Addon[];
+  50 |   library: LibraryResponse | null;
+  51 |   searchResults: SearchResult[];
+  52 |   searchMovies: SearchResult[];
+  53 |   searchSeries: SearchResult[];
+  54 |   searchHasMore: boolean;
+  55 |   searchSkip: number;
+  56 |   currentSearchQuery: string;
+  57 |   streams: Stream[];
+  58 |   selectedItem: ContentItem | null;
+  59 |   currentPlaying: CurrentPlaying | null;
+  60 |   isLoadingDiscover: boolean;
+  61 |   isLoadingAddons: boolean;
+  62 |   isLoadingLibrary: boolean;
+  63 |   isLoadingSearch: boolean;
+  64 |   isLoadingMoreSearch: boolean;
+  65 |   isLoadingStreams: boolean;
+  66 |   error: string | null;
+  67 |   setSelectedItem: (item: ContentItem | null) => void;
+  68 |   fetchDiscover: (forceRefresh?: boolean) => Promise<void>;
+  69 |   fetchAddons: (forceRefresh?: boolean) => Promise<void>;
+  70 |   fetchLibrary: (forceRefresh?: boolean) => Promise<void>;
+  71 |   search: (query: string) => Promise<void>;
+  72 |   loadMoreSearch: () => Promise<void>;
+  73 |   fetchStreams: (type: string, id: string) => Promise<Stream[]>;
+  74 |   // PATCH_V19B_INTERFACE
+  75 |   prefetchStreams: (type: string, id: string) => Promise<void>;
+  76 |   addToLibrary: (item: ContentItem) => Promise<void>;
+  77 |   removeFromLibrary: (type: string, id: string) => Promise<void>;
+  78 |   clearSearch: () => void;
+  79 |   setCurrentPlaying: (info: CurrentPlaying | null) => void;
+  80 |   resetStore: () => void;
+  81 | }
+  82 | 
+  83 | const initialState = {
+  84 |   discoverData: null,
+  85 |   addons: [],
+  86 |   library: null,
+  87 |   searchResults: [],
+  88 |   searchMovies: [],
+  89 |   searchSeries: [],
+  90 |   searchHasMore: false,
+  91 |   searchSkip: 0,
+  92 |   currentSearchQuery: '',
+  93 |   currentPlaying: null,
+  94 |   selectedItem: null,
+  95 |   streams: [],
+  96 |   isLoadingDiscover: false,
+  97 |   isLoadingAddons: false,
+  98 |   isLoadingLibrary: false,
+  99 |   isLoadingSearch: false,
+ 100 |   isLoadingMoreSearch: false,
+ 101 |   isLoadingStreams: false,
+ 102 |   error: null,
+ 103 | };
+ 104 | 
+ 105 | export const useContentStore = create<ContentState>((set, get) => ({
+ 106 |   ...initialState,
+ 107 | 
+ 108 |   setSelectedItem: (item: ContentItem | null) => {
+ 109 |     set({ selectedItem: item });
+ 110 |   },
+ 111 | 
+ 112 |   resetStore: () => {
+ 113 |     set(initialState);
+ 114 |   },
+ 115 | 
+ 116 |   fetchDiscover: async (forceRefresh = false) => {
+ 117 |     const currentData = get().discoverData;
+ 118 |     
+ 119 |     // Try to load from persistent cache instantly (first open after app restart)
+ 120 |     if (!currentData && !forceRefresh) {
+ 121 |       const cached = await getCached<DiscoverResponse>('discover_data');
+ 122 |       if (cached) {
+ 123 |         console.log('[ContentStore] Loaded discover from cache instantly');
+ 124 |         set({ discoverData: cached, isLoadingDiscover: false });
+ 125 |         // Still refresh in background
+ 126 |         api.content.getDiscover().then(data => {
+ 127 |           set({ discoverData: data });
+ 128 |           setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
+ 129 |         }).catch(err => {
+ 130 |           console.log('[ContentStore] Background refresh error:', err);
+ 131 |         });
+ 132 |         return;
+ 133 |       }
+ 134 |     }
+ 135 |     
+ 136 |     // Show cached data immediately (stale-while-revalidate)
+ 137 |     if (currentData && !forceRefresh) {
+ 138 |       // Still refresh in background, but don't show loading spinner
+ 139 |       api.content.getDiscover().then(data => {
+ 140 |         set({ discoverData: data });
+ 141 |         setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
+ 142 |       }).catch(err => {
+ 143 |         console.log('[ContentStore] Background refresh error:', err);
+ 144 |       });
+ 145 |       return;
+ 146 |     }
+ 147 |     set({ isLoadingDiscover: true, error: null });
+ 148 |     try {
+ 149 |       const data = await api.content.getDiscover();
+ 150 |       set({ discoverData: data, isLoadingDiscover: false });
+ 151 |       setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
+ 152 |     } catch (error: any) {
+ 153 |       console.log('[ContentStore] fetchDiscover error:', error);
+ 154 |       set({ error: error.message, isLoadingDiscover: false, discoverData: currentData || null });
+ 155 |     }
+ 156 |   },
+ 157 | 
+ 158 |   fetchAddons: async (forceRefresh = false) => {
+ 159 |     set({ isLoadingAddons: true, error: null });
+ 160 |     try {
+ 161 |       const data = await api.addons.getAll();
+ 162 |       set({ addons: data || [], isLoadingAddons: false });
+ 163 |     } catch (error: any) {
+ 164 |       console.log('[ContentStore] fetchAddons error:', error);
+ 165 |       set({ error: error.message, isLoadingAddons: false, addons: [] });
+ 166 |     }
+ 167 |   },
+ 168 | 
+ 169 |   fetchLibrary: async (forceRefresh = false) => {
+ 170 |     set({ isLoadingLibrary: true, error: null });
+ 171 |     try {
+ 172 |       const data = await api.library.get();
+ 173 |       set({ library: data, isLoadingLibrary: false });
+ 174 |     } catch (error: any) {
+ 175 |       console.log('[ContentStore] fetchLibrary error:', error);
+ 176 |       set({ error: error.message, isLoadingLibrary: false });
+ 177 |     }
+ 178 |   },
+ 179 | 
+ 180 |   search: async (query: string) => {
+ 181 |     if (!query.trim()) {
+ 182 |       set({ searchResults: [], searchMovies: [], searchSeries: [], searchHasMore: false, searchSkip: 0, currentSearchQuery: '' });
+ 183 |       return;
+ 184 |     }
+ 185 |     set({ isLoadingSearch: true, error: null, currentSearchQuery: query, searchSkip: 0 });
+ 186 |     try {
+ 187 |       const data = await api.content.search(query, 0, 30);
+ 188 |       const movies = data.movies || [];
+ 189 |       const series = data.series || [];
+ 190 |       const results = [...movies, ...series];
+ 191 |       set({ 
+ 192 |         searchResults: results, 
+ 193 |         searchMovies: movies,
+ 194 |         searchSeries: series,
+ 195 |         searchHasMore: data.hasMore || false,
+ 196 |         searchSkip: 30,
+ 197 |         isLoadingSearch: false 
+ 198 |       });
+ 199 |     } catch (error: any) {
+ 200 |       console.log('[ContentStore] search error:', error);
+ 201 |       set({ error: error.message, isLoadingSearch: false });
+ 202 |     }
+ 203 |   },
+ 204 | 
+ 205 |   loadMoreSearch: async () => {
+ 206 |     const { currentSearchQuery, searchSkip, searchMovies, searchSeries, isLoadingMoreSearch } = get();
+ 207 |     if (!currentSearchQuery || isLoadingMoreSearch) return;
+ 208 |     
+ 209 |     set({ isLoadingMoreSearch: true });
+ 210 |     try {
+ 211 |       const data = await api.content.search(currentSearchQuery, searchSkip, 30);
+ 212 |       const newMovies = data.movies || [];
+ 213 |       const newSeries = data.series || [];
+ 214 |       set({ 
+ 215 |         searchMovies: [...searchMovies, ...newMovies],
+ 216 |         searchSeries: [...searchSeries, ...newSeries],
+ 217 |         searchResults: [...searchMovies, ...newMovies, ...searchSeries, ...newSeries],
+ 218 |         searchHasMore: data.hasMore || false,
+ 219 |         searchSkip: searchSkip + 30,
+ 220 |         isLoadingMoreSearch: false 
+ 221 |       });
+ 222 |     } catch (error: any) {
+ 223 |       console.log('[ContentStore] loadMoreSearch error:', error);
+ 224 |       set({ error: error.message, isLoadingMoreSearch: false });
+ 225 |     }
+ 226 |   },
+ 227 | 
+ 228 |   fetchStreams: async (type: string, id: string) => {
+ 229 |     // PATCH_V19B_FETCHSTREAMS_BODY — memory cache → disk cache → network
+ 230 |     const cacheKey = `${type}/${id}`;
+ 231 | 
+ 232 |     // 1. Memory cache — instant
+ 233 |     const cached = getStreamsCache(cacheKey);
+ 234 |     if (cached && cached.length > 0) {
+ 235 |       set({ streams: cached, isLoadingStreams: false, error: null });
+ 236 |       return cached;
+ 237 |     }
+ 238 | 
+ 239 |     // 2. AsyncStorage disk cache — ~10ms
+ 240 |     set({ isLoadingStreams: true, streams: [], error: null });
+ 241 |     const diskCached = await loadStreamsFromDisk(cacheKey);
+ 242 |     if (diskCached && diskCached.length > 0) {
+ 243 |       setStreamsCache(cacheKey, diskCached);
+ 244 |       set({ streams: diskCached, isLoadingStreams: false, error: null });
+ 245 |       return diskCached;
+ 246 |     }
+ 247 | 
+ 248 |     // 3. Network with throttled progressive updates (max 1 set per 150ms)
+ 249 |     try {
+ 250 |       let _v19LastSet = 0;
+ 251 |       let _v19PendingTimer: any = null;
+ 252 |       let _v19PendingStreams: Stream[] = [];
+ 253 |       const flushPending = () => {
+ 254 |         if (_v19PendingStreams.length === 0) return;
+ 255 |         _v19LastSet = Date.now();
+ 256 |         set({ streams: _v19PendingStreams, isLoadingStreams: false });
+ 257 |         _v19PendingStreams = [];
+ 258 |       };
+ 259 |       const result = await api.addons.getAllStreams(type, id, (partialStreams: Stream[]) => {
+ 260 |         _v19PendingStreams = partialStreams;
+ 261 |         const elapsed = Date.now() - _v19LastSet;
+ 262 |         if (elapsed >= 150) {
+ 263 |           if (_v19PendingTimer) { clearTimeout(_v19PendingTimer); _v19PendingTimer = null; }
+ 264 |           flushPending();
+ 265 |         } else if (!_v19PendingTimer) {
+ 266 |           _v19PendingTimer = setTimeout(() => { _v19PendingTimer = null; flushPending(); }, 150 - elapsed);
+ 267 |         }
+ 268 |       });
+ 269 |       if (_v19PendingTimer) { clearTimeout(_v19PendingTimer); _v19PendingTimer = null; }
+ 270 |       const allStreams = result.streams || [];
+ 271 |       setStreamsCache(cacheKey, allStreams);
+ 272 |       saveStreamsToDisk(cacheKey, allStreams); // fire-and-forget
+ 273 |       set({ streams: allStreams, isLoadingStreams: false });
+ 274 |       return allStreams;
+ 275 |     } catch (error: any) {
+ 276 |       console.log('[ContentStore] fetchStreams error:', error);
+ 277 |       set({ streams: [], isLoadingStreams: false });
+ 278 |       return [];
+ 279 |     }
+ 280 |   },
+ 281 | 
+ 282 |   // PATCH_V19B_PREFETCH_IMPL — warm the cache without touching visible state.
+ 283 |   // Used by ContentCard on poster focus so by the time the user clicks,
+ 284 |   // streams are already in memory + disk cache.
+ 285 |   prefetchStreams: async (type: string, id: string) => {
+ 286 |     const cacheKey = `${type}/${id}`;
+ 287 |     if (getStreamsCache(cacheKey)) return;
+ 288 |     if (_pendingPrefetches.has(cacheKey)) return;
+ 289 |     _pendingPrefetches.add(cacheKey);
+ 290 |     try {
+ 291 |       // Try disk first to avoid an unnecessary network round-trip
+ 292 |       const diskCached = await loadStreamsFromDisk(cacheKey);
+ 293 |       if (diskCached && diskCached.length > 0) {
+ 294 |         setStreamsCache(cacheKey, diskCached);
+ 295 |         return;
+ 296 |       }
+ 297 |       const result = await api.addons.getAllStreams(type, id);
+ 298 |       const allStreams = result.streams || [];
+ 299 |       if (allStreams.length > 0) {
+ 300 |         setStreamsCache(cacheKey, allStreams);
+ 301 |         saveStreamsToDisk(cacheKey, allStreams);
+ 302 |       }
+ 303 |     } catch { /* prefetch is best-effort */ }
+ 304 |     finally { _pendingPrefetches.delete(cacheKey); }
+ 305 |   },
+ 306 | 
+ 307 |   addToLibrary: async (item: ContentItem) => {
+ 308 |     try {
+ 309 |       await api.library.add(item);
+ 310 |       await get().fetchLibrary();
+ 311 |     } catch (error: any) {
+ 312 |       console.log('[ContentStore] addToLibrary error:', error);
+ 313 |       set({ error: error.message });
+ 314 |     }
+ 315 |   },
+ 316 | 
+ 317 |   removeFromLibrary: async (type: string, id: string) => {
+ 318 |     try {
+ 319 |       await api.library.remove(type, id);
+ 320 |       await get().fetchLibrary();
+ 321 |     } catch (error: any) {
+ 322 |       console.log('[ContentStore] removeFromLibrary error:', error);
+ 323 |       set({ error: error.message });
+ 324 |     }
+ 325 |   },
+ 326 | 
+ 327 |   clearSearch: () => {
+ 328 |     set({ searchResults: [], searchMovies: [], searchSeries: [], searchHasMore: false, searchSkip: 0, currentSearchQuery: '' });
+ 329 |   },
+ 330 | 
+ 331 |   setCurrentPlaying: (info: CurrentPlaying | null) => {
+ 332 |     set({ currentPlaying: info });
+ 333 |   },
+ 334 | }));
+ 335 | 

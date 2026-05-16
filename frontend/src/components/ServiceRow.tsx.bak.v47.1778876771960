@@ -7,7 +7,6 @@ import {
   useWindowDimensions,
   InteractionManager,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list'; // PATCH_V49_FLASHLIST
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
 import apiClient from '../api/client';
@@ -52,17 +51,16 @@ function releaseMountToken(rowIndex: number) {
 }
 
 const LazyMount: React.FC<{ height: number; rowIndex: number; children: React.ReactNode }> = memo(({ height, rowIndex, children }) => {
-  // PATCH_V47_TIME_STAGGER — time-staggered mount (30ms per row, max 600ms).
-  // Replaces V43B's mount-queue: deterministic, no onLayout dependency,
-  // no JS-thread chain. Rows pop in like a wave; cold start ~3-5x faster.
   const [shouldRender, setShouldRender] = useState(rowIndex === 0);
-  const hasReleasedRef = useRef(true); // V47: layout-release no longer used; keep ref for compat.
+  const hasReleasedRef = useRef(false);
 
   useEffect(() => {
     if (shouldRender) return;
-    const delayMs = Math.min(rowIndex * 30, 600);
-    const t = setTimeout(() => setShouldRender(true), delayMs);
-    return () => clearTimeout(t);
+    let cancelled = false;
+    requestMountToken(rowIndex).then(() => {
+      if (!cancelled) setShouldRender(true);
+    });
+    return () => { cancelled = true; };
   }, [rowIndex, shouldRender]);
 
   const handleLayout = useCallback(() => {
@@ -125,7 +123,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const lastFetchTime = useRef(0);
   const totalRef = useRef(initialItems?.length || 0);
   const itemCountRef = useRef(initialItems?.length || 0);
-  const flatListRef = useRef<FlashList<ContentItem>>(null); // PATCH_V49_FLASHLIST
+  const flatListRef = useRef<FlatList>(null);
 
   // Track whether user is navigating horizontally within this row
   const isNavigatingInRowRef = useRef(false);
@@ -189,10 +187,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     if (isTV && flatListRef.current && isNavigatingInRowRef.current) {
       // HORIZONTAL NAVIGATION — apply smooth 1-card scroll
       const targetOffset = Math.max(0, (index - TV_SCROLL_ANCHOR) * itemTotalWidth);
-      // PATCH_V48_NO_ANIM_SCROLL — instant scroll, no queued animations.
-      // Animated horizontal scroll was the #1 D-pad lag cause; presses
-      // queued 250ms animations that piled up faster than they played.
-      flatListRef.current.scrollToOffset({ offset: targetOffset, animated: false });
+      flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
     }
     // If isNavigatingInRowRef is false, user entered from another row via up/down
     // → DON'T scroll, just let the selector land where Android TV placed it
@@ -221,7 +216,11 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [fetchMore]);
 
-  // PATCH_V49_FLASHLIST — getItemLayout removed; FlashList auto-virtualizes with estimatedItemSize.
+  const getItemLayout = useCallback((_data: any, index: number) => ({
+    length: itemTotalWidth,
+    offset: paddingLeft + (index * itemTotalWidth),
+    index,
+  }), [itemTotalWidth, paddingLeft]);
 
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <ContentCard
@@ -251,20 +250,25 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
           </Text>
         </View>
         
-        {/* PATCH_V49_FLASHLIST — horizontal FlashList replaces FlatList for 3-5x D-pad perf */}
-        <FlashList
-          ref={flatListRef as any}
+        <FlatList
+          ref={flatListRef}
           horizontal
           data={validItems}
           extraData={validItems.length}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          getItemLayout={getItemLayout}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={
-            isTV ? styles.scrollContentTV : styles.scrollContent
-          }
-          estimatedItemSize={itemTotalWidth}
-          drawDistance={itemTotalWidth * 3}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isTV && styles.scrollContentTV,
+          ]}
+          style={styles.flatListStyle}
+          initialNumToRender={2} /* PATCH_V43B_SEQUENTIAL_MOUNT — first paint is 2 cards */
+          maxToRenderPerBatch={3} /* PATCH_V41_COLDSTART_BUDGET — smaller render chunks; more JS yields */
+          updateCellsBatchingPeriod={50}
+          windowSize={5}
+          removeClippedSubviews={false} /* PATCH_V43B_SEQUENTIAL_MOUNT — TV focus stability */
           onEndReached={handleEndReached}
           onEndReachedThreshold={3}
         />

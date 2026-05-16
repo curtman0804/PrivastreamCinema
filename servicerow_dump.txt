@@ -1,0 +1,325 @@
+=== frontend\src\components\ServiceRow.tsx (282 lines, 9199 bytes) ===
+
+   1 | import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
+   2 | import {
+   3 |   View,
+   4 |   Text,
+   5 |   StyleSheet,
+   6 |   FlatList,
+   7 |   useWindowDimensions,
+   8 |   InteractionManager,
+   9 | } from 'react-native';
+  10 | import { ContentCard, getCardWidth } from './ContentCard';
+  11 | import { ContentItem } from '../api/client';
+  12 | import apiClient from '../api/client';
+  13 | import { colors } from '../styles/colors';
+  14 | 
+  15 | const ITEM_GAP = 16;
+  16 | const TV_PADDING_LEFT = 48;
+  17 | const TV_PADDING_RIGHT = 48;
+  18 | const MOBILE_PADDING = 16;
+  19 | 
+  20 | // Anchor position: the row starts scrolling once focus reaches this card index.
+  21 | // 4 means: posters 1-5 free movement, poster 6 triggers first scroll.
+  22 | const TV_SCROLL_ANCHOR = 4;
+  23 | 
+  24 | // Lazy wrapper — only mounts the real ServiceRow content after a staggered delay.
+  25 | // This prevents all horizontal FlatLists from mounting at once and blocking the JS thread.
+  26 | const LazyMount: React.FC<{ height: number; delay?: number; children: React.ReactNode }> = memo(({ height, delay = 0, children }) => {
+  27 |   const [shouldRender, setShouldRender] = useState(delay <= 0);
+  28 |   
+  29 |   useEffect(() => {
+  30 |     if (delay <= 0) {
+  31 |       setShouldRender(true);
+  32 |       return;
+  33 |     }
+  34 |     const timer = setTimeout(() => {
+  35 |       InteractionManager.runAfterInteractions(() => {
+  36 |         setShouldRender(true);
+  37 |       });
+  38 |     }, delay);
+  39 |     return () => clearTimeout(timer);
+  40 |   }, [delay]);
+  41 |   
+  42 |   if (!shouldRender) {
+  43 |     return <View style={{ height, backgroundColor: 'transparent' }} />;
+  44 |   }
+  45 |   
+  46 |   return <>{children}</>;
+  47 | });
+  48 | 
+  49 | interface ServiceRowProps {
+  50 |   title: string;
+  51 |   serviceName: string;
+  52 |   contentType: 'movies' | 'series' | 'channels';
+  53 |   items: ContentItem[];
+  54 |   onItemPress: (item: ContentItem) => void;
+  55 |   onItemFocus?: (item: ContentItem) => void;
+  56 |   onSectionFocus?: () => void;
+  57 |   isFirstRow?: boolean;
+  58 |   rowIndex?: number;
+  59 | }
+  60 | 
+  61 | export const ServiceRow: React.FC<ServiceRowProps> = memo(({
+  62 |   title,
+  63 |   serviceName,
+  64 |   contentType,
+  65 |   items: initialItems,
+  66 |   onItemPress,
+  67 |   onItemFocus,
+  68 |   onSectionFocus,
+  69 |   isFirstRow = false,
+  70 |   rowIndex = 0,
+  71 | }) => {
+  72 |   const { width: screenWidth, height } = useWindowDimensions();
+  73 |   const isTV = screenWidth > height || screenWidth > 800;
+  74 | 
+  75 |   const cardWidth = getCardWidth(screenWidth, isTV, 'medium');
+  76 |   const itemTotalWidth = cardWidth + ITEM_GAP;
+  77 |   const paddingLeft = isTV ? TV_PADDING_LEFT : MOBILE_PADDING;
+  78 | 
+  79 |   const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
+  80 | 
+  81 |   const skipRef = useRef(initialItems?.length || 0);
+  82 |   const hasMoreRef = useRef(true);
+  83 |   const isFetchingRef = useRef(false);
+  84 |   const lastFetchTime = useRef(0);
+  85 |   const totalRef = useRef(initialItems?.length || 0);
+  86 |   const itemCountRef = useRef(initialItems?.length || 0);
+  87 |   const flatListRef = useRef<FlatList>(null);
+  88 | 
+  89 |   // Track whether user is navigating horizontally within this row
+  90 |   const isNavigatingInRowRef = useRef(false);
+  91 |   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  92 | 
+  93 |   const validItems = useMemo(() => 
+  94 |     (allItems || []).filter(Boolean), [allItems]);
+  95 |   
+  96 |   itemCountRef.current = validItems.length;
+  97 |   
+  98 |   if (validItems.length === 0) return null;
+  99 | 
+ 100 |   const fetchMore = useCallback(async () => {
+ 101 |     const now = Date.now();
+ 102 |     if (isFetchingRef.current || !hasMoreRef.current) return;
+ 103 |     if (now - lastFetchTime.current < 2000) return;
+ 104 | 
+ 105 |     isFetchingRef.current = true;
+ 106 |     lastFetchTime.current = now;
+ 107 |     try {
+ 108 |       const resp = await apiClient.get(
+ 109 |         `/api/content/category/${encodeURIComponent(serviceName)}/${contentType}?skip=${skipRef.current}&limit=100`
+ 110 |       );
+ 111 |       const newItems: ContentItem[] = resp.data.items || [];
+ 112 |       if (newItems.length > 0) {
+ 113 |         setAllItems(prev => {
+ 114 |           const ids = new Set(prev.map(i => i.id || i.imdb_id));
+ 115 |           const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
+ 116 |           const updated = [...prev, ...unique];
+ 117 |           totalRef.current = updated.length;
+ 118 |           return updated;
+ 119 |         });
+ 120 |         skipRef.current += newItems.length;
+ 121 |       }
+ 122 |       hasMoreRef.current = resp.data.hasMore !== undefined 
+ 123 |         ? resp.data.hasMore 
+ 124 |         : newItems.length >= 20;
+ 125 |     } catch {
+ 126 |       hasMoreRef.current = false;
+ 127 |     } finally {
+ 128 |       isFetchingRef.current = false;
+ 129 |     }
+ 130 |   }, [serviceName, contentType]);
+ 131 | 
+ 132 |   // Card focus handler
+ 133 |   const handleCardFocus = useCallback((index: number) => {
+ 134 |     // Cancel any pending blur timer — user is still in this row
+ 135 |     if (blurTimerRef.current) {
+ 136 |       clearTimeout(blurTimerRef.current);
+ 137 |       blurTimerRef.current = null;
+ 138 |     }
+ 139 | 
+ 140 |     onSectionFocus?.();
+ 141 |     
+ 142 |     // Pre-fetch meta data for the focused item
+ 143 |     const focusedItem = validItems[index];
+ 144 |     if (focusedItem && onItemFocus) {
+ 145 |       onItemFocus(focusedItem);
+ 146 |     }
+ 147 | 
+ 148 |     if (isTV && flatListRef.current && isNavigatingInRowRef.current) {
+ 149 |       // HORIZONTAL NAVIGATION — apply smooth 1-card scroll
+ 150 |       const targetOffset = Math.max(0, (index - TV_SCROLL_ANCHOR) * itemTotalWidth);
+ 151 |       flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
+ 152 |     }
+ 153 |     // If isNavigatingInRowRef is false, user entered from another row via up/down
+ 154 |     // → DON'T scroll, just let the selector land where Android TV placed it
+ 155 | 
+ 156 |     // Mark this row as active for horizontal navigation
+ 157 |     isNavigatingInRowRef.current = true;
+ 158 | 
+ 159 |     // Pre-fetch when near end
+ 160 |     if (index >= totalRef.current - 15 && hasMoreRef.current) {
+ 161 |       fetchMore();
+ 162 |     }
+ 163 |   }, [onSectionFocus, onItemFocus, validItems, fetchMore, itemTotalWidth, isTV]);
+ 164 | 
+ 165 |   // Card blur handler — detect when user leaves this row
+ 166 |   const handleCardBlur = useCallback(() => {
+ 167 |     // Set timer: if no card in this row gets focus within 150ms,
+ 168 |     // user has left this row (pressed up/down)
+ 169 |     blurTimerRef.current = setTimeout(() => {
+ 170 |       isNavigatingInRowRef.current = false;
+ 171 |     }, 150);
+ 172 |   }, []);
+ 173 | 
+ 174 |   const handleEndReached = useCallback(() => {
+ 175 |     if (!isFetchingRef.current && hasMoreRef.current) {
+ 176 |       fetchMore();
+ 177 |     }
+ 178 |   }, [fetchMore]);
+ 179 | 
+ 180 |   const getItemLayout = useCallback((_data: any, index: number) => ({
+ 181 |     length: itemTotalWidth,
+ 182 |     offset: paddingLeft + (index * itemTotalWidth),
+ 183 |     index,
+ 184 |   }), [itemTotalWidth, paddingLeft]);
+ 185 | 
+ 186 |   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
+ 187 |     <ContentCard
+ 188 |       item={item}
+ 189 |       onPress={() => onItemPress(item)}
+ 190 |       onCardFocus={() => handleCardFocus(index)}
+ 191 |       onCardBlur={handleCardBlur}
+ 192 |       showTitle={true}
+ 193 |       hasTVPreferredFocus={isFirstRow && index === 0}
+ 194 |       isFirstInRow={index === 0}
+ 195 |       isLastInRow={index === itemCountRef.current - 1}
+ 196 |     />
+ 197 |   ), [onItemPress, handleCardFocus, handleCardBlur, isFirstRow]);
+ 198 | 
+ 199 |   const keyExtractor = useCallback((item: ContentItem) => 
+ 200 |     item.id || item.imdb_id || `${item.name}`, []);
+ 201 | 
+ 202 |   // First 2 rows render immediately, subsequent rows stagger by 150ms each
+ 203 |   const lazyDelay = rowIndex <= 1 ? 0 : (rowIndex - 1) * 150;
+ 204 | 
+ 205 |   return (
+ 206 |     <LazyMount height={200} delay={lazyDelay}>
+ 207 |       <View style={styles.container}>
+ 208 |         <View style={[styles.header, isTV && styles.headerTV]}>
+ 209 |           <Text style={[styles.title, isTV && styles.titleTV]}>
+ 210 |             {title || serviceName || 'Content'}
+ 211 |           </Text>
+ 212 |         </View>
+ 213 |         
+ 214 |         <FlatList
+ 215 |           ref={flatListRef}
+ 216 |           horizontal
+ 217 |           data={validItems}
+ 218 |           extraData={validItems.length}
+ 219 |           renderItem={renderItem}
+ 220 |           keyExtractor={keyExtractor}
+ 221 |           getItemLayout={getItemLayout}
+ 222 |           showsHorizontalScrollIndicator={false}
+ 223 |           contentContainerStyle={[
+ 224 |             styles.scrollContent,
+ 225 |             isTV && styles.scrollContentTV,
+ 226 |           ]}
+ 227 |           style={styles.flatListStyle}
+ 228 |           initialNumToRender={3} /* PATCH_V41_COLDSTART_BUDGET — was 6; halves cold-start image fetches */
+ 229 |           maxToRenderPerBatch={3} /* PATCH_V41_COLDSTART_BUDGET — smaller render chunks; more JS yields */
+ 230 |           updateCellsBatchingPeriod={50}
+ 231 |           windowSize={5}
+ 232 |           removeClippedSubviews={true}
+ 233 |           onEndReached={handleEndReached}
+ 234 |           onEndReachedThreshold={3}
+ 235 |         />
+ 236 |       </View>
+ 237 |     </LazyMount>
+ 238 |   );
+ 239 | });
+ 240 | 
+ 241 | export const MetaRow = ServiceRow;
+ 242 | 
+ 243 | const styles = StyleSheet.create({
+ 244 |   container: {
+ 245 |     marginBottom: 8,
+ 246 |     overflow: 'visible',
+ 247 |   },
+ 248 |   header: {
+ 249 |     flexDirection: 'row',
+ 250 |     justifyContent: 'space-between',
+ 251 |     alignItems: 'center',
+ 252 |     paddingHorizontal: 16,
+ 253 |     marginBottom: 8,
+ 254 |   },
+ 255 |   headerTV: {
+ 256 |     paddingHorizontal: TV_PADDING_LEFT,
+ 257 |     marginBottom: 6,
+ 258 |   },
+ 259 |   title: {
+ 260 |     color: colors.primary,
+ 261 |     fontSize: 18,
+ 262 |     fontWeight: '600',
+ 263 |     letterSpacing: 0.5,
+ 264 |   },
+ 265 |   titleTV: {
+ 266 |     fontSize: 22,
+ 267 |   },
+ 268 |   scrollContent: {
+ 269 |     paddingLeft: MOBILE_PADDING,
+ 270 |     paddingRight: MOBILE_PADDING + 32,
+ 271 |     paddingVertical: 4,
+ 272 |   },
+ 273 |   scrollContentTV: {
+ 274 |     paddingLeft: TV_PADDING_LEFT,
+ 275 |     paddingRight: TV_PADDING_RIGHT + 80,
+ 276 |     paddingVertical: 4,
+ 277 |   },
+ 278 |   flatListStyle: {
+ 279 |     overflow: 'visible',
+ 280 |   },
+ 281 | });
+ 282 | 
+
+=== Quick scans ===
+
+[imports of react-native] 1 hit(s)
+  9: } from 'react-native';
+
+[FlatList usage] 2 hit(s)
+  87: const flatListRef = useRef<FlatList>(null);
+  214: <FlatList
+
+[ContentCard usage] 1 hit(s)
+  187: <ContentCard
+
+[useState declarations] 2 hit(s)
+  27: const [shouldRender, setShouldRender] = useState(delay <= 0);
+  79: const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
+
+[useEffect declarations] 2 hit(s)
+  1: import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
+  29: useEffect(() => {
+
+[memo / React.memo] 2 hit(s)
+  26: const LazyMount: React.FC<{ height: number; delay?: number; children: React.ReactNode }> = memo(({ height, delay = 0, children }) => {
+  61: export const ServiceRow: React.FC<ServiceRowProps> = memo(({
+
+[export default] 0 hit(s)
+
+[renderItem / keyExtractor] 4 hit(s)
+  186: const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
+  199: const keyExtractor = useCallback((item: ContentItem) =>
+  219: renderItem={renderItem}
+  220: keyExtractor={keyExtractor}
+
+[rowIndex prop] 3 hit(s)
+  58: rowIndex?: number;
+  70: rowIndex = 0,
+  203: const lazyDelay = rowIndex <= 1 ? 0 : (rowIndex - 1) * 150;
+
+[InteractionManager] 2 hit(s)
+  8: InteractionManager,
+  35: InteractionManager.runAfterInteractions(() => {

@@ -1,0 +1,84 @@
+================================================================
+=== FILE: frontend\app\_layout.tsx
+================================================================
+=== TOTAL LINES: 20   CRLF: true
+
+   1 | import React from 'react';
+   2 | // PATCH_V48_NO_FREEZE — enableFreeze removed. Was causing 3s back-nav lag.
+   3 | // import { enableFreeze } from 'react-native-screens';
+   4 | // enableFreeze(true);
+   5 | import { Stack } from 'expo-router';
+   6 | import { StatusBar } from 'expo-status-bar';
+   7 | import { SafeAreaProvider } from 'react-native-safe-area-context';
+   8 | import { View } from 'react-native';
+   9 | 
+  10 | export default function RootLayout() {
+  11 |   return (
+  12 |     <SafeAreaProvider>
+  13 |       <View style={{ flex: 1, backgroundColor: '#0c0c0c' }}>
+  14 |         <StatusBar style="light" />
+  15 |         <Stack screenOptions={{ headerShown: false, animation: 'none', freezeOnBlur: false /* PATCH_V48_NO_FREEZE — back-nav is instant */ }} />
+  16 |       </View>
+  17 |     </SafeAreaProvider>
+  18 |   );
+  19 | }
+  20 | 
+
+================================================================
+=== FILE: frontend\app\(tabs)\discover.tsx
+================================================================
+=== TOTAL LINES: 813   CRLF: true
+
+--- useFocusEffect region (with 4 lines before + 20 lines after) ---
+  97 |   // Backing from Details/Player → Discover used to fire fetchDiscover(true)
+  98 |   // every time, re-rendering every row and causing back-nav lag. SWR in
+  99 |   // the store already keeps data fresh; we only force-refetch every 60s.
+ 100 |   const lastDiscoverFetchTime = useRef<number>(Date.now());
+ 101 |   useFocusEffect(
+ 102 |     useCallback(() => {
+ 103 |       const now = Date.now();
+ 104 |       const cwElapsed = now - lastCWFetchTime.current;
+ 105 |       const discoverElapsed = now - lastDiscoverFetchTime.current;
+ 106 |       // Always cheap CW refresh after 30s; only heavy discover refresh after 60s.
+ 107 |       if (cwElapsed < 30000 && discoverElapsed < 60000) {
+ 108 |         return; // recent enough — back-nav stays instant
+ 109 |       }
+ 110 |       const handle = InteractionManager.runAfterInteractions(() => {
+ 111 |         if (cwElapsed >= 30000) fetchContinueWatching();
+ 112 |         if (discoverElapsed >= 60000) {
+ 113 |           lastDiscoverFetchTime.current = Date.now();
+ 114 |           fetchDiscover(); // no force flag — SWR pattern from store
+ 115 |         }
+ 116 |       });
+ 117 |       return () => handle.cancel();
+ 118 |     }, [fetchContinueWatching])
+ 119 |   );
+ 120 | 
+ 121 |   // Check if there's any content to display
+ 122 |   const hasContent = useMemo(() => {
+
+--- handleItemFocus region (with 4 lines before + 18 lines after) ---
+ 164 |   // if the user actually pauses on a poster for >350ms.
+ 165 |   const prefetchingRef = useRef<Set<string>>(new Set());
+ 166 |   const focusDebounceTimerRef = useRef<any>(null);
+ 167 |   const pendingFocusItemRef = useRef<ContentItem | null>(null);
+ 168 |   const handleItemFocus = useCallback((item: ContentItem) => {
+ 169 |     pendingFocusItemRef.current = item;
+ 170 |     if (focusDebounceTimerRef.current) clearTimeout(focusDebounceTimerRef.current);
+ 171 |     focusDebounceTimerRef.current = setTimeout(() => {
+ 172 |       focusDebounceTimerRef.current = null;
+ 173 |       const it = pendingFocusItemRef.current;
+ 174 |       if (!it) return;
+ 175 |       const id = it.imdb_id || it.id;
+ 176 |       if (!id || prefetchingRef.current.has(id) || getMetaCache(id)) return;
+ 177 |       prefetchingRef.current.add(id);
+ 178 |       api.content.getMeta(it.type, id).then((meta) => {
+ 179 |         setMetaCache(id, meta);
+ 180 |         if (meta.background) {
+ 181 |           try { Image.prefetch(meta.background); } catch (_) {}
+ 182 |         }
+ 183 |       }).catch(() => {});
+ 184 |     }, 350);
+ 185 |   }, []);
+ 186 | 
+ 187 |   const handleItemPress = (item: ContentItem) => {

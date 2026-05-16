@@ -143,22 +143,58 @@ export const useContentStore = create<ContentState>((set, get) => ({
 
     set({ isLoadingDiscover: true, error: null });
     try {
-      // PATCH_V57_FULL_FETCH — always fetch full discover (no backend pagination).
-      // V54 frontend already staggers render so cold start stays fast,
-      // and we need ALL addons (Streaming Catalogs especially) for proper
-      // row population.
+      // Phase 1 — fast first paint (5 services).
+      // We fetch via api.content.getDiscover with query params appended by
+      // calling client.get directly when the API allows; otherwise fall back
+      // to the legacy single-call.
       let firstPage: any = null;
       try {
-        firstPage = await (api.content as any).getDiscover();
+        // Use the underlying axios client if present
+        const apiAny: any = api as any;
+        if (apiAny.client && apiAny.client.get) {
+          const resp = await apiAny.client.get('/discover?limit=5');
+          firstPage = resp.data;
+        } else {
+          firstPage = await apiAny.content.getDiscover();
+        }
       } catch (err) {
-        console.log('[ContentStore] discover fetch failed:', err);
-        throw err;
+        // Backend might not have V55 backend yet → fall back to legacy.
+        console.log('[ContentStore] Phase 1 failed, falling back:', err);
+        firstPage = await (api.content as any).getDiscover();
       }
 
       if (firstPage) {
         set({ discoverData: firstPage, isLoadingDiscover: false });
         setCache('discover_data', firstPage, CACHE_DURATIONS.MEDIUM);
-}
+
+        // Phase 2 — background fill-in (rest of services) if backend says hasMore.
+        const hasMore = firstPage.hasMore === true;
+        const skip = (firstPage.skip || 0) + (firstPage.services ? Object.keys(firstPage.services).length : 0);
+        if (hasMore && skip > 0) {
+          (async () => {
+            try {
+              const apiAny: any = api as any;
+              let restPage: any = null;
+              if (apiAny.client && apiAny.client.get) {
+                const resp = await apiAny.client.get('/discover?skip=' + skip);
+                restPage = resp.data;
+              }
+              if (restPage && restPage.services) {
+                const merged = {
+                  ...firstPage,
+                  services: { ...(firstPage.services || {}), ...(restPage.services || {}) },
+                  hasMore: false,
+                };
+                set({ discoverData: merged });
+                setCache('discover_data', merged, CACHE_DURATIONS.MEDIUM);
+                console.log('[ContentStore] V55 phase-2 merged ' + Object.keys(restPage.services).length + ' more services');
+              }
+            } catch (e) {
+              console.log('[ContentStore] V55 phase-2 background fetch failed:', e);
+            }
+          })();
+        }
+      }
     } catch (error: any) {
       console.log('[ContentStore] fetchDiscover error:', error);
       set({ error: error?.message || 'discover failed', isLoadingDiscover: false, discoverData: currentData || null });

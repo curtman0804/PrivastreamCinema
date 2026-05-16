@@ -1,4 +1,42 @@
-// PATCH_V53_STREMIO_PATTERN — clean SearchBar matching Stremio's Android TV
+/* eslint-disable */
+// apply_patches_v53.js — REVERT my V51+V52 mistakes and ship the Stremio-style
+// search pattern: a BARE TextInput that's directly D-pad-focusable on Android TV.
+//
+// THE PROBLEM I CAUSED:
+//   V51 wrapped the TextInput in a Pressable so D-pad would land on it.
+//   That Pressable then STOLE the OK-press, so pressing OK never actually
+//   focused the TextInput — it just called handleRowPress which called focus()
+//   too late and got swallowed.
+//
+//   V52 made it worse by adding an on-screen keyboard (which you do NOT want).
+//
+// THE STREMIO PATTERN:
+//   TextInput is directly D-pad-focusable on Android TV when it has:
+//     - hasTVPreferredFocus  → makes the D-pad land on it on screen mount
+//     - autoFocus            → triggers focus() which pops the system IME
+//     - showSoftInputOnFocus → forces the IME up regardless
+//   No Pressable wrapper. No on-screen keyboard. Same as Stremio.
+//
+// This patch OVERWRITES SearchBar.tsx with the clean version and removes
+// the TVKeyboard rendering. The TVKeyboard.tsx file is left on disk
+// (unused) — safe to delete manually if you want.
+//
+// Backup of current file: SearchBar.tsx.bak.v53.<ts>
+
+const fs = require('fs');
+const path = require('path');
+
+const F = path.join('frontend', 'src', 'components', 'SearchBar.tsx');
+if (!fs.existsSync(F)) {
+  console.error('ERROR: ' + F + ' not found.');
+  process.exit(1);
+}
+
+const bak = F + '.bak.v53.' + Date.now();
+fs.copyFileSync(F, bak);
+console.log('  [info] backup → ' + bak);
+
+const CLEAN = `// PATCH_V53_STREMIO_PATTERN — clean SearchBar matching Stremio's Android TV
 // search pattern: bare TextInput is directly D-pad-focusable. No Pressable
 // wrapper, no on-screen keyboard. The system Gboard for TV pops up natively
 // when the TextInput is focused.
@@ -137,3 +175,19 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.1 }],
   },
 });
+`;
+
+fs.writeFileSync(F, CLEAN, 'utf8');
+console.log('  [OK]   SearchBar.tsx rewritten clean (Stremio pattern)');
+console.log('');
+console.log('========================================');
+console.log('  V53 done.');
+console.log('========================================');
+console.log('Rebuild APK, sideload, force-stop + relaunch on Streamer 4K.');
+console.log('Expected:');
+console.log('  ✓ Open Search → TextInput is auto-focused → system Gboard pops up.');
+console.log('  ✓ Type via remote/keyboard → submit → results show.');
+console.log('  ✓ Phone behavior unchanged.');
+console.log('');
+console.log('Verify:');
+console.log('  findstr /S /C:"PATCH_V53" frontend\\\\src\\\\components\\\\SearchBar.tsx');

@@ -1,14 +1,9 @@
-// PATCH_V53_STREMIO_PATTERN — clean SearchBar matching Stremio's Android TV
-// search pattern: bare TextInput is directly D-pad-focusable. No Pressable
-// wrapper, no on-screen keyboard. The system Gboard for TV pops up natively
-// when the TextInput is focused.
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   TextInput,
   StyleSheet,
   Pressable,
-  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -24,53 +19,39 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   initialValue = '',
 }) => {
   const [query, setQuery] = useState(initialValue);
-  const [inputFocused, setInputFocused] = useState(false);
-  const inputRef = useRef<TextInput>(null);
 
+  // Update query when initialValue changes (from tag navigation)
   useEffect(() => {
-    if (initialValue) setQuery(initialValue);
-  }, [initialValue]);
-
-  // On Android TV, programmatic focus after mount reliably pops the system IME.
-  // Stremio does the same — they don't rely on autoFocus alone.
-  useEffect(() => {
-    if (Platform.OS !== 'android' || initialValue) return;
-    const t = setTimeout(() => {
-      try { inputRef.current?.focus(); } catch (_) {}
-    }, 250);
-    return () => clearTimeout(t);
+    if (initialValue) {
+      setQuery(initialValue);
+    }
   }, [initialValue]);
 
   const handleSubmit = () => {
-    if (query.trim()) onSearch(query.trim());
+    if (query.trim()) {
+      onSearch(query.trim());
+    }
   };
+
   const handleClear = () => {
     setQuery('');
     onSearch('');
-    try { inputRef.current?.focus(); } catch (_) {}
   };
 
   return (
     <View style={styles.container}>
-      <View style={[styles.inputRow, inputFocused && styles.inputRowFocused]}>
+      <View style={styles.inputRow}>
         <Ionicons name="search" size={20} color="#888888" style={styles.icon} />
         <TextInput
-          ref={inputRef}
           style={styles.input}
           placeholder={placeholder}
           placeholderTextColor="#888888"
           value={query}
           onChangeText={setQuery}
           onSubmitEditing={handleSubmit}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
           returnKeyType="search"
           autoCapitalize="none"
           autoCorrect={false}
-          autoFocus={!initialValue}
-          showSoftInputOnFocus={true}
-          hasTVPreferredFocus={!initialValue}
-          blurOnSubmit={false}
         />
         {query.length > 0 && (
           <Pressable onPress={handleClear} style={styles.clearButton}>
@@ -108,20 +89,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     height: 48,
-    borderWidth: 2,
-    borderColor: 'transparent',
   },
-  inputRowFocused: {
-    borderColor: '#B8A05C',
-    backgroundColor: '#222',
+  icon: {
+    marginRight: 8,
   },
-  icon: { marginRight: 8 },
   input: {
     flex: 1,
     color: '#FFFFFF',
     fontSize: 16,
   },
-  clearButton: { padding: 4 },
+  clearButton: {
+    padding: 4,
+  },
   searchButton: {
     backgroundColor: '#B8A05C',
     borderRadius: 12,

@@ -7,7 +7,6 @@ import {
   useWindowDimensions,
   InteractionManager,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list'; // PATCH_V49_FLASHLIST
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
 import apiClient from '../api/client';
@@ -125,7 +124,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
   const lastFetchTime = useRef(0);
   const totalRef = useRef(initialItems?.length || 0);
   const itemCountRef = useRef(initialItems?.length || 0);
-  const flatListRef = useRef<FlashList<ContentItem>>(null); // PATCH_V49_FLASHLIST
+  const flatListRef = useRef<FlatList>(null);
 
   // Track whether user is navigating horizontally within this row
   const isNavigatingInRowRef = useRef(false);
@@ -221,7 +220,11 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
     }
   }, [fetchMore]);
 
-  // PATCH_V49_FLASHLIST — getItemLayout removed; FlashList auto-virtualizes with estimatedItemSize.
+  const getItemLayout = useCallback((_data: any, index: number) => ({
+    length: itemTotalWidth,
+    offset: paddingLeft + (index * itemTotalWidth),
+    index,
+  }), [itemTotalWidth, paddingLeft]);
 
   const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
     <ContentCard
@@ -251,20 +254,25 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(({
           </Text>
         </View>
         
-        {/* PATCH_V49_FLASHLIST — horizontal FlashList replaces FlatList for 3-5x D-pad perf */}
-        <FlashList
-          ref={flatListRef as any}
+        <FlatList
+          ref={flatListRef}
           horizontal
           data={validItems}
           extraData={validItems.length}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          getItemLayout={getItemLayout}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={
-            isTV ? styles.scrollContentTV : styles.scrollContent
-          }
-          estimatedItemSize={itemTotalWidth}
-          drawDistance={itemTotalWidth * 3}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isTV && styles.scrollContentTV,
+          ]}
+          style={styles.flatListStyle}
+          initialNumToRender={2} /* PATCH_V43B_SEQUENTIAL_MOUNT — first paint is 2 cards */
+          maxToRenderPerBatch={3} /* PATCH_V41_COLDSTART_BUDGET — smaller render chunks; more JS yields */
+          updateCellsBatchingPeriod={50}
+          windowSize={5}
+          removeClippedSubviews={false} /* PATCH_V43B_SEQUENTIAL_MOUNT — TV focus stability */
           onEndReached={handleEndReached}
           onEndReachedThreshold={3}
         />

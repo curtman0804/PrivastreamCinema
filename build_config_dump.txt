@@ -1,0 +1,286 @@
+================================================================
+=== FILE: frontend\app.json
+================================================================
+   1 | {
+   2 |   "expo": {
+   3 |     "name": "Privastream Cinema",
+   4 |     "slug": "privastreamcinema",
+   5 |     "version": "1.7.1",
+   6 |     "orientation": "default",
+   7 |     "icon": "./assets/images/icon.png",
+   8 |     "scheme": "privastreamcinema",
+   9 |     "userInterfaceStyle": "automatic",
+  10 |     "newArchEnabled": true,
+  11 |     "ios": {
+  12 |       "supportsTablet": true,
+  13 |       "bundleIdentifier": "com.privastream.cinema"
+  14 |     },
+  15 |     "android": {
+  16 |       "adaptiveIcon": {
+  17 |         "foregroundImage": "./assets/images/adaptive-icon-foreground.png",
+  18 |         "monochromeImage": "./assets/images/adaptive-icon-monochrome.png",
+  19 |         "backgroundColor": "#000000"
+  20 |       },
+  21 |       "splash": {
+  22 |         "image": "./assets/images/logo.png",
+  23 |         "resizeMode": "contain",
+  24 |         "backgroundColor": "#000000"
+  25 |       },
+  26 |       "package": "com.privastream.cinema",
+  27 |       "allowBackup": false,
+  28 |       "versionCode": 21
+  29 |     },
+  30 |     "web": {
+  31 |       "bundler": "metro",
+  32 |       "output": "static",
+  33 |       "favicon": "./assets/images/favicon.png"
+  34 |     },
+  35 |     "plugins": [
+  36 |       "expo-router",
+  37 |       [
+  38 |         "expo-splash-screen",
+  39 |         {
+  40 |           "image": "./assets/images/adaptive-icon.png",
+  41 |           "imageWidth": 288,
+  42 |           "resizeMode": "contain",
+  43 |           "backgroundColor": "#000000",
+  44 |           "enableFullScreenImage_legacy": true
+  45 |         }
+  46 |       ],
+  47 |       "expo-font",
+  48 |       "./plugins/withTVKeyEvents",
+  49 |       "./plugins/withTVLauncher",
+  50 |       [
+  51 |         "expo-build-properties",
+  52 |         {
+  53 |           "android": {
+  54 |             "usesCleartextTraffic": true
+  55 |           }
+  56 |         }
+  57 |       ],
+  58 |       "expo-video"
+  59 |     ],
+  60 |     "experiments": {
+  61 |       "typedRoutes": true
+  62 |     },
+  63 |     "extra": {
+  64 |       "router": {},
+  65 |       "eas": {
+  66 |         "projectId": "734879b5-3cae-4195-b064-cc0c7617b7ae"
+  67 |       },
+  68 |       "backendUrl": "http://71.9.152.146:8001"
+  69 |     },
+  70 |     "owner": "choyt"
+  71 |   }
+  72 | }
+
+================================================================
+=== FILE: frontend\package.json
+================================================================
+   1 | {
+   2 |   "name": "frontend",
+   3 |   "main": "expo-router/entry",
+   4 |   "version": "1.0.0",
+   5 |   "scripts": {
+   6 |     "start": "expo start",
+   7 |     "reset-project": "node ./scripts/reset-project.js",
+   8 |     "android": "expo run:android",
+   9 |     "ios": "expo run:ios",
+  10 |     "web": "expo start --web",
+  11 |     "lint": "expo lint"
+  12 |   },
+  13 |   "dependencies": {
+  14 |     "@expo/ngrok": "^4.1.3",
+  15 |     "@expo/vector-icons": "^15.0.3",
+  16 |     "@react-native-async-storage/async-storage": "^2.2.0",
+  17 |     "@react-navigation/bottom-tabs": "^7.3.10",
+  18 |     "@react-navigation/elements": "^2.3.8",
+  19 |     "@react-navigation/native": "^7.1.6",
+  20 |     "@shopify/flash-list": "2.0.2",
+  21 |     "@types/react": "~19.1.10",
+  22 |     "axios": "^1.13.2",
+  23 |     "expo": "54.0.33",
+  24 |     "expo-av": "^16.0.8",
+  25 |     "expo-blur": "~15.0.8",
+  26 |     "expo-build-properties": "^55.0.10",
+  27 |     "expo-clipboard": "^8.0.8",
+  28 |     "expo-constants": "~18.0.13",
+  29 |     "expo-dev-client": "~6.0.20",
+  30 |     "expo-font": "~14.0.11",
+  31 |     "expo-haptics": "~15.0.8",
+  32 |     "expo-image": "~3.0.11",
+  33 |     "expo-keep-awake": "^15.0.8",
+  34 |     "expo-key-event": "^1.8.3",
+  35 |     "expo-linear-gradient": "^15.0.8",
+  36 |     "expo-linking": "~8.0.11",
+  37 |     "expo-navigation-bar": "^5.0.10",
+  38 |     "expo-router": "~6.0.23",
+  39 |     "expo-screen-orientation": "^9.0.8",
+  40 |     "expo-splash-screen": "~31.0.13",
+  41 |     "expo-status-bar": "~3.0.9",
+  42 |     "expo-symbols": "~1.0.8",
+  43 |     "expo-system-ui": "~6.0.9",
+  44 |     "expo-video": "~3.0.16",
+  45 |     "expo-web-browser": "~15.0.10",
+  46 |     "react": "19.1.0",
+  47 |     "react-dom": "19.1.0",
+  48 |     "react-native": "0.81.5",
+  49 |     "react-native-dotenv": "^3.4.11",
+  50 |     "react-native-gesture-handler": "~2.28.0",
+  51 |     "react-native-keyboard-aware-scroll-view": "^0.9.5",
+  52 |     "react-native-reanimated": "~4.1.1",
+  53 |     "react-native-safe-area-context": "~5.6.0",
+  54 |     "react-native-screens": "~4.16.0",
+  55 |     "react-native-web": "^0.21.0",
+  56 |     "react-native-webview": "13.15.0",
+  57 |     "react-native-worklets": "0.5.1",
+  58 |     "zustand": "^5.0.9"
+  59 |   },
+  60 |   "devDependencies": {
+  61 |     "@babel/core": "^7.25.2",
+  62 |     "eslint": "^9.25.0",
+  63 |     "typescript": "~5.9.2"
+  64 |   },
+  65 |   "private": true,
+  66 |   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  67 | }
+  68 | 
+
+================================================================
+=== FILE: frontend\android\gradle.properties
+================================================================
+   1 | # Project-wide Gradle settings.
+   2 | 
+   3 | # IDE (e.g. Android Studio) users:
+   4 | # Gradle settings configured through the IDE *will override*
+   5 | # any settings specified in this file.
+   6 | 
+   7 | # For more details on how to configure your build environment visit
+   8 | # http://www.gradle.org/docs/current/userguide/build_environment.html
+   9 | 
+  10 | # Specifies the JVM arguments used for the daemon process.
+  11 | # The setting is particularly useful for tweaking memory settings.
+  12 | # Default value: -Xmx512m -XX:MaxMetaspaceSize=256m
+  13 | org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+  14 | 
+  15 | # When configured, Gradle will run in incubating parallel mode.
+  16 | # This option should only be used with decoupled projects. More details, visit
+  17 | # http://www.gradle.org/docs/current/userguide/multi_project_builds.html#sec:decoupled_projects
+  18 | org.gradle.parallel=true
+  19 | 
+  20 | # AndroidX package structure to make it clearer which packages are bundled with the
+  21 | # Android operating system, and which are packaged with your app's APK
+  22 | # https://developer.android.com/topic/libraries/support-library/androidx-rn
+  23 | android.useAndroidX=true
+  24 | 
+  25 | # Enable AAPT2 PNG crunching
+  26 | android.enablePngCrunchInReleaseBuilds=true
+  27 | 
+  28 | # Use this property to specify which architecture you want to build.
+  29 | # You can also override it from the CLI using
+  30 | # ./gradlew <task> -PreactNativeArchitectures=x86_64
+  31 | reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86,x86_64
+  32 | 
+  33 | # Use this property to enable support to the new architecture.
+  34 | # This will allow you to use TurboModules and the Fabric render in
+  35 | # your application. You should enable this flag either if you want
+  36 | # to write custom TurboModules/Fabric components OR use libraries that
+  37 | # are providing them.
+  38 | newArchEnabled=true
+  39 | 
+  40 | # Use this property to enable or disable the Hermes JS engine.
+  41 | # If set to false, you will be using JSC instead.
+  42 | hermesEnabled=true
+  43 | 
+  44 | # Use this property to enable edge-to-edge display support.
+  45 | # This allows your app to draw behind system bars for an immersive UI.
+  46 | # Note: Only works with ReactActivity and should not be used with custom Activity.
+  47 | edgeToEdgeEnabled=true
+  48 | 
+  49 | # Enable GIF support in React Native images (~200 B increase)
+  50 | expo.gif.enabled=true
+  51 | # Enable webp support in React Native images (~85 KB increase)
+  52 | expo.webp.enabled=true
+  53 | # Enable animated webp support (~3.4 MB increase)
+  54 | # Disabled by default because iOS doesn't support animated webp
+  55 | expo.webp.animated=false
+  56 | 
+  57 | # Enable network inspector
+  58 | EX_DEV_CLIENT_NETWORK_INSPECTOR=true
+  59 | 
+  60 | # Use legacy packaging to compress native libraries in the resulting APK.
+  61 | expo.useLegacyPackaging=false
+  62 | 
+  63 | # Specifies whether the app is configured to use edge-to-edge via the app config or plugin
+  64 | # WARNING: This property has been deprecated and will be removed in Expo SDK 55. Use `edgeToEdgeEnabled` or `react.edgeToEdgeEnabled` to determine whether the project is using edge-to-edge.
+  65 | expo.edgeToEdgeEnabled=true
+  66 | 
+
+================================================================
+=== FILE: frontend\android\app\build.gradle (HERMES + ARCHITECTURE LINES ONLY)
+================================================================
+  L14:     hermesCommand = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/sdks/hermesc/%OS-BIN%/hermesc"
+  L55:     /* Hermes Commands */
+  L56:     //   The hermes compiler command to run. By default it is 'hermesc'
+  L57:     // hermesCommand = "$rootDir/my-custom-hermesc/bin/hermesc"
+  L59:     //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
+  L60:     // hermesFlags = ["-O", "-output-source-map"]
+  L177:     if (hermesEnabled.toBoolean()) {
+  L178:         implementation("com.facebook.react:hermes-android")
+
+================================================================
+=== FILE: frontend\eas.json
+================================================================
+   1 | {
+   2 |   "cli": {
+   3 |     "version": ">= 3.0.0",
+   4 |     "appVersionSource": "local",
+   5 |     "requireCommit": false
+   6 |   },
+   7 |   "build": {
+   8 |     "development": {
+   9 |       "developmentClient": true,
+  10 |       "distribution": "internal",
+  11 |       "android": {
+  12 |         "buildType": "apk",
+  13 |         "withoutCredentials": true
+  14 |       },
+  15 |       "node": "22.12.0"
+  16 |     },
+  17 |     "preview": {
+  18 |       "distribution": "internal",
+  19 |       "android": {
+  20 |         "buildType": "apk",
+  21 |         "withoutCredentials": true
+  22 |       },
+  23 |       "node": "22.12.0"
+  24 |     },
+  25 |     "production": {
+  26 |       "android": {
+  27 |         "buildType": "apk",
+  28 |         "withoutCredentials": true
+  29 |       },
+  30 |       "node": "22.12.0"
+  31 |     }
+  32 |   },
+  33 |   "submit": {
+  34 |     "production": {}
+  35 |   }
+  36 | }
+  37 | 
+
+================================================================
+=== AUTO-DIAGNOSIS ===
+================================================================
+app.json → expo.jsEngine = NOT SET
+app.json → expo.newArchEnabled = true
+app.json → expo.android = {"adaptiveIcon":{"foregroundImage":"./assets/images/adaptive-icon-foreground.png","monochromeImage":"./assets/images/adaptive-icon-monochrome.png","backgroundColor":"#000000"},"splash":{"image":"./ass
+package.json → react-native = 0.81.5
+package.json → expo = 54.0.33
+package.json → react-native-screens = ~4.16.0
+
+HERMES status:        DEFAULT (likely hermes on modern Expo)
+NEW ARCHITECTURE:     true
+
+If HERMES is false/unset and RN >= 0.70 → enabling Hermes gives 2-3x perf.
+If newArchEnabled is false → bridge is the bottleneck on Android TV.

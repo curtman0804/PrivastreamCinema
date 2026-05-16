@@ -1,0 +1,954 @@
+================================================================
+=== FILE: frontend\app\(tabs)\search.tsx   (197 lines)
+================================================================
+   1 | import React, { useState, useCallback, useEffect, useRef } from 'react';
+   2 | import {
+   3 |   View,
+   4 |   Text,
+   5 |   StyleSheet,
+   6 |   ScrollView,
+   7 |   ActivityIndicator,
+   8 | } from 'react-native';
+   9 | import { SafeAreaView } from 'react-native-safe-area-context';
+  10 | import { useRouter, useLocalSearchParams } from 'expo-router';
+  11 | import { Ionicons } from '@expo/vector-icons';
+  12 | import { useContentStore } from '../../src/store/contentStore';
+  13 | import { SearchBar } from '../../src/components/SearchBar';
+  14 | import { ServiceRow } from '../../src/components/ServiceRow';
+  15 | import { SearchResult } from '../../src/api/client';
+  16 | 
+  17 | export default function SearchScreen() {
+  18 |   const router = useRouter();
+  19 |   const { q: queryParam } = useLocalSearchParams<{ q?: string }>();
+  20 |   const searchResults = useContentStore(s => s.searchResults);
+  21 |   const searchMovies = useContentStore(s => s.searchMovies);
+  22 |   const searchSeries = useContentStore(s => s.searchSeries);
+  23 |   const isLoadingSearch = useContentStore(s => s.isLoadingSearch);
+  24 |   const search = useContentStore(s => s.search);
+  25 |   const clearSearch = useContentStore(s => s.clearSearch);
+  26 |   const [hasSearched, setHasSearched] = useState(false);
+  27 |   const [currentQuery, setCurrentQuery] = useState<string>('');
+  28 |   const hasTriggeredInitialSearch = useRef(false);
+  29 | 
+  30 |   // Auto-trigger search when navigated to with a query parameter
+  31 |   useEffect(() => {
+  32 |     if (queryParam && !hasTriggeredInitialSearch.current) {
+  33 |       hasTriggeredInitialSearch.current = true;
+  34 |       const decodedQuery = decodeURIComponent(queryParam);
+  35 |       setCurrentQuery(decodedQuery);
+  36 |       setHasSearched(true);
+  37 |       search(decodedQuery);
+  38 |     }
+  39 |   }, [queryParam, search]);
+  40 | 
+  41 |   // Reset when component unmounts
+  42 |   useEffect(() => {
+  43 |     return () => {
+  44 |       hasTriggeredInitialSearch.current = false;
+  45 |     };
+  46 |   }, [queryParam]);
+  47 | 
+  48 |   const handleSearch = useCallback(async (query: string) => {
+  49 |     if (!query.trim()) {
+  50 |       clearSearch();
+  51 |       setHasSearched(false);
+  52 |       setCurrentQuery('');
+  53 |       return;
+  54 |     }
+  55 |     setCurrentQuery(query);
+  56 |     setHasSearched(true);
+  57 |     await search(query);
+  58 |   }, [search, clearSearch]);
+  59 | 
+  60 |   const handleItemPress = (item: SearchResult) => {
+  61 |     router.push({
+  62 |       pathname: `/details/${item.type}/${encodeURIComponent(item.id)}`,
+  63 |       params: {
+  64 |         name: item.name || '',
+  65 |         poster: item.poster || '',
+  66 |         year: item.year ? String(item.year) : '',
+  67 |         imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+  68 |       },
+  69 |     });
+  70 |   };
+  71 | 
+  72 |   return (
+  73 |     <SafeAreaView style={styles.container} edges={['top']}>
+  74 |       <View style={styles.header}>
+  75 |         <Text style={styles.headerTitle}>Search</Text>
+  76 |       </View>
+  77 | 
+  78 |       <SearchBar onSearch={handleSearch} initialValue={currentQuery} />
+  79 | 
+  80 |       {isLoadingSearch ? (
+  81 |         <View style={styles.centerContainer}>
+  82 |           <ActivityIndicator size="large" color="#B8A05C" />
+  83 |           <Text style={styles.loadingText}>Searching...</Text>
+  84 |         </View>
+  85 |       ) : hasSearched && searchResults.length === 0 ? (
+  86 |         <View style={styles.centerContainer}>
+  87 |           <Ionicons name="search-outline" size={64} color="#444444" />
+  88 |           <Text style={styles.emptyText}>No results found</Text>
+  89 |           <Text style={styles.emptySubtext}>Try a different search term</Text>
+  90 |         </View>
+  91 |       ) : !hasSearched ? (
+  92 |         <View style={styles.centerContainer}>
+  93 |           <Ionicons name="film-outline" size={64} color="#444444" />
+  94 |           <Text style={styles.emptyText}>Search for movies & TV shows</Text>
+  95 |           <Text style={styles.emptySubtext}>Find your favorite content</Text>
+  96 |         </View>
+  97 |       ) : (
+  98 |         <ScrollView 
+  99 |           style={styles.scrollView}
+ 100 |           showsVerticalScrollIndicator={false}
+ 101 |           contentContainerStyle={styles.scrollContent}
+ 102 |         >
+ 103 |           {/* Movies Row */}
+ 104 |           {searchMovies.length > 0 && (
+ 105 |             <ServiceRow
+ 106 |               title={`Movies (${searchMovies.length})`}
+ 107 |               items={searchMovies}
+ 108 |               onItemPress={handleItemPress}
+ 109 |             />
+ 110 |           )}
+ 111 | 
+ 112 |           {/* Series Row */}
+ 113 |           {searchSeries.length > 0 && (
+ 114 |             <ServiceRow
+ 115 |               title={`Series (${searchSeries.length})`}
+ 116 |               items={searchSeries}
+ 117 |               onItemPress={handleItemPress}
+ 118 |             />
+ 119 |           )}
+ 120 | 
+ 121 |           {/* Show summary at bottom if both exist */}
+ 122 |           {searchMovies.length > 0 && searchSeries.length > 0 && (
+ 123 |             <View style={styles.resultsSummary}>
+ 124 |               <Text style={styles.resultsSummaryText}>
+ 125 |                 {searchMovies.length} Movies  •  {searchSeries.length} Series
+ 126 |               </Text>
+ 127 |             </View>
+ 128 |           )}
+ 129 |           
+ 130 |           <View style={styles.bottomPadding} />
+ 131 |         </ScrollView>
+ 132 |       )}
+ 133 |     </SafeAreaView>
+ 134 |   );
+ 135 | }
+ 136 | 
+ 137 | const styles = StyleSheet.create({
+ 138 |   container: {
+ 139 |     flex: 1,
+ 140 |     backgroundColor: '#0c0c0c',
+ 141 |   },
+ 142 |   header: {
+ 143 |     paddingHorizontal: 16,
+ 144 |     paddingVertical: 12,
+ 145 |     borderBottomWidth: 1,
+ 146 |     borderBottomColor: '#1a1a1a',
+ 147 |   },
+ 148 |   headerTitle: {
+ 149 |     fontSize: 28,
+ 150 |     fontWeight: '800',
+ 151 |     color: '#B8A05C',
+ 152 |   },
+ 153 |   centerContainer: {
+ 154 |     flex: 1,
+ 155 |     justifyContent: 'center',
+ 156 |     alignItems: 'center',
+ 157 |     paddingHorizontal: 32,
+ 158 |   },
+ 159 |   loadingText: {
+ 160 |     color: '#B8A05C',
+ 161 |     marginTop: 12,
+ 162 |     fontSize: 16,
+ 163 |   },
+ 164 |   emptyText: {
+ 165 |     color: '#B8A05C',
+ 166 |     fontSize: 18,
+ 167 |     fontWeight: '600',
+ 168 |     marginTop: 16,
+ 169 |     textAlign: 'center',
+ 170 |   },
+ 171 |   emptySubtext: {
+ 172 |     color: '#9A8540',
+ 173 |     fontSize: 14,
+ 174 |     marginTop: 8,
+ 175 |     textAlign: 'center',
+ 176 |   },
+ 177 |   scrollView: {
+ 178 |     flex: 1,
+ 179 |   },
+ 180 |   scrollContent: {
+ 181 |     paddingTop: 8,
+ 182 |   },
+ 183 |   resultsSummary: {
+ 184 |     alignItems: 'center',
+ 185 |     paddingVertical: 12,
+ 186 |     paddingHorizontal: 16,
+ 187 |   },
+ 188 |   resultsSummaryText: {
+ 189 |     color: '#888888',
+ 190 |     fontSize: 13,
+ 191 |     fontWeight: '500',
+ 192 |   },
+ 193 |   bottomPadding: {
+ 194 |     height: 40,
+ 195 |   },
+ 196 | });
+ 197 | 
+
+================================================================
+=== FILE: frontend\app\search.tsx   (361 lines)
+================================================================
+   1 | import React, { useEffect, useState, useRef } from 'react';
+   2 | import {
+   3 |   View,
+   4 |   Text,
+   5 |   StyleSheet,
+   6 |   FlatList,
+   7 |   Pressable,
+   8 |   ActivityIndicator,
+   9 |   Dimensions,
+  10 |   TextInput,
+  11 | } from 'react-native';
+  12 | import { useLocalSearchParams, useRouter } from 'expo-router';
+  13 | import { SafeAreaView } from 'react-native-safe-area-context';
+  14 | import { Ionicons } from '@expo/vector-icons';
+  15 | import { Image } from 'expo-image';
+  16 | import { useContentStore } from '../src/store/contentStore';
+  17 | import { ContentItem } from '../src/api/client';
+  18 | 
+  19 | const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  20 | const isTV = screenWidth > screenHeight || screenWidth > 800;
+  21 | 
+  22 | // Logo header image
+  23 | const logoHeaderImage = require('../assets/images/logo_header.png');
+  24 | 
+  25 | // TV-optimized sizing: 6 columns on TV, 3 on mobile
+  26 | const NUM_COLUMNS = isTV ? 6 : 3;
+  27 | const HORIZONTAL_PADDING = isTV ? 32 : 16;
+  28 | const ITEM_SPACING = isTV ? 16 : 8;
+  29 | const ITEM_WIDTH = (screenWidth - (HORIZONTAL_PADDING * 2) - (ITEM_SPACING * (NUM_COLUMNS - 1))) / NUM_COLUMNS;
+  30 | const ITEM_HEIGHT = ITEM_WIDTH * 1.5;
+  31 | 
+  32 | // Focusable Search Result Item
+  33 | function FocusableResultItem({ 
+  34 |   item, 
+  35 |   onPress,
+  36 | }: { 
+  37 |   item: ContentItem;
+  38 |   onPress: () => void;
+  39 | }) {
+  40 |   const [isFocused, setIsFocused] = useState(false);
+  41 |   
+  42 |   return (
+  43 |     <Pressable 
+  44 |       style={[
+  45 |         styles.itemContainer, 
+  46 |         isFocused && styles.itemContainerFocused
+  47 |       ]}
+  48 |       onPress={onPress}
+  49 |       onFocus={() => setIsFocused(true)}
+  50 |       onBlur={() => setIsFocused(false)}
+  51 |     >
+  52 |       <Image
+  53 |         source={{ uri: item.poster }}
+  54 |         style={[styles.poster, isFocused && styles.posterFocused]}
+  55 |         contentFit="cover"
+  56 |         placeholder={require('../assets/images/no-poster.png')}
+  57 |         placeholderContentFit="cover"
+  58 |       />
+  59 |       <Text style={styles.itemTitle} numberOfLines={2}>{item.name}</Text>
+  60 |     </Pressable>
+  61 |   );
+  62 | }
+  63 | 
+  64 | // Focusable Button Component
+  65 | function FocusableButton({ 
+  66 |   onPress, 
+  67 |   style, 
+  68 |   focusedStyle,
+  69 |   children,
+  70 | }: {
+  71 |   onPress: () => void;
+  72 |   style: any;
+  73 |   focusedStyle?: any;
+  74 |   children: React.ReactNode;
+  75 | }) {
+  76 |   const [isFocused, setIsFocused] = useState(false);
+  77 |   
+  78 |   return (
+  79 |     <Pressable
+  80 |       style={[style, isFocused && (focusedStyle || styles.defaultFocused)]}
+  81 |       onPress={onPress}
+  82 |       onFocus={() => setIsFocused(true)}
+  83 |       onBlur={() => setIsFocused(false)}
+  84 |     >
+  85 |       {children}
+  86 |     </Pressable>
+  87 |   );
+  88 | }
+  89 | 
+  90 | export default function SearchScreen() {
+  91 |   const { q } = useLocalSearchParams<{ q?: string }>();
+  92 |   const router = useRouter();
+  93 |   const searchResults = useContentStore(s => s.searchResults);
+  94 |   const isLoadingSearch = useContentStore(s => s.isLoadingSearch);
+  95 |   const search = useContentStore(s => s.search);
+  96 |   const clearSearch = useContentStore(s => s.clearSearch);
+  97 |   const [searchQuery, setSearchQuery] = useState(q || '');
+  98 |   const flatListRef = useRef<FlatList>(null);
+  99 | 
+ 100 |   // Auto-search when query param exists
+ 101 |   useEffect(() => {
+ 102 |     if (q) {
+ 103 |       setSearchQuery(q);
+ 104 |       const timer = setTimeout(() => {
+ 105 |         search(q);
+ 106 |       }, 100);
+ 107 |       return () => clearTimeout(timer);
+ 108 |     }
+ 109 |   }, [q]);
+ 110 | 
+ 111 |   const handleSearch = () => {
+ 112 |     if (searchQuery.trim()) {
+ 113 |       search(searchQuery.trim());
+ 114 |     }
+ 115 |   };
+ 116 | 
+ 117 |   const handleItemPress = (item: ContentItem) => {
+ 118 |     const id = item.imdb_id || item.id;
+ 119 |     const encodedId = encodeURIComponent(id);
+ 120 |     router.push({
+ 121 |       pathname: `/details/${item.type}/${encodedId}`,
+ 122 |       params: {
+ 123 |         name: item.name || '',
+ 124 |         poster: item.poster || '',
+ 125 |         background: item.background || '',
+ 126 |         logo: item.logo || '',
+ 127 |         year: item.year ? String(item.year) : '',
+ 128 |         imdbRating: item.imdbRating ? String(item.imdbRating) : '',
+ 129 |         description: item.description || '',
+ 130 |       }
+ 131 |     });
+ 132 |   };
+ 133 | 
+ 134 |   // Deduplicate results based on imdb_id or id
+ 135 |   const deduplicatedResults = React.useMemo(() => {
+ 136 |     const seen = new Set<string>();
+ 137 |     return searchResults.filter(item => {
+ 138 |       const key = item.imdb_id || item.id;
+ 139 |       if (seen.has(key)) {
+ 140 |         return false;
+ 141 |       }
+ 142 |       seen.add(key);
+ 143 |       return true;
+ 144 |     });
+ 145 |   }, [searchResults]);
+ 146 | 
+ 147 |   const renderItem = ({ item, index }: { item: ContentItem; index: number }) => (
+ 148 |     <FocusableResultItem
+ 149 |       item={item}
+ 150 |       onPress={() => handleItemPress(item)}
+ 151 |     />
+ 152 |   );
+ 153 | 
+ 154 |   const getItemLayout = (_: any, index: number) => ({
+ 155 |     length: ITEM_HEIGHT + 40, // poster height + title + margin
+ 156 |     offset: (ITEM_HEIGHT + 40) * Math.floor(index / NUM_COLUMNS),
+ 157 |     index,
+ 158 |   });
+ 159 | 
+ 160 |   return (
+ 161 |     <SafeAreaView style={styles.container} edges={['top']}>
+ 162 |       {/* Branded Header with Logo */}
+ 163 |       <View style={styles.header}>
+ 164 |         <FocusableButton 
+ 165 |           onPress={() => router.back()} 
+ 166 |           style={styles.backButton}
+ 167 |           focusedStyle={styles.backButtonFocused}
+ 168 |         >
+ 169 |           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+ 170 |         </FocusableButton>
+ 171 |         <Image 
+ 172 |           source={logoHeaderImage}
+ 173 |           style={styles.headerLogo}
+ 174 |           contentFit="contain"
+ 175 |         />
+ 176 |         <View style={{ width: 36 }} />{/* Spacer to center logo */}
+ 177 |       </View>
+ 178 |       
+ 179 |       {/* Search Bar */}
+ 180 |       <View style={styles.searchBarRow}>
+ 181 |         <View style={styles.searchInputContainer}>
+ 182 |           <TextInput
+ 183 |             style={styles.searchInput}
+ 184 |             value={searchQuery}
+ 185 |             onChangeText={setSearchQuery}
+ 186 |             onSubmitEditing={handleSearch}
+ 187 |             placeholder="Search movies, series, actors..."
+ 188 |             placeholderTextColor="#666"
+ 189 |             returnKeyType="search"
+ 190 |             autoFocus={!q}
+ 191 |           />
+ 192 |           <FocusableButton 
+ 193 |             onPress={handleSearch} 
+ 194 |             style={styles.searchButton}
+ 195 |             focusedStyle={styles.searchButtonFocused}
+ 196 |           >
+ 197 |             <Ionicons name="search" size={20} color="#B8A05C" />
+ 198 |           </FocusableButton>
+ 199 |         </View>
+ 200 |       </View>
+ 201 | 
+ 202 |       {/* Results */}
+ 203 |       {isLoadingSearch ? (
+ 204 |         <View style={styles.centerContainer}>
+ 205 |           <ActivityIndicator size="large" color="#B8A05C" />
+ 206 |           <Text style={styles.searchingText}>Searching...</Text>
+ 207 |         </View>
+ 208 |       ) : deduplicatedResults.length === 0 ? (
+ 209 |         <View style={styles.centerContainer}>
+ 210 |           <Ionicons name="search-outline" size={48} color="#444" />
+ 211 |           <Text style={styles.noResultsText}>
+ 212 |             {q ? `No results for "${q}"` : 'Search for movies, series, or actors'}
+ 213 |           </Text>
+ 214 |         </View>
+ 215 |       ) : (
+ 216 |         <FlatList
+ 217 |           ref={flatListRef}
+ 218 |           data={deduplicatedResults}
+ 219 |           renderItem={renderItem}
+ 220 |           keyExtractor={(item, index) => `${item.imdb_id || item.id}-${index}`}
+ 221 |           numColumns={NUM_COLUMNS}
+ 222 |           contentContainerStyle={styles.gridContent}
+ 223 |           showsVerticalScrollIndicator={false}
+ 224 |           getItemLayout={getItemLayout}
+ 225 |           initialNumToRender={NUM_COLUMNS * 3}
+ 226 |           maxToRenderPerBatch={NUM_COLUMNS * 2}
+ 227 |           windowSize={5}
+ 228 |           ListHeaderComponent={
+ 229 |             <Text style={styles.resultsCount}>
+ 230 |               {deduplicatedResults.length} results for "{searchQuery}"
+ 231 |             </Text>
+ 232 |           }
+ 233 |         />
+ 234 |       )}
+ 235 |     </SafeAreaView>
+ 236 |   );
+ 237 | }
+ 238 | 
+ 239 | const styles = StyleSheet.create({
+ 240 |   container: {
+ 241 |     flex: 1,
+ 242 |     backgroundColor: '#0f0f11',
+ 243 |   },
+ 244 |   header: {
+ 245 |     flexDirection: 'row',
+ 246 |     alignItems: 'center',
+ 247 |     justifyContent: 'space-between',
+ 248 |     paddingHorizontal: HORIZONTAL_PADDING,
+ 249 |     paddingVertical: 10,
+ 250 |     borderBottomWidth: 1,
+ 251 |     borderBottomColor: '#1a1a1d',
+ 252 |   },
+ 253 |   headerLogo: {
+ 254 |     width: 140,
+ 255 |     height: 32,
+ 256 |   },
+ 257 |   searchBarRow: {
+ 258 |     paddingHorizontal: HORIZONTAL_PADDING,
+ 259 |     paddingVertical: 8,
+ 260 |   },
+ 261 |   backButton: {
+ 262 |     width: 44,
+ 263 |     height: 44,
+ 264 |     borderRadius: 22,
+ 265 |     backgroundColor: 'rgba(255,255,255,0.1)',
+ 266 |     justifyContent: 'center',
+ 267 |     alignItems: 'center',
+ 268 |     borderWidth: 2,
+ 269 |     borderColor: 'transparent',
+ 270 |   },
+ 271 |   backButtonFocused: {
+ 272 |     borderColor: '#B8A05C',
+ 273 |     backgroundColor: 'rgba(184, 160, 92, 0.3)',
+ 274 |   },
+ 275 |   searchInputContainer: {
+ 276 |     flex: 1,
+ 277 |     flexDirection: 'row',
+ 278 |     alignItems: 'center',
+ 279 |     backgroundColor: '#1a1a1d',
+ 280 |     borderRadius: 12,
+ 281 |     paddingHorizontal: 12,
+ 282 |   },
+ 283 |   searchInput: {
+ 284 |     flex: 1,
+ 285 |     color: '#FFFFFF',
+ 286 |     fontSize: 16,
+ 287 |     paddingVertical: 12,
+ 288 |   },
+ 289 |   searchButton: {
+ 290 |     width: 40,
+ 291 |     height: 40,
+ 292 |     borderRadius: 20,
+ 293 |     justifyContent: 'center',
+ 294 |     alignItems: 'center',
+ 295 |     borderWidth: 2,
+ 296 |     borderColor: 'transparent',
+ 297 |   },
+ 298 |   searchButtonFocused: {
+ 299 |     borderColor: '#B8A05C',
+ 300 |     backgroundColor: 'rgba(184, 160, 92, 0.3)',
+ 301 |   },
+ 302 |   centerContainer: {
+ 303 |     flex: 1,
+ 304 |     justifyContent: 'center',
+ 305 |     alignItems: 'center',
+ 306 |   },
+ 307 |   searchingText: {
+ 308 |     color: '#999',
+ 309 |     marginTop: 12,
+ 310 |     fontSize: 14,
+ 311 |   },
+ 312 |   noResultsText: {
+ 313 |     color: '#666',
+ 314 |     marginTop: 12,
+ 315 |     fontSize: 16,
+ 316 |     textAlign: 'center',
+ 317 |     paddingHorizontal: 32,
+ 318 |   },
+ 319 |   resultsCount: {
+ 320 |     color: '#888',
+ 321 |     fontSize: 14,
+ 322 |     paddingBottom: 16,
+ 323 |   },
+ 324 |   gridContent: {
+ 325 |     padding: HORIZONTAL_PADDING,
+ 326 |   },
+ 327 |   itemContainer: {
+ 328 |     width: ITEM_WIDTH,
+ 329 |     marginBottom: 16,
+ 330 |     marginRight: ITEM_SPACING,
+ 331 |     borderRadius: 8,
+ 332 |     borderWidth: 2,
+ 333 |     borderColor: 'transparent',
+ 334 |     padding: 4,
+ 335 |   },
+ 336 |   itemContainerFocused: {
+ 337 |     borderColor: '#B8A05C',
+ 338 |     backgroundColor: 'rgba(184, 160, 92, 0.15)',
+ 339 |     transform: [{ scale: 1.02 }],
+ 340 |   },
+ 341 |   poster: {
+ 342 |     width: '100%',
+ 343 |     height: ITEM_HEIGHT,
+ 344 |     borderRadius: 6,
+ 345 |     backgroundColor: '#1a1a1d',
+ 346 |   },
+ 347 |   posterFocused: {
+ 348 |     // Additional poster styling when focused
+ 349 |   },
+ 350 |   itemTitle: {
+ 351 |     color: '#FFFFFF',
+ 352 |     fontSize: isTV ? 13 : 12,
+ 353 |     marginTop: 6,
+ 354 |     textAlign: 'center',
+ 355 |   },
+ 356 |   defaultFocused: {
+ 357 |     borderColor: '#B8A05C',
+ 358 |     backgroundColor: 'rgba(184, 160, 92, 0.3)',
+ 359 |   },
+ 360 | });
+ 361 | 
+
+================================================================
+=== FILE: frontend\src\components\SearchBar.tsx   (118 lines)
+================================================================
+   1 | import React, { useState, useEffect } from 'react';
+   2 | import {
+   3 |   View,
+   4 |   TextInput,
+   5 |   StyleSheet,
+   6 |   Pressable,
+   7 | } from 'react-native';
+   8 | import { Ionicons } from '@expo/vector-icons';
+   9 | 
+  10 | interface SearchBarProps {
+  11 |   onSearch: (query: string) => void;
+  12 |   placeholder?: string;
+  13 |   initialValue?: string;
+  14 | }
+  15 | 
+  16 | export const SearchBar: React.FC<SearchBarProps> = ({
+  17 |   onSearch,
+  18 |   placeholder = 'Search movies & TV shows...',
+  19 |   initialValue = '',
+  20 | }) => {
+  21 |   const [query, setQuery] = useState(initialValue);
+  22 | 
+  23 |   // Update query when initialValue changes (from tag navigation)
+  24 |   useEffect(() => {
+  25 |     if (initialValue) {
+  26 |       setQuery(initialValue);
+  27 |     }
+  28 |   }, [initialValue]);
+  29 | 
+  30 |   const handleSubmit = () => {
+  31 |     if (query.trim()) {
+  32 |       onSearch(query.trim());
+  33 |     }
+  34 |   };
+  35 | 
+  36 |   const handleClear = () => {
+  37 |     setQuery('');
+  38 |     onSearch('');
+  39 |   };
+  40 | 
+  41 |   return (
+  42 |     <View style={styles.container}>
+  43 |       <View style={styles.inputRow}>
+  44 |         <Ionicons name="search" size={20} color="#888888" style={styles.icon} />
+  45 |         <TextInput
+  46 |           style={styles.input}
+  47 |           placeholder={placeholder}
+  48 |           placeholderTextColor="#888888"
+  49 |           value={query}
+  50 |           onChangeText={setQuery}
+  51 |           onSubmitEditing={handleSubmit}
+  52 |           returnKeyType="search"
+  53 |           autoCapitalize="none"
+  54 |           autoCorrect={false}
+  55 |         />
+  56 |         {query.length > 0 && (
+  57 |           <Pressable onPress={handleClear} style={styles.clearButton}>
+  58 |             <Ionicons name="close-circle" size={20} color="#888888" />
+  59 |           </Pressable>
+  60 |         )}
+  61 |       </View>
+  62 |       {/* Explicit search button — focusable on Android TV/Firestick */}
+  63 |       <Pressable
+  64 |         onPress={handleSubmit}
+  65 |         style={({focused}) => [
+  66 |           styles.searchButton,
+  67 |           focused && styles.searchButtonFocused
+  68 |         ]}
+  69 |       >
+  70 |         <Ionicons name="search" size={20} color="#000" />
+  71 |       </Pressable>
+  72 |     </View>
+  73 |   );
+  74 | };
+  75 | 
+  76 | const styles = StyleSheet.create({
+  77 |   container: {
+  78 |     flexDirection: 'row',
+  79 |     alignItems: 'center',
+  80 |     marginHorizontal: 16,
+  81 |     marginVertical: 12,
+  82 |     gap: 8,
+  83 |   },
+  84 |   inputRow: {
+  85 |     flex: 1,
+  86 |     flexDirection: 'row',
+  87 |     alignItems: 'center',
+  88 |     backgroundColor: '#1a1a1a',
+  89 |     borderRadius: 12,
+  90 |     paddingHorizontal: 12,
+  91 |     height: 48,
+  92 |   },
+  93 |   icon: {
+  94 |     marginRight: 8,
+  95 |   },
+  96 |   input: {
+  97 |     flex: 1,
+  98 |     color: '#FFFFFF',
+  99 |     fontSize: 16,
+ 100 |   },
+ 101 |   clearButton: {
+ 102 |     padding: 4,
+ 103 |   },
+ 104 |   searchButton: {
+ 105 |     backgroundColor: '#B8A05C',
+ 106 |     borderRadius: 12,
+ 107 |     width: 48,
+ 108 |     height: 48,
+ 109 |     justifyContent: 'center',
+ 110 |     alignItems: 'center',
+ 111 |     borderWidth: 2,
+ 112 |     borderColor: 'transparent',
+ 113 |   },
+ 114 |   searchButtonFocused: {
+ 115 |     borderColor: '#FFFFFF',
+ 116 |     transform: [{ scale: 1.1 }],
+ 117 |   },
+ 118 | });
+
+=== frontend\plugins\withTVKeyEvents  (NOT FOUND)
+================================================================
+=== FILE: frontend\plugins\withTVKeyEvents.js   (109 lines)
+================================================================
+   1 | const { withMainActivity } = require("expo/config-plugins");
+   2 | 
+   3 | /**
+   4 |  * Expo config plugin that adds key event interception to MainActivity.
+   5 |  * Captures Fire Stick / Android TV remote button presses and forwards to React Native.
+   6 |  * 
+   7 |  * CRITICAL CHANGES for RN 0.81 / Expo 54:
+   8 |  * - Tries BOTH new arch (reactHost) and old arch (reactNativeHost) paths
+   9 |  * - CONSUMES media key events (play/pause, ff, rw) so Android doesn't steal them
+  10 |  * - Adds KEYCODE_SPACE for Bluetooth keyboards
+  11 |  */
+  12 | const withTVKeyEvents = (config) => {
+  13 |   return withMainActivity(config, (config) => {
+  14 |     const contents = config.modResults.contents;
+  15 |     
+  16 |     let modified = contents;
+  17 |     
+  18 |     // Add KeyEvent import
+  19 |     if (!modified.includes("import android.view.KeyEvent")) {
+  20 |       modified = modified.replace(
+  21 |         "import android.os.Bundle",
+  22 |         "import android.os.Bundle\nimport android.view.KeyEvent"
+  23 |       );
+  24 |     }
+  25 |     
+  26 |     // Add event emitter imports
+  27 |     if (!modified.includes("import com.facebook.react.bridge.Arguments")) {
+  28 |       modified = modified.replace(
+  29 |         "import android.os.Bundle",
+  30 |         "import android.os.Bundle\nimport com.facebook.react.bridge.Arguments\nimport com.facebook.react.modules.core.DeviceEventManagerModule"
+  31 |       );
+  32 |     }
+  33 |     
+  34 |     // Add dispatchKeyEvent override before the closing brace of the class
+  35 |     if (!modified.includes("dispatchKeyEvent")) {
+  36 |       const dispatchKeyEventCode = `
+  37 |   override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+  38 |     if (event.action == KeyEvent.ACTION_DOWN) {
+  39 |       val eventName = when (event.keyCode) {
+  40 |         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "playPause"
+  41 |         KeyEvent.KEYCODE_MEDIA_PLAY -> "play"
+  42 |         KeyEvent.KEYCODE_MEDIA_PAUSE -> "pause"
+  43 |         KeyEvent.KEYCODE_MEDIA_REWIND -> "rewind"
+  44 |         KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "fastForward"
+  45 |         KeyEvent.KEYCODE_SPACE -> "playPause"
+  46 |         KeyEvent.KEYCODE_DPAD_LEFT -> "left"
+  47 |         KeyEvent.KEYCODE_DPAD_RIGHT -> "right"
+  48 |         KeyEvent.KEYCODE_DPAD_UP -> "up"
+  49 |         KeyEvent.KEYCODE_DPAD_DOWN -> "down"
+  50 |         KeyEvent.KEYCODE_DPAD_CENTER -> "select"
+  51 |         KeyEvent.KEYCODE_ENTER -> "select"
+  52 |         else -> null
+  53 |       }
+  54 |       
+  55 |       if (eventName != null) {
+  56 |         var emitted = false
+  57 |         try {
+  58 |           val reactApp = application as? com.facebook.react.ReactApplication
+  59 |           if (reactApp != null) {
+  60 |             // Try NEW architecture path first (RN 0.81+)
+  61 |             var ctx: com.facebook.react.bridge.ReactContext? = null
+  62 |             try {
+  63 |               ctx = reactApp.reactHost?.currentReactContext
+  64 |             } catch (e: Exception) { /* not available */ }
+  65 |             
+  66 |             // Fallback to OLD architecture path
+  67 |             if (ctx == null) {
+  68 |               try {
+  69 |                 ctx = reactApp.reactNativeHost?.reactInstanceManager?.currentReactContext
+  70 |               } catch (e: Exception) { /* not available */ }
+  71 |             }
+  72 |             
+  73 |             if (ctx != null) {
+  74 |               val params = Arguments.createMap()
+  75 |               params.putString("eventType", eventName)
+  76 |               params.putInt("keyCode", event.keyCode)
+  77 |               ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+  78 |                 .emit("onTVKeyEvent", params)
+  79 |               emitted = true
+  80 |             }
+  81 |           }
+  82 |         } catch (e: Exception) {
+  83 |           // Ignore - React context not ready
+  84 |         }
+  85 |         
+  86 |         // CRITICAL: For media keys, CONSUME the event to prevent Android from
+  87 |         // handling it via MediaSession/ExoPlayer directly (which bypasses our JS controls)
+  88 |         val isMediaKey = eventName == "playPause" || eventName == "play" || 
+  89 |                          eventName == "pause" || eventName == "rewind" || 
+  90 |                          eventName == "fastForward"
+  91 |         if (isMediaKey && emitted) {
+  92 |           return true  // Consume the event - we handled it in JS
+  93 |         }
+  94 |       }
+  95 |     }
+  96 |     return super.dispatchKeyEvent(event)
+  97 |   }
+  98 | `;
+  99 |       const lastBrace = modified.lastIndexOf("}");
+ 100 |       modified = modified.substring(0, lastBrace) + dispatchKeyEventCode + "\n}";
+ 101 |     }
+ 102 |     
+ 103 |     config.modResults.contents = modified;
+ 104 |     return config;
+ 105 |   });
+ 106 | };
+ 107 | 
+ 108 | module.exports = withTVKeyEvents;
+ 109 | 
+
+=== frontend\plugins\withTVLauncher  (NOT FOUND)
+================================================================
+=== FILE: frontend\plugins\withTVLauncher.js   (106 lines)
+================================================================
+   1 | const { withAndroidManifest, withDangerousMod } = require("expo/config-plugins");
+   2 | const fs = require("fs");
+   3 | const path = require("path");
+   4 | 
+   5 | /**
+   6 |  * Makes the app appear in the TV app row on Google TV, Fire TV, etc.
+   7 |  * Sets the app label, banner image, and LEANBACK_LAUNCHER category.
+   8 |  * Also copies the tv_banner.png into the Android drawable directory.
+   9 |  */
+  10 | const withTVLauncher = (config) => {
+  11 |   // Step 1: Modify the manifest
+  12 |   config = withAndroidManifest(config, (config) => {
+  13 |     const manifest = config.modResults.manifest;
+  14 | 
+  15 |     if (!manifest["uses-feature"]) {
+  16 |       manifest["uses-feature"] = [];
+  17 |     }
+  18 |     const features = manifest["uses-feature"];
+  19 | 
+  20 |     if (!features.some((f) => f.$?.["android:name"] === "android.software.leanback")) {
+  21 |       features.push({
+  22 |         $: { "android:name": "android.software.leanback", "android:required": "false" },
+  23 |       });
+  24 |     }
+  25 | 
+  26 |     if (!features.some((f) => f.$?.["android:name"] === "android.hardware.touchscreen")) {
+  27 |       features.push({
+  28 |         $: { "android:name": "android.hardware.touchscreen", "android:required": "false" },
+  29 |       });
+  30 |     }
+  31 | 
+  32 |     // Explicitly set application label and banner for TV launchers
+  33 |     const application = manifest.application?.[0];
+  34 |     if (application) {
+  35 |       application.$["android:label"] = "Privastream Cinema";
+  36 |       application.$["android:banner"] = "@drawable/tv_banner";
+  37 |     }
+  38 | 
+  39 |     // Add LEANBACK_LAUNCHER to main activity and set its label + banner
+  40 |     const activities = application?.activity || [];
+  41 |     for (const activity of activities) {
+  42 |       if (activity.$?.["android:name"] === ".MainActivity") {
+  43 |         activity.$["android:label"] = "Privastream Cinema";
+  44 |         activity.$["android:banner"] = "@drawable/tv_banner";
+  45 |       }
+  46 |       
+  47 |       const intentFilters = activity["intent-filter"] || [];
+  48 |       for (const filter of intentFilters) {
+  49 |         const categories = filter.category || [];
+  50 |         const hasLauncher = categories.some(
+  51 |           (c) => c.$?.["android:name"] === "android.intent.category.LAUNCHER"
+  52 |         );
+  53 |         if (hasLauncher) {
+  54 |           if (!categories.some((c) => c.$?.["android:name"] === "android.intent.category.LEANBACK_LAUNCHER")) {
+  55 |             categories.push({
+  56 |               $: { "android:name": "android.intent.category.LEANBACK_LAUNCHER" },
+  57 |             });
+  58 |             filter.category = categories;
+  59 |           }
+  60 |         }
+  61 |       }
+  62 |     }
+  63 | 
+  64 |     config.modResults.manifest = manifest;
+  65 |     return config;
+  66 |   });
+  67 | 
+  68 |   // Step 2: Copy tv_banner.png into drawable directory
+  69 |   config = withDangerousMod(config, [
+  70 |     "android",
+  71 |     async (config) => {
+  72 |       const projectRoot = config.modRequest.projectRoot;
+  73 |       const bannerSrc = path.join(projectRoot, "assets", "images", "tv_banner.png");
+  74 |       const drawableDir = path.join(
+  75 |         projectRoot,
+  76 |         "android",
+  77 |         "app",
+  78 |         "src",
+  79 |         "main",
+  80 |         "res",
+  81 |         "drawable"
+  82 |       );
+  83 | 
+  84 |       // Ensure drawable directory exists
+  85 |       if (!fs.existsSync(drawableDir)) {
+  86 |         fs.mkdirSync(drawableDir, { recursive: true });
+  87 |       }
+  88 | 
+  89 |       // Copy banner if source exists
+  90 |       if (fs.existsSync(bannerSrc)) {
+  91 |         const dest = path.join(drawableDir, "tv_banner.png");
+  92 |         fs.copyFileSync(bannerSrc, dest);
+  93 |         console.log(`  ✔ Copied tv_banner.png to drawable`);
+  94 |       } else {
+  95 |         console.warn(`  ⚠ tv_banner.png not found at ${bannerSrc}`);
+  96 |       }
+  97 | 
+  98 |       return config;
+  99 |     },
+ 100 |   ]);
+ 101 | 
+ 102 |   return config;
+ 103 | };
+ 104 | 
+ 105 | module.exports = withTVLauncher;
+ 106 | 
+
+================================================================
+=== KEY SIGNALS ===
+================================================================
+
+--- frontend\app\(tabs)\search.tsx (0 signals) ---
+
+--- frontend\app\search.tsx (2 signals) ---
+  L182  [TextInput]  <TextInput
+  L190  [autoFocus]  autoFocus={!q}
+
+--- frontend\src\components\SearchBar.tsx (1 signals) ---
+  L45  [TextInput]  <TextInput
+
+--- frontend\plugins\withTVKeyEvents.js (25 signals) ---
+  L12  [KeyEvent listener]  const withTVKeyEvents = (config) => {
+  L18  [KeyEvent listener]  // Add KeyEvent import
+  L19  [KeyEvent listener]  if (!modified.includes("import android.view.KeyEvent")) {
+  L22  [KeyEvent listener]  "import android.os.Bundle\nimport android.view.KeyEvent"
+  L34  [KeyEvent listener]  // Add dispatchKeyEvent override before the closing brace of the class
+  L35  [KeyEvent listener]  if (!modified.includes("dispatchKeyEvent")) {
+  L36  [KeyEvent listener]  const dispatchKeyEventCode = `
+  L37  [KeyEvent listener]  override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+  L38  [KeyEvent listener]  if (event.action == KeyEvent.ACTION_DOWN) {
+  L40  [KeyEvent listener]  KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "playPause"
+  L41  [KeyEvent listener]  KeyEvent.KEYCODE_MEDIA_PLAY -> "play"
+  L42  [KeyEvent listener]  KeyEvent.KEYCODE_MEDIA_PAUSE -> "pause"
+  L43  [KeyEvent listener]  KeyEvent.KEYCODE_MEDIA_REWIND -> "rewind"
+  L44  [KeyEvent listener]  KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "fastForward"
+  L45  [KeyEvent listener]  KeyEvent.KEYCODE_SPACE -> "playPause"
+  L46  [KeyEvent listener]  KeyEvent.KEYCODE_DPAD_LEFT -> "left"
+  L47  [KeyEvent listener]  KeyEvent.KEYCODE_DPAD_RIGHT -> "right"
+  L48  [KeyEvent listener]  KeyEvent.KEYCODE_DPAD_UP -> "up"
+  L49  [KeyEvent listener]  KeyEvent.KEYCODE_DPAD_DOWN -> "down"
+  L50  [KeyEvent listener]  KeyEvent.KEYCODE_DPAD_CENTER -> "select"
+  L51  [KeyEvent listener]  KeyEvent.KEYCODE_ENTER -> "select"
+  L78  [KeyEvent listener]  .emit("onTVKeyEvent", params)
+  L96  [KeyEvent listener]  return super.dispatchKeyEvent(event)
+  L100  [KeyEvent listener]  modified = modified.substring(0, lastBrace) + dispatchKeyEventCode + "\n}";
+  L108  [KeyEvent listener]  module.exports = withTVKeyEvents;
+
+--- frontend\plugins\withTVLauncher.js (0 signals) ---

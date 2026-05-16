@@ -349,14 +349,15 @@ export default function DiscoverScreen() {
           </View>
 
           {/* Scrollable Content — ScrollView for smooth scrolling, rows are individually optimized */}
-          {/* PATCH_V58_SCROLLVIEW — outer ScrollView with progressive render.
-               Outer FlashList caused row recycling bugs; with ~30 rows total a plain
-               ScrollView + V54's maxRowsV54 gating is the right balance. */}
-          <ScrollView
-            ref={scrollViewRef}
-            style={styles.scrollView}
+          {/* PATCH_V54_VIRTUALIZE — vertical FlashList replaces ScrollView */}
+          <FlashList
+            data={flatRowsV54}
+            extraData={flatRowsV54.length}
+            keyExtractor={(it: any) => it.key}
+            getItemType={(it: any) => it.kind} // PATCH_V57_GETITEMTYPE
+            estimatedItemSize={260}
+            drawDistance={500}
             showsVerticalScrollIndicator={false}
-            scrollEventThrottle={16}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -365,11 +366,10 @@ export default function DiscoverScreen() {
                 colors={[colors.primary]}
               />
             }
-          >
-            {flatRowsV54.map((item: any) => {
+            renderItem={({ item }: any) => {
               if (item.kind === 'cw') {
                 return (
-                  <View key={item.key} style={styles.section}>
+                  <View style={styles.section}>
                     <View style={[styles.sectionHeader, isTV && styles.sectionHeaderTV]}>
                       <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>Continue Watching</Text>
                     </View>
@@ -387,7 +387,6 @@ export default function DiscoverScreen() {
               }
               return (
                 <ServiceRow
-                  key={item.key}
                   title={item.title}
                   serviceName={item.serviceName}
                   contentType={item.contentType}
@@ -397,9 +396,8 @@ export default function DiscoverScreen() {
                   rowIndex={item.rowIdx}
                 />
               );
-            })}
-            <View style={styles.bottomPadding} />
-          </ScrollView>}
+            }}
+            ListFooterComponent={<View style={styles.bottomPadding} />}
           />
         </View>
       )}

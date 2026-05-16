@@ -1,0 +1,471 @@
+# diagnose_discover_layout.js — read-only
+# generated: 2026-05-15T14:58:54.160Z
+# file: frontend\app\(tabs)\discover.tsx   lines: 795
+
+======================================================================
+  imports + top of TabScreen
+======================================================================
+
+  -- imports & state setup  (L1–L75) --
+  L   1: import React, { useEffect, useCallback, useState, useMemo, useRef } from 'react';
+  L   2: import {
+  L   3:   View,
+  L   4:   Text,
+  L   5:   StyleSheet,
+  L   6:   ScrollView,
+  L   7:   RefreshControl,
+  L   8:   ActivityIndicator,
+  L   9:   Pressable,
+  L  10:   FlatList,
+  L  11:   useWindowDimensions,
+  L  12:   findNodeHandle,
+  L  13:   Platform,
+  L  14:   InteractionManager,
+  L  15: } from 'react-native';
+  L  16: import { SafeAreaView } from 'react-native-safe-area-context';
+  L  17: import { useRouter, useFocusEffect } from 'expo-router';
+  L  18: import { Image } from 'expo-image';
+  L  19: import { Ionicons } from '@expo/vector-icons';
+  L  20: import { useContentStore } from '../../src/store/contentStore';
+  L  21: import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
+  L  22: import { ServiceRow } from '../../src/components/ServiceRow';
+  L  23: import { ContentItem, api, WatchProgress } from '../../src/api/client';
+  L  24: import { getCardWidth } from '../../src/components/ContentCard';
+  L  25: import { colors } from '../../src/styles/colors';
+  L  26: import { Image as RNImage } from 'react-native';
+  L  27: 
+  L  28: const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
+  L  29: 
+  L  30: // PATCH_V15B_LAZYMOUNT_COMPONENT
+  L  31: // Defers child mounting by `delay` ms then waits for the next idle window
+  L  32: // (InteractionManager) before rendering. Used to stagger discover service
+  L  33: // rows so the JS thread is not pegged with N FlatLists on cold start.
+  L  34: function LazyMount({ delay, children, placeholder }: { delay: number; children: React.ReactNode; placeholder?: React.ReactNode }) {
+  L  35:   const [shouldMount, setShouldMount] = useState(delay <= 0);
+  L  36:   useEffect(() => {
+  L  37:     if (delay <= 0) return;
+  L  38:     let cancelled = false;
+  L  39:     const t = setTimeout(() => {
+  L  40:       InteractionManager.runAfterInteractions(() => {
+  L  41:         if (!cancelled) setShouldMount(true);
+  L  42:       });
+  L  43:     }, delay);
+  L  44:     return () => { cancelled = true; clearTimeout(t); };
+  L  45:   }, [delay]);
+  L  46:   if (!shouldMount) return (placeholder ?? null) as any;
+  L  47:   return <>{children}</>;
+  L  48: }
+  L  49: 
+  L  50: export default function DiscoverScreen() {
+  L  51:   const router = useRouter();
+  L  52:   const { width, height } = useWindowDimensions();
+  L  53:   const isTV = width > height || width > 800;
+  L  54:   
+  L  55:   // CRITICAL: Use zustand SELECTORS — only re-render when these specific fields change.
+  L  56:   // Without selectors, the Discover page re-renders when ANY store field changes
+  L  57:   // (e.g., when Details page loads streams), causing hundreds of poster images
+  L  58:   // to re-render and blocking the JS thread for 3+ seconds.
+  L  59:   const discoverData = useContentStore(s => s.discoverData);
+  L  60:   const isLoadingDiscover = useContentStore(s => s.isLoadingDiscover);
+  L  61:   const fetchDiscover = useContentStore(s => s.fetchDiscover);
+  L  62:   const fetchAddons = useContentStore(s => s.fetchAddons);
+  L  63:   const addons = useContentStore(s => s.addons);
+  L  64:   const [refreshing, setRefreshing] = useState(false);
+  L  65:   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
+  L  66:   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+  L  67:   const scrollViewRef = useRef<ScrollView>(null);
+  L  68:   const sectionPositions = useRef<Record<string, number>>({});
+  L  69:   const lastFocusedSection = useRef<string>('');
+  L  70:   const lastCWFetchTime = useRef<number>(0);
+  L  71: 
+  L  72:   // Use same card width calculation as ContentCard for consistency
+  L  73:   const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
+  L  74:   const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
+  L  75: 
+
+======================================================================
+  main return body — entire ScrollView + children
+======================================================================
+  <ScrollView> opens at L67
+  </ScrollView> closes at L409
+
+  -- FULL ScrollView body  (L67–L409) --
+  L  67:   const scrollViewRef = useRef<ScrollView>(null);
+  L  68:   const sectionPositions = useRef<Record<string, number>>({});
+  L  69:   const lastFocusedSection = useRef<string>('');
+  L  70:   const lastCWFetchTime = useRef<number>(0);
+  L  71: 
+  L  72:   // Use same card width calculation as ContentCard for consistency
+  L  73:   const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
+  L  74:   const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
+  L  75: 
+  L  76:   // Fetch continue watching data
+  L  77:   const fetchContinueWatching = useCallback(async () => {
+  L  78:     try {
+  L  79:       setIsLoadingProgress(true);
+  L  80:       const response = await api.watchProgress.getAll();
+  L  81:       setContinueWatching(response.continueWatching || []);
+  L  82:       lastCWFetchTime.current = Date.now();
+  L  83:     } catch (err) {
+  L  84:       console.log('[Discover] Error fetching continue watching:', err);
+  L  85:     } finally {
+  L  86:       setIsLoadingProgress(false);
+  L  87:     }
+  L  88:   }, []);
+  L  89: 
+  L  90:   useEffect(() => {
+  L  91:     fetchAddons();
+  L  92:     fetchDiscover();
+  L  93:     fetchContinueWatching();
+  L  94:   }, []);
+  L  95: 
+  L  96:   // Re-fetch discover data AND continue watching when screen comes into focus
+  L  97:   // This ensures newly installed addons show up immediately
+  L  98:   useFocusEffect(
+  L  99:     useCallback(() => {
+  L 100:       const timeSinceLastFetch = Date.now() - lastCWFetchTime.current;
+  L 101:       if (timeSinceLastFetch < 30000 && continueWatching.length >= 0) {
+  L 102:         return;
+  L 103:       }
+  L 104:       const handle = InteractionManager.runAfterInteractions(() => {
+  L 105:         fetchContinueWatching();
+  L 106:         fetchDiscover(true); // Force refresh so new addon catalogs appear
+  L 107:       });
+  L 108:       return () => handle.cancel();
+  L 109:     }, [fetchContinueWatching, continueWatching.length])
+  L 110:   );
+  L 111: 
+  L 112:   // Check if there's any content to display
+  L 113:   const hasContent = useMemo(() => {
+  L 114:     if (!discoverData?.services) return false;
+  L 115:     return Object.values(discoverData.services).some(
+  L 116:       (content: any) => 
+  L 117:         (content?.movies?.length > 0) || 
+  L 118:         (content?.series?.length > 0) || 
+  L 119:         (content?.channels?.length > 0)
+  L 120:     );
+  L 121:   }, [discoverData]);
+  L 122: 
+  L 123:   const onRefresh = useCallback(async () => {
+  L 124:     setRefreshing(true);
+  L 125:     await Promise.all([
+  L 126:       fetchAddons(),
+  L 127:       fetchDiscover(),
+  L 128:       fetchContinueWatching(),
+  L 129:     ]);
+  L 130:     setRefreshing(false);
+  L 131:   }, [fetchContinueWatching]);
+  L 132: 
+  L 133:   // Handle section focus - scroll parent to show category title
+  L 134:   const handleSectionFocus = useCallback((sectionKey: string) => {
+  L 135:     if (lastFocusedSection.current === sectionKey) return;
+  L 136:     lastFocusedSection.current = sectionKey;
+  L 137:     
+  L 138:     const sectionY = sectionPositions.current[sectionKey];
+  L 139:     if (sectionY !== undefined && scrollViewRef.current) {
+  L 140:       // Small delay to override Android TV's auto-scroll (which only shows the card, not the title)
+  L 141:       setTimeout(() => {
+  L 142:         scrollViewRef.current?.scrollTo({ y: Math.max(0, sectionY - 10), animated: true });
+  L 143:       }, 50);
+  L 144:     }
+  L 145:   }, []);
+  L 146: 
+  L 147:   // Row sync: keep all rows scrolled to the same horizontal offset
+  L 148:   // (No longer needed — removed carousel anchor scrolling)
+  L 149: 
+  L 150:   // Item width for snap scrolling
+  L 151:   const itemWidth = POSTER_WIDTH + 16;
+  L 152: 
+  L 153:   // PRE-FETCH meta on poster focus (D-pad hover) so backdrop is ready before click
+  L 154:   const prefetchingRef = useRef<Set<string>>(new Set());
+  L 155:   const handleItemFocus = useCallback((item: ContentItem) => {
+  L 156:     const id = item.imdb_id || item.id;
+  L 157:     if (!id || prefetchingRef.current.has(id) || getMetaCache(id)) return;
+  L 158:     prefetchingRef.current.add(id);
+  L 159:     // Fire-and-forget: fetch meta in background
+  L 160:     api.content.getMeta(item.type, id).then((meta) => {
+  L 161:       setMetaCache(id, meta);
+  L 162:       // Also pre-download the backdrop image so it's in expo-image disk cache
+  L 163:       if (meta.background) {
+  L 164:         Image.prefetch(meta.background);
+  L 165:       }
+  L 166:     }).catch(() => {});
+  L 167:   }, []);
+  L 168: 
+  L 169:   const handleItemPress = (item: ContentItem) => {
+  L 170:     const id = item.imdb_id || item.id;
+  L 171:     const encodedId = encodeURIComponent(id);
+  L 172:     // Minimal params for instant first paint — just name + poster
+  L 173:     router.push({
+  L 174:       pathname: `/details/${item.type}/${encodedId}`,
+  L 175:       params: {
+  L 176:         name: item.name || '',
+  L 177:         poster: item.poster || '',
+  L 178:       },
+  L 179:     });
+  L 180:   };
+  L 181: 
+  L 182:   // Handle continue watching item press
+  L 183:   const handleContinueWatchingPress = (item: WatchProgress) => {
+  L 184:     if (item.stream_info_hash || item.stream_url) {
+  L 185:       router.push({
+  L 186:         pathname: '/player',
+  L 187:         params: {
+  L 188:           infoHash: item.stream_info_hash || '',
+  L 189:           directUrl: item.stream_url || '',
+  L 190:           fileIdx: item.stream_file_idx != null ? String(item.stream_file_idx) : '',
+  L 191:           filename: item.stream_filename || '',
+  L 192:           title: item.title || '',
+  L 193:           contentType: item.content_type,
+  L 194:           contentId: item.content_id,
+  L 195:           poster: item.poster || '',
+  L 196:           backdrop: item.backdrop || '',
+  L 197:           logo: item.logo || '',
+  L 198:           resumePosition: String(item.progress || 0),
+  L 199:           season: item.season != null ? String(item.season) : '',
+  L 200:           episode: item.episode != null ? String(item.episode) : '',
+  L 201:           seriesId: item.series_id || '',
+  L 202:         },
+  L 203:       });
+  L 204:       return;
+  L 205:     }
+  L 206:     
+  L 207:     let targetId = item.content_id;
+  L 208:     let targetType = item.content_type;
+  L 209:     
+  L 210:     if (item.series_id) {
+  L 211:       targetId = item.series_id;
+  L 212:       targetType = 'series';
+  L 213:     } else if (item.content_type === 'series' && item.content_id.includes(':')) {
+  L 214:       const parts = item.content_id.split(':');
+  L 215:       if (parts.length >= 1) {
+  L 216:         targetId = parts[0];
+  L 217:       }
+  L 218:     }
+  L 219:     
+  L 220:     const encodedId = encodeURIComponent(targetId);
+  L 221:     router.push({
+  L 222:       pathname: `/details/${targetType}/${encodedId}`,
+  L 223:       params: {
+  L 224:         name: item.title || '',
+  L 225:         poster: item.poster || '',
+  L 226:         resumeEpisodeId: item.content_type === 'series' ? item.content_id : '',
+  L 227:         resumePosition: String(item.progress || 0),
+  L 228:         resumeSeason: item.season !== undefined ? String(item.season) : '',
+  L 229:         resumeEpisode: item.episode !== undefined ? String(item.episode) : '',
+  L 230:       },
+  L 231:     });
+  L 232:   };
+  L 233: 
+  L 234:   // Handle removing item from continue watching
+  L 235:   const handleRemoveFromContinueWatching = async (item: WatchProgress) => {
+  L 236:     // Optimistic update - remove from UI immediately for instant feedback
+  L 237:     setContinueWatching(prev => prev.filter(i => i.content_id !== item.content_id));
+  L 238:     
+  L 239:     // Then delete from server in background (don't await)
+  L 240:     api.watchProgress.delete(item.content_id).catch(err => {
+  L 241:       console.log('[Discover] Error removing from continue watching:', err);
+  L 242:       // Optionally: restore the item if delete fails
+  L 243:     });
+  L 244:   };
+  L 245: 
+  L 246:   // Render a continue watching item (Stremio style)
+  L 247:   const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) => (
+  L 248:     <ContinueWatchingItem
+  L 249:       item={item}
+  L 250:       posterWidth={POSTER_WIDTH}
+  L 251:       posterHeight={POSTER_HEIGHT}
+  L 252:       isTV={isTV}
+  L 253:       onPress={() => handleContinueWatchingPress(item)}
+  L 254:       onRemove={() => handleRemoveFromContinueWatching(item)}
+  L 255:       onSectionFocus={() => handleSectionFocus('continue-watching')}
+  L 256:     />
+  L 257:   );
+  L 258: 
+  L 259:   // Show loading only on initial load
+  L 260:   if (isLoadingDiscover && !discoverData) {
+  L 261:     return (
+  L 262:       <SafeAreaView style={styles.container} edges={['top']}>
+  L 263:         <View style={styles.loadingContainer}>
+  L 264:           <ActivityIndicator size="large" color={colors.primary} />
+  L 265:         </View>
+  L 266:       </SafeAreaView>
+  L 267:     );
+  L 268:   }
+  L 269: 
+  L 270:   return (
+  L 271:     <SafeAreaView style={styles.container} edges={['top']}>
+  L 272:       {/* Welcome Screen - No Addons and No Continue Watching */}
+  L 273:       {!hasContent && continueWatching.length === 0 && !isLoadingDiscover ? (
+  L 274:         <View style={{ flex: 1 }}>
+  L 275:           {/* Logo Header - always visible */}
+  L 276:           <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
+  L 277:             <Image
+  L 278:               source={require('../../assets/images/logo_header.png')}
+  L 279:               style={[styles.logoImage, isTV && styles.logoImageTV]}
+  L 280:               contentFit="contain"
+  L 281:             />
+  L 282:             <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+  L 283:               Privastream Cinema
+  L 284:             </Text>
+  L 285:           </View>
+  L 286:           <View style={styles.welcomeContainer}>
+  L 287:             <Ionicons name="extension-puzzle-outline" size={64} color={colors.primary} />
+  L 288:             <Text style={[styles.welcomeTitle, isTV && styles.welcomeTitleTV]}>No Addons Installed</Text>
+  L 289:             <Text style={[styles.welcomeSubtext, isTV && styles.welcomeSubtextTV]}>
+  L 290:               Install addons to start streaming
+  L 291:             </Text>
+  L 292:             <GoToAddonsButton router={router} isTV={isTV} />
+  L 293:           </View>
+  L 294:         </View>
+  L 295:       ) : (
+  L 296:         /* Content area with fixed header */
+  L 297:         <View style={{ flex: 1 }}>
+  L 298:           {/* Fixed Logo Header */}
+  L 299:           <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
+  L 300:             <Image
+  L 301:               source={require('../../assets/images/logo_header.png')}
+  L 302:               style={[styles.logoImage, isTV && styles.logoImageTV]}
+  L 303:               contentFit="contain"
+  L 304:             />
+  L 305:             <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+  L 306:               Privastream Cinema
+  L 307:             </Text>
+  L 308:           </View>
+  L 309: 
+  L 310:           {/* Scrollable Content — ScrollView for smooth scrolling, rows are individually optimized */}
+  L 311:           <ScrollView
+  L 312:             ref={scrollViewRef}
+  L 313:             style={styles.scrollView}
+  L 314:             showsVerticalScrollIndicator={false}
+  L 315:             scrollEventThrottle={16}
+  L 316:             refreshControl={
+  L 317:               <RefreshControl
+  L 318:                 refreshing={refreshing}
+  L 319:                 onRefresh={onRefresh}
+  L 320:                 tintColor={colors.primary}
+  L 321:                 colors={[colors.primary]}
+  L 322:               />
+  L 323:             }
+  L 324:           >
+  L 325:           {/* Continue Watching Section */}
+  L 326:           {continueWatching.length > 0 && (
+  L 327:             <View 
+  L 328:               style={styles.section}
+  L 329:               onLayout={(e) => { sectionPositions.current['continue-watching'] = e.nativeEvent.layout.y; }}
+  L 330:             >
+  L 331:               <View style={[styles.sectionHeader, isTV && styles.sectionHeaderTV]}>
+  L 332:                 <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>
+  L 333:                   Continue Watching
+  L 334:                 </Text>
+  L 335:               </View>
+  L 336:               <FlatList
+  L 337:                 data={continueWatching}
+  L 338:                 renderItem={renderContinueWatchingItem}
+  L 339:                 keyExtractor={(cwItem) => cwItem.content_id}
+  L 340:                 horizontal
+  L 341:                 showsHorizontalScrollIndicator={false}
+  L 342:                 contentContainerStyle={[styles.rowContent, isTV && styles.rowContentTV]}
+  L 343:                 removeClippedSubviews={true}
+  L 344:                 windowSize={5}
+  L 345:                 initialNumToRender={3}
+  L 346:                 // PATCH_V14B_CW_VIRT
+  L 347:                 maxToRenderPerBatch={3}
+  L 348:                 updateCellsBatchingPeriod={50}
+  L 349:               />
+  L 350:             </View>
+  L 351:           )}
+  L 352:           
+  L 353:           {/* Content Rows from Addons */}
+  L 354:           {(() => {
+  L 355:             let rowIdx = 0;
+  L 356:             return Object.entries(discoverData?.services || {}).map(([serviceName, content]) => {
+  L 357:             const hasMoviesInName = serviceName.toLowerCase().includes('movie');
+  L 358:             const hasSeriesInName = serviceName.toLowerCase().includes('series');
+  L 359:             const hasChannelsInName = serviceName.toLowerCase().includes('channel');
+  L 360:             
+  L 361:             return (
+  L 362:               <LazyMount key={serviceName} delay={0} /* PATCH_V39_NO_STAGGER — no stagger; FlatList handles deferral */ placeholder={<View style={{ height: 240 }} />}> {/* PATCH_V15B_LAZYMOUNT_USAGE */}
+  L 363:                 {content?.movies && content.movies.length > 0 && (
+  L 364:                   <View onLayout={(e) => { sectionPositions.current[`${serviceName}-movies`] = e.nativeEvent.layout.y; }}>
+  L 365:                     <ServiceRow
+  L 366:                       title={hasMoviesInName ? serviceName : `${serviceName} Movies`}
+  L 367:                       serviceName={serviceName}
+  L 368:                       contentType="movies"
+  L 369:                       items={content.movies}
+  L 370:                       onItemPress={handleItemPress}
+  L 371:                       onItemFocus={handleItemFocus}
+  L 372:                       onSectionFocus={() => handleSectionFocus(`${serviceName}-movies`)}
+  L 373:                       rowIndex={rowIdx++}
+  L 374:                     />
+  L 375:                   </View>
+  L 376:                 )}
+  L 377:                 {content?.series && content.series.length > 0 && (
+  L 378:                   <View onLayout={(e) => { sectionPositions.current[`${serviceName}-series`] = e.nativeEvent.layout.y; }}>
+  L 379:                     <ServiceRow
+  L 380:                       title={hasSeriesInName ? serviceName : `${serviceName} Series`}
+  L 381:                       serviceName={serviceName}
+  L 382:                       contentType="series"
+  L 383:                       items={content.series}
+  L 384:                       onItemPress={handleItemPress}
+  L 385:                       onItemFocus={handleItemFocus}
+  L 386:                       onSectionFocus={() => handleSectionFocus(`${serviceName}-series`)}
+  L 387:                       rowIndex={rowIdx++}
+  L 388:                     />
+  L 389:                   </View>
+  L 390:                 )}
+  L 391:                 {content?.channels && content.channels.length > 0 && (
+  L 392:                   <View onLayout={(e) => { sectionPositions.current[`${serviceName}-channels`] = e.nativeEvent.layout.y; }}>
+  L 393:                     <ServiceRow
+  L 394:                       title={hasChannelsInName ? serviceName : `${serviceName} Channels`}
+  L 395:                       serviceName={serviceName}
+  L 396:                       contentType="channels"
+  L 397:                       items={content.channels.map((ch: any) => ({ ...ch, type: 'tv' as const }))}
+  L 398:                       onItemPress={handleItemPress}
+  L 399:                       onSectionFocus={() => handleSectionFocus(`${serviceName}-channels`)}
+  L 400:                       rowIndex={rowIdx++}
+  L 401:                     />
+  L 402:                   </View>
+  L 403:                 )}
+  L 404:               </LazyMount>
+  L 405:             );
+  L 406:           });
+  L 407:           })()}
+  L 408:           <View style={styles.bottomPadding} />
+  L 409:         </ScrollView>
+
+======================================================================
+  any ListHeaderComponent / ListFooterComponent / RefreshControl already in file
+======================================================================
+  L   7:   RefreshControl,
+  L 317:               <RefreshControl
+  L 336:               <FlatList
+
+======================================================================
+  outer container structure (SafeAreaView / View / etc. around ScrollView)
+======================================================================
+
+  -- 20 lines above <ScrollView>  (L47–L67) --
+  L  47:   return <>{children}</>;
+  L  48: }
+  L  49: 
+  L  50: export default function DiscoverScreen() {
+  L  51:   const router = useRouter();
+  L  52:   const { width, height } = useWindowDimensions();
+  L  53:   const isTV = width > height || width > 800;
+  L  54:   
+  L  55:   // CRITICAL: Use zustand SELECTORS — only re-render when these specific fields change.
+  L  56:   // Without selectors, the Discover page re-renders when ANY store field changes
+  L  57:   // (e.g., when Details page loads streams), causing hundreds of poster images
+  L  58:   // to re-render and blocking the JS thread for 3+ seconds.
+  L  59:   const discoverData = useContentStore(s => s.discoverData);
+  L  60:   const isLoadingDiscover = useContentStore(s => s.isLoadingDiscover);
+  L  61:   const fetchDiscover = useContentStore(s => s.fetchDiscover);
+  L  62:   const fetchAddons = useContentStore(s => s.fetchAddons);
+  L  63:   const addons = useContentStore(s => s.addons);
+  L  64:   const [refreshing, setRefreshing] = useState(false);
+  L  65:   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
+  L  66:   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+  L  67:   const scrollViewRef = useRef<ScrollView>(null);
+
+# done.

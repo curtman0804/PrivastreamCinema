@@ -111,10 +111,19 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     }
   }, [isFirstInRow, isLastInRow, selfTag]);
 
-  // PATCH_V48_NO_NODEHANDLE_TIMER — removed per-card setTimeout(100ms).
-  // With ~30 rows × 6 cards visible, this was firing 60+ deferred bridge
-  // calls on cold start. The handleLayout path above already fires the
-  // native tag assignment when the view is laid out — no timer needed.
+  // Also try on mount and when isFirst/isLast changes
+  useEffect(() => {
+    if ((isFirstInRow || isLastInRow) && pressableRef.current) {
+      // Small delay to ensure native view is ready
+      const timer = setTimeout(() => {
+        if (pressableRef.current) {
+          const tag = getNativeTag(pressableRef.current);
+          if (tag && tag > 0) setSelfTag(tag);
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isFirstInRow, isLastInRow]);
 
   // PATCH_V37_KILL_V19C_PREFETCH — V19C focus prefetch DISABLED.
 
