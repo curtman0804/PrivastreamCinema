@@ -186,39 +186,101 @@ export default function DiscoverScreen() {
   }, []);
 
   // PATCH_V54_VIRTUALIZE — progressive: 6 services first, expand after 700ms.
-  const [maxRowsV54, setMaxRowsV54] = useState(6); // PATCH_V54_FLATROWS
-  useEffect(() => {
-    const t = setTimeout(() => setMaxRowsV54(999), 700);
-    return () => clearTimeout(t);
-  }, []);
-  const flatRowsV54 = useMemo(() => {
-    const rows: any[] = [];
-    if (continueWatching.length > 0) rows.push({ key: '__cw__', kind: 'cw' });
-    let rIdx = 0;
-    Object.entries(discoverData?.services || {}).forEach(([sName, c]: any) => {
-      const lname = sName.toLowerCase();
-      const hasMov = lname.includes('movie');
-      const hasSer = lname.includes('series');
-      const hasCh  = lname.includes('channel');
-      if (c?.movies?.length > 0)   rows.push({ key: sName+'|m', kind: 'row', serviceName: sName, contentType: 'movies',   items: c.movies,   title: hasMov ? sName : sName+' Movies',   rowIdx: rIdx++ });
-      if (c?.series?.length > 0)   rows.push({ key: sName+'|s', kind: 'row', serviceName: sName, contentType: 'series',   items: c.series,   title: hasSer ? sName : sName+' Series',   rowIdx: rIdx++ });
-      if (c?.channels?.length > 0) rows.push({ key: sName+'|c', kind: 'row', serviceName: sName, contentType: 'channels', items: c.channels.map((ch:any)=>({ ...ch, type: 'tv' as const })), title: hasCh ? sName : sName+' Channels', rowIdx: rIdx++ });
-    });
-    return rows.slice(0, 1 + maxRowsV54);
-  }, [continueWatching, discoverData, maxRowsV54]);
+ const [maxRowsV54, setMaxRowsV54] = useState(6); // PATCH_V54_FLATROWS
 
-    const handleItemPress = (item: ContentItem) => {
-    const id = item.imdb_id || item.id;
-    const encodedId = encodeURIComponent(id);
-    // Minimal params for instant first paint — just name + poster
-    router.push({
-      pathname: `/details/${item.type}/${encodedId}`,
-      params: {
-        name: item.name || '',
-        poster: item.poster || '',
-      },
-    });
-  };
+useEffect(() => {
+  const t = setTimeout(() => setMaxRowsV54(999), 700);
+  return () => clearTimeout(t);
+}, []);
+
+// Build flattened rows safely (optimized)
+const flatRowsV54 = useMemo(() => {
+  const rows: any[] = [];
+
+  const services = discoverData?.services;
+  if (!services || typeof services !== 'object') {
+    return rows;
+  }
+
+  // Continue Watching row (constant identity, no recalculation logic)
+  if (continueWatching?.length > 0) {
+    rows.push({ key: '__cw__', kind: 'cw' });
+  }
+
+  let rIdx = 0;
+
+  const entries = Object.entries(services);
+
+  for (let i = 0; i < entries.length; i++) {
+    const [sName, c]: any = entries[i];
+    if (!c) continue;
+
+    const lname = (sName || '').toLowerCase();
+
+    const hasMov = lname.includes('movie');
+    const hasSer = lname.includes('series');
+    const hasCh = lname.includes('channel');
+
+    const movies = c.movies;
+    const series = c.series;
+    const channels = c.channels;
+
+    if (movies?.length) {
+      rows.push({
+        key: `${sName}|m`,
+        kind: 'row',
+        serviceName: sName,
+        contentType: 'movies',
+        items: movies,
+        title: hasMov ? sName : `${sName} Movies`,
+        rowIdx: rIdx++,
+      });
+    }
+
+    if (series?.length) {
+      rows.push({
+        key: `${sName}|s`,
+        kind: 'row',
+        serviceName: sName,
+        contentType: 'series',
+        items: series,
+        title: hasSer ? sName : `${sName} Series`,
+        rowIdx: rIdx++,
+      });
+    }
+
+    if (channels?.length) {
+      rows.push({
+        key: `${sName}|c`,
+        kind: 'row',
+        serviceName: sName,
+        contentType: 'channels',
+        items: channels.map((ch: any) => ({
+          ...ch,
+          type: 'tv' as const,
+        })),
+        title: hasCh ? sName : `${sName} Channels`,
+        rowIdx: rIdx++,
+      });
+    }
+  }
+
+  return rows.slice(0, 1 + maxRowsV54);
+}, [discoverData?.services, continueWatching, maxRowsV54]);
+
+// Navigation handler (kept minimal for speed)
+const handleItemPress = useCallback((item: ContentItem) => {
+  const id = item.imdb_id || item.id;
+  if (!id) return;
+
+  router.push({
+    pathname: `/details/${item.type}/${encodeURIComponent(id)}`,
+    params: {
+      name: item.name || '',
+      poster: item.poster || '',
+    },
+  });
+}, [router]);
 
   // Handle continue watching item press
   const handleContinueWatchingPress = (item: WatchProgress) => {
@@ -284,8 +346,9 @@ export default function DiscoverScreen() {
     });
   };
 
-  // Render a continue watching item (Stremio style)
-  const renderContinueWatchingItem = ({ item }: { item: WatchProgress }) => (
+// Render a continue watching item (Stremio style)
+const renderContinueWatchingItem = useCallback(
+  ({ item }: { item: WatchProgress }) => (
     <ContinueWatchingItem
       item={item}
       posterWidth={POSTER_WIDTH}
@@ -295,116 +358,163 @@ export default function DiscoverScreen() {
       onRemove={() => handleRemoveFromContinueWatching(item)}
       onSectionFocus={() => handleSectionFocus('continue-watching')}
     />
-  );
+  ),
+  [isTV]
+);
 
-  // Show loading only on initial load
-  if (isLoadingDiscover && !discoverData) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
+// Show loading only on initial load
+if (isLoadingDiscover && !discoverData) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Welcome Screen - No Addons and No Continue Watching */}
-      {!hasContent && continueWatching.length === 0 && !isLoadingDiscover ? (
-        <View style={{ flex: 1 }}>
-          {/* Logo Header - always visible */}
-          <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
-            <Image
-              source={require('../../assets/images/logo_header.png')}
-              style={[styles.logoImage, isTV && styles.logoImageTV]}
-              contentFit="contain"
-            />
-            <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
-              Privastream Cinema
-            </Text>
-          </View>
-          <View style={styles.welcomeContainer}>
-            <Ionicons name="extension-puzzle-outline" size={64} color={colors.primary} />
-            <Text style={[styles.welcomeTitle, isTV && styles.welcomeTitleTV]}>No Addons Installed</Text>
-            <Text style={[styles.welcomeSubtext, isTV && styles.welcomeSubtextTV]}>
-              Install addons to start streaming
-            </Text>
-            <GoToAddonsButton router={router} isTV={isTV} />
-          </View>
-        </View>
-      ) : (
-        /* Content area with fixed header */
-        <View style={{ flex: 1 }}>
-          {/* Fixed Logo Header */}
-          <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
-            <Image
-              source={require('../../assets/images/logo_header.png')}
-              style={[styles.logoImage, isTV && styles.logoImageTV]}
-              contentFit="contain"
-            />
-            <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
-              Privastream Cinema
-            </Text>
-          </View>
-
-          {/* Scrollable Content — ScrollView for smooth scrolling, rows are individually optimized */}
-          {/* PATCH_V58_SCROLLVIEW — outer ScrollView with progressive render.
-               Outer FlashList caused row recycling bugs; with ~30 rows total a plain
-               ScrollView + V54's maxRowsV54 gating is the right balance. */}
-          <ScrollView
-            ref={scrollViewRef}
-            style={styles.scrollView}
-            showsVerticalScrollIndicator={false}
-            scrollEventThrottle={16}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={colors.primary}
-                colors={[colors.primary]}
-              />
-            }
-          >
-            {flatRowsV54.map((item: any) => {
-              if (item.kind === 'cw') {
-                return (
-                  <View key={item.key} style={styles.section}>
-                    <View style={[styles.sectionHeader, isTV && styles.sectionHeaderTV]}>
-                      <Text style={[styles.sectionTitle, isTV && styles.sectionTitleTV]}>Continue Watching</Text>
-                    </View>
-                    <FlatList
-                      data={continueWatching}
-                      renderItem={renderContinueWatchingItem}
-                      keyExtractor={(cwItem) => cwItem.content_id}
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={[styles.rowContent, isTV && styles.rowContentTV]}
-                      removeClippedSubviews={true}
-                    />
-                  </View>
-                );
-              }
-              return (
-                <ServiceRow
-                  key={item.key}
-                  title={item.title}
-                  serviceName={item.serviceName}
-                  contentType={item.contentType}
-                  items={item.items}
-                  onItemPress={handleItemPress}
-                  onItemFocus={item.contentType !== 'channels' ? handleItemFocus : undefined}
-                  rowIndex={item.rowIdx}
-                />
-              );
-            })}
-            <View style={styles.bottomPadding} />
-          </ScrollView>}
-          />
-        </View>
-      )}
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
     </SafeAreaView>
   );
+}
+
+return (
+  <SafeAreaView style={styles.container} edges={['top']}>
+    {/* Welcome Screen - No Addons and No Continue Watching */}
+    {!hasContent && continueWatching.length === 0 && !isLoadingDiscover ? (
+      <View style={{ flex: 1 }}>
+        {/* Logo Header - always visible */}
+        <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
+          <Image
+            source={require('../../assets/images/logo_header.png')}
+            style={[styles.logoImage, isTV && styles.logoImageTV]}
+            contentFit="contain"
+          />
+
+          <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+            Privastream Cinema
+          </Text>
+        </View>
+
+        <View style={styles.welcomeContainer}>
+          <Ionicons
+            name="extension-puzzle-outline"
+            size={64}
+            color={colors.primary}
+          />
+
+          <Text style={[styles.welcomeTitle, isTV && styles.welcomeTitleTV]}>
+            No Addons Installed
+          </Text>
+
+          <Text style={[styles.welcomeSubtext, isTV && styles.welcomeSubtextTV]}>
+            Install addons to start streaming
+          </Text>
+
+          <GoToAddonsButton router={router} isTV={isTV} />
+        </View>
+      </View>
+    ) : (
+      <View style={{ flex: 1 }}>
+        {/* Fixed Logo Header */}
+        <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
+          <Image
+            source={require('../../assets/images/logo_header.png')}
+            style={[styles.logoImage, isTV && styles.logoImageTV]}
+            contentFit="contain"
+          />
+
+          <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+            Privastream Cinema
+          </Text>
+        </View>
+
+        {/* Scrollable Content */}
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          removeClippedSubviews={true}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+        >
+          {flatRowsV54.map((item: any) => {
+            if (item.kind === 'cw') {
+              return (
+                <View key={item.key} style={styles.section}>
+                  <View
+                    style={[
+                      styles.sectionHeader,
+                      isTV && styles.sectionHeaderTV,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.sectionTitle,
+                        isTV && styles.sectionTitleTV,
+                      ]}
+                    >
+                      Continue Watching
+                    </Text>
+                  </View>
+
+                  <FlatList
+                    data={continueWatching}
+                    renderItem={renderContinueWatchingItem}
+                    keyExtractor={(cwItem) =>
+                      String(cwItem.content_id)
+                    }
+
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+
+                    contentContainerStyle={[
+                      styles.rowContent,
+                      isTV && styles.rowContentTV,
+                    ]}
+
+                    removeClippedSubviews={true}
+                    initialNumToRender={4}
+                    maxToRenderPerBatch={4}
+                    windowSize={3}
+                    updateCellsBatchingPeriod={50}
+
+                    getItemLayout={(_, index) => ({
+                      length: isTV ? 320 : 220,
+                      offset: (isTV ? 320 : 220) * index,
+                      index,
+                    })}
+                  />
+                </View>
+              );
+            }
+
+            return (
+              <ServiceRow
+                key={item.key}
+                title={item.title}
+                serviceName={item.serviceName}
+                contentType={item.contentType}
+                items={item.items}
+                onItemPress={handleItemPress}
+                onItemFocus={
+                  item.contentType !== 'channels'
+                    ? handleItemFocus
+                    : undefined
+                }
+                rowIndex={item.rowIdx}
+              />
+            );
+          })}
+
+          <View style={styles.bottomPadding} />
+        </ScrollView>
+      </View>
+    )}
+  </SafeAreaView>
+);
 }
 
 // Go To Addons Button (matches Addons page style)

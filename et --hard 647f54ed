@@ -1,0 +1,122 @@
+[33m647f54ed[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m)[m app nav better. some addons not populating
+[33m411d394a[m perf: V40 — disable freezeOnBlur (instant back, no re-mount storm)
+[33m0f52e91f[m fix: V34 + V36 — back nav works at every level (native expo-router pop)
+[33mf7802b34[m fix: remove duplicate _parseStreamInfoCache (patch sediment)
+[33mf380b6b5[m correct episodes
+[33m90727561[m FF Fix
+[33m6cea05b9[m FF, Binge Nav, Series Loading
+[33m03a48f3d[m Play next popup, episode selection fixes, Up Next card WORKING
+[33mf066643a[m Play next popup, episode selection fixes, Up Next card
+[33m5a8699e8[m stable
+[33med7b8c6f[m Initial commit
+[33mfa3dc440[m Auto-generated changes
+[33mdf892149[m auto-commit for d17d2abf-fed1-482f-8a9a-143e5e3d6f07
+[33md0dbd88c[m Auto-generated changes
+[33md66acf02[m auto-commit for 6070b67a-67e7-4941-b264-6f1c89f6ad82
+[33m5ea98104[m auto-commit for b08d386e-4c96-45ff-8762-e8e297cc471e
+[33m6a7de07d[m auto-commit for 6b74fc6c-1260-42b2-8f4b-4bc21fc87479
+[33m07feb13e[m auto-commit for ae41ba69-e51e-4a4b-beb8-5a80022d036a
+[33mbf7e7fbf[m auto-commit for de143dd6-88a2-4c4e-8d65-f0b5f9f31cad
+[33m7b3d065d[m auto-commit for 237fc059-9fde-4dcb-a44f-b1f6d716843a
+[33m00138b10[m v1.6.0 - Instant playback when ready
+[33mec2b5699[m v1.5.9
+[33m6be2b60e[m v1.5.8 - Fixed stream timeout during playback, instant X button removal
+[33m07a1a90f[m v1.5.7 - Navigation performance improvements
+[33mb200e04c[m v1.5.6 - All playback fixes, dynamic version, hardcoded backend URL
+[33m637d229b[m Hardcoded backend URL for playback
+[33mb809c922[m Auto-generated changes
+[33m69cbe5de[m Auto-generated changes
+[33m13585cb2[m Auto-generated changes
+[33m6606c74f[m auto-commit for a2ea6502-10dd-49aa-a262-1c57a7541576
+[33m5350cfa7[m Auto-generated changes
+[33m29d7adf0[m auto-commit for 009815bc-169a-4602-91f1-ad56cfb8d990
+[33m7be35e79[m Auto-generated changes
+[33m0578c7c0[m Auto-generated changes
+[33m9dc33e23[m auto-commit for ee20413f-1bf4-4d73-b96c-e1afce3dfe73
+[33ma32aeaca[m auto-commit for a5965843-a6b9-496e-bcc3-aeba41fb67d9
+[33m68e8b6ef[m auto-commit for 0cff35d3-5dae-48d1-bdcc-10317e9d1206
+[33m79e9d07f[m auto-commit for 280b92ee-6dd2-4f80-bdb5-55cd51c313da
+[33m0355c40e[m auto-commit for 1b6b1556-237c-467d-b306-408e71c988e5
+[33md146a7e2[m auto-commit for ecfbcaea-b490-4e5f-bb81-30c754671ebe
+[33mf5c02529[m auto-commit for 205eda6c-4fb8-489a-a062-17ecd835200d
+[33m38a420ca[m auto-commit for 8fcbb35b-c391-4a46-ab43-d29ef5ce4669
+[33m9b562094[m auto-commit for fa9ebfd6-6a29-458a-9da5-1e1274427e16
+[33m7cdfb605[m auto-commit for 286d6bad-42e7-44cf-a9ab-26ea29dedf9b
+[33meac4c4fd[m auto-commit for 9173b9b9-7b1f-46ee-af80-19acd53d95f2
+[33m333fe4c8[m auto-commit for eccadd5c-9272-4e43-b4c8-bc48f1b53f3d
+[33m8230fba6[m auto-commit for be46eaf8-efad-4741-823e-229ee30cb7a6
+[33md8d78c55[m auto-commit for 911c383b-80c9-46fe-86fd-1a002ad1dcbd
+[33m7c7e7336[m auto-commit for c154262a-70f3-4351-ae3f-b06cdd4c9e05
+[33m2492e892[m auto-commit for d6513f61-48f0-41fc-8487-84e5d1c9ce7e
+[33mad3f2054[m auto-commit for 8dc3434d-fb1a-49d4-aeed-1ca300b7e50e
+[33m98a9fc0f[m auto-commit for 1873582a-887e-4a55-84f9-b785626af3bf
+[33m2a4284b0[m auto-commit for 22601a24-ba69-4868-bfac-e7c7a64276e1
+[33m9f930f54[m auto-commit for 3eb52ae4-e1cb-4774-a80e-085578999f96
+[33m46b354d1[m auto-commit for 2e847e98-6881-49b5-a2f7-8f339af51d62
+[33m5f50e5d4[m auto-commit for 2d92fd78-e600-4190-811e-05dfadee2f01
+[33mbf011c6b[m auto-commit for 793bc0b8-585f-4c63-91ce-419b3d67d77b
+[33mdce2de1e[m auto-commit for 37a174c3-a851-4b15-bfe8-f610e874a2c1
+[33mdd3c6114[m auto-commit for a72676a6-1054-411a-b06f-1c5c645f556f
+[33m4a60e0ac[m auto-commit for 078a07bf-01ce-4f40-8306-cc504f4d2853
+[33m623b5cad[m auto-commit for 5ac9322e-a962-4380-b1c8-725d862dc174
+[33md4703cc8[m auto-commit for b7a08965-1c23-4fed-9861-0be660066c87
+[33mff6aa59a[m auto-commit for 11f8e5d8-69ee-4f3d-a15a-17d2ef054bc5
+[33mc00427df[m auto-commit for 0ef6e31f-b5de-4ce6-a5f7-25db84f970db
+[33m559c8d4c[m auto-commit for 5ab032b0-1ca1-4d5c-8071-41a8c15d19d8
+[33m733ad377[m auto-commit for a7b98df1-f526-4cc7-87b3-03eecec57303
+[33me2ae63ab[m auto-commit for aa4cad84-645c-461b-9166-007ca28eef65
+[33mc0bf6c89[m auto-commit for afbd549a-6b43-42a1-bfd0-0fb5cad0772e
+[33mc7585d1c[m auto-commit for 2b461e34-ab7d-4360-bb28-5588ca5d373c
+[33mab7c9885[m auto-commit for a6c96117-e098-4b9f-88b7-e1f8409b0847
+[33m98ac179d[m auto-commit for a27254c9-eea9-4704-8c98-6532d0b14cee
+[33mfdbd6df3[m auto-commit for 2dd5fddc-0c05-4a29-8021-093671147f63
+[33m7aeba8fb[m auto-commit for 78c7d795-4987-494c-bbfa-ad3cc06a6e8f
+[33m361fd6d7[m auto-commit for 0db2bb93-f3b9-419c-ac5a-837867dfb62e
+[33m76f714e2[m auto-commit for 9a26b3b9-4b9f-4743-b0f8-177763df6bff
+[33m3d3e3466[m auto-commit for c2d56f52-b1cc-478c-af21-ed7999610c49
+[33mb5ba04ad[m auto-commit for 5acb047d-9078-4cf2-8fd9-482dc02e2c55
+[33m24e2d4e0[m auto-commit for fecbf2da-bd1d-4e54-a4b1-3b9df7dd5cd7
+[33med09de91[m auto-commit for 975448ea-6107-4db6-80f9-3a481b9cfd57
+[33mf3556e45[m auto-commit for 31680b29-9589-41f7-8fc9-97c7736c6f30
+[33m03f92b12[m auto-commit for ee7077e9-c70c-4182-857c-474153f253a3
+[33mb20c8022[m auto-commit for feaaceff-d339-41aa-aeb6-af090e70a014
+[33m7b67c4f3[m auto-commit for ed78f2d1-2ee6-4944-b83c-69939502be89
+[33macf5424b[m auto-commit for 79c4c51d-c65b-4b87-9e95-e002de4782c2
+[33m5a704075[m auto-commit for 323817cb-0608-484e-ba30-269ecaf68fa5
+[33mdef35334[m auto-commit for fa9562fe-f349-4fb9-98b6-ca38017cceb0
+[33mee31df12[m auto-commit for 8d7b6910-2241-4ddb-90e1-294a734bc008
+[33m620001b6[m auto-commit for 2097f1f9-cfc3-4780-a465-33473f7a1074
+[33m6c94886f[m auto-commit for 1c04e2cb-e5fd-44eb-ab1c-bfbae7e9b50f
+[33mc2b39f85[m auto-commit for 43eaa3da-f71d-42ef-a21b-ccf4dd1ae279
+[33mc3361462[m auto-commit for b23596e7-a741-4398-b676-a7cb8d9608d6
+[33m7d720d53[m auto-commit for e58ffad8-1491-49e4-b542-f9100422cc68
+[33m05f34b44[m auto-commit for 33f073e4-f480-49fd-866e-22e6b5ebd193
+[33m00da91fc[m auto-commit for 7ef8c3bf-97dd-4ccd-9ce9-c8a87946ec7a
+[33m8b06ea8b[m auto-commit for 7429ad02-10dd-4e0a-9b7e-9ff6a77d221d
+[33m2b9f782b[m auto-commit for a08c8438-a597-4986-bcc5-8881657b2430
+[33md36b3956[m auto-commit for ebc3deef-fe99-41b6-9e93-b1f63bf19da5
+[33m01ce083f[m auto-commit for 3c956599-ce89-4405-b30f-9119ac0310ee
+[33mad20647b[m auto-commit for 7fae8228-5092-4396-8433-62ca4a314be2
+[33m43f7bcc0[m auto-commit for b321a4bb-02ae-4b5c-bc8a-ddbd9aab99cb
+[33m31cc23c2[m auto-commit for f481c4fd-7e07-4fc7-9fec-ab0083302bcf
+[33mf4da03b3[m auto-commit for f51ba29e-2695-447e-ac52-ff6abf43f9f9
+[33m7d6c6ad4[m auto-commit for ab9f62c7-caba-42c2-939f-767d2a847bff
+[33m7e626f60[m auto-commit for a3916016-3ed4-4df4-8efb-867f255e90c4
+[33mcb4f2ced[m auto-commit for 5da69e72-b55e-4b75-b991-c046b9f86f6b
+[33m09cef226[m auto-commit for 83ef3114-492b-47e5-ab6b-98dec28aba34
+[33m20fc2631[m auto-commit for 770ead5a-3edf-453e-899a-b4d287ac3cfe
+[33mc148d272[m auto-commit for ab4a53f9-f942-4f03-8dc7-521dd0412bf2
+[33m4d9f8d7e[m auto-commit for 0e8fabeb-7afd-44df-94e6-008d5a0ef7ea
+[33m22924135[m auto-commit for 5b7b00a3-1dc7-44cc-8dd1-67afbe42c24a
+[33mbf2d25da[m auto-commit for 2ac70093-3203-4b30-be8e-16f0fa131c9a
+[33md9e861aa[m auto-commit for 383e92b3-8169-41b5-a716-8c0f3d4d6621
+[33ma9bc5529[m auto-commit for cad92a03-e58c-4a00-95c5-0e3526ab4ba0
+[33m97640a6a[m auto-commit for 29a5143e-0b8a-43ec-a376-7c82e79e6e53
+[33m20b57a26[m auto-commit for 2eb5d4b1-2f5a-42e9-9778-30c392f995fd
+[33m58173239[m auto-commit for abd7b94a-b25e-4ad2-8c8d-82a262d86177
+[33m4886db32[m auto-commit for 9a64accb-243e-422a-aa03-041c0483722a
+[33m342813b5[m auto-commit for f921658c-ab92-4d11-9489-fba8a57b1299
+[33mfa4ee826[m auto-commit for 7041b369-6762-487e-a4db-60aae0598fca
+[33m4a0fc0cd[m auto-commit for b530200c-7ffd-4891-b956-e86e40c1100d
+[33md8b5c03c[m auto-commit for aa32abdd-984d-480f-8461-fb8ab36b5cbd
+[33mcde44f4d[m auto-commit for 
