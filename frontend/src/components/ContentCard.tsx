@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
+import React, { memo, useState, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,22 +9,25 @@ import {
   findNodeHandle,
   Image as RNImage,
 } from 'react-native';
+
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentItem, SearchResult, api } from '../api/client';
-import { useContentStore } from '../store/contentStore'; // PATCH_V19C_FOCUS_PREFETCH
 import { colors, posterShapes } from '../styles/colors';
 import Constants from 'expo-constants';
 
-// Fallback image for missing posters
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
-// Build backend image proxy URL for posters that fail to load directly
 const getProxiedPosterUrl = (originalUrl: string): string => {
-  const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
-  return `${backendUrl}/api/proxy/image?url=${encodeURIComponent(originalUrl)}`;
-};
+  const backendUrl =
+    process.env.EXPO_PUBLIC_BACKEND_URL ||
+    Constants.expoConfig?.extra?.backendUrl ||
+    '';
 
+  return `${backendUrl}/api/proxy/image?url=${encodeURIComponent(
+    originalUrl
+  )}`;
+};
 
 interface ContentCardProps {
   item: ContentItem | SearchResult;
@@ -43,33 +46,32 @@ interface ContentCardProps {
   onCardBlur?: () => void;
 }
 
-export const getCardWidth = (screenWidth: number, isTV: boolean, size: string = 'medium') => {
+export const getCardWidth = (
+  screenWidth: number,
+  isTV: boolean,
+  size: string = 'medium'
+) => {
   if (isTV) {
     const numCards = 6;
     const horizontalPadding = 80;
     const gapsBetweenCards = (numCards - 1) * 16;
-    let cardWidth = (screenWidth - horizontalPadding - gapsBetweenCards) / numCards;
+
+    let cardWidth =
+      (screenWidth - horizontalPadding - gapsBetweenCards) /
+      numCards;
+
     return Math.min(cardWidth, 180);
   } else {
     const baseWidth = Math.min(screenWidth, 500);
-    const CARD_WIDTH = (baseWidth - 48) / 3;
-    return size === 'small' ? CARD_WIDTH * 0.85 : size === 'large' ? CARD_WIDTH * 1.15 : CARD_WIDTH;
-  }
-};
 
-// Helper to get native tag from a ref — works on both old and new RN architectures
-const getNativeTag = (ref: any): number | null => {
-  if (!ref) return null;
-  // Try findNodeHandle (works on old architecture)
-  try {
-    const tag = findNodeHandle(ref);
-    if (tag && tag > 0) return tag;
-  } catch (_e) {}
-  // Try _nativeTag (works on both architectures)
-  if (ref._nativeTag && ref._nativeTag > 0) return ref._nativeTag;
-  // Try __nativeTag
-  if (ref.__nativeTag && ref.__nativeTag > 0) return ref.__nativeTag;
-  return null;
+    const CARD_WIDTH = (baseWidth - 48) / 3;
+
+    return size === 'small'
+      ? CARD_WIDTH * 0.85
+      : size === 'large'
+      ? CARD_WIDTH * 1.15
+      : CARD_WIDTH;
+  }
 };
 
 const ContentCardComponent: React.FC<ContentCardProps> = ({
@@ -89,99 +91,60 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   onCardBlur,
 }) => {
   const { width, height } = useWindowDimensions();
+
+  const isTV = width > height || width > 800;
+
+  const cardWidth = getCardWidth(width, isTV, size);
+
+  const aspectRatio = posterShapes[posterShape];
+
+  const cardHeight = cardWidth * aspectRatio;
+
   const [isFocused, setIsFocused] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
   const [posterError, setPosterError] = useState(false);
   const [useProxy, setUseProxy] = useState(false);
-  const pressableRef = useRef<View>(null);
-  const [selfTag, setSelfTag] = useState<number>(0);
-  
-  const isTV = width > height || width > 800;
-  const cardWidth = getCardWidth(width, isTV, size);
-  const aspectRatio = posterShapes[posterShape];
-  const cardHeight = cardWidth * aspectRatio;
 
-  // Get native tag via onLayout (fires after native view is fully laid out)
-  const handleLayout = useCallback(() => {
-    if ((isFirstInRow || isLastInRow) && pressableRef.current) {
-      const tag = getNativeTag(pressableRef.current);
-      if (tag && tag !== selfTag) {
-        setSelfTag(tag);
-      }
-    }
-  }, [isFirstInRow, isLastInRow, selfTag]);
-
-  // PATCH_V48_NO_NODEHANDLE_TIMER — removed per-card setTimeout(100ms).
-  // With ~30 rows × 6 cards visible, this was firing 60+ deferred bridge
-  // calls on cold start. The handleLayout path above already fires the
-  // native tag assignment when the view is laid out — no timer needed.
-
-  // PATCH_V37_KILL_V19C_PREFETCH — V19C focus prefetch DISABLED.
-
-  //   Original reason for disable: scrolling D-pad across posters queues
-
-  //   many delayed prefetches, hammering the backend and fragmenting the
-
-  //   JS thread → laggy D-pad. (Matches the handoff warning verbatim.)
-
-  //   To re-enable: remove this marker and any "if (false) {" guard added
-
-  //   below. Original V19C comment was:
-// PATCH_V19C_FOCUS_PREFETCH — schedule a stream prefetch ~800ms after focus so
-  // flicking rows on the D-pad doesn't fire dozens of network requests.
-  const _prefetchTimerRef = useRef<any>(null);
+  const pressableRef = useRef<any>(null);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
     onCardFocus?.();
-    // Schedule prefetch
-    if (_prefetchTimerRef.current) clearTimeout(_prefetchTimerRef.current);
-    _prefetchTimerRef.current = setTimeout(() => {
-      _prefetchTimerRef.current = null;
-      try {
-        const _itemAny: any = item;
-        const _type: string | undefined = _itemAny?.type || (_itemAny?.imdb_id ? 'movie' : undefined);
-        const _id: string | undefined = _itemAny?.imdb_id || _itemAny?.id;
-        if (_type && _id) {
-          const _store: any = useContentStore.getState();
-          if (typeof _store.prefetchStreams === 'function') {
-            // V38_V19C_KILL — V19C focus prefetch disabled. Was hammering the backend
-            // during rapid D-pad nav across posters → laggy. The handoff explicitly
-            // said this should be rolled back. To re-enable: uncomment the next line.
-            // _store.prefetchStreams(_type, _id);
-          }
-        }
-      } catch { /* prefetch is best-effort */ }
-    }, 800);
-  }, [onCardFocus, item]);
+  }, [onCardFocus]);
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
     onCardBlur?.();
-    if (_prefetchTimerRef.current) {
-      clearTimeout(_prefetchTimerRef.current);
-      _prefetchTimerRef.current = null;
-    }
   }, [onCardBlur]);
 
   const handleLongPress = useCallback(async () => {
     const contentId = item.imdb_id || item.id;
-    const contentName = item.name || item.title || 'this item';
-    
+
+    const contentName =
+      item.name || item.title || 'this item';
+
     Alert.alert(
-      isInLibrary ? 'Remove from Library?' : 'Add to Library?',
-      isInLibrary 
+      isInLibrary
+        ? 'Remove from Library?'
+        : 'Add to Library?',
+      isInLibrary
         ? `Remove "${contentName}" from your library?`
         : `Add "${contentName}" to your library?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
         {
           text: isInLibrary ? 'Remove' : 'Add',
-          style: isInLibrary ? 'destructive' : 'default',
+          style: isInLibrary
+            ? 'destructive'
+            : 'default',
           onPress: async () => {
             try {
               if (isInLibrary) {
                 await api.library.remove(contentId);
+
                 setIsInLibrary(false);
               } else {
                 await api.library.add({
@@ -190,12 +153,18 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
                   name: contentName,
                   poster: item.poster || '',
                 });
+
                 setIsInLibrary(true);
               }
+
               onLibraryChange?.();
             } catch (error) {
               console.log('Library error:', error);
-              Alert.alert('Error', 'Failed to update library');
+
+              Alert.alert(
+                'Error',
+                'Failed to update library'
+              );
             }
           },
         },
@@ -205,54 +174,70 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   if (!item) return null;
 
-  // Build focus trapping props
-  const focusTrapProps: any = {};
-  if (isLastInRow && selfTag > 0) {
-    focusTrapProps.nextFocusRight = selfTag;
-  }
-  if (isFirstInRow && selfTag > 0) {
-    focusTrapProps.nextFocusLeft = selfTag;
-  }
+  // HARD TV FOCUS LOCK
+  const selfNode = findNodeHandle(pressableRef.current);
 
   return (
     <Pressable
       ref={pressableRef}
+      focusable={true}
       onPress={onPress}
       onLongPress={handleLongPress}
       delayLongPress={500}
       onFocus={handleFocus}
       onBlur={handleBlur}
-      onLayout={handleLayout}
       android_ripple={null}
       hasTVPreferredFocus={hasTVPreferredFocus}
-      {...focusTrapProps}
-      style={[styles.container, { width: cardWidth }]}
+
+      nextFocusRight={
+        isLastInRow && selfNode
+          ? selfNode
+          : undefined
+      }
+
+      nextFocusLeft={
+        isFirstInRow && selfNode
+          ? selfNode
+          : undefined
+      }
+
+      style={[
+        styles.container,
+        { width: cardWidth },
+      ]}
+
       accessible={true}
       accessibilityRole="button"
-      accessibilityLabel={item.name || item.title || 'Content'}
+      accessibilityLabel={
+        item.name || item.title || 'Content'
+      }
       accessibilityHint="Long press to add or remove from library"
     >
-      {/* Poster Container - Focus border only around this */}
-      <View style={[
-        styles.posterContainer,
-        { height: cardHeight },
-        isFocused && styles.posterFocused,
-      ]}>
-        {/* Image or Placeholder */}
+      <View
+        style={[
+          styles.posterContainer,
+          { height: cardHeight },
+          isFocused && styles.posterFocused,
+        ]}
+      >
         <View style={styles.imageWrapper}>
           {item.poster && !posterError ? (
             <Image
-              source={{ uri: useProxy ? getProxiedPosterUrl(item.poster) : item.poster }}
+              source={{
+                uri: useProxy
+                  ? getProxiedPosterUrl(item.poster)
+                  : item.poster,
+              }}
               style={styles.posterImage}
               contentFit="cover"
-              recyclingKey={`${item.id || item.imdb_id}${useProxy ? '-proxy' : ''}`}
+              recyclingKey={`${
+                item.id || item.imdb_id
+              }${useProxy ? '-proxy' : ''}`}
               cachePolicy="memory-disk"
               onError={() => {
                 if (!useProxy && item.poster) {
-                  // First failure: retry through backend proxy (bypasses CDN hotlink blocking)
                   setUseProxy(true);
                 } else {
-                  // Proxy also failed: show placeholder
                   setPosterError(true);
                 }
               }}
@@ -265,38 +250,65 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
             />
           )}
         </View>
-        
-        {/* Library indicator */}
+
         {isInLibrary && (
           <View style={styles.libraryBadge}>
-            <Ionicons name="bookmark" size={12} color={colors.textPrimary} />
+            <Ionicons
+              name="bookmark"
+              size={12}
+              color={colors.textPrimary}
+            />
           </View>
         )}
-        
-        {/* Watched checkmark indicator - opposite corner from library badge (Stremio-style) */}
-        {(watched || (showProgress !== undefined && showProgress >= 90)) && (
+
+        {(watched ||
+          (showProgress !== undefined &&
+            showProgress >= 90)) && (
           <View style={styles.watchedBadge}>
-            <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+            <Ionicons
+              name="checkmark-circle"
+              size={18}
+              color="#4CAF50"
+            />
           </View>
         )}
-        
-        {/* Progress bar */}
-        {showProgress !== undefined && showProgress > 0 && (
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBackground} />
-            <View style={[styles.progressBar, { width: `${Math.min(showProgress, 100)}%` }]} />
-          </View>
-        )}
+
+        {showProgress !== undefined &&
+          showProgress > 0 && (
+            <View style={styles.progressContainer}>
+              <View
+                style={styles.progressBackground}
+              />
+
+              <View
+                style={[
+                  styles.progressBar,
+                  {
+                    width: `${Math.min(
+                      showProgress,
+                      100
+                    )}%`,
+                  },
+                ]}
+              />
+            </View>
+          )}
       </View>
-      
-      {/* Title bar - OUTSIDE poster */}
-      {showTitle && (item.name || item.title) && (
-        <View style={styles.titleContainer}>
-          <Text style={[styles.title, isTV && styles.titleTV]} numberOfLines={2}>
-            {item.name || item.title}
-          </Text>
-        </View>
-      )}
+
+      {showTitle &&
+        (item.name || item.title) && (
+          <View style={styles.titleContainer}>
+            <Text
+              style={[
+                styles.title,
+                isTV && styles.titleTV,
+              ]}
+              numberOfLines={2}
+            >
+              {item.name || item.title}
+            </Text>
+          </View>
+        )}
     </Pressable>
   );
 };
@@ -308,6 +320,7 @@ const styles = StyleSheet.create({
     marginRight: 16,
     marginBottom: 2,
   },
+
   posterContainer: {
     borderRadius: 6,
     overflow: 'visible',
@@ -316,26 +329,24 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'transparent',
   },
+
   posterFocused: {
     borderColor: colors.primary,
   },
+
   imageWrapper: {
     width: '100%',
     height: '100%',
     borderRadius: 4,
     overflow: 'hidden',
   },
+
   posterImage: {
     width: '100%',
     height: '100%',
     backgroundColor: colors.backgroundLight,
   },
-  placeholder: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.backgroundLight,
-  },
+
   libraryBadge: {
     position: 'absolute',
     top: 8,
@@ -344,14 +355,16 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     padding: 4,
   },
+
   watchedBadge: {
     position: 'absolute',
     top: 6,
     left: 6,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 10,
     padding: 1,
   },
+
   progressContainer: {
     position: 'absolute',
     bottom: 12,
@@ -361,6 +374,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     overflow: 'hidden',
   },
+
   progressBackground: {
     position: 'absolute',
     top: 0,
@@ -370,16 +384,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textPrimary,
     opacity: 0.3,
   },
+
   progressBar: {
     height: '100%',
     backgroundColor: colors.textPrimary,
     borderRadius: 4,
   },
+
   titleContainer: {
     paddingTop: 6,
     paddingHorizontal: 4,
     height: 38,
   },
+
   title: {
     color: colors.primary,
     fontSize: 12,
@@ -387,6 +404,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 16,
   },
+
   titleTV: {
     fontSize: 13,
   },

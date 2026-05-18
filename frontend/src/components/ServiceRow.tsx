@@ -1,13 +1,22 @@
-import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import React, {
+  memo,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+  useEffect,
+} from 'react';
+
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   useWindowDimensions,
   InteractionManager,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list'; // PATCH_V49_FLASHLIST
+
+import { FlashList } from '@shopify/flash-list';
+
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
 import apiClient from '../api/client';
@@ -18,73 +27,32 @@ const TV_PADDING_LEFT = 48;
 const TV_PADDING_RIGHT = 48;
 const MOBILE_PADDING = 16;
 
-// Anchor position: the row starts scrolling once focus reaches this card index.
-// 4 means: posters 1-5 free movement, poster 6 triggers first scroll.
 const TV_SCROLL_ANCHOR = 4;
 
-// Lazy wrapper — only mounts the real ServiceRow content after a staggered delay.
-// This prevents all horizontal FlatLists from mounting at once and blocking the JS thread.
-// PATCH_V43B_SEQUENTIAL_MOUNT — Singleton mount queue. Row N+1 only mounts after row N
-// has signaled "painted". Guarantees serial mounting; JS thread is never
-// asked to mount two FlatLists at once. Adapts to device speed.
-const mountQueue: { rowIndex: number; grant: () => void }[] = [];
-let currentMountTicket = 0;
-
-function requestMountToken(rowIndex: number): Promise<void> {
-  return new Promise((resolve) => {
-    if (rowIndex <= currentMountTicket) {
-      resolve();
-      return;
-    }
-    mountQueue.push({ rowIndex, grant: resolve });
-    mountQueue.sort((a, b) => a.rowIndex - b.rowIndex);
-  });
-}
-
-function releaseMountToken(rowIndex: number) {
-  if (rowIndex >= currentMountTicket) {
-    currentMountTicket = rowIndex + 1;
-  }
-  while (mountQueue.length > 0 && mountQueue[0].rowIndex <= currentMountTicket) {
-    const next = mountQueue.shift()!;
-    requestAnimationFrame(() => next.grant());
-  }
-}
-
-const LazyMount: React.FC<{ height: number; rowIndex: number; children: React.ReactNode }> = memo(({ height, rowIndex, children }) => {
-  // PATCH_V47_TIME_STAGGER — time-staggered mount (30ms per row, max 600ms).
-  // Replaces V43B's mount-queue: deterministic, no onLayout dependency,
-  // no JS-thread chain. Rows pop in like a wave; cold start ~3-5x faster.
+const LazyMount: React.FC<{
+  height: number;
+  rowIndex: number;
+  children: React.ReactNode;
+}> = memo(({ height, rowIndex, children }) => {
   const [shouldRender, setShouldRender] = useState(rowIndex === 0);
-  const hasReleasedRef = useRef(true); // V47: layout-release no longer used; keep ref for compat.
 
   useEffect(() => {
     if (shouldRender) return;
+
     const delayMs = Math.min(rowIndex * 30, 600);
-    const t = setTimeout(() => setShouldRender(true), delayMs);
+
+    const t = setTimeout(() => {
+      setShouldRender(true);
+    }, delayMs);
+
     return () => clearTimeout(t);
   }, [rowIndex, shouldRender]);
-
-  const handleLayout = useCallback(() => {
-    if (hasReleasedRef.current) return;
-    hasReleasedRef.current = true;
-    InteractionManager.runAfterInteractions(() => releaseMountToken(rowIndex));
-  }, [rowIndex]);
-
-  useEffect(() => {
-    return () => {
-      if (!hasReleasedRef.current) {
-        hasReleasedRef.current = true;
-        releaseMountToken(rowIndex);
-      }
-    };
-  }, [rowIndex]);
 
   if (!shouldRender) {
     return <View style={{ height, backgroundColor: 'transparent' }} />;
   }
 
-  return <View onLayout={handleLayout}>{children}</View>;
+  return <View>{children}</View>;
 });
 
 interface ServiceRowProps {
@@ -99,179 +67,252 @@ interface ServiceRowProps {
   rowIndex?: number;
 }
 
-export const ServiceRow: React.FC<ServiceRowProps> = memo(({
-  title,
-  serviceName,
-  contentType,
-  items: initialItems,
-  onItemPress,
-  onItemFocus,
-  onSectionFocus,
-  isFirstRow = false,
-  rowIndex = 0,
-}) => {
-  const { width: screenWidth, height } = useWindowDimensions();
-  const isTV = screenWidth > height || screenWidth > 800;
+export const ServiceRow: React.FC<ServiceRowProps> = memo(
+  ({
+    title,
+    serviceName,
+    contentType,
+    items: initialItems,
+    onItemPress,
+    onItemFocus,
+    onSectionFocus,
+    isFirstRow = false,
+    rowIndex = 0,
+  }) => {
+    const { width: screenWidth, height } = useWindowDimensions();
 
-  const cardWidth = getCardWidth(screenWidth, isTV, 'medium');
-  const itemTotalWidth = cardWidth + ITEM_GAP;
-  const paddingLeft = isTV ? TV_PADDING_LEFT : MOBILE_PADDING;
+    const isTV = screenWidth > height || screenWidth > 800;
 
-  const [allItems, setAllItems] = useState<ContentItem[]>(() => initialItems || []);
+    const cardWidth = getCardWidth(screenWidth, isTV, 'medium');
 
-  const skipRef = useRef(initialItems?.length || 0);
-  const hasMoreRef = useRef(true);
-  const isFetchingRef = useRef(false);
-  const lastFetchTime = useRef(0);
-  const totalRef = useRef(initialItems?.length || 0);
-  const itemCountRef = useRef(initialItems?.length || 0);
-  const flatListRef = useRef<FlashList<ContentItem>>(null); // PATCH_V49_FLASHLIST
+    const itemTotalWidth = cardWidth + ITEM_GAP;
 
-  // Track whether user is navigating horizontally within this row
-  const isNavigatingInRowRef = useRef(false);
-  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [allItems, setAllItems] = useState<ContentItem[]>(
+      () => initialItems || []
+    );
 
-  const validItems = useMemo(() => 
-    (allItems || []).filter(Boolean), [allItems]);
-  
-  itemCountRef.current = validItems.length;
-  
-  if (validItems.length === 0) return null;
+    const skipRef = useRef(initialItems?.length || 0);
+    const hasMoreRef = useRef(true);
+    const isFetchingRef = useRef(false);
+    const lastFetchTime = useRef(0);
 
-  const fetchMore = useCallback(async () => {
-    const now = Date.now();
-    if (isFetchingRef.current || !hasMoreRef.current) return;
-    if (now - lastFetchTime.current < 2000) return;
+    const totalRef = useRef(initialItems?.length || 0);
+    const itemCountRef = useRef(initialItems?.length || 0);
 
-    isFetchingRef.current = true;
-    lastFetchTime.current = now;
-    try {
-      const resp = await apiClient.get(
-        `/api/content/category/${encodeURIComponent(serviceName)}/${contentType}?skip=${skipRef.current}&limit=100`
-      );
-      const newItems: ContentItem[] = resp.data.items || [];
-      if (newItems.length > 0) {
-        setAllItems(prev => {
-          const ids = new Set(prev.map(i => i.id || i.imdb_id));
-          const unique = newItems.filter(i => !ids.has(i.id || i.imdb_id));
-          const updated = [...prev, ...unique];
-          totalRef.current = updated.length;
-          return updated;
-        });
-        skipRef.current += newItems.length;
+    const flatListRef = useRef<FlashList<ContentItem>>(null);
+
+    const isNavigatingInRowRef = useRef(false);
+
+    const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+      null
+    );
+
+    const validItems = useMemo(
+      () => (allItems || []).filter(Boolean),
+      [allItems]
+    );
+
+    itemCountRef.current = validItems.length;
+
+    if (validItems.length === 0) {
+      return null;
+    }
+
+    const fetchMore = useCallback(async () => {
+      const now = Date.now();
+
+      if (isFetchingRef.current || !hasMoreRef.current) return;
+
+      if (now - lastFetchTime.current < 2000) return;
+
+      isFetchingRef.current = true;
+      lastFetchTime.current = now;
+
+      try {
+        const resp = await apiClient.get(
+          `/api/content/category/${encodeURIComponent(
+            serviceName
+          )}/${contentType}?skip=${skipRef.current}&limit=100`
+        );
+
+        const newItems: ContentItem[] = resp.data.items || [];
+
+        if (newItems.length > 0) {
+          setAllItems(prev => {
+            const ids = new Set(
+              prev.map(i => i.id || i.imdb_id)
+            );
+
+            const unique = newItems.filter(
+              i => !ids.has(i.id || i.imdb_id)
+            );
+
+            const updated = [...prev, ...unique];
+
+            totalRef.current = updated.length;
+
+            return updated;
+          });
+
+          skipRef.current += newItems.length;
+        }
+
+        hasMoreRef.current =
+          resp.data.hasMore !== undefined
+            ? resp.data.hasMore
+            : newItems.length >= 20;
+      } catch {
+        hasMoreRef.current = false;
+      } finally {
+        isFetchingRef.current = false;
       }
-      hasMoreRef.current = resp.data.hasMore !== undefined 
-        ? resp.data.hasMore 
-        : newItems.length >= 20;
-    } catch {
-      hasMoreRef.current = false;
-    } finally {
-      isFetchingRef.current = false;
-    }
-  }, [serviceName, contentType]);
+    }, [serviceName, contentType]);
 
-  // Card focus handler
-  const handleCardFocus = useCallback((index: number) => {
-    // Cancel any pending blur timer — user is still in this row
-    if (blurTimerRef.current) {
-      clearTimeout(blurTimerRef.current);
-      blurTimerRef.current = null;
-    }
+    const handleCardFocus = useCallback(
+      (index: number) => {
+        if (blurTimerRef.current) {
+          clearTimeout(blurTimerRef.current);
+          blurTimerRef.current = null;
+        }
 
-    onSectionFocus?.();
-    
-    // Pre-fetch meta data for the focused item
-    const focusedItem = validItems[index];
-    if (focusedItem && onItemFocus) {
-      onItemFocus(focusedItem);
-    }
+        onSectionFocus?.();
 
-    if (isTV && flatListRef.current && isNavigatingInRowRef.current) {
-      // HORIZONTAL NAVIGATION — apply smooth 1-card scroll
-      const targetOffset = Math.max(0, (index - TV_SCROLL_ANCHOR) * itemTotalWidth);
-      // PATCH_V48_NO_ANIM_SCROLL — instant scroll, no queued animations.
-      // Animated horizontal scroll was the #1 D-pad lag cause; presses
-      // queued 250ms animations that piled up faster than they played.
-      flatListRef.current.scrollToOffset({ offset: targetOffset, animated: false });
-    }
-    // If isNavigatingInRowRef is false, user entered from another row via up/down
-    // → DON'T scroll, just let the selector land where Android TV placed it
+        const focusedItem = validItems[index];
 
-    // Mark this row as active for horizontal navigation
-    isNavigatingInRowRef.current = true;
+        if (focusedItem && onItemFocus) {
+          onItemFocus(focusedItem);
+        }
 
-    // Pre-fetch when near end
-    if (index >= totalRef.current - 15 && hasMoreRef.current) {
-      fetchMore();
-    }
-  }, [onSectionFocus, onItemFocus, validItems, fetchMore, itemTotalWidth, isTV]);
+        if (
+          isTV &&
+          flatListRef.current &&
+          isNavigatingInRowRef.current
+        ) {
+          const targetOffset = Math.max(
+            0,
+            (index - TV_SCROLL_ANCHOR) * itemTotalWidth
+          );
 
-  // Card blur handler — detect when user leaves this row
-  const handleCardBlur = useCallback(() => {
-    // Set timer: if no card in this row gets focus within 150ms,
-    // user has left this row (pressed up/down)
-    blurTimerRef.current = setTimeout(() => {
-      isNavigatingInRowRef.current = false;
-    }, 150);
-  }, []);
+          flatListRef.current.scrollToOffset({
+            offset: targetOffset,
+            animated: false,
+          });
+        }
 
-  const handleEndReached = useCallback(() => {
-    if (!isFetchingRef.current && hasMoreRef.current) {
-      fetchMore();
-    }
-  }, [fetchMore]);
+        isNavigatingInRowRef.current = true;
 
-  // PATCH_V49_FLASHLIST — getItemLayout removed; FlashList auto-virtualizes with estimatedItemSize.
+        if (
+          index >= totalRef.current - 15 &&
+          hasMoreRef.current
+        ) {
+          fetchMore();
+        }
+      },
+      [
+        onSectionFocus,
+        onItemFocus,
+        validItems,
+        fetchMore,
+        itemTotalWidth,
+        isTV,
+      ]
+    );
 
-  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
-    <ContentCard
-      item={item}
-      onPress={() => onItemPress(item)}
-      onCardFocus={() => handleCardFocus(index)}
-      onCardBlur={handleCardBlur}
-      showTitle={true}
-      hasTVPreferredFocus={isFirstRow && index === 0}
-      isFirstInRow={index === 0}
-      isLastInRow={index === itemCountRef.current - 1}
-    />
-  ), [onItemPress, handleCardFocus, handleCardBlur, isFirstRow]);
+    const handleCardBlur = useCallback(() => {
+      blurTimerRef.current = setTimeout(() => {
+        isNavigatingInRowRef.current = false;
+      }, 150);
+    }, []);
 
-  const keyExtractor = useCallback((item: ContentItem) => 
-    item.id || item.imdb_id || `${item.name}`, []);
+    const handleEndReached = useCallback(() => {
+      if (!isFetchingRef.current && hasMoreRef.current) {
+        fetchMore();
+      }
+    }, [fetchMore]);
 
-  // PATCH_V43B_SEQUENTIAL_MOUNT — Row 0 mounts immediately; subsequent rows mount
-  // in order after the previous row paints (signaled via onLayout).
+    const renderItem = useCallback(
+      ({
+        item,
+        index,
+      }: {
+        item: ContentItem;
+        index: number;
+      }) => {
+        const isFirst = index === 0;
+        const isLast =
+          index === itemCountRef.current - 1;
 
-  return (
-    <LazyMount height={200} rowIndex={rowIndex}>
-      <View style={styles.container}>
-        <View style={[styles.header, isTV && styles.headerTV]}>
-          <Text style={[styles.title, isTV && styles.titleTV]}>
-            {title || serviceName || 'Content'}
-          </Text>
+        return (
+          <ContentCard
+            item={item}
+            onPress={() => onItemPress(item)}
+            onCardFocus={() => handleCardFocus(index)}
+            onCardBlur={handleCardBlur}
+            showTitle={true}
+            hasTVPreferredFocus={
+              isFirstRow && index === 0
+            }
+            isFirstInRow={isFirst}
+            isLastInRow={isLast}
+          />
+        );
+      },
+      [
+        onItemPress,
+        handleCardFocus,
+        handleCardBlur,
+        isFirstRow,
+      ]
+    );
+
+    const keyExtractor = useCallback(
+      (item: ContentItem) =>
+        item.id || item.imdb_id || `${item.name}`,
+      []
+    );
+
+    return (
+      <LazyMount height={200} rowIndex={rowIndex}>
+        <View style={styles.container}>
+          <View
+            style={[
+              styles.header,
+              isTV && styles.headerTV,
+            ]}
+          >
+            <Text
+              style={[
+                styles.title,
+                isTV && styles.titleTV,
+              ]}
+            >
+              {title || serviceName || 'Content'}
+            </Text>
+          </View>
+
+          <FlashList
+            ref={flatListRef as any}
+            horizontal
+            data={validItems}
+            extraData={validItems.length}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={
+              isTV
+                ? styles.scrollContentTV
+                : styles.scrollContent
+            }
+            estimatedItemSize={itemTotalWidth}
+            drawDistance={itemTotalWidth * 3}
+            onEndReached={handleEndReached}
+            onEndReachedThreshold={3}
+          />
         </View>
-        
-        {/* PATCH_V49_FLASHLIST — horizontal FlashList replaces FlatList for 3-5x D-pad perf */}
-        <FlashList
-          ref={flatListRef as any}
-          horizontal
-          data={validItems}
-          extraData={validItems.length}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={
-            isTV ? styles.scrollContentTV : styles.scrollContent
-          }
-          estimatedItemSize={itemTotalWidth}
-          drawDistance={itemTotalWidth * 3}
-          onEndReached={handleEndReached}
-          onEndReachedThreshold={3}
-        />
-      </View>
-    </LazyMount>
-  );
-});
+      </LazyMount>
+    );
+  }
+);
 
 export const MetaRow = ServiceRow;
 
@@ -280,6 +321,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     overflow: 'visible',
   },
+
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -287,29 +329,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 8,
   },
+
   headerTV: {
     paddingHorizontal: TV_PADDING_LEFT,
     marginBottom: 6,
   },
+
   title: {
     color: colors.primary,
     fontSize: 18,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
+
   titleTV: {
     fontSize: 22,
   },
+
   scrollContent: {
     paddingLeft: MOBILE_PADDING,
     paddingRight: MOBILE_PADDING + 32,
     paddingVertical: 4,
   },
+
   scrollContentTV: {
     paddingLeft: TV_PADDING_LEFT,
     paddingRight: TV_PADDING_RIGHT + 80,
     paddingVertical: 4,
   },
+
   flatListStyle: {
     overflow: 'visible',
   },
