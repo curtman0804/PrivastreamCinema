@@ -1,19 +1,42 @@
 import React, { useState } from 'react';
 import { useEffect, useRef } from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid } from 'react-native';
+import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid, findNodeHandle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
-  // PATCH_V34_ROOT_SILENT_NO_OP — back at root does NOTHING visible.
-    // No toast (invisible on TV anyway), no exit, just absorb the press.
-    // Use HOME button on the remote to leave the app.
-    useEffect(() => {
-      if (Platform.OS !== "android") return;
-      const sub = BackHandler.addEventListener("hardwareBackPress", () => true);
-      return () => { try { sub.remove(); } catch (_) {} };
-    }, []);
+  // PATCH_V71_BACK_ROUTE_AWARE - hardware back is route-aware now.
+  //   Nested screens -> router.back()
+  //   Non-Discover tabs -> go to Discover
+  //   Discover (root) -> return false, OS exits the app
+  const pathname = usePathname();
+  const router = useRouter();
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const onBack = () => {
+      try {
+        if (router.canGoBack && router.canGoBack()) {
+          router.back();
+          return true;
+        }
+      } catch (_) {}
+      const p = String(pathname || '').toLowerCase();
+      // On Discover (root) -> let system exit
+      if (p === '/' || p.endsWith('/discover') || p === '/(tabs)' || p === '/(tabs)/discover') {
+        return false;
+      }
+      // Any other tab -> back to Discover
+      try {
+        router.replace('/(tabs)/discover');
+        return true;
+      } catch (_) {
+        return false;
+      }
+    };
+    const sub = BackHandler.addEventListener("hardwareBackPress", onBack);
+    return () => { try { sub.remove(); } catch (_) {} };
+  }, [pathname]);
 
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -49,11 +72,61 @@ export default function TabsLayout() {
           isTV && styles.tabBarItemTV,
         ],
         tabBarButton: (props) => {
+          // PATCH_V71B_TAB_FOCUS_TRAP - hardened trap with multi-source tag detection. (PATCH_V71C_UP_ENABLED)
           const [isFocused, setIsFocused] = useState(false);
+          const btnRef = useRef(null);
+          const [selfTag, setSelfTag] = useState(0);
+
+          // Detect first/last tab from any available source.
+          const blob = String(
+            (props.accessibilityLabel || '') + ' ' +
+            (props.to || '') + ' ' +
+            (props.href || '') + ' ' +
+            (props.route?.name || '') + ' ' +
+            (props.target || '')
+          ).toLowerCase();
+          const isFirst = blob.includes('discover');
+          const isLast = blob.includes('profile');
+
+          // Try to grab a valid native tag from multiple sources.
+          const grabTag = () => {
+            if (!btnRef.current || !(isFirst || isLast)) return;
+            const r = btnRef.current;
+            let tag = 0;
+            try {
+              const t = findNodeHandle(r);
+              if (t && t > 0) tag = t;
+            } catch (_) {}
+            if (!tag && r._nativeTag && r._nativeTag > 0) tag = r._nativeTag;
+            if (!tag && r.__nativeTag && r.__nativeTag > 0) tag = r.__nativeTag;
+            if (tag && tag !== selfTag) setSelfTag(tag);
+          };
+
+          // Ladder of retries so we don't depend on a single mount-time call.
+          useEffect(() => {
+            if (!(isFirst || isLast)) return;
+            const timers = [50, 200, 500, 1000, 2000].map((ms) => setTimeout(grabTag, ms));
+            return () => { timers.forEach(clearTimeout); };
+          }, [isFirst, isLast]);
+
+          const trap = {};
+          if (selfTag > 0) {
+            if (isFirst) {
+              trap.nextFocusLeft = selfTag;
+            }
+            if (isLast) {
+              trap.nextFocusRight = selfTag;
+            }
+          }
+
           return (
             <Pressable
+              ref={btnRef}
               {...props}
-              onFocus={() => setIsFocused(true)}
+              {...trap}
+              focusable={true}
+              onLayout={grabTag}
+              onFocus={() => { setIsFocused(true); grabTag(); }}
               onBlur={() => setIsFocused(false)}
               style={({ focused }) => [
                 props.style,
