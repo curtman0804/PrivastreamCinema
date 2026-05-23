@@ -1,0 +1,156 @@
+// PATCH_V53_STREMIO_PATTERN — clean SearchBar matching Stremio's Android TV
+// search pattern: bare TextInput is directly D-pad-focusable. No Pressable
+// wrapper, no on-screen keyboard. The system Gboard for TV pops up natively
+// when the TextInput is focused.
+import React, { useState, useEffect, useRef } from 'react';
+import { View,
+  TextInput,
+  StyleSheet,
+  Pressable,
+  Platform, Keyboard } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+
+interface SearchBarProps {
+  onSearch: (query: string) => void;
+  placeholder?: string;
+  initialValue?: string;
+}
+
+export const SearchBar: React.FC<SearchBarProps> = ({
+  onSearch,
+  placeholder = 'Search movies & TV shows...',
+  initialValue = '',
+}) => {
+  const [query, setQuery] = useState(initialValue);
+  const [inputFocused, setInputFocused] = useState(false);
+  // PATCH_V72C_FOCUS_STATE — Android TV needs onFocus/onBlur + state for visible focus.
+  const [clearFocused, setClearFocused] = useState(false);
+  const [searchBtnFocused, setSearchBtnFocused] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (initialValue) setQuery(initialValue);
+  }, [initialValue]);
+
+  // On Android TV, programmatic focus after mount reliably pops the system IME.
+  // Stremio does the same — they don't rely on autoFocus alone.
+  useEffect(() => {
+    if (Platform.OS !== 'android' || initialValue) return;
+    const t = setTimeout(() => {
+      try { inputRef.current?.focus(); } catch (_) {}
+    }, 250);
+    return () => clearTimeout(t);
+  }, [initialValue]);
+
+  const handleSubmit = () => {
+    // PATCH_V72_KEYBOARD_DISMISS — submit, then explicitly dismiss IME and blur input.
+    if (query.trim()) onSearch(query.trim());
+    try { inputRef.current?.blur(); } catch (_) {}
+    try { Keyboard.dismiss(); } catch (_) {}
+  };
+  const handleClear = () => {
+    setQuery('');
+    onSearch('');
+    try { inputRef.current?.focus(); } catch (_) {}
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.inputRow, inputFocused && styles.inputRowFocused]}>
+        <Ionicons name="search" size={20} color="#888888" style={styles.icon} />
+        <TextInput
+          ref={inputRef}
+          style={styles.input}
+          placeholder={placeholder}
+          placeholderTextColor="#888888"
+          value={query}
+          onChangeText={setQuery}
+          onSubmitEditing={handleSubmit}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoFocus={!initialValue}
+          showSoftInputOnFocus={true}
+          hasTVPreferredFocus={!initialValue}
+          blurOnSubmit={true} /* PATCH_V72_KEYBOARD_DISMISS */
+        />
+        {query.length > 0 && (
+          /* PATCH_V72C_FOCUS_STATE — Android TV onFocus/onBlur state */
+          <Pressable
+            onPress={handleClear}
+            onFocus={() => setClearFocused(true)}
+            onBlur={() => setClearFocused(false)}
+            style={[styles.clearButton, clearFocused && styles.clearButtonFocused]}
+          >
+            <Ionicons name="close-circle" size={24} color={clearFocused ? '#000000' : '#888888'} />
+          </Pressable>
+        )}
+      </View>
+      {/* Explicit search button — PATCH_V72C_FOCUS_STATE */}
+      <Pressable
+        onPress={handleSubmit}
+        onFocus={() => setSearchBtnFocused(true)}
+        onBlur={() => setSearchBtnFocused(false)}
+        style={[styles.searchButton, searchBtnFocused && styles.searchButtonFocused]}
+      >
+        <Ionicons name="search" size={22} color={searchBtnFocused ? '#FFFFFF' : '#000000'} />
+      </Pressable>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginVertical: 12,
+    gap: 8,
+  },
+  inputRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  inputRowFocused: {
+    borderColor: '#B8A05C',
+    backgroundColor: '#222',
+  },
+  icon: { marginRight: 8 },
+  input: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 16,
+  },
+  clearButton: { padding: 4 },
+  searchButton: {
+    backgroundColor: '#B8A05C',
+    borderRadius: 12,
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  searchButtonFocused: {
+    backgroundColor: '#8B7440',
+    borderColor: '#FFFFFF',
+    borderWidth: 4,
+    transform: [{ scale: 1.15 }],
+  },
+  /* PATCH_V72_CLEAR_FOCUS style */
+  clearButtonFocused: {
+    backgroundColor: '#B8A05C',
+    borderRadius: 14,
+    transform: [{ scale: 1.2 }],
+  },
+});

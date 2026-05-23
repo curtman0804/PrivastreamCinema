@@ -358,8 +358,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         )}
 
         {releaseStatus === 'in_cinemas' && (
-          <View style={styles.inCinemasBadgeWrap} pointerEvents="none"><View style={styles.inCinemasBadgePill}>
-            <Ionicons name="ticket" size={10} color={colors.textPrimary} style={styles.inCinemasBadgeIcon} /><Text style={styles.inCinemasBadgeText}>IN CINEMA</Text></View>
+          <View style={styles.inCinemasBadge} pointerEvents="none">
+            <Text style={styles.inCinemasBadgeText}>IN CINEMAS</Text>
           </View>
         )}
 
@@ -510,29 +510,6 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 6,
     zIndex: 5,
     elevation: 5,
-  },
-
-  inCinemasBadgeWrap: {
-    position: 'absolute',
-    top: 6,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 5,
-    elevation: 5,
-  },
-
-  inCinemasBadgePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-
-  inCinemasBadgeIcon: {
-    marginRight: 4,
   },
 
   inCinemasBadgeText: {

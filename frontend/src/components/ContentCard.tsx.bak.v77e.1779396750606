@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
+import React, { memo, useState, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -17,80 +17,6 @@ import { colors, posterShapes } from '../styles/colors';
 import Constants from 'expo-constants';
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
-
-// === RELEASE_STATUS_V77E ===
-// Singleton batched fetcher. Coalesces release-status requests across all
-// mounted ContentCards so we send 1 batch per 250ms (up to 50 ids).
-const _v77ReleaseCache = new Map();
-const _v77PendingIds = new Set();
-const _v77Subscribers = new Map();
-let _v77FlushTimer = null;
-
-async function _v77FlushBatch() {
-  _v77FlushTimer = null;
-  if (_v77PendingIds.size === 0) return;
-  const ids = Array.from(_v77PendingIds).slice(0, 50);
-  ids.forEach(id => _v77PendingIds.delete(id));
-
-  const notifyAll = (status) => {
-    ids.forEach(id => {
-      const subs = _v77Subscribers.get(id);
-      if (subs) {
-        subs.forEach(cb => { try { cb(status); } catch (e) {} });
-        _v77Subscribers.delete(id);
-      }
-    });
-  };
-
-  try {
-    const backendUrl =
-      process.env.EXPO_PUBLIC_BACKEND_URL ||
-      Constants.expoConfig?.extra?.backendUrl ||
-      '';
-    const res = await fetch(`${backendUrl}/api/movie/release_status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imdb_ids: ids }),
-    });
-    if (!res.ok) {
-      notifyAll('none');
-    } else {
-      const data = await res.json();
-      ids.forEach(id => {
-        const status = (data && data[id]) || 'none';
-        _v77ReleaseCache.set(id, status);
-        const subs = _v77Subscribers.get(id);
-        if (subs) {
-          subs.forEach(cb => { try { cb(status); } catch (e) {} });
-          _v77Subscribers.delete(id);
-        }
-      });
-    }
-  } catch (e) {
-    notifyAll('none');
-  }
-
-  if (_v77PendingIds.size > 0 && !_v77FlushTimer) {
-    _v77FlushTimer = setTimeout(_v77FlushBatch, 100);
-  }
-}
-
-function _v77RequestReleaseStatus(imdbId, cb) {
-  if (_v77ReleaseCache.has(imdbId)) {
-    cb(_v77ReleaseCache.get(imdbId));
-    return () => {};
-  }
-  if (!_v77Subscribers.has(imdbId)) _v77Subscribers.set(imdbId, new Set());
-  const subs = _v77Subscribers.get(imdbId);
-  subs.add(cb);
-  _v77PendingIds.add(imdbId);
-  if (!_v77FlushTimer) _v77FlushTimer = setTimeout(_v77FlushBatch, 250);
-  return () => {
-    const s = _v77Subscribers.get(imdbId);
-    if (s) s.delete(cb);
-  };
-}
-
 
 const getProxiedPosterUrl = (originalUrl: string): string => {
   const backendUrl =
@@ -178,16 +104,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
   const [posterError, setPosterError] = useState(false);
   const [useProxy, setUseProxy] = useState(false);
-
-  const [releaseStatus, setReleaseStatus] = useState(null);
-
-  useEffect(() => {
-    if (!item) return;
-    if (item.type === 'series' || item.type === 'tv' || item.type === 'channel' || item.type === 'episode') return;
-    const imdbId = item.imdb_id || item.id;
-    if (!imdbId || !String(imdbId).startsWith('tt')) return;
-    return _v77RequestReleaseStatus(String(imdbId), setReleaseStatus);
-  }, [item]);
 
   const pressableRef = useRef<any>(null);
 
@@ -357,12 +273,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           </View>
         )}
 
-        {releaseStatus === 'in_cinemas' && (
-          <View style={styles.inCinemasBadgeWrap} pointerEvents="none"><View style={styles.inCinemasBadgePill}>
-            <Ionicons name="ticket" size={10} color={colors.textPrimary} style={styles.inCinemasBadgeIcon} /><Text style={styles.inCinemasBadgeText}>IN CINEMA</Text></View>
-          </View>
-        )}
-
         {showProgress !== undefined &&
           showProgress > 0 && (
             <View style={styles.progressContainer}>
@@ -510,29 +420,6 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 6,
     zIndex: 5,
     elevation: 5,
-  },
-
-  inCinemasBadgeWrap: {
-    position: 'absolute',
-    top: 6,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 5,
-    elevation: 5,
-  },
-
-  inCinemasBadgePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-
-  inCinemasBadgeIcon: {
-    marginRight: 4,
   },
 
   inCinemasBadgeText: {
