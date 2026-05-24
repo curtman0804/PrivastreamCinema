@@ -67,9 +67,6 @@ export default function DiscoverScreen() {
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionPositions = useRef<Record<string, number>>({});
-  // === ROW_SNAP_V78 ===
-  const rowYPositionsRef = useRef<Record<number, number>>({});
-  const lastFocusedRowRef = useRef<number>(-1);
   const lastFocusedSection = useRef<string>('');
   const lastCWFetchTime = useRef<number>(0);
 
@@ -143,21 +140,6 @@ export default function DiscoverScreen() {
     setRefreshing(false);
   }, [fetchContinueWatching]);
 
-  // === ROW_SNAP_V78 === — Stremio-style row snap
-  const handleRowLayout = useCallback((rowIndex: number, y: number) => {
-    rowYPositionsRef.current[rowIndex] = y;
-  }, []);
-
-  const handleRowFocus = useCallback((rowIndex: number) => {
-    if (lastFocusedRowRef.current === rowIndex) return;
-    lastFocusedRowRef.current = rowIndex;
-    const y = rowYPositionsRef.current[rowIndex];
-    if (y === undefined || !scrollViewRef.current) return;
-    // firstRowY no longer used — title-at-top (v79)
-    const targetY = Math.max(0, y);
-    scrollViewRef.current.scrollTo({ y: targetY, animated: true });
-  }, []);
-
   // Handle section focus - scroll parent to show category title
   const handleSectionFocus = useCallback((sectionKey: string) => {
     if (lastFocusedSection.current === sectionKey) return;
@@ -167,7 +149,7 @@ export default function DiscoverScreen() {
     if (sectionY !== undefined && scrollViewRef.current) {
       // Small delay to override Android TV's auto-scroll (which only shows the card, not the title)
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: Math.max(0, sectionY), animated: true });
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, sectionY - 10), animated: true });
       }, 50);
     }
   }, []);
@@ -460,9 +442,14 @@ return (
         >
           {flatRowsV54.map((item: any) => {
             if (item.kind === 'cw') {
+              // V108_ROW_SNAP: record CW row Y for back-scroll
               return (
-                <View key={item.key} style={styles.section}
-                  onLayout={(e) => { sectionPositions.current['continue-watching'] = e.nativeEvent.layout.y; }}
+                <View
+                  key={item.key}
+                  style={styles.section}
+                  onLayout={(e) => {
+                    sectionPositions.current[item.key] = e.nativeEvent.layout.y;
+                  }}
                 >
                   <View
                     style={[
@@ -511,23 +498,33 @@ return (
               );
             }
 
+            // V108_ROW_SNAP: wrap ServiceRow with onLayout for row Y measurement
             return (
-              <ServiceRow
+              <View
                 key={item.key}
-                title={item.title}
-                serviceName={item.serviceName}
-                contentType={item.contentType}
-                items={item.items}
-                onItemPress={handleItemPress}
-                onItemFocus={
-                  item.contentType !== 'channels'
-                    ? handleItemFocus
-                    : undefined
-                }
-                rowIndex={item.rowIdx}
-                onRowFocus={handleRowFocus}
-                onRowLayout={handleRowLayout}
-              />
+                onLayout={(e) => {
+                  sectionPositions.current[item.key] = e.nativeEvent.layout.y;
+                }}
+              >
+                <ServiceRow
+                  title={item.title}
+                  serviceName={item.serviceName}
+                  contentType={item.contentType}
+                  items={item.items}
+                  onItemPress={handleItemPress}
+                  onItemFocus={
+                    item.contentType !== 'channels'
+                      ? (ci) => {
+                          handleSectionFocus(item.key);
+                          handleItemFocus(ci);
+                        }
+                      : (ci) => {
+                          handleSectionFocus(item.key);
+                        }
+                  }
+                  rowIndex={item.rowIdx}
+                />
+              </View>
             );
           })}
 

@@ -147,10 +147,10 @@ export default function DiscoverScreen() {
     
     const sectionY = sectionPositions.current[sectionKey];
     if (sectionY !== undefined && scrollViewRef.current) {
-      // Small delay to override Android TV's auto-scroll (which only shows the card, not the title)
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: Math.max(0, sectionY - 10), animated: true });
-      }, 50);
+      // V109_INSTANT_SCROLL: instant snap (no animation queue) so held D-pad
+      // flies through rows like Stremio. Negative offset keeps the title row
+      // visible above the focused poster.
+      scrollViewRef.current.scrollTo({ y: Math.max(0, sectionY - 10), animated: false });
     }
   }, []);
 
@@ -442,8 +442,15 @@ return (
         >
           {flatRowsV54.map((item: any) => {
             if (item.kind === 'cw') {
+              // V108_ROW_SNAP: record CW row Y for back-scroll
               return (
-                <View key={item.key} style={styles.section}>
+                <View
+                  key={item.key}
+                  style={styles.section}
+                  onLayout={(e) => {
+                    sectionPositions.current[item.key] = e.nativeEvent.layout.y;
+                  }}
+                >
                   <View
                     style={[
                       styles.sectionHeader,
@@ -491,21 +498,33 @@ return (
               );
             }
 
+            // V108_ROW_SNAP: wrap ServiceRow with onLayout for row Y measurement
             return (
-              <ServiceRow
+              <View
                 key={item.key}
-                title={item.title}
-                serviceName={item.serviceName}
-                contentType={item.contentType}
-                items={item.items}
-                onItemPress={handleItemPress}
-                onItemFocus={
-                  item.contentType !== 'channels'
-                    ? handleItemFocus
-                    : undefined
-                }
-                rowIndex={item.rowIdx}
-              />
+                onLayout={(e) => {
+                  sectionPositions.current[item.key] = e.nativeEvent.layout.y;
+                }}
+              >
+                <ServiceRow
+                  title={item.title}
+                  serviceName={item.serviceName}
+                  contentType={item.contentType}
+                  items={item.items}
+                  onItemPress={handleItemPress}
+                  onItemFocus={
+                    item.contentType !== 'channels'
+                      ? (ci) => {
+                          handleSectionFocus(item.key);
+                          handleItemFocus(ci);
+                        }
+                      : (ci) => {
+                          handleSectionFocus(item.key);
+                        }
+                  }
+                  rowIndex={item.rowIdx}
+                />
+              </View>
             );
           })}
 
