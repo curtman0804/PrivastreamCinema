@@ -24,9 +24,6 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   initialValue = '',
 }) => {
   const [query, setQuery] = useState(initialValue);
-  // v122-search-focus: track focus for TV remote selector visibility
-  const [isClearFocused, setIsClearFocused] = useState(false);
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
@@ -76,22 +73,18 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           blurOnSubmit={false}
         />
         {query.length > 0 && (
-          <Pressable
-            onPress={handleClear}
-            onFocus={() => setIsClearFocused(true)}
-            onBlur={() => setIsClearFocused(false)}
-            style={[styles.clearButton, isClearFocused && styles.clearButtonFocused]}
-          >
-            <Ionicons name="close-circle" size={22} color={isClearFocused ? '#FFFFFF' : '#888888'} />
+          <Pressable onPress={handleClear} style={styles.clearButton}>
+            <Ionicons name="close-circle" size={20} color="#888888" />
           </Pressable>
         )}
       </View>
       {/* Explicit search button — focusable on Android TV/Firestick */}
       <Pressable
         onPress={handleSubmit}
-        onFocus={() => setIsSearchFocused(true)}
-        onBlur={() => setIsSearchFocused(false)}
-        style={[styles.searchButton, isSearchFocused && styles.searchButtonFocused]}
+        style={({focused}) => [
+          styles.searchButton,
+          focused && styles.searchButtonFocused
+        ]}
       >
         <Ionicons name="search" size={20} color="#000" />
       </Pressable>
@@ -128,18 +121,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
   },
-  clearButton: {
-    padding: 6,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  clearButtonFocused: {
-    /* v122-search-focus */
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    transform: [{ scale: 1.15 }],
-  },
+  clearButton: { padding: 4 },
   searchButton: {
     backgroundColor: '#B8A05C',
     borderRadius: 12,
