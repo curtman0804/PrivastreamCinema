@@ -589,7 +589,8 @@ export default function DetailsScreen() {
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [watchedEpisodes, setWatchedEpisodes] = useState<Record<string, boolean>>({});
   const autoPlayTriggeredRef = useRef(false);
-  // v121j-overlay-removed
+  // v121i-play-loading: show full-screen overlay while Play button waits
+  const [isInitiatingPlay, setIsInitiatingPlay] = useState(false);
 
   const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
@@ -1116,7 +1117,8 @@ const nextEpisodeData = nextEpisode ? {
       <View style={styles.gradientOverlay} />
       
       {/* Auto-play loading — Stremio-style cinematic transition */}
-      {autoPlayParam === 'true' && !autoPlayTriggeredRef.current && (
+      {/* v121i-play-loading */}
+      {((autoPlayParam === 'true' && !autoPlayTriggeredRef.current) || isInitiatingPlay) && (
         <View style={styles.autoPlayOverlay}>
           {/* Full-screen series backdrop (blurred). Priority: loaded content
               backdrop (the real series art) → passed-in backdrop param → poster. */}
@@ -1329,6 +1331,8 @@ const nextEpisodeData = nextEpisode ? {
                 {!isLoadingStreams && streams.length > 0 && (
                   <FocusableButton
                     onPress={async () => {
+                      /* v121i-play-loading */
+                      setIsInitiatingPlay(true);
                       /* v121d-play-wait */
                       // Wait for backend-resolved cached stream before
                       // firing. Without this, Torrentio direct returns

@@ -317,11 +317,7 @@ export const api = {
           allStreams = [...allStreams, ...deduplicated];
           allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
           console.log(`[STREAMS] ${sourceName}: +${deduplicated.length} streams (total: ${allStreams.length}) in ${Date.now() - startTime}ms`);
-          /* v121h-suppress-direct */
-          // Don't render Torrentio/TPB raw streams progressively.
-          // Backend will arrive with the curated cached+resolved list
-          // (v121c-backend-override) and we want one clean render.
-          // (onProgress intentionally suppressed for non-Backend sources)
+          if (onProgress) onProgress([...allStreams]);
         } else {
           console.log(`[STREAMS] ${sourceName}: 0 new streams in ${Date.now() - startTime}ms`);
         }

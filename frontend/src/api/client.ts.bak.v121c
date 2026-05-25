@@ -289,22 +289,6 @@ export const api = {
       const existingHashes = new Set<string>();
       
       const mergeAndNotify = (newStreams: Stream[], sourceName: string) => {
-        /* v121c-backend-override */
-        // When backend returns pre-resolved cached streams, REPLACE the
-        // merged list. Backend already filtered uncached, sorted by quality,
-        // and pre-resolved direct HTTPS URLs. Don't let raw Torrentio/TPB
-        // results dilute the Play button's top pick.
-        if (sourceName === 'Backend' && newStreams.some((s: any) => s.externalUrl || s.url || s.direct_url)) {
-          allStreams = newStreams.slice();
-          existingHashes.clear();
-          for (const s of allStreams) {
-            const h = (s.infoHash || '').toLowerCase();
-            if (h) existingHashes.add(h);
-          }
-          console.log(`[STREAMS] v121c: Backend override - using ${allStreams.length} curated streams`);
-          if (onProgress) onProgress(allStreams.slice());
-          return;
-        }
         const deduplicated = newStreams.filter((s: Stream) => {
           if (s.infoHash) {
             const hash = s.infoHash.toLowerCase();
@@ -317,11 +301,7 @@ export const api = {
           allStreams = [...allStreams, ...deduplicated];
           allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
           console.log(`[STREAMS] ${sourceName}: +${deduplicated.length} streams (total: ${allStreams.length}) in ${Date.now() - startTime}ms`);
-          /* v121h-suppress-direct */
-          // Don't render Torrentio/TPB raw streams progressively.
-          // Backend will arrive with the curated cached+resolved list
-          // (v121c-backend-override) and we want one clean render.
-          // (onProgress intentionally suppressed for non-Backend sources)
+          if (onProgress) onProgress([...allStreams]);
         } else {
           console.log(`[STREAMS] ${sourceName}: 0 new streams in ${Date.now() - startTime}ms`);
         }

@@ -589,7 +589,6 @@ export default function DetailsScreen() {
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [watchedEpisodes, setWatchedEpisodes] = useState<Record<string, boolean>>({});
   const autoPlayTriggeredRef = useRef(false);
-  // v121j-overlay-removed
 
   const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
@@ -1358,14 +1357,7 @@ const nextEpisodeData = nextEpisode ? {
                           console.log('[v121d] backend fetch failed', e);
                         }
                       }
-                      /* v121d3-resolved-only */
-                      // Auto-pick only from pre-resolved (cached + resolved)
-                      // streams. Uncached can outscore cached on raw quality
-                      // points, so we restrict the auto-pick pool. Manual
-                      // stream-card selection still works for any stream.
-                      const resolved = pool.filter((s: any) => s && (s.url || s.externalUrl || s.direct_url));
-                      const candidates = resolved.length > 0 ? resolved : pool;
-                      const sorted = sortStreamsByLanguage(candidates);
+                      const sorted = sortStreamsByLanguage(pool);
                       if (sorted[0]) handleStreamSelect(sorted[0]);
                     }}
                     style={styles.playButton}

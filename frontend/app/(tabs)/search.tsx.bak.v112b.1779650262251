@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  InteractionManager, /* V119B_FIX_IMPORT */
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -43,10 +42,7 @@ export default function SearchScreen() {
       const decodedQuery = decodeURIComponent(queryParam);
       setCurrentQuery(decodedQuery);
       setHasSearched(true);
-      // V119: defer the network call until the screen has painted
-      InteractionManager.runAfterInteractions(() => {
-        search(decodedQuery);
-      });
+      search(decodedQuery);
     }
   }, [queryParam, search]);
 
@@ -57,19 +53,15 @@ export default function SearchScreen() {
     };
   }, [queryParam]);
 
-  // V119_TRANSITION_LAG: defer auto-paging until AFTER nav transition completes
-  // so the Discover->Search animation doesn't stutter on the JS thread.
+  // V112: auto-page through ALL remaining results once initial search finishes
   useEffect(() => {
     if (!hasSearched) return;
     if (isLoadingSearch || isLoadingMoreSearch) return;
     if (!searchHasMore) return;
-    if (pagesLoaded.current >= 15) return;
-    const handle = InteractionManager.runAfterInteractions(() => {
-      pagesLoaded.current += 1;
-      loadMoreSearch();
-    });
-    return () => handle.cancel();
-  }, [hasSearched, isLoadingSearch, isLoadingMoreSearch, searchHasMore, loadMoreSearch, searchMovies.length, searchSeries.length]);
+    if (pagesLoaded.current >= 15) return; // safety cap (~1500 items per type)
+    pagesLoaded.current += 1;
+    loadMoreSearch();
+  }, [hasSearched, isLoadingSearch, isLoadingMoreSearch, searchHasMore, loadMoreSearch]);
 
   // Reset paging + focus state when query changes
   useEffect(() => {
@@ -142,12 +134,6 @@ export default function SearchScreen() {
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
-          /* V112B_LOCK_BOTTOM: hard-stop at last row, no overscroll past content */
-          bounces={false}
-          overScrollMode="never"
-          alwaysBounceVertical={false}
-          /* V119_TRANSITION_LAG: drop offscreen rows from native view tree */
-          removeClippedSubviews={true}
         >
           {/* Movies Row */}
           {searchMovies.length > 0 && (
@@ -246,6 +232,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   bottomPadding: {
-    height: 8, // V112B: minimal padding so last row ends flush with screen
+    height: 40,
   },
 });
