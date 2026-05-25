@@ -289,30 +289,19 @@ export const api = {
       const existingHashes = new Set<string>();
       
       const mergeAndNotify = (newStreams: Stream[], sourceName: string) => {
-        /* v121k-upgrade-merge */
-        // When backend returns pre-resolved streams, UPGRADE existing
-        // entries in place (add url/externalUrl to matching hashes) and
-        // append any new ones. The list doesn't shrink, so no flicker.
+        /* v121c-backend-override */
+        // When backend returns pre-resolved cached streams, REPLACE the
+        // merged list. Backend already filtered uncached, sorted by quality,
+        // and pre-resolved direct HTTPS URLs. Don't let raw Torrentio/TPB
+        // results dilute the Play button's top pick.
         if (sourceName === 'Backend' && newStreams.some((s: any) => s.externalUrl || s.url || s.direct_url)) {
-          let upgraded = 0;
-          let added = 0;
-          for (const newS of newStreams as any[]) {
-            const newHash = (newS.infoHash || '').toLowerCase();
-            if (!newHash) continue;
-            const idx = allStreams.findIndex((s: any) => (s.infoHash || '').toLowerCase() === newHash);
-            if (idx >= 0) {
-              if (newS.url || newS.externalUrl || newS.direct_url) {
-                Object.assign(allStreams[idx], newS);
-                upgraded++;
-              }
-            } else {
-              allStreams.push(newS);
-              existingHashes.add(newHash);
-              added++;
-            }
+          allStreams = newStreams.slice();
+          existingHashes.clear();
+          for (const s of allStreams) {
+            const h = (s.infoHash || '').toLowerCase();
+            if (h) existingHashes.add(h);
           }
-          allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
-          console.log(`[STREAMS] v121k: Backend upgrade-merge - upgraded ${upgraded}, added ${added}, total ${allStreams.length}`);
+          console.log(`[STREAMS] v121c: Backend override - using ${allStreams.length} curated streams`);
           if (onProgress) onProgress(allStreams.slice());
           return;
         }
@@ -328,7 +317,11 @@ export const api = {
           allStreams = [...allStreams, ...deduplicated];
           allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
           console.log(`[STREAMS] ${sourceName}: +${deduplicated.length} streams (total: ${allStreams.length}) in ${Date.now() - startTime}ms`);
-          if (onProgress) onProgress([...allStreams]);
+          /* v121h-suppress-direct */
+          // Don't render Torrentio/TPB raw streams progressively.
+          // Backend will arrive with the curated cached+resolved list
+          // (v121c-backend-override) and we want one clean render.
+          // (onProgress intentionally suppressed for non-Backend sources)
         } else {
           console.log(`[STREAMS] ${sourceName}: 0 new streams in ${Date.now() - startTime}ms`);
         }

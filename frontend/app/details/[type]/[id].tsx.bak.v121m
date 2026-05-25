@@ -589,14 +589,6 @@ export default function DetailsScreen() {
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [watchedEpisodes, setWatchedEpisodes] = useState<Record<string, boolean>>({});
   const autoPlayTriggeredRef = useRef(false);
-  // v121m-play-overlay: movie-aware Play loading overlay
-  const [isPlayLoading, setIsPlayLoading] = useState(false);
-  useEffect(() => {
-    if (!isPlayLoading) return;
-    // Safety net: clear after 15s if navigation didn't fire
-    const _t = setTimeout(() => setIsPlayLoading(false), 15000);
-    return () => clearTimeout(_t);
-  }, [isPlayLoading]);
   // v121j-overlay-removed
 
   const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
@@ -1124,8 +1116,7 @@ const nextEpisodeData = nextEpisode ? {
       <View style={styles.gradientOverlay} />
       
       {/* Auto-play loading — Stremio-style cinematic transition */}
-      {/* v121m-play-overlay: also fires on isPlayLoading */}
-      {((autoPlayParam === 'true' && !autoPlayTriggeredRef.current) || isPlayLoading) && (
+      {autoPlayParam === 'true' && !autoPlayTriggeredRef.current && (
         <View style={styles.autoPlayOverlay}>
           {/* Full-screen series backdrop (blurred). Priority: loaded content
               backdrop (the real series art) → passed-in backdrop param → poster. */}
@@ -1155,21 +1146,17 @@ const nextEpisodeData = nextEpisode ? {
               </Text>
             )}
 
-            {type === 'series' && (
-              <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '600', textAlign: 'center', marginBottom: 6 }}>
-                {nextTitleParam ? String(nextTitleParam) : (currentEpisode?.name || `Episode ${episodeNumber}`)}
-              </Text>
-            )}
-            {type === 'series' && (
-              <Text style={{ color: '#B8A05C', fontSize: 14, fontWeight: '600', marginBottom: 36, letterSpacing: 1 }}>
-                S{episodeSeason} E{episodeNumber}
-              </Text>
-            )}
+            <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '600', textAlign: 'center', marginBottom: 6 }}>
+              {nextTitleParam ? String(nextTitleParam) : (currentEpisode?.name || `Episode ${episodeNumber}`)}
+            </Text>
+            <Text style={{ color: '#B8A05C', fontSize: 14, fontWeight: '600', marginBottom: 36, letterSpacing: 1 }}>
+              S{episodeSeason} E{episodeNumber}
+            </Text>
 
             {/* Indeterminate animated loading bar */}
             <AutoPlayLoadingBar />
             <Text style={{ color: '#CCC', fontSize: 13, marginTop: 14, fontWeight: '500' }}>
-              {type === 'movie' ? 'Loading...' : 'Loading next episode...'}
+              Loading next episode...
             </Text>
           </View>
         </View>
@@ -1342,8 +1329,6 @@ const nextEpisodeData = nextEpisode ? {
                 {!isLoadingStreams && streams.length > 0 && (
                   <FocusableButton
                     onPress={async () => {
-                      /* v121m-play-overlay */
-                      setIsPlayLoading(true);
                       /* v121d-play-wait */
                       // Wait for backend-resolved cached stream before
                       // firing. Without this, Torrentio direct returns
