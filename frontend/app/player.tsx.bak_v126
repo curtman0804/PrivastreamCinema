@@ -725,21 +725,6 @@ export default function PlayerScreen() {
   const [countdown, setCountdown] = useState(15);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const creditsShownRef = useRef(false); // Track if we've shown the credits popup
-  /* v126-preresolve-ref */
-  const preResolveRef = useRef<null | {
-    directUrl?: string;
-    infoHash?: string;
-    sources?: string[];
-    fileIdx?: number | null;
-    filename?: string;
-    fallbackStreams?: any[];
-    contentId?: string;
-    title?: string;
-    poster?: string;
-    backdrop?: string;
-    season?: string;
-    episode?: string;
-  }>(null);
   
   // Credits detection settings - show popup near the end
   const CREDITS_TIME_REMAINING_MS = 5000; // Show popup when 5 seconds remaining
@@ -878,94 +863,20 @@ export default function PlayerScreen() {
     setShowNextEpisodeModal(true);
     setCountdown(remainingSeconds); // Match actual remaining time
     
-    /* v126-preresolve-block */
-    if (nextEpisodeId && contentType === 'series') {
-      /* v127-preresolve-early */
-      // v127: populate preResolveRef with at least an infoHash as SOON
-      // as the stream list comes back, so the binge fast path triggers
-      // even if the user mashes "Play Next" within the first few seconds
-      // (before /api/stream/start_and_wait finishes).  We upgrade the ref
-      // with directUrl later when start_and_wait returns ready.
-      const _nextIdParts = (nextEpisodeId as string).split(':');
-      const _baseId = _nextIdParts[0] || '';
-      const _nextSeason = _nextIdParts.length >= 3 ? _nextIdParts[_nextIdParts.length - 2] : '';
-      const _nextEpisodeNum = _nextIdParts.length >= 3 ? _nextIdParts[_nextIdParts.length - 1] : '';
-      const _backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-      preResolveRef.current = null;
-      (async () => {
-        try {
-          const token = await AsyncStorage.getItem('auth_token');
-          const authHeaders: any = token ? { Authorization: `Bearer ${token}` } : {};
-          // 1) fetch next-episode stream list
-          const listResp = await fetch(
-            `${_backendUrl}/api/streams/series/${encodeURIComponent(nextEpisodeId as string)}`,
-            { headers: authHeaders }
-          );
-          if (!listResp.ok) { console.log('[PLAYER v127] streams fetch failed:', listResp.status); return; }
-          const listData = await listResp.json();
-          const list = Array.isArray(listData?.streams) ? listData.streams : [];
-          if (list.length === 0) { console.log('[PLAYER v127] no streams for next ep'); return; }
-          const best = list[0];
-          const bestHash = best && best.infoHash;
-          if (!bestHash) { console.log('[PLAYER v127] top stream missing infoHash'); return; }
-          const baseTitle = nextEpisodeTitle || `Episode ${_nextEpisodeNum}`;
-          const basePoster = (nextEpisodePoster || poster || '') as string;
-          const baseBackdrop = (backdrop || '') as string;
-          // 2) PRE-COMMIT hash-only ref — fast path can fire any time now
-          preResolveRef.current = {
-            infoHash: bestHash,
-            sources: best.sources || [],
-            fileIdx: best.fileIdx != null ? best.fileIdx : null,
-            filename: best.filename || '',
-            fallbackStreams: list.slice(1, 6),
-            contentId: nextEpisodeId as string,
-            title: baseTitle,
-            poster: basePoster,
-            backdrop: baseBackdrop,
-            season: _nextSeason,
-            episode: _nextEpisodeNum,
-          };
-          console.log('[PLAYER v127] hash-only fast path armed, hash=', String(bestHash).slice(0, 8));
-          // 3) kick PM and long-poll for the resolved URL (upgrades the ref)
-          const sn = parseInt(_nextSeason, 10);
-          const en = parseInt(_nextEpisodeNum, 10);
-          const startResp = await fetch(`${_backendUrl}/api/stream/start_and_wait`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...authHeaders },
-            body: JSON.stringify({
-              infoHash: bestHash,
-              fileIdx: best.fileIdx != null ? best.fileIdx : null,
-              filename: best.filename || null,
-              season: isNaN(sn) ? null : sn,
-              episode: isNaN(en) ? null : en,
-              timeout_ms: 8000,
-            }),
-          });
-          const startData = await startResp.json().catch(() => ({}));
-          console.log('[PLAYER v127] start_and_wait status=', startData && startData.status);
-          if (startData && startData.status === 'ready' && startData.debrid_url) {
-            // UPGRADE — replace hash-only with directUrl so /player has
-            // nothing to resolve.
-            const _cur = preResolveRef.current || {};
-            preResolveRef.current = {
-              ..._cur,
-              directUrl: `${_backendUrl}${startData.debrid_url}`,
-              infoHash: bestHash,
-            };
-            console.log('[PLAYER v127] preResolveRef UPGRADED to directUrl');
-          } else if (startData && startData.status === 'uncached') {
-            // PM doesn't have it.  Keep hash-only ref; /player will fall
-            // through its existing fallback-torrents flow.
-            console.log('[PLAYER v127] PM uncached — keeping hash-only ref');
-          } else if (startData && startData.status === 'error') {
-            // Don't poison the ref — wipe it so we fall back to the
-            // details/{id}?autoPlay=true path which has its own retry.
-            console.log('[PLAYER v127] start_and_wait error — clearing ref to fall back');
-            preResolveRef.current = null;
-          }
-          // status === 'buffering': keep hash-only ref as-is
-        } catch (e) { console.log('[PLAYER v127] pre-resolve threw:', e); }
-      })();
+    // PRE-RESOLVE: Start resolving the next episode NOW so it's ready when we navigate
+    if (nextEpisodeId && infoHash) {
+      const nextIdParts = (nextEpisodeId as string).split(':');
+      const nextSeason = nextIdParts.length >= 3 ? nextIdParts[nextIdParts.length - 2] : '';
+      const nextEpisodeNum = nextIdParts.length >= 3 ? nextIdParts[nextIdParts.length - 1] : '';
+      console.log('[PLAYER] Pre-resolving next episode:', nextEpisodeId, 'hash:', infoHash);
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+      AsyncStorage.getItem('auth_token').then(token => {
+        fetch(`${backendUrl}/api/stream/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ infoHash, fileIdx: null, season: nextSeason, episode: nextEpisodeNum }),
+        }).catch(() => {});
+      });
     }
     
     // Start countdown - auto-play next episode when countdown ends
@@ -976,47 +887,15 @@ export default function PlayerScreen() {
           if (countdownRef.current) clearInterval(countdownRef.current);
           setShowNextEpisodeModal(false);
           
-          /* v126-countdown-nav */
+          // Navigate to next episode with autoPlay (no preferHash — Stremio
+          // does fresh lookup per episode to avoid stale-cache races).
           console.log('[PLAYER] Countdown ended - auto-playing next episode:', nextEpisodeId);
-          // v126 BINGE FAST PATH: if preResolveRef is populated, navigate
-          // DIRECTLY to /player and skip the details/id.tsx middleman.
-          // Keep the dismiss(2) so the back-stack stays clean (v124w).
-          const _pre = preResolveRef.current;
+          // v124w-clean-stack: dismiss [player + prevEpisodePage] then push next.
           try { (router as any).dismiss && (router as any).dismiss(2); } catch (_) {}
-          if (_pre && (_pre.directUrl || _pre.infoHash)) {
-            const _baseIdCN = ((nextEpisodeId as string) || '').split(':')[0];
-            const _params: any = {
-              title: _pre.title || nextEpisodeTitle || '',
-              poster: _pre.poster || (nextEpisodePoster || poster || '') as string,
-              backdrop: _pre.backdrop || (backdrop || '') as string,
-              contentType: 'series',
-              contentId: _pre.contentId || (nextEpisodeId as string),
-              seriesId: _baseIdCN,
-              season: _pre.season || '',
-              episode: _pre.episode || '',
-              isLive: 'false',
-            };
-            if (_pre.directUrl) {
-              _params.directUrl = _pre.directUrl;
-            } else if (_pre.infoHash) {
-              _params.infoHash = _pre.infoHash;
-              _params.fileIdx = _pre.fileIdx != null ? String(_pre.fileIdx) : '';
-              _params.filename = _pre.filename || '';
-              _params.sources = JSON.stringify(_pre.sources || []);
-            }
-            if (_pre.fallbackStreams && _pre.fallbackStreams.length > 0) {
-              _params.fallbackStreams = JSON.stringify(_pre.fallbackStreams);
-            }
-            console.log('[PLAYER v126] BINGE FAST PATH: direct /player nav,', _pre.directUrl ? 'pre-resolved URL' : 'hash-only');
-            preResolveRef.current = null;
-            router.push({ pathname: '/player', params: _params });
-          } else {
-            // Fallback (pre-resolve incomplete) — original autoplay flow.
-            router.push({
-              pathname: `/details/series/${nextEpisodeId}`,
-              params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '', nextPoster: (nextEpisodePoster || poster || '') as string, nextBackdrop: (backdrop || '') as string },
-            });
-          }
+          router.push({
+            pathname: `/details/series/${nextEpisodeId}`,
+            params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '', nextPoster: (nextEpisodePoster || poster || '') as string, nextBackdrop: (backdrop || '') as string },
+          });
           return 0;
         }
         return prev - 1;
@@ -1063,45 +942,16 @@ export default function PlayerScreen() {
     
     console.log('[PLAYER] Playing next episode:', nextEpisodeId);
 
-    /* v126-manual-nav */
-    // v126 BINGE FAST PATH: same logic as countdown branch — if pre-resolve
-    // populated preResolveRef, go straight to /player and skip details/id.tsx.
-    const _preM = preResolveRef.current;
+    // Navigate to the next episode details page with autoPlay.
+    // Stremio-style: do NOT carry over the previous hash. Each episode does
+    // a fresh stream lookup and resolves the top stream on demand. This
+    // guarantees we never reuse stale RD state from the previous episode.
+    // v124w-clean-stack: dismiss [player + prevEpisodePage] then push next.
     try { (router as any).dismiss && (router as any).dismiss(2); } catch (_) {}
-    if (_preM && (_preM.directUrl || _preM.infoHash)) {
-      const _baseIdM = ((nextEpisodeId as string) || '').split(':')[0];
-      const _paramsM: any = {
-        title: _preM.title || nextEpisodeTitle || '',
-        poster: _preM.poster || (poster || '') as string,
-        backdrop: _preM.backdrop || (backdrop || '') as string,
-        contentType: 'series',
-        contentId: _preM.contentId || (nextEpisodeId as string),
-        seriesId: _baseIdM,
-        season: _preM.season || '',
-        episode: _preM.episode || '',
-        isLive: 'false',
-      };
-      if (_preM.directUrl) {
-        _paramsM.directUrl = _preM.directUrl;
-      } else if (_preM.infoHash) {
-        _paramsM.infoHash = _preM.infoHash;
-        _paramsM.fileIdx = _preM.fileIdx != null ? String(_preM.fileIdx) : '';
-        _paramsM.filename = _preM.filename || '';
-        _paramsM.sources = JSON.stringify(_preM.sources || []);
-      }
-      if (_preM.fallbackStreams && _preM.fallbackStreams.length > 0) {
-        _paramsM.fallbackStreams = JSON.stringify(_preM.fallbackStreams);
-      }
-      console.log('[PLAYER v126] BINGE FAST PATH (manual): direct /player nav,', _preM.directUrl ? 'pre-resolved URL' : 'hash-only');
-      preResolveRef.current = null;
-      router.push({ pathname: '/player', params: _paramsM });
-    } else {
-      // Fallback (pre-resolve not ready) — original autoplay flow.
-      router.push({
-        pathname: `/details/series/${nextEpisodeId}`,
-        params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '' },
-      });
-    }
+    router.push({
+      pathname: `/details/series/${nextEpisodeId}`,
+      params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '' },
+    });
   };
   
   // Go back (cancel next episode)

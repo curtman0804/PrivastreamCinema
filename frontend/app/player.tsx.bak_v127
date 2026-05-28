@@ -880,12 +880,6 @@ export default function PlayerScreen() {
     
     /* v126-preresolve-block */
     if (nextEpisodeId && contentType === 'series') {
-      /* v127-preresolve-early */
-      // v127: populate preResolveRef with at least an infoHash as SOON
-      // as the stream list comes back, so the binge fast path triggers
-      // even if the user mashes "Play Next" within the first few seconds
-      // (before /api/stream/start_and_wait finishes).  We upgrade the ref
-      // with directUrl later when start_and_wait returns ready.
       const _nextIdParts = (nextEpisodeId as string).split(':');
       const _baseId = _nextIdParts[0] || '';
       const _nextSeason = _nextIdParts.length >= 3 ? _nextIdParts[_nextIdParts.length - 2] : '';
@@ -896,37 +890,18 @@ export default function PlayerScreen() {
         try {
           const token = await AsyncStorage.getItem('auth_token');
           const authHeaders: any = token ? { Authorization: `Bearer ${token}` } : {};
-          // 1) fetch next-episode stream list
           const listResp = await fetch(
             `${_backendUrl}/api/streams/series/${encodeURIComponent(nextEpisodeId as string)}`,
             { headers: authHeaders }
           );
-          if (!listResp.ok) { console.log('[PLAYER v127] streams fetch failed:', listResp.status); return; }
+          if (!listResp.ok) { console.log('[PLAYER v126] streams fetch failed:', listResp.status); return; }
           const listData = await listResp.json();
           const list = Array.isArray(listData?.streams) ? listData.streams : [];
-          if (list.length === 0) { console.log('[PLAYER v127] no streams for next ep'); return; }
+          if (list.length === 0) { console.log('[PLAYER v126] no streams for next ep'); return; }
           const best = list[0];
           const bestHash = best && best.infoHash;
-          if (!bestHash) { console.log('[PLAYER v127] top stream missing infoHash'); return; }
-          const baseTitle = nextEpisodeTitle || `Episode ${_nextEpisodeNum}`;
-          const basePoster = (nextEpisodePoster || poster || '') as string;
-          const baseBackdrop = (backdrop || '') as string;
-          // 2) PRE-COMMIT hash-only ref — fast path can fire any time now
-          preResolveRef.current = {
-            infoHash: bestHash,
-            sources: best.sources || [],
-            fileIdx: best.fileIdx != null ? best.fileIdx : null,
-            filename: best.filename || '',
-            fallbackStreams: list.slice(1, 6),
-            contentId: nextEpisodeId as string,
-            title: baseTitle,
-            poster: basePoster,
-            backdrop: baseBackdrop,
-            season: _nextSeason,
-            episode: _nextEpisodeNum,
-          };
-          console.log('[PLAYER v127] hash-only fast path armed, hash=', String(bestHash).slice(0, 8));
-          // 3) kick PM and long-poll for the resolved URL (upgrades the ref)
+          if (!bestHash) { console.log('[PLAYER v126] top stream missing infoHash'); return; }
+          console.log('[PLAYER v126] pre-resolving next ep, top hash=', String(bestHash).slice(0,8));
           const sn = parseInt(_nextSeason, 10);
           const en = parseInt(_nextEpisodeNum, 10);
           const startResp = await fetch(`${_backendUrl}/api/stream/start_and_wait`, {
@@ -942,29 +917,37 @@ export default function PlayerScreen() {
             }),
           });
           const startData = await startResp.json().catch(() => ({}));
-          console.log('[PLAYER v127] start_and_wait status=', startData && startData.status);
+          console.log('[PLAYER v126] start_and_wait status=', startData && startData.status);
+          const baseTitle = nextEpisodeTitle || `Episode ${_nextEpisodeNum}`;
+          const basePoster = (nextEpisodePoster || poster || '') as string;
+          const baseBackdrop = (backdrop || '') as string;
           if (startData && startData.status === 'ready' && startData.debrid_url) {
-            // UPGRADE — replace hash-only with directUrl so /player has
-            // nothing to resolve.
-            const _cur = preResolveRef.current || {};
             preResolveRef.current = {
-              ..._cur,
               directUrl: `${_backendUrl}${startData.debrid_url}`,
               infoHash: bestHash,
+              sources: best.sources || [],
+              fileIdx: best.fileIdx != null ? best.fileIdx : null,
+              filename: best.filename || '',
+              fallbackStreams: list.slice(1, 6),
+              contentId: nextEpisodeId as string,
+              title: baseTitle, poster: basePoster, backdrop: baseBackdrop,
+              season: _nextSeason, episode: _nextEpisodeNum,
             };
-            console.log('[PLAYER v127] preResolveRef UPGRADED to directUrl');
-          } else if (startData && startData.status === 'uncached') {
-            // PM doesn't have it.  Keep hash-only ref; /player will fall
-            // through its existing fallback-torrents flow.
-            console.log('[PLAYER v127] PM uncached — keeping hash-only ref');
-          } else if (startData && startData.status === 'error') {
-            // Don't poison the ref — wipe it so we fall back to the
-            // details/{id}?autoPlay=true path which has its own retry.
-            console.log('[PLAYER v127] start_and_wait error — clearing ref to fall back');
-            preResolveRef.current = null;
+          } else if (startData && startData.status === 'buffering') {
+            preResolveRef.current = {
+              infoHash: bestHash,
+              sources: best.sources || [],
+              fileIdx: best.fileIdx != null ? best.fileIdx : null,
+              filename: best.filename || '',
+              fallbackStreams: list.slice(1, 6),
+              contentId: nextEpisodeId as string,
+              title: baseTitle, poster: basePoster, backdrop: baseBackdrop,
+              season: _nextSeason, episode: _nextEpisodeNum,
+            };
+          } else {
+            console.log('[PLAYER v126] pre-resolve status=', startData && startData.status, '- falling back to autoplay path');
           }
-          // status === 'buffering': keep hash-only ref as-is
-        } catch (e) { console.log('[PLAYER v127] pre-resolve threw:', e); }
+        } catch (e) { console.log('[PLAYER v126] pre-resolve threw:', e); }
       })();
     }
     
