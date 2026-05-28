@@ -890,9 +890,7 @@ export default function PlayerScreen() {
           // Navigate to next episode with autoPlay (no preferHash — Stremio
           // does fresh lookup per episode to avoid stale-cache races).
           console.log('[PLAYER] Countdown ended - auto-playing next episode:', nextEpisodeId);
-          // v124w-clean-stack: dismiss [player + prevEpisodePage] then push next.
-          try { (router as any).dismiss && (router as any).dismiss(2); } catch (_) {}
-          router.push({
+          router.replace({
             pathname: `/details/series/${nextEpisodeId}`,
             params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '', nextPoster: (nextEpisodePoster || poster || '') as string, nextBackdrop: (backdrop || '') as string },
           });
@@ -946,9 +944,7 @@ export default function PlayerScreen() {
     // Stremio-style: do NOT carry over the previous hash. Each episode does
     // a fresh stream lookup and resolves the top stream on demand. This
     // guarantees we never reuse stale RD state from the previous episode.
-    // v124w-clean-stack: dismiss [player + prevEpisodePage] then push next.
-    try { (router as any).dismiss && (router as any).dismiss(2); } catch (_) {}
-    router.push({
+    router.replace({
       pathname: `/details/series/${nextEpisodeId}`,
       params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '' },
     });
@@ -1965,8 +1961,21 @@ export default function PlayerScreen() {
     return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
   };
 
-  // Handle back button
+  // v124b-back-contextual: contextual back from player.
+  //   Series -> show root with current episode focused.
+  //   Movie  -> default router.back() (stream cards page).
   const handleBack = () => {
+    try {
+      if (contentType === 'series' && seriesId && season && episode) {
+        router.replace({
+          pathname: `/details/series/${seriesId}`,
+          params: { focusS: String(season), focusE: String(episode) },
+        });
+        return;
+      }
+    } catch (e) {
+      console.log('[PLAYER] v124b handleBack error', e);
+    }
     router.back();
   };
 

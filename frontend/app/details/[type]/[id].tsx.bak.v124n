@@ -17,7 +17,7 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { useNavigation, CommonActions } from '@react-navigation/native';
+import { useNavigation, CommonActions, StackActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import Constants from 'expo-constants';
@@ -310,7 +310,7 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
     else if (info.language === 'MULTI') s += 900;
     else s += 100;
     s += QUALITY_PTS[info.quality] || 0;
-    /* v121e-codec-penalty */ if (!info.isHEVC) s += 250; if (!info.isHDR) s += 150;
+    /* v124e-quality-4k */ if (!info.isHEVC) s += 100; if (!info.isHDR) s += 220;
     if (stream.url) s += 50;
     const sd = info.seeders || 0;
     if (sd > 0) s += Math.min(Math.log10(sd) * 5, 20);
@@ -417,44 +417,28 @@ function EpisodeCard({
   onPress,
   isWatched,
   onMarkUnwatched,
-  autoFocus,
+  hasTVPreferredFocus,
 }: {
   episode: Episode;
   fallbackPoster?: string;
   onPress: () => void;
   isWatched?: boolean;
   onMarkUnwatched?: () => void;
-  autoFocus?: boolean;
+  hasTVPreferredFocus?: boolean;
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const [thumbError, setThumbError] = useState(false);
-  // v124ab-inject-useref: declare pressableRef + retry-focus effect for EpisodeCard.
-  const pressableRef = useRef<any>(null);
-  useEffect(() => {
-    if (!autoFocus) return;
-    const tries = [60, 200, 500];
-    const timers = tries.map(delay => setTimeout(() => {
-      try {
-        const p: any = pressableRef.current;
-        if (!p) return;
-        if (typeof p.focus === 'function') { try { p.focus(); } catch (_) {} }
-        try { p.setNativeProps && p.setNativeProps({ hasTVPreferredFocus: true }); } catch (_) {}
-      } catch (_) {}
-    }, delay));
-    return () => { timers.forEach(t => clearTimeout(t)); };
-  }, [autoFocus]);
   const thumbUri = episode.thumbnail || fallbackPoster;
   
   return (
     <Pressable
-      ref={pressableRef}
       style={[styles.episodeCard, isFocused && styles.episodeCardFocused]}
       onPress={onPress}
       onLongPress={isWatched ? onMarkUnwatched : undefined}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       delayLongPress={600}
-      hasTVPreferredFocus={!!autoFocus}
+      hasTVPreferredFocus={hasTVPreferredFocus}
     >
       <View style={{ position: 'relative' }}>
         {thumbUri && !thumbError ? (
@@ -493,6 +477,9 @@ export default function DetailsScreen() {
     // Display data passed via route params for INSTANT rendering
     name: paramName, poster: paramPoster,
     autoPlay: autoPlayParam,
+    fromPlayer: fromPlayerParam,
+    focusS: focusSParam,
+    focusE: focusEParam,
     selectedSeason: paramSelectedSeason,
     selectedEpisode: paramSelectedEpisode,
     nextTitle: nextTitleParam,
@@ -507,14 +494,15 @@ export default function DetailsScreen() {
     resumeEpisode?: string;
     name?: string; poster?: string;
     autoPlay?: string;
+    fromPlayer?: string;
+    focusS?: string;
+    focusE?: string;
     nextTitle?: string;
     nextPoster?: string;
     nextBackdrop?: string;
     selectedSeason?: string;
     selectedEpisode?: string;
   }>();
-
-  const router = useRouter();
 
   // === ANDROID-TV BACK BUTTON FIX =========================================
   // Hardware back from any episode-details page teleports straight to the
@@ -523,55 +511,138 @@ export default function DetailsScreen() {
   const navigation = useNavigation();
 
   const goToSeriesRootWithFocus = useCallback(() => {
-    // v124w-clean-stack: with the autoplay v124w fix, the binge stack stays
-    // clean at [..., RMroot, currentEpisodePage, player]. A plain router.back()
-    // from the episode page lands on RMroot in one press. Then setParams to
-    // focus the just-watched episode on the series-root selector.
-    const idStr = String(id || '');
-    if (type !== 'series' || !idStr.includes(':')) {
-      console.log('[BACK-UI v124w] not an episode page, no-op');
-      return false;
-    }
+    // PATCH_V6_NAV_RESET — atomically resets stack, kills binge pollution
+    const idStr = (id as string) || '';
+    if (!idStr.includes(':')) return false;
     const parts = idStr.split(':');
+    const baseIdLocal = parts[0] || idStr;
     const s = parts[1] || '';
     const e = parts[2] || '';
-    console.log('[BACK-UI v124w] fired idStr=' + idStr + ' season=' + s + ' episode=' + e);
     try {
-      router.back();
-      // After back lands us on RMroot, push focus params so the selector
-      // highlights the just-watched episode.
+      // Wipe the inner stack and replace with ONLY the series_root entry.
+      // Back from series_root then cleanly exits to the parent tabs navigator.
+      // PATCH_V7_HOME_TAB — keep (tabs) base so back from series root lands on home
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 1,
+          routes: [
+            { name: '(tabs)' },
+            {
+              name: 'details/[type]/[id]',
+              params: { type: type as string, id: baseIdLocal, selectedSeason: s, selectedEpisode: e },
+            },
+          ],
+        }) as any
+      );
+    } catch (_) {
+      // Fallback to old push-based behavior if navigation.reset throws
+      try { if (typeof (router as any).dismissAll === 'function') (router as any).dismissAll(); } catch (__) {}
       setTimeout(() => {
-        try { router.setParams({ selectedSeason: s, selectedEpisode: e } as any); }
-        catch (err) { console.log('[BACK-UI v124w] setParams error', err); }
-      }, 80);
-      return true;
-    } catch (err) {
-      console.log('[BACK-UI v124w] router.back error', err);
-      return false;
+        router.push({
+          pathname: `/details/${type}/${baseIdLocal}`,
+          params: { selectedSeason: s, selectedEpisode: e },
+        });
+      }, 30);
     }
+    return true;
   }, [id, type, router, navigation]);
 
   const handleBack = useCallback(() => {
     if (!goToSeriesRootWithFocus()) router.back();
   }, [goToSeriesRootWithFocus, router]);
 
+  // v124m-stack-reset: single BackHandler. Binge-aware via CommonActions.reset.
+  //
+  // On an episode page (id contains ":"):
+  //   - inspect nav stack via navigation.getState()
+  //   - drop every entry whose id starts with "<seriesId>:"
+  //   - ensure series root entry exists (push at end if missing)
+  //   - dispatch CommonActions.reset to the rebuilt list
+  // Else (series root or movie page): router.back().
   useEffect(() => {
-    // PATCH_V34_DETAILS_BACK — back ALWAYS does something visible:
-    //   1. Series-episode page → goToSeriesRootWithFocus() handles it (returns true)
-    //   2. Movies / series-roots → router.back() to previous screen
-    //   3. Deep-linked (empty stack) → fall back to Discover tab
-    //   4. ALWAYS return true so Android can't force-exit
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      try { if (goToSeriesRootWithFocus()) return true; } catch (_) {}
+    const rawId = String(id || '');
+    const isEpisodePage = type === 'series' && rawId.includes(':');
+    const parts = rawId.split(':');
+    const seriesRootId = parts[0];
+    const sNum = parts[1] || '';
+    const eNum = parts[2] || '';
+    console.log('[BACK v124m] mount isEp=' + isEpisodePage + ' rawId=' + rawId + ' rootId=' + seriesRootId);
+    const handler = () => {
+      try {
+        if (isEpisodePage && seriesRootId) {
+          let stateOk = false;
+          try {
+            const state = navigation.getState && navigation.getState();
+            const routes = (state && state.routes) || [];
+            console.log('[BACK v124m] hwBack routes=' + routes.length);
+            for (let i = 0; i < routes.length; i++) {
+              const r = routes[i] || {};
+              const rname = String(r.name || '');
+              const rid = String((r.params && r.params.id) || '');
+              console.log('[BACK v124m]   [' + i + '] name=' + rname + ' id=' + rid);
+            }
+            // Build new routes: drop binge entries of THIS series; keep series
+            // root with focus params; keep everything else as-is.
+            const kept = [];
+            let rootInKept = false;
+            for (const r of routes) {
+              const rid = String((r && r.params && r.params.id) || '');
+              const ridRoot = rid.split(':')[0];
+              if (rid === seriesRootId) {
+                kept.push({
+                  name: r.name,
+                  params: { ...(r.params || {}), focusS: sNum, focusE: eNum },
+                });
+                rootInKept = true;
+                continue;
+              }
+              if (ridRoot === seriesRootId && rid !== seriesRootId) {
+                // binge episode page entry - drop it
+                continue;
+              }
+              kept.push({ name: r.name, params: r.params, state: r.state });
+            }
+            if (!rootInKept) {
+              // No series root in history at all - synthesize one at the end.
+              kept.push({
+                name: 'details/[type]/[id]',
+                params: { type: 'series', id: seriesRootId, focusS: sNum, focusE: eNum },
+              });
+            }
+            console.log('[BACK v124m] dispatching reset, newLen=' + kept.length);
+            navigation.dispatch(
+              CommonActions.reset({
+                index: kept.length - 1,
+                routes: kept,
+              })
+            );
+            stateOk = true;
+          } catch (e) {
+            console.log('[BACK v124m] reset failed', e);
+          }
+          if (stateOk) return true;
+          // Fallback if reset blew up: plain replace.
+          router.replace({
+            pathname: '/details/series/' + seriesRootId,
+            params: { focusS: sNum, focusE: eNum },
+          });
+          return true;
+        }
+      } catch (e) {
+        console.log('[BACK v124m] outer error', e);
+      }
       try { router.back(); return true; } catch (_) {}
       try { router.replace('/(tabs)/discover'); } catch (_) {}
       return true;
-    });
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', handler);
     return () => sub.remove();
-  }, [goToSeriesRootWithFocus]);
+  }, [id, type, router, navigation]);
+
   // ========================================================================
 
 
+  const router = useRouter();
   
   // Use zustand SELECTORS — only re-render when these specific fields change
   // This prevents re-renders from unrelated store changes (discover data, addons, etc.)
@@ -601,6 +672,7 @@ export default function DetailsScreen() {
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [watchedEpisodes, setWatchedEpisodes] = useState<Record<string, boolean>>({});
   const autoPlayTriggeredRef = useRef(false);
+  // v124c-back-contextual
   // v121m-play-overlay: movie-aware Play loading overlay
   const [isPlayLoading, setIsPlayLoading] = useState(false);
   useEffect(() => {
@@ -654,36 +726,6 @@ export default function DetailsScreen() {
       .sort((a, b) => a.episode - b.episode);
   }, [content?.videos, selectedSeason]);
 
-  /* v125b-target-episode */
-  // Which episode should take TV focus when the series root renders?
-  // Priority:
-  //   1) explicit paramSelectedEpisode (set by goToSeriesRootWithFocus
-  //      when the user backs out of an episode page)
-  //   2) highest-numbered watched episode in the current season
-  //   3) null → first card takes focus (FlatList default)
-  const targetEpisodeNumber = useMemo(() => {
-    if (type !== 'series') return null;
-    const fromParam = paramSelectedEpisode != null
-      ? parseInt(String(paramSelectedEpisode), 10)
-      : NaN;
-    if (!isNaN(fromParam)) return fromParam;
-    const prefix = `${baseId || id}:${selectedSeason}:`;
-    const watchedNums = Object.keys(watchedEpisodes)
-      .filter((k) => k.startsWith(prefix) && watchedEpisodes[k])
-      .map((k) => parseInt(k.split(':')[2], 10))
-      .filter((n) => !isNaN(n));
-    if (watchedNums.length === 0) return null;
-    return Math.max(...watchedNums);
-  }, [type, paramSelectedEpisode, watchedEpisodes, baseId, id, selectedSeason]);
-
-  const targetEpisodeIndex = useMemo(() => {
-    if (targetEpisodeNumber == null) return 0;
-    const idx = episodesForSeason.findIndex(
-      (ep) => ep.episode === targetEpisodeNumber
-    );
-    return idx >= 0 ? idx : 0;
-  }, [episodesForSeason, targetEpisodeNumber]);
-
   useEffect(() => {
     // If we have cached meta with background, skip the meta fetch entirely
     const hasCachedMeta = cachedMeta && cachedMeta.background;
@@ -705,6 +747,15 @@ export default function DetailsScreen() {
   }, [id, type]);
 
   useEffect(() => {
+    /* v124c-back-contextual: prefer focusS over default first-season */
+    if (seasons.length === 0) return;
+    const wantedSeason = focusSParam ? parseInt(String(focusSParam), 10) : NaN;
+    if (!isNaN(wantedSeason) && seasons.includes(wantedSeason) && selectedSeason !== wantedSeason) {
+      setSelectedSeason(wantedSeason);
+    }
+  }, [seasons, focusSParam]);
+
+  useEffect(() => {
     if (seasons.length === 0) return;
     const fromParam = paramSelectedSeason ? parseInt(paramSelectedSeason as string, 10) : NaN;
     if (!isNaN(fromParam) && seasons.includes(fromParam)) {
@@ -721,14 +772,26 @@ export default function DetailsScreen() {
   // the episodes list (series root) instead of the previous episode's page.
   // Matches Stremio: back from next-up screen = back to the show, not to EP-N-1.
   useEffect(() => {
-    if (autoPlayParam !== 'true' || type !== 'series' || !baseId) return;
+    // v124h-back-order: intercept hardware Back on series episode pages
+    // when arriving from /player (fromPlayer=true) OR from autoplay.
+    // Route to series root with focusS/focusE so the just-watched episode
+    // is highlighted on the show page.
+    const isFromPlayer = fromPlayerParam === 'true';
+    const isAutoPlay = autoPlayParam === 'true';
+    if ((!isFromPlayer && !isAutoPlay) || type !== 'series' || !baseId) return;
     const handler = () => {
-      router.replace({ pathname: `/details/series/${baseId}` });
-      return true; // swallow the default back nav
+      router.replace({
+        pathname: `/details/series/${baseId}`,
+        params: {
+          focusS: String(episodeSeason || ''),
+          focusE: String(episodeNumber || ''),
+        },
+      });
+      return true;
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', handler);
     return () => sub.remove();
-  }, [autoPlayParam, type, baseId]);
+  }, [autoPlayParam, fromPlayerParam, type, baseId, episodeSeason, episodeNumber]);
 
   useEffect(() => {
     if (content && library) {
@@ -798,23 +861,12 @@ export default function DetailsScreen() {
         return () => clearTimeout(t);
       }
 
-      /* v125b-no-flash */
+      autoPlayTriggeredRef.current = true;
       const sorted = sortStreamsByLanguage(streams);
       const bestStream = sorted[0];
       if (bestStream) {
         console.log('[AUTOPLAY] Content ready:', contentReady, '- selecting best stream for', id, '->', bestStream.title || bestStream.name);
-        // v125b FIX A: keep the cinematic overlay continuously visible.
-        // setIsPlayLoading(true) must fire BEFORE we flip the trigger ref
-        // or clear the autoPlay param, otherwise the overlay condition
-        // (autoPlay && !triggered) || isPlayLoading goes false for one
-        // frame and the bare episode card paints (the "flash").
-        setIsPlayLoading(true);
-        autoPlayTriggeredRef.current = true;
-        try { router.setParams({ autoPlay: '' } as any); } catch (_) {}
         setTimeout(() => handleStreamSelect(bestStream), 200);
-      } else {
-        autoPlayTriggeredRef.current = true;
-        try { router.setParams({ autoPlay: '' } as any); } catch (_) {}
       }
     }
   }, [streams, isLoadingStreams, autoPlayParam, id, content]);
@@ -925,6 +977,12 @@ const nextEpisodeData = nextEpisode ? {
           poster: content?.poster || '',
           logo: content?.logo || '',
           ...currentEpisodeMeta,
+          ...(type === 'series' ? {
+            /* v124d-player-params */
+            seriesId: baseId || (id as string),
+            season: String(episodeSeason),
+            episode: String(episodeNumber),
+          } : {}),
           ...nextEpisodeData,
           ...resumeData,
         },
@@ -961,6 +1019,12 @@ const nextEpisodeData = nextEpisode ? {
           poster: content?.poster || '',
           logo: content?.logo || '',
           ...currentEpisodeMeta,
+          ...(type === 'series' ? {
+            /* v124d-player-params */
+            seriesId: baseId || (id as string),
+            season: String(episodeSeason),
+            episode: String(episodeNumber),
+          } : {}),
           ...nextEpisodeData,
           ...resumeData,
         },
@@ -1009,6 +1073,12 @@ const nextEpisodeData = nextEpisode ? {
           sources: stream.sources ? JSON.stringify(stream.sources) : '',
           fallbackTorrents: fallbackTorrents.length > 0 ? JSON.stringify(fallbackTorrents) : '',
           ...currentEpisodeMeta,
+          ...(type === 'series' ? {
+            /* v124d-player-params */
+            seriesId: baseId || (id as string),
+            season: String(episodeSeason),
+            episode: String(episodeNumber),
+          } : {}),
           ...nextEpisodeData,
           ...resumeData,
         },
@@ -1077,6 +1147,12 @@ const nextEpisodeData = nextEpisode ? {
           poster: content?.poster || '',
           logo: content?.logo || '',
           ...currentEpisodeMeta,
+          ...(type === 'series' ? {
+            /* v124d-player-params */
+            seriesId: baseId || (id as string),
+            season: String(episodeSeason),
+            episode: String(episodeNumber),
+          } : {}),
           ...nextEpisodeData,
           ...resumeData,
         },
@@ -1147,22 +1223,21 @@ const nextEpisodeData = nextEpisode ? {
   }, []);
 
   // Render episode item for FlatList
-  /* v125b-focus-target */
   const renderEpisodeItem = ({ item }: { item: Episode }) => {
-    // v125b: focus the targetEpisodeNumber card (param-driven OR last-watched).
+    // Check watched status using series:season:episode format
     const epContentId = `${baseId || id}:${item.season}:${item.episode}`;
     const epWatched = !!watchedEpisodes[epContentId];
-    const isFocusTarget = targetEpisodeNumber != null
-      && item.season === selectedSeason
-      && item.episode === targetEpisodeNumber;
+    /* v124c-back-contextual: focus the episode the user just finished */
+    const isFocusTarget = !!(focusSParam && focusEParam && parseInt(String(focusSParam), 10) === item.season && parseInt(String(focusEParam), 10) === item.episode);
     return (
       <EpisodeCard
-        episode={item}
+        episode={item} 
         fallbackPoster={content?.poster}
         onPress={() => handleEpisodePress(item)}
         isWatched={epWatched}
         onMarkUnwatched={() => handleMarkUnwatched(epContentId)}
-        autoFocus={isFocusTarget}
+      
+        hasTVPreferredFocus={isFocusTarget}
       />
     );
   };
@@ -1183,8 +1258,7 @@ const nextEpisodeData = nextEpisode ? {
       
       {/* Auto-play loading — Stremio-style cinematic transition */}
       {/* v121m-play-overlay: also fires on isPlayLoading */}
-      {/* v124y-overlay-persists: keep overlay up the WHOLE autoplay so user never sees episode card */}
-      {((autoPlayParam === 'true') || isPlayLoading) && (
+      {((autoPlayParam === 'true' && !autoPlayTriggeredRef.current) || isPlayLoading) && (
         <View style={styles.autoPlayOverlay}>
           {/* Full-screen series backdrop (blurred). Priority: loaded content
               backdrop (the real series art) → passed-in backdrop param → poster. */}
@@ -1227,9 +1301,7 @@ const nextEpisodeData = nextEpisode ? {
 
             {/* Indeterminate animated loading bar */}
             <AutoPlayLoadingBar />
-            <Text style={{ color: '#CCC', fontSize: 13, marginTop: 14, fontWeight: '500' }}>
-              {/* v124z-fixes: was '{'Loading...'}  /* v124x: was ...' */}{'Loading...'}
-            </Text>
+            {/* v123-loading-text: text removed; title + SE + bar are enough */}
           </View>
         </View>
       )}
@@ -1382,25 +1454,13 @@ const nextEpisodeData = nextEpisode ? {
               </ScrollView>
               
               {/* Episodes List */}
-              {/* v125b-flatlist-scroll */}
               <FlatList
-                key={`episodes-${selectedSeason}-${targetEpisodeIndex}`}
                 data={episodesForSeason}
                 renderItem={renderEpisodeItem}
                 keyExtractor={(item) => `${item.season}-${item.episode}`}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.episodesList}
-                // v125b FIX B: mount the target card at first paint, scroll it
-                // into view, and guarantee the existing v124ab pressableRef
-                // + setNativeProps retry actually has a node to focus.
-                initialScrollIndex={targetEpisodeIndex}
-                getItemLayout={(_, index) => ({ length: 160, offset: 172 * index, index })}
-                initialNumToRender={Math.max(8, targetEpisodeIndex + 3)}
-                onScrollToIndexFailed={() => {
-                  // getItemLayout makes this practically unreachable, but
-                  // keep a no-op handler so React Native doesn't warn.
-                }}
               />
             </View>
           )}

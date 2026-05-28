@@ -428,21 +428,6 @@ function EpisodeCard({
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const [thumbError, setThumbError] = useState(false);
-  // v124ab-inject-useref: declare pressableRef + retry-focus effect for EpisodeCard.
-  const pressableRef = useRef<any>(null);
-  useEffect(() => {
-    if (!autoFocus) return;
-    const tries = [60, 200, 500];
-    const timers = tries.map(delay => setTimeout(() => {
-      try {
-        const p: any = pressableRef.current;
-        if (!p) return;
-        if (typeof p.focus === 'function') { try { p.focus(); } catch (_) {} }
-        try { p.setNativeProps && p.setNativeProps({ hasTVPreferredFocus: true }); } catch (_) {}
-      } catch (_) {}
-    }, delay));
-    return () => { timers.forEach(t => clearTimeout(t)); };
-  }, [autoFocus]);
   const thumbUri = episode.thumbnail || fallbackPoster;
   
   return (
@@ -654,36 +639,6 @@ export default function DetailsScreen() {
       .sort((a, b) => a.episode - b.episode);
   }, [content?.videos, selectedSeason]);
 
-  /* v125b-target-episode */
-  // Which episode should take TV focus when the series root renders?
-  // Priority:
-  //   1) explicit paramSelectedEpisode (set by goToSeriesRootWithFocus
-  //      when the user backs out of an episode page)
-  //   2) highest-numbered watched episode in the current season
-  //   3) null → first card takes focus (FlatList default)
-  const targetEpisodeNumber = useMemo(() => {
-    if (type !== 'series') return null;
-    const fromParam = paramSelectedEpisode != null
-      ? parseInt(String(paramSelectedEpisode), 10)
-      : NaN;
-    if (!isNaN(fromParam)) return fromParam;
-    const prefix = `${baseId || id}:${selectedSeason}:`;
-    const watchedNums = Object.keys(watchedEpisodes)
-      .filter((k) => k.startsWith(prefix) && watchedEpisodes[k])
-      .map((k) => parseInt(k.split(':')[2], 10))
-      .filter((n) => !isNaN(n));
-    if (watchedNums.length === 0) return null;
-    return Math.max(...watchedNums);
-  }, [type, paramSelectedEpisode, watchedEpisodes, baseId, id, selectedSeason]);
-
-  const targetEpisodeIndex = useMemo(() => {
-    if (targetEpisodeNumber == null) return 0;
-    const idx = episodesForSeason.findIndex(
-      (ep) => ep.episode === targetEpisodeNumber
-    );
-    return idx >= 0 ? idx : 0;
-  }, [episodesForSeason, targetEpisodeNumber]);
-
   useEffect(() => {
     // If we have cached meta with background, skip the meta fetch entirely
     const hasCachedMeta = cachedMeta && cachedMeta.background;
@@ -798,23 +753,15 @@ export default function DetailsScreen() {
         return () => clearTimeout(t);
       }
 
-      /* v125b-no-flash */
+      autoPlayTriggeredRef.current = true;
+      // v124z-fixes: clear autoPlay param so a future back-nav to this
+      // episode page doesn't re-show the overlay.
+      try { router.setParams({ autoPlay: '' } as any); } catch (_) {}
       const sorted = sortStreamsByLanguage(streams);
       const bestStream = sorted[0];
       if (bestStream) {
         console.log('[AUTOPLAY] Content ready:', contentReady, '- selecting best stream for', id, '->', bestStream.title || bestStream.name);
-        // v125b FIX A: keep the cinematic overlay continuously visible.
-        // setIsPlayLoading(true) must fire BEFORE we flip the trigger ref
-        // or clear the autoPlay param, otherwise the overlay condition
-        // (autoPlay && !triggered) || isPlayLoading goes false for one
-        // frame and the bare episode card paints (the "flash").
-        setIsPlayLoading(true);
-        autoPlayTriggeredRef.current = true;
-        try { router.setParams({ autoPlay: '' } as any); } catch (_) {}
         setTimeout(() => handleStreamSelect(bestStream), 200);
-      } else {
-        autoPlayTriggeredRef.current = true;
-        try { router.setParams({ autoPlay: '' } as any); } catch (_) {}
       }
     }
   }, [streams, isLoadingStreams, autoPlayParam, id, content]);
@@ -1147,22 +1094,20 @@ const nextEpisodeData = nextEpisode ? {
   }, []);
 
   // Render episode item for FlatList
-  /* v125b-focus-target */
   const renderEpisodeItem = ({ item }: { item: Episode }) => {
-    // v125b: focus the targetEpisodeNumber card (param-driven OR last-watched).
+    // v124x-selector-focus: focus the card that matches paramSelectedEpisode.
     const epContentId = `${baseId || id}:${item.season}:${item.episode}`;
     const epWatched = !!watchedEpisodes[epContentId];
-    const isFocusTarget = targetEpisodeNumber != null
-      && item.season === selectedSeason
-      && item.episode === targetEpisodeNumber;
+    const selEpNum = paramSelectedEpisode ? parseInt(String(paramSelectedEpisode), 10) : NaN;
+    const isCurrentEp = !isNaN(selEpNum) && item.season === selectedSeason && item.episode === selEpNum;
     return (
-      <EpisodeCard
-        episode={item}
+      <EpisodeCard 
+        episode={item} 
         fallbackPoster={content?.poster}
         onPress={() => handleEpisodePress(item)}
         isWatched={epWatched}
         onMarkUnwatched={() => handleMarkUnwatched(epContentId)}
-        autoFocus={isFocusTarget}
+        autoFocus={isCurrentEp}
       />
     );
   };
@@ -1382,25 +1327,14 @@ const nextEpisodeData = nextEpisode ? {
               </ScrollView>
               
               {/* Episodes List */}
-              {/* v125b-flatlist-scroll */}
               <FlatList
-                key={`episodes-${selectedSeason}-${targetEpisodeIndex}`}
+                key={`episodes-${selectedSeason}-${paramSelectedEpisode || ''}`}
                 data={episodesForSeason}
                 renderItem={renderEpisodeItem}
                 keyExtractor={(item) => `${item.season}-${item.episode}`}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.episodesList}
-                // v125b FIX B: mount the target card at first paint, scroll it
-                // into view, and guarantee the existing v124ab pressableRef
-                // + setNativeProps retry actually has a node to focus.
-                initialScrollIndex={targetEpisodeIndex}
-                getItemLayout={(_, index) => ({ length: 160, offset: 172 * index, index })}
-                initialNumToRender={Math.max(8, targetEpisodeIndex + 3)}
-                onScrollToIndexFailed={() => {
-                  // getItemLayout makes this practically unreachable, but
-                  // keep a no-op handler so React Native doesn't warn.
-                }}
               />
             </View>
           )}

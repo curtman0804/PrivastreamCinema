@@ -29,6 +29,7 @@ try {
   console.log('[TV] TV event handlers not available');
 }
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/api/client';
@@ -890,9 +891,7 @@ export default function PlayerScreen() {
           // Navigate to next episode with autoPlay (no preferHash — Stremio
           // does fresh lookup per episode to avoid stale-cache races).
           console.log('[PLAYER] Countdown ended - auto-playing next episode:', nextEpisodeId);
-          // v124w-clean-stack: dismiss [player + prevEpisodePage] then push next.
-          try { (router as any).dismiss && (router as any).dismiss(2); } catch (_) {}
-          router.push({
+          router.replace({
             pathname: `/details/series/${nextEpisodeId}`,
             params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '', nextPoster: (nextEpisodePoster || poster || '') as string, nextBackdrop: (backdrop || '') as string },
           });
@@ -946,9 +945,7 @@ export default function PlayerScreen() {
     // Stremio-style: do NOT carry over the previous hash. Each episode does
     // a fresh stream lookup and resolves the top stream on demand. This
     // guarantees we never reuse stale RD state from the previous episode.
-    // v124w-clean-stack: dismiss [player + prevEpisodePage] then push next.
-    try { (router as any).dismiss && (router as any).dismiss(2); } catch (_) {}
-    router.push({
+    router.replace({
       pathname: `/details/series/${nextEpisodeId}`,
       params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '' },
     });
@@ -1965,10 +1962,88 @@ export default function PlayerScreen() {
     return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
   };
 
-  // Handle back button
+  // v124p-player-clean-exit: REBUILD nav stack on leaving player.
+  //
+  // For series: rewrite the stack to exactly [...preHistory, seriesRoot,
+  // currentEpisodePage]. Drops every prior binge episode page and stale
+  // /player entry. After this, every back press is a normal router.back().
+  //
+  // For movies: default router.back().
+  const navigation = useNavigation();
   const handleBack = () => {
+    try {
+      if (contentType === 'series' && seriesId && season && episode) {
+        const epId = `${seriesId}:${season}:${episode}`;
+        const state = navigation.getState && navigation.getState();
+        const routes = (state && state.routes) || [];
+        console.log('[PLAYER v124p] handleBack series, stack=' + routes.length);
+        for (let i = 0; i < routes.length; i++) {
+          const r = routes[i] || {};
+          const rid = String((r.params && r.params.id) || '');
+          console.log('[PLAYER v124p]   [' + i + '] name=' + r.name + ' id=' + rid);
+        }
+        // Find the most recent series-root entry below the player.
+        let rootIdx = -1;
+        for (let i = routes.length - 1; i >= 0; i--) {
+          const rid = String((routes[i] && routes[i].params && routes[i].params.id) || '');
+          if (rid === seriesId) { rootIdx = i; break; }
+        }
+        let baseRoutes;
+        if (rootIdx >= 0) {
+          // Keep everything up to and including the existing series root.
+          baseRoutes = routes.slice(0, rootIdx + 1).map(r => ({
+            name: r.name,
+            params: r.params,
+          }));
+        } else {
+          // No series root in history. Keep entries that aren't part of
+          // this series or the player, then synthesize a fresh root.
+          baseRoutes = [];
+          for (const r of routes) {
+            const rid = String((r && r.params && r.params.id) || '');
+            const rname = String(r && r.name || '');
+            if (rid && rid.split(':')[0] === seriesId) continue;
+            if (rname.indexOf('player') !== -1) continue;
+            baseRoutes.push({ name: r.name, params: r.params });
+          }
+          baseRoutes.push({
+            name: 'details/[type]/[id]',
+            params: { type: 'series', id: seriesId },
+          });
+        }
+        baseRoutes.push({
+          name: 'details/[type]/[id]',
+          params: { type: 'series', id: epId, fromPlayer: 'true' },
+        });
+        console.log('[PLAYER v124p] dispatching reset, newLen=' + baseRoutes.length);
+        navigation.dispatch(
+          CommonActions.reset({
+            index: baseRoutes.length - 1,
+            routes: baseRoutes,
+          })
+        );
+        return;
+      }
+    } catch (e) {
+      console.log('[PLAYER v124p] handleBack error', e);
+    }
     router.back();
   };
+
+  // v124f-hardware-back: route the hardware Back button through handleBack
+  // so it follows the same series-aware logic as the on-screen Back button.
+  React.useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      try {
+        handleBack();
+      } catch (e) {
+        console.log('[PLAYER] v124f hardwareBack error', e);
+        return false; // let system back handle it
+      }
+      return true; // we handled it
+    });
+    return () => sub.remove();
+  }, [handleBack]);
 
   return (
     <View style={styles.container}>
