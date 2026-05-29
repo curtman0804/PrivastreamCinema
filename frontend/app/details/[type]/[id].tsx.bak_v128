@@ -429,64 +429,20 @@ function EpisodeCard({
   const [isFocused, setIsFocused] = useState(false);
   const [thumbError, setThumbError] = useState(false);
   // v124ab-inject-useref: declare pressableRef + retry-focus effect for EpisodeCard.
-  /* v128-focus-cancel */
   const pressableRef = useRef<any>(null);
-  /* v135-focus-unlock */
-  // v128 tracked "user moved away" via onBlur to stop the retry timers
-  // re-grabbing focus, but on Android TV onBlur races the next focus event
-  // and the guard fails intermittently.  v135 instead uses a hard one-shot
-  // flag: once we successfully grabbed focus ONCE, never re-grab.
-  // Plus we drop the setNativeProps({ hasTVPreferredFocus: true }) line --
-  // that's the call that was re-applying the native focus lock and
-  // snapping focus back when the user pressed D-pad.
-  const hasFocusedRef = useRef(false);
-  const userMovedRef = useRef(false);
-  const focusGrabbedOnceRef = useRef(false);
-  // hasTVPreferredFocus is a one-shot request on Android TV but RN re-applies
-  // it on every render of this Pressable.  Tie it to a state flag that flips
-  // off after the initial-grab window so RN stops re-asserting the native
-  // focus-preferred bit on every re-render.
-  const [tvPreferred, setTvPreferred] = useState(!!autoFocus);
   useEffect(() => {
-    if (!autoFocus) {
-      hasFocusedRef.current = false;
-      userMovedRef.current = false;
-      focusGrabbedOnceRef.current = false;
-      setTvPreferred(false);
-      return;
-    }
-    hasFocusedRef.current = false;
-    userMovedRef.current = false;
-    focusGrabbedOnceRef.current = false;
-    setTvPreferred(true);
-    const tryFocus = (delay: number) => {
-      if (userMovedRef.current || focusGrabbedOnceRef.current) {
-        console.log('[FOCUS v135] skip retry@' + delay + 'ms (moved=' + userMovedRef.current + ' grabbed=' + focusGrabbedOnceRef.current + ')');
-        return;
-      }
+    if (!autoFocus) return;
+    const tries = [60, 200, 500];
+    const timers = tries.map(delay => setTimeout(() => {
       try {
         const p: any = pressableRef.current;
         if (!p) return;
-        if (typeof p.focus === 'function') {
-          console.log('[FOCUS v135] retry@' + delay + 'ms p.focus() ep=' + episode.episode);
-          try { p.focus(); } catch (_) {}
-        }
+        if (typeof p.focus === 'function') { try { p.focus(); } catch (_) {} }
+        try { p.setNativeProps && p.setNativeProps({ hasTVPreferredFocus: true }); } catch (_) {}
       } catch (_) {}
-    };
-    const tries = [60, 200, 500];
-    const timers = tries.map((delay) => setTimeout(() => tryFocus(delay), delay));
-    // Release the React-level hasTVPreferredFocus flag after the initial
-    // grab window so RN stops re-applying the native focus lock on every
-    // subsequent render.
-    const releaseTimer = setTimeout(() => {
-      console.log('[FOCUS v135] releasing hasTVPreferredFocus for ep=' + episode.episode);
-      setTvPreferred(false);
-    }, 600);
-    return () => {
-      timers.forEach((t) => clearTimeout(t));
-      clearTimeout(releaseTimer);
-    };
-  }, [autoFocus, episode.episode]);
+    }, delay));
+    return () => { timers.forEach(t => clearTimeout(t)); };
+  }, [autoFocus]);
   const thumbUri = episode.thumbnail || fallbackPoster;
   
   return (
@@ -495,22 +451,10 @@ function EpisodeCard({
       style={[styles.episodeCard, isFocused && styles.episodeCardFocused]}
       onPress={onPress}
       onLongPress={isWatched ? onMarkUnwatched : undefined}
-      /* v135-focus-unlock-blur */
-      onFocus={() => {
-        setIsFocused(true);
-        hasFocusedRef.current = true;
-        focusGrabbedOnceRef.current = true;
-        console.log('[FOCUS v135] onFocus ep=' + episode.episode + ' (one-shot guard set)');
-      }}
-      onBlur={() => {
-        setIsFocused(false);
-        if (hasFocusedRef.current) {
-          userMovedRef.current = true;
-          console.log('[FOCUS v135] onBlur ep=' + episode.episode + ' (userMoved=true)');
-        }
-      }}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
       delayLongPress={600}
-      hasTVPreferredFocus={tvPreferred}
+      hasTVPreferredFocus={!!autoFocus}
     >
       <View style={{ position: 'relative' }}>
         {thumbUri && !thumbError ? (
@@ -618,11 +562,9 @@ export default function DetailsScreen() {
     //   3. Deep-linked (empty stack) → fall back to Discover tab
     //   4. ALWAYS return true so Android can't force-exit
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      /* v134-back-diag */
-      console.log('[BACK v134] main hwBack fired; id=', id, ' type=', type, ' autoPlay=', autoPlayParam);
-      try { if (goToSeriesRootWithFocus()) { console.log('[BACK v134] -> series-root-with-focus'); return true; } } catch (_) {}
-      try { router.back(); console.log('[BACK v134] -> router.back()'); return true; } catch (_) {}
-      try { router.replace('/(tabs)/discover'); console.log('[BACK v134] -> replace discover'); } catch (_) {}
+      try { if (goToSeriesRootWithFocus()) return true; } catch (_) {}
+      try { router.back(); return true; } catch (_) {}
+      try { router.replace('/(tabs)/discover'); } catch (_) {}
       return true;
     });
     return () => sub.remove();
@@ -781,18 +723,7 @@ export default function DetailsScreen() {
   useEffect(() => {
     if (autoPlayParam !== 'true' || type !== 'series' || !baseId) return;
     const handler = () => {
-      /* v134-clean-stack-on-back */
-      // Dismiss every screen above the tab root so leftover /player(s)
-      // from the binge chain UNMOUNT and their TVKeyEvent listeners get
-      // cleaned up.  Without this, D-pad presses on the series root are
-      // intercepted by the still-mounted player and the screen goes back.
-      console.log('[BACK v134] autoPlay back fired; dismissing stack and replacing with series root', baseId);
-      try { router.dismissAll && router.dismissAll(); } catch (e) { console.log('[BACK v134] dismissAll err', e); }
-      try {
-        router.replace({ pathname: `/details/series/${baseId}` });
-      } catch (e) {
-        console.log('[BACK v134] replace err', e);
-      }
+      router.replace({ pathname: `/details/series/${baseId}` });
       return true; // swallow the default back nav
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', handler);
@@ -822,21 +753,7 @@ export default function DetailsScreen() {
         }
       };
       loadWatched();
-      /* v134-clear-overlay */
-      // Returning from /player keeps this screen mounted with stale
-      // isPlayLoading / autoPlay=true, leaving the loading overlay up.
-      // Clear them on every focus so the user actually sees the content.
-      console.log('[FOCUS v134] details focused, clearing overlay; autoPlayParam=', autoPlayParam, ' isPlayLoading-cleared');
-      setIsPlayLoading(false);
-      if (autoPlayTriggeredRef.current && autoPlayParam === 'true') {
-        try {
-          router.setParams({ autoPlay: 'done' });
-          console.log('[FOCUS v134] stripped autoPlay param');
-        } catch (e) {
-          console.log('[FOCUS v134] setParams failed', e);
-        }
-      }
-    }, [autoPlayParam])
+    }, [])
   );
 
   // AUTO-PLAY: When navigated from "Play Next", auto-select best stream from
@@ -934,57 +851,6 @@ export default function DetailsScreen() {
   };
 
   const handleStreamSelect = async (stream: Stream) => {
-    /* v129-handle-upgrade */
-    /* v131-handle-normalize */
-    // Normalize info_hash (snake) -> infoHash (camel) up-front so the
-    // upgrade-race condition + start_and_wait body both see the field.
-    if ((stream as any).info_hash && !stream.infoHash) {
-      stream = { ...stream, infoHash: (stream as any).info_hash } as any;
-    }
-    if ((stream as any).upgrade_candidate && stream.infoHash && !stream.url) {
-      try {
-        setIsPlayLoading(true);
-        const _authT = await AsyncStorage.getItem('auth_token');
-        const _bUrl = process.env.EXPO_PUBLIC_BACKEND_URL || (Constants.expoConfig as any)?.extra?.backendUrl || '';
-        const _hdrs: any = { 'Content-Type': 'application/json', ...(_authT ? { Authorization: `Bearer ${_authT}` } : {}) };
-        const _idP = ((id as string) || '').split(':');
-        const _sn = _idP.length >= 3 ? parseInt(_idP[_idP.length - 2], 10) : NaN;
-        const _en = _idP.length >= 3 ? parseInt(_idP[_idP.length - 1], 10) : NaN;
-        console.log('[DETAILS v129] upgrade-race start hash=', stream.infoHash.slice(0, 8));
-        const _resp = await fetch(`${_bUrl}/api/stream/start_and_wait`, {
-          method: 'POST',
-          headers: _hdrs,
-          body: JSON.stringify({
-            infoHash: stream.infoHash,
-            fileIdx: stream.fileIdx != null ? stream.fileIdx : null,
-            filename: stream.filename || null,
-            season: isNaN(_sn) ? null : _sn,
-            episode: isNaN(_en) ? null : _en,
-            timeout_ms: 6500,
-          }),
-        });
-        const _data = await _resp.json().catch(() => ({}));
-        console.log('[DETAILS v129] upgrade-race status=', _data && _data.status);
-        if (_data && _data.status === 'ready' && _data.debrid_url) {
-          // Upgrade wins — inject resolved URL, fall through to existing path
-          stream = { ...stream, url: `${_bUrl}${_data.debrid_url}` } as any;
-          console.log('[DETAILS v129] UPGRADED (quality-upgraded)');
-        } else {
-          // Upgrade lost — pick top cached stream from this content's streams
-          const _cachedFallback = streams.find((s) => s !== stream && s.url && !(s as any).upgrade_candidate);
-          if (_cachedFallback) {
-            console.log('[DETAILS v129] upgrade lost — using cached fallback:', _cachedFallback.name || '');
-            stream = _cachedFallback;
-          } else {
-            console.log('[DETAILS v129] no cached fallback — proceeding with infoHash (player resolves)');
-          }
-        }
-      } catch (_v129e) {
-        console.log('[DETAILS v129] upgrade-race threw:', _v129e);
-      }
-      // Note: we deliberately leave setIsPlayLoading(true) — router.push
-      // will unmount this screen and the overlay vanishes with it.
-    }
     const subtitleContentId = isEpisodePage 
       ? `${baseId}:${episodeSeason}:${episodeNumber}`
       : (id as string);
@@ -1550,67 +1416,43 @@ const nextEpisodeData = nextEpisode ? {
                       /* v121m-play-overlay */
                       setIsPlayLoading(true);
                       /* v121d-play-wait */
-                      /* v130-force-upgrade-refetch */
-                      // v130: ALWAYS refetch with ?upgrade=1 on Play click. The
-                      // previous `if (!hasResolved(pool))` guard short-circuited
-                      // the refetch because the page-mount fetch had already
-                      // populated streams with backend-resolved entries — which
-                      // meant v129's `?upgrade=1` query never reached backend.
+                      // Wait for backend-resolved cached stream before
+                      // firing. Without this, Torrentio direct returns
+                      // uncached streams FAST, frontend shows Play, user
+                      // taps it, picks an uncached stream, orange screen.
                       let pool = streams;
-                      try {
-                        const authToken = await AsyncStorage.getItem('auth_token');
-                        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL
-                          || (Constants.expoConfig as any)?.extra?.backendUrl
-                          || '';
-                        const encodedId = encodeURIComponent(id as string);
-                        console.log('[DETAILS v130] fetching streams with ?upgrade=1 for', type, encodedId);
-                        const resp = await fetch(
-                          `${backendUrl}/api/streams/${type}/${encodedId}?upgrade=1`,
-                          { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} }
-                        );
-                        if (resp.ok) {
-                          const data = await resp.json();
-                          if (Array.isArray(data?.streams) && data.streams.length > 0) {
-                            pool = data.streams;
-                            const _upcount = pool.filter((s: any) => s?.upgrade_candidate).length;
-                            console.log('[DETAILS v130] got', pool.length, 'streams,', _upcount, 'upgrade candidates');
+                      const hasResolved = (arr: any[]) =>
+                        arr.some((s: any) => s && (s.url || s.externalUrl || s.direct_url));
+                      if (!hasResolved(pool)) {
+                        try {
+                          const authToken = await AsyncStorage.getItem('auth_token');
+                          const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL
+                            || (Constants.expoConfig as any)?.extra?.backendUrl
+                            || '';
+                          const encodedId = encodeURIComponent(id as string);
+                          const resp = await fetch(
+                            `${backendUrl}/api/streams/${type}/${encodedId}`,
+                            { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} }
+                          );
+                          if (resp.ok) {
+                            const data = await resp.json();
+                            if (Array.isArray(data?.streams) && data.streams.length > 0) {
+                              pool = data.streams;
+                            }
                           }
-                        } else {
-                          console.log('[DETAILS v130] upgrade fetch non-ok:', resp.status);
+                        } catch (e) {
+                          console.log('[v121d] backend fetch failed', e);
                         }
-                      } catch (e) {
-                        console.log('[DETAILS v130] upgrade fetch failed:', e);
                       }
                       /* v121d3-resolved-only */
-                      /* v129-prefer-upgrade */
-                      // Auto-pick from pre-resolved (cached) streams. If the
-                      // backend (v128b) returned upgrade_candidate items (uncached,
-                      // strictly higher quality tier), prefer the top one — the
-                      // race in handleStreamSelect will try to resolve it and
-                      // auto-fallback to the top cached if PM can't cache in time.
-                      /* v131-normalize-upgrade */
-                      // v131: don't require infoHash on filter (some streams from
-                      // aggregation use info_hash snake_case).  We normalize the
-                      // chosen stream's infoHash field a few lines below instead.
-                      const upgradeCandidates = pool.filter((s: any) => s?.upgrade_candidate && (s?.infoHash || s?.info_hash));
+                      // Auto-pick only from pre-resolved (cached + resolved)
+                      // streams. Uncached can outscore cached on raw quality
+                      // points, so we restrict the auto-pick pool. Manual
+                      // stream-card selection still works for any stream.
                       const resolved = pool.filter((s: any) => s && (s.url || s.externalUrl || s.direct_url));
                       const candidates = resolved.length > 0 ? resolved : pool;
                       const sorted = sortStreamsByLanguage(candidates);
-                      let picked: any = sorted[0];
-                      if (upgradeCandidates.length > 0) {
-                        const upgradeSorted = sortStreamsByLanguage(upgradeCandidates);
-                        if (upgradeSorted[0]) {
-                          /* v131-normalize-pick */
-                          picked = upgradeSorted[0];
-                          // Normalize: some streams come back with info_hash (snake_case).
-                          // Copy to infoHash so downstream code (handleStreamSelect, start_and_wait) works.
-                          if (!picked.infoHash && (picked as any).info_hash) {
-                            picked = { ...picked, infoHash: (picked as any).info_hash } as any;
-                          }
-                          console.log('[DETAILS v129/v131] preferring upgrade candidate:', picked.name || '', 'hash=', String(picked.infoHash || '').slice(0, 8));
-                        }
-                      }
-                      if (picked) handleStreamSelect(picked);
+                      if (sorted[0]) handleStreamSelect(sorted[0]);
                     }}
                     style={styles.playButton}
                     focusedStyle={styles.playButtonFocused}

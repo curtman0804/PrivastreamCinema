@@ -1822,52 +1822,6 @@ export default function PlayerScreen() {
       // tryNextFallbackTorrent() if the primary errors out.
       const seasonNum = season ? parseInt(season, 10) : undefined;
       const episodeNum = episode ? parseInt(episode, 10) : undefined;
-      /* v132-fast-resolve */
-      // v132: try the synchronous start_and_wait endpoint first.  For
-      // PM-cached streams this returns the resolved URL in 200-800ms,
-      // letting us skip the entire torrent-status poll race.  Fall
-      // through to the old behaviour if PM says "buffering" / "uncached".
-      try {
-        const _v132Token = await AsyncStorage.getItem('auth_token');
-        const _v132Backend = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-        const _v132Resp = await fetch(`${_v132Backend}/api/stream/start_and_wait`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(_v132Token ? { Authorization: `Bearer ${_v132Token}` } : {}),
-          },
-          body: JSON.stringify({
-            infoHash,
-            fileIdx: validFileIdx != null ? validFileIdx : null,
-            filename: filename || null,
-            season: seasonNum != null ? seasonNum : null,
-            episode: episodeNum != null ? episodeNum : null,
-            timeout_ms: 5000,
-          }),
-        });
-        const _v132Data = await _v132Resp.json().catch(() => ({}));
-        console.log('[PLAYER v132] start_and_wait status=', _v132Data && _v132Data.status);
-        if (_v132Data && _v132Data.status === 'ready' && _v132Data.debrid_url) {
-          const _v132Url = `${_v132Backend}${_v132Data.debrid_url}`;
-          console.log('[PLAYER v132] FAST RESOLVE: PM ready in budget, skipping poll race');
-          setDownloadProgress(100);
-          setLoadingStatus('');
-          if (_v132Data.video_size) videoFileSizeRef.current = _v132Data.video_size;
-          videoRetryCountRef.current = 0;
-          setStreamUrl(_v132Url);
-          // Keep PM warm via the same lightweight keep-alive the slow path uses
-          pollIntervalRef.current = setTimeout(function _v132KeepAlive() {
-            if (continuePollingRef.current) {
-              api.stream.status(infoHash).catch(() => {});
-              pollIntervalRef.current = setTimeout(_v132KeepAlive, 10000) as any;
-            }
-          }, 10000) as any;
-          return;
-        }
-      } catch (_v132e) {
-        console.log('[PLAYER v132] start_and_wait threw, falling through:', _v132e);
-      }
-
       await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources, seasonNum, episodeNum);
       
       // Quality ranking: higher = better

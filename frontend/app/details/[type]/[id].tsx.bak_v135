@@ -431,62 +431,34 @@ function EpisodeCard({
   // v124ab-inject-useref: declare pressableRef + retry-focus effect for EpisodeCard.
   /* v128-focus-cancel */
   const pressableRef = useRef<any>(null);
-  /* v135-focus-unlock */
-  // v128 tracked "user moved away" via onBlur to stop the retry timers
-  // re-grabbing focus, but on Android TV onBlur races the next focus event
-  // and the guard fails intermittently.  v135 instead uses a hard one-shot
-  // flag: once we successfully grabbed focus ONCE, never re-grab.
-  // Plus we drop the setNativeProps({ hasTVPreferredFocus: true }) line --
-  // that's the call that was re-applying the native focus lock and
-  // snapping focus back when the user pressed D-pad.
+  // v128: track whether the user has navigated AWAY from this card so the
+  // later retries (200ms / 500ms) don't yank focus back from wherever the
+  // user is now.
   const hasFocusedRef = useRef(false);
   const userMovedRef = useRef(false);
-  const focusGrabbedOnceRef = useRef(false);
-  // hasTVPreferredFocus is a one-shot request on Android TV but RN re-applies
-  // it on every render of this Pressable.  Tie it to a state flag that flips
-  // off after the initial-grab window so RN stops re-asserting the native
-  // focus-preferred bit on every re-render.
-  const [tvPreferred, setTvPreferred] = useState(!!autoFocus);
   useEffect(() => {
     if (!autoFocus) {
+      // Reset for next time this card becomes the target
       hasFocusedRef.current = false;
       userMovedRef.current = false;
-      focusGrabbedOnceRef.current = false;
-      setTvPreferred(false);
       return;
     }
     hasFocusedRef.current = false;
     userMovedRef.current = false;
-    focusGrabbedOnceRef.current = false;
-    setTvPreferred(true);
-    const tryFocus = (delay: number) => {
-      if (userMovedRef.current || focusGrabbedOnceRef.current) {
-        console.log('[FOCUS v135] skip retry@' + delay + 'ms (moved=' + userMovedRef.current + ' grabbed=' + focusGrabbedOnceRef.current + ')');
-        return;
-      }
+    const tries = [60, 200, 500];
+    const timers = tries.map(delay => setTimeout(() => {
+      // If the user already moved D-pad away after we grabbed focus once,
+      // do NOT re-grab — that's the snap-back bug.
+      if (userMovedRef.current) return;
       try {
         const p: any = pressableRef.current;
         if (!p) return;
-        if (typeof p.focus === 'function') {
-          console.log('[FOCUS v135] retry@' + delay + 'ms p.focus() ep=' + episode.episode);
-          try { p.focus(); } catch (_) {}
-        }
+        if (typeof p.focus === 'function') { try { p.focus(); } catch (_) {} }
+        try { p.setNativeProps && p.setNativeProps({ hasTVPreferredFocus: true }); } catch (_) {}
       } catch (_) {}
-    };
-    const tries = [60, 200, 500];
-    const timers = tries.map((delay) => setTimeout(() => tryFocus(delay), delay));
-    // Release the React-level hasTVPreferredFocus flag after the initial
-    // grab window so RN stops re-applying the native focus lock on every
-    // subsequent render.
-    const releaseTimer = setTimeout(() => {
-      console.log('[FOCUS v135] releasing hasTVPreferredFocus for ep=' + episode.episode);
-      setTvPreferred(false);
-    }, 600);
-    return () => {
-      timers.forEach((t) => clearTimeout(t));
-      clearTimeout(releaseTimer);
-    };
-  }, [autoFocus, episode.episode]);
+    }, delay));
+    return () => { timers.forEach(t => clearTimeout(t)); };
+  }, [autoFocus]);
   const thumbUri = episode.thumbnail || fallbackPoster;
   
   return (
@@ -495,22 +467,11 @@ function EpisodeCard({
       style={[styles.episodeCard, isFocused && styles.episodeCardFocused]}
       onPress={onPress}
       onLongPress={isWatched ? onMarkUnwatched : undefined}
-      /* v135-focus-unlock-blur */
-      onFocus={() => {
-        setIsFocused(true);
-        hasFocusedRef.current = true;
-        focusGrabbedOnceRef.current = true;
-        console.log('[FOCUS v135] onFocus ep=' + episode.episode + ' (one-shot guard set)');
-      }}
-      onBlur={() => {
-        setIsFocused(false);
-        if (hasFocusedRef.current) {
-          userMovedRef.current = true;
-          console.log('[FOCUS v135] onBlur ep=' + episode.episode + ' (userMoved=true)');
-        }
-      }}
+      /* v128-focus-cancel-blur */
+      onFocus={() => { setIsFocused(true); hasFocusedRef.current = true; }}
+      onBlur={() => { setIsFocused(false); if (hasFocusedRef.current) userMovedRef.current = true; }}
       delayLongPress={600}
-      hasTVPreferredFocus={tvPreferred}
+      hasTVPreferredFocus={!!autoFocus}
     >
       <View style={{ position: 'relative' }}>
         {thumbUri && !thumbError ? (
