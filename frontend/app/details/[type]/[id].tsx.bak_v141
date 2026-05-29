@@ -311,32 +311,12 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
     else s += 100;
     s += QUALITY_PTS[info.quality] || 0;
     /* v121e-codec-penalty */ /* v127-codec-rebalance */ if (!info.isHEVC) s += 100; if (!info.isHDR) s += 75;
-    /* v141-cached-first-seeds-matter */
-    // Cached / direct URL boost is now a partition gate — see below.  Keep
-    // a small intra-bucket nudge so tied cached streams prefer ones with
-    // a working URL set.
     if (stream.url) s += 50;
     const sd = info.seeders || 0;
-    // v141: was Math.min(log10(sd)*5, 20) — capped at +20, basically noise.
-    // Now scales up to +240 so seeders meaningfully break quality ties.
-    if (sd > 0) s += Math.min(Math.log10(sd + 1) * 80, 240);
+    if (sd > 0) s += Math.min(Math.log10(sd) * 5, 20);
     return s;
   };
-  // v141: HARD partition — every CACHED stream (stream.url present) sorts
-  // above every UNCACHED stream, regardless of quality/score.  Inside each
-  // bucket the score sort (cached-first, then quality, then seeders) wins.
-  const _v141_cached = parsed.filter((p) => !!p.stream.url);
-  const _v141_uncached = parsed.filter((p) => !p.stream.url);
-  _v141_cached.sort((a, b) => computeScore(b.info, b.stream) - computeScore(a.info, a.stream));
-  _v141_uncached.sort((a, b) => computeScore(b.info, b.stream) - computeScore(a.info, a.stream));
-  parsed.length = 0;
-  for (const p of _v141_cached) parsed.push(p);
-  for (const p of _v141_uncached) parsed.push(p);
-  if (parsed.length > 0) {
-    const _top = parsed[0];
-    const _topInfo = _top.info;
-    console.log('[SORT v141] picked top:', _topInfo.quality || '?', 'cached=' + (!!_top.stream.url), 'seeders=' + (_topInfo.seeders || 0), 'lang=' + (_topInfo.language || '?'), '| cached_n=' + _v141_cached.length, 'uncached_n=' + _v141_uncached.length);
-  }
+  parsed.sort((a, b) => computeScore(b.info, b.stream) - computeScore(a.info, a.stream));
 
   // PATCH_V16A_COMMENTARY_SINK — partition commentary tracks to the end of the result.
   // Whatever score-based sort ran above, commentary always sinks last so

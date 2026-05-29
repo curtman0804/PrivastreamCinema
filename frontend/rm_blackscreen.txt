@@ -1,0 +1,243 @@
+--------- beginning of main
+05-29 15:40:36.860 10996 11020 I ReactNativeJS: Running "main"
+05-29 15:40:37.719 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/addons'
+05-29 15:40:37.722 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/discover-organized'
+05-29 15:40:37.725 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/watch-progress'
+05-29 15:40:37.728 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Popular%20Movies/movies?skip=20&limit=100'
+05-29 15:40:37.732 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/watch-progress'
+05-29 15:40:38.744 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/watch-progress'
+05-29 15:40:38.746 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/watch-progress'
+05-29 15:40:38.748 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/addons'
+05-29 15:40:39.445 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/discover-organized'
+05-29 15:40:39.838 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Popular%20Movies/movies?skip=20&limit=100'
+05-29 15:40:39.840 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Popular%20Series/series?skip=20&limit=100'
+05-29 15:40:39.842 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/New%20Movies/movies?skip=20&limit=100'
+05-29 15:40:39.845 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/New%20Series/series?skip=20&limit=100'
+05-29 15:40:39.848 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Netflix%20Movies/movies?skip=20&limit=100'
+05-29 15:40:39.866 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Netflix%20Series/series?skip=20&limit=100'
+05-29 15:40:39.868 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Disney%2B%20Movies/movies?skip=20&limit=100'
+05-29 15:40:40.283 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/meta/movie/tt16431404'
+05-29 15:40:40.314 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Netflix%20Series/series?skip=20&limit=100'
+05-29 15:40:40.435 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Netflix%20Movies/movies?skip=20&limit=100'
+05-29 15:40:40.755 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/New%20Movies/movies?skip=20&limit=100'
+05-29 15:40:40.781 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/New%20Series/series?skip=20&limit=100'
+05-29 15:40:40.785 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt16431404'
+05-29 15:40:40.790 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Disney%2B%20Movies/movies?skip=20&limit=100'
+05-29 15:40:40.818 10996 11020 I ReactNativeJS: '[PREFETCH v138] kicking /api/streams for focused movie', 'tt16431404'
+05-29 15:40:40.841 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Disney%2B%20Movies/movies?skip=20&limit=100'
+05-29 15:40:40.889 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Popular%20Series/series?skip=20&limit=100'
+05-29 15:40:40.890 10996 11020 I ReactNativeJS: [STREAMS] ========== Fetching streams for movie/tt16431404 ==========
+05-29 15:40:42.846 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/streams/movie/tt16431404'
+05-29 15:40:42.849 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/addon-proxy/torrentio/movie/tt16431404'
+05-29 15:40:42.853 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/addon-proxy/tpb/movie/tt16431404'
+05-29 15:40:42.875 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Disney%2B%20Movies/movies?skip=20&limit=100'
+05-29 15:40:42.991 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Disney%2B%20Series/series?skip=20&limit=100'
+05-29 15:40:42.993 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Prime%20Video%20Movies/movies?skip=20&limit=100'
+05-29 15:40:42.996 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Prime%20Video%20Series/series?skip=20&limit=100'
+05-29 15:40:42.998 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/HBO%20Max%20Movies/movies?skip=20&limit=100'
+05-29 15:40:43.000 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/HBO%20Max%20Series/series?skip=20&limit=100'
+05-29 15:40:43.031 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Hulu%20Movies/movies?skip=20&limit=100'
+05-29 15:40:43.033 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Hulu%20Series/series?skip=20&limit=100'
+05-29 15:40:43.036 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Paramount%2B%20Movies/movies?skip=20&limit=100'
+05-29 15:40:43.038 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Paramount%2B%20Series/series?skip=20&limit=100'
+05-29 15:40:43.040 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Apple%20TV%2B%20Movies/movies?skip=20&limit=100'
+05-29 15:40:43.043 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Apple%20TV%2B%20Series/series?skip=20&limit=100'
+05-29 15:40:43.045 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Peacock%20Movies/movies?skip=20&limit=100'
+05-29 15:40:43.047 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Peacock%20Series/series?skip=20&limit=100'
+05-29 15:40:43.050 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Discovery%2B%20Series/series?skip=20&limit=100'
+05-29 15:40:44.677 10996 11020 I ReactNativeJS: [STREAMS] Torrentio: 0 new streams in 3787ms
+05-29 15:40:44.677 10996 11020 I ReactNativeJS: [STREAMS] TPB+: 0 new streams in 3787ms
+05-29 15:40:44.693 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Disney%2B%20Series/series?skip=20&limit=100'
+05-29 15:40:44.709 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Prime%20Video%20Movies/movies?skip=20&limit=100'
+05-29 15:40:44.726 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Prime%20Video%20Series/series?skip=20&limit=100'
+05-29 15:40:44.762 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/HBO%20Max%20Movies/movies?skip=20&limit=100'
+05-29 15:40:44.781 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/HBO%20Max%20Series/series?skip=20&limit=100'
+05-29 15:40:44.798 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Hulu%20Movies/movies?skip=20&limit=100'
+05-29 15:40:44.842 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Hulu%20Series/series?skip=20&limit=100'
+05-29 15:40:44.882 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Paramount%2B%20Movies/movies?skip=20&limit=100'
+05-29 15:40:45.485 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Paramount%2B%20Series/series?skip=20&limit=100'
+05-29 15:40:45.499 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Apple%20TV%2B%20Movies/movies?skip=20&limit=100'
+05-29 15:40:45.576 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Apple%20TV%2B%20Series/series?skip=20&limit=100'
+05-29 15:40:45.577 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/meta/series/tt34929457'
+05-29 15:40:45.795 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Peacock%20Movies/movies?skip=20&limit=100'
+05-29 15:40:45.887 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Peacock%20Series/series?skip=20&limit=100'
+05-29 15:40:46.005 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Discovery%2B%20Series/series?skip=20&limit=100'
+05-29 15:40:46.098 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt34929457'
+05-29 15:40:46.616 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/meta/series/tt30413044'
+05-29 15:40:46.730 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt30413044'
+05-29 15:40:47.294 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/addon-proxy/tpb/movie/tt16431404'
+05-29 15:40:47.501 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/addon-proxy/torrentio/movie/tt16431404'
+05-29 15:40:48.246 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/streams/movie/tt16431404'
+05-29 15:40:48.247 10996 11020 I ReactNativeJS: [STREAMS] v121k: Backend upgrade-merge - upgraded 0, added 20, total 20
+05-29 15:40:48.247 10996 11020 I ReactNativeJS: [STREAMS] All sources done: 20 total streams in 7357ms
+05-29 15:40:50.199 10996 11020 I ReactNativeJS: [PREWARM] Pre-warming top English stream: fa753883de10ec66141086c6903b2dc1e3a1f5f3 (ThePirateBay • Apex.2026.2160p.NF.WEB-DL.DDP5.1.Atmos.H.265-PandaQT SDR 4k 
+05-29 15:40:50.199 10996 11020 I ReactNativeJS: 💾 10.52 GB | 🌱 29 | ⚡ 4K)
+05-29 15:40:50.303 10996 11020 I ReactNativeJS: '[FOCUS v134] details focused, clearing overlay; autoPlayParam=', undefined, ' isPlayLoading-cleared'
+05-29 15:40:50.311 10996 11020 I ReactNativeJS: '[API] Request:', 'POST', 'http://71.9.152.146:8001/api/stream/prewarm/fa753883de10ec66141086c6903b2dc1e3a1f5f3'
+05-29 15:40:50.313 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/library'
+05-29 15:40:50.505 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/library'
+05-29 15:40:50.595 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/stream/prewarm/fa753883de10ec66141086c6903b2dc1e3a1f5f3'
+05-29 15:40:55.152 10996 11020 I ReactNativeJS: [FOCUS v135] onFocus ep=1 (one-shot guard set)
+05-29 15:40:57.207 10996 11020 I ReactNativeJS: [PREWARM] Pre-warming top English stream: fa753883de10ec66141086c6903b2dc1e3a1f5f3 (ThePirateBay • Apex.2026.2160p.NF.WEB-DL.DDP5.1.Atmos.H.265-PandaQT SDR 4k 
+05-29 15:40:57.207 10996 11020 I ReactNativeJS: 💾 10.52 GB | 🌱 29 | ⚡ 4K)
+05-29 15:40:57.327 10996 11020 I ReactNativeJS: '[FOCUS v134] details focused, clearing overlay; autoPlayParam=', undefined, ' isPlayLoading-cleared'
+05-29 15:40:57.711 10996 11020 I ReactNativeJS: [PREWARM] Pre-warming top English stream: 44c66ba1650661cb337cbac4d850e02d34ded802 (Rick and Morty - S01 - 2160p HDR Ai Upscale 5.1 MKV -Mesc
+05-29 15:40:57.711 10996 11020 I ReactNativeJS: Rick and Morty - S01E01 - Pilot - 2160p HDR Ai Upscale -Mesc.mkv
+05-29 15:40:57.711 10996 11020 I ReactNativeJS: 👤 72 💾 1.25 GB ⚙️ ThePirateBay)
+05-29 15:40:57.747 10996 11020 I ReactNativeJS: [PREWARM] Pre-warming top English stream: 44c66ba1650661cb337cbac4d850e02d34ded802 (Rick and Morty - S01 - 2160p HDR Ai Upscale 5.1 MKV -Mesc
+05-29 15:40:57.747 10996 11020 I ReactNativeJS: Rick and Morty - S01E01 - Pilot - 2160p HDR Ai Upscale -Mesc.mkv
+05-29 15:40:57.747 10996 11020 I ReactNativeJS: 👤 72 💾 1.25 GB ⚙️ ThePirateBay)
+05-29 15:40:57.754 10996 11020 I ReactNativeJS: '[API] Request:', 'POST', 'http://71.9.152.146:8001/api/stream/prewarm/fa753883de10ec66141086c6903b2dc1e3a1f5f3'
+05-29 15:40:57.757 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/meta/series/tt2861424'
+05-29 15:40:57.771 10996 11020 I ReactNativeJS: [FOCUS v135] onBlur ep=1 (userMoved=true)
+05-29 15:40:57.880 10996 11020 I ReactNativeJS: '[API] Request:', 'POST', 'http://71.9.152.146:8001/api/stream/prewarm/44c66ba1650661cb337cbac4d850e02d34ded802'
+05-29 15:40:57.883 10996 11020 I ReactNativeJS: '[API] Request:', 'POST', 'http://71.9.152.146:8001/api/stream/prewarm/44c66ba1650661cb337cbac4d850e02d34ded802'
+05-29 15:40:57.885 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/library'
+05-29 15:40:57.890 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/stream/prewarm/fa753883de10ec66141086c6903b2dc1e3a1f5f3'
+05-29 15:40:58.063 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/stream/prewarm/44c66ba1650661cb337cbac4d850e02d34ded802'
+05-29 15:40:58.064 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/stream/prewarm/44c66ba1650661cb337cbac4d850e02d34ded802'
+05-29 15:40:58.066 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/library'
+05-29 15:40:58.269 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt2861424'
+05-29 15:41:01.004 10996 11020 I ReactNativeJS: '[DETAILS v130] fetching streams with ?upgrade=1 for', 'series', 'tt2861424%3A1%3A1'
+05-29 15:41:09.737 10996 11020 I ReactNativeJS: '[DETAILS v130] got', 23, 'streams,', 2, 'upgrade candidates'
+05-29 15:41:09.755 10996 11020 I ReactNativeJS: [DETAILS] Privacy proxy: routing through RD unrestrict
+05-29 15:41:09.936 10996 11020 I ReactNativeJS: [PLAYER] Route params - resumePosition: "undefined", parsed: null
+05-29 15:41:09.975 10996 11020 I ReactNativeJS: '[PREWARM v136] starting next-episode pre-warm for', 'tt2861424:1:2'
+05-29 15:41:09.975 10996 11020 I ReactNativeJS: [TV] Setting up native key event listener (stable, ref-based)
+05-29 15:41:10.057 10996 11020 I ReactNativeJS: [PLAYER] Route params - resumePosition: "undefined", parsed: null
+05-29 15:41:10.117 10996 11020 W ReactNativeJS: `setBehaviorAsync` is not supported with edge-to-edge enabled.
+05-29 15:41:10.121 10996 11020 I ReactNativeJS: [PLAYER] Route params - resumePosition: "undefined", parsed: null
+05-29 15:41:10.281 10996 11020 I ReactNativeJS: '[SUBTITLES] URL params - contentType:', 'series', 'contentId:', 'tt2861424:1:1'
+05-29 15:41:10.281 10996 11020 I ReactNativeJS: [SUBTITLES] Using URL params to fetch subtitles
+05-29 15:41:10.281 10996 11020 I ReactNativeJS: '[SUBTITLES] fetchSubtitles called with:', 'series', 'tt2861424:1:1'
+05-29 15:41:10.281 10996 11020 I ReactNativeJS: '[SUBTITLES] Making API call for:', 'series', 'tt2861424:1:1'
+05-29 15:41:10.284 10996 11020 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/subtitles/series/tt2861424:1:1'
+05-29 15:41:10.713 10996 11020 I ReactNativeJS: '[API] Response OK:', '/api/subtitles/series/tt2861424:1:1'
+05-29 15:41:10.727 10996 11020 I ReactNativeJS: '[SUBTITLES] API response:', { subtitles: 
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:    [ { id: '5547887',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954134875',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'eng',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'English' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '7395663',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1955973823',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'aze',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'AZE' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '6346381',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954927686',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'ara',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Arabic' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '5911085',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954489616',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'bos',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'BOS' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '6664806',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1955244932',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'bul',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Bulgarian' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '6619528',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1955199935?senc=cp1250',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'hrv',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Croatian' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '7947564',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1956517331?senc=cp1250',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'cze',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Czech' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '7101409',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1955682393',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'dan',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Danish' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '5602765',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954188649',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'ell',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'ELL' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '7588786',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1956164775',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'fin',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Finnish' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '6302585',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954883743',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'fre',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'French' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '6362200',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954943491',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'heb',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Hebrew' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '5557270',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954142753',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'hun',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Hungarian' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '6392153',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954973718',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'ind',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Indonesian' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '8005350',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1956574564',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'ita',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Italian' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '7847750',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1956419269',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'jpn',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Japanese' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '8171036',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1956739447',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'kur',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'KUR' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '8020085',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1956589303',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'nld',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'NLD' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '7094551',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1955675493',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'per',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'PER' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '5621189',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954207098',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'pob',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'POB' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '6356720',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954938024',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'pol',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Polish' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '6790492',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1955370668',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'por',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Portuguese' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '6858664',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1955438999?senc=cp1250',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'ron',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'RON' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '5622173',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954208092',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'rus',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Russian' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '7728713',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1956301800',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'slv',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'SLV' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '5827492',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954405793?senc=cp1250',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'srp',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Serbian' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '5636690',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954222613',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'spa',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Spanish' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '6745339',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1955325299',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'swe',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Swedish' },
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:      { id: '5684549',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        url: 'https://subs5.strem.io/en/download/subencoding-stremio-utf8/src-api/file/1954262821',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        lang: 'tur',
+05-29 15:41:10.727 10996 11020 I ReactNativeJS:        langName: 'Turkish' } ] }
+05-29 15:41:10.727 10996 11020 I ReactNativeJS: [SUBTITLES] Setting 29 subtitle options
+05-29 15:41:10.729 10996 11020 I ReactNativeJS: [PLAYER] Route params - resumePosition: "undefined", parsed: null
+05-29 15:41:11.918 10996 11020 I ReactNativeJS: '[PREWARM v136] /api/streams ready (', 22, 'streams) in', 1939, 'ms'
+05-29 15:41:11.918 10996 11020 I ReactNativeJS: '[PREWARM v136] hash-only preResolveRef committed for', '4b91c928'
+05-29 15:41:11.983 10996 11020 I ReactNativeJS: '[PREWARM v136] start_and_wait status=', 'ready', 'in', 65, 'ms'
+05-29 15:41:11.983 10996 11020 I ReactNativeJS: [PREWARM v136] DONE - directUrl ready, next episode will be INSTANT
+05-29 15:41:14.438 10996 11020 I ReactNativeJS: [PLAYER] Route params - resumePosition: "undefined", parsed: null
+05-29 15:41:19.134 10996 11020 I ReactNativeJS: [PLAYER] Route params - resumePosition: "undefined", parsed: null
+05-29 15:41:33.916 10996 11020 I ReactNativeJS: [PLAYER] Route params - resumePosition: "undefined", parsed: null
+05-29 15:41:40.115 10996 11020 I ReactNativeJS: [PLAYER] Playback timeout - no more fallback streams
+05-29 15:41:40.121 10996 11020 I ReactNativeJS: [PLAYER] Route params - resumePosition: "undefined", parsed: null

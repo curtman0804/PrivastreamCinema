@@ -166,17 +166,9 @@ export default function DiscoverScreen() {
   const prefetchingRef = useRef<Set<string>>(new Set());
   const focusDebounceTimerRef = useRef<any>(null);
   const pendingFocusItemRef = useRef<ContentItem | null>(null);
-  /* v138-stream-prefetch */
-  // Second-tier prefetch: at 900ms of stable focus on a MOVIE poster,
-  // kick off /api/streams.  Lands in both the content-store cache AND
-  // the server-side 2-min cache, so the eventual click is a cache hit.
-  const streamPrefetchingRef = useRef<Set<string>>(new Set());
-  const streamPrefetchTimerRef = useRef<any>(null);
-  const fetchStreamsForPrefetch = useContentStore(s => s.fetchStreams);
   const handleItemFocus = useCallback((item: ContentItem) => {
     pendingFocusItemRef.current = item;
     if (focusDebounceTimerRef.current) clearTimeout(focusDebounceTimerRef.current);
-    if (streamPrefetchTimerRef.current) clearTimeout(streamPrefetchTimerRef.current);
     focusDebounceTimerRef.current = setTimeout(() => {
       focusDebounceTimerRef.current = null;
       const it = pendingFocusItemRef.current;
@@ -191,24 +183,7 @@ export default function DiscoverScreen() {
         }
       }).catch(() => {});
     }, 350);
-    // v138: stream prefetch on extended focus.  Movies only -- series
-    // posters land on the series root (no stream fetch there).
-    streamPrefetchTimerRef.current = setTimeout(() => {
-      streamPrefetchTimerRef.current = null;
-      const it = pendingFocusItemRef.current;
-      if (!it) return;
-      if (it.type !== 'movie') return;
-      const id = it.imdb_id || it.id;
-      if (!id || streamPrefetchingRef.current.has(id)) return;
-      streamPrefetchingRef.current.add(id);
-      console.log('[PREFETCH v138] kicking /api/streams for focused movie', id);
-      try {
-        fetchStreamsForPrefetch(it.type, id);
-      } catch (e) {
-        console.log('[PREFETCH v138] failed', e);
-      }
-    }, 900);
-  }, [fetchStreamsForPrefetch]);
+  }, []);
 
   // PATCH_V54_VIRTUALIZE — progressive: 6 services first, expand after 700ms.
  const [maxRowsV54, setMaxRowsV54] = useState(6); // PATCH_V54_FLATROWS
