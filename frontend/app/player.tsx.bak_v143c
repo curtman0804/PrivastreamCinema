@@ -882,16 +882,22 @@ export default function PlayerScreen() {
     })();
   }, [nextEpisodeId, contentType]);
   
-  // PATCH_V143C_NO_THROTTLE — reverted v143b's setPosition throttle because
-  // it desynced the UI position from the actual playhead, breaking the FF
-  // handler (which read state to compute the next seek target) and tripping
-  // credits/auto-next-episode logic at the wrong moment.
+  // PATCH_V143_PERF_THROTTLE — throttle setPosition to ~500ms.
+  // expo-av fires onPlaybackStatusUpdate at video frame rate during playback
+  // and at much higher rate during buffering, causing 30+ re-renders/sec of
+  // the entire player tree. Throttling keeps the seekbar at 2 Hz (smooth
+  // enough for a TV UI) while eliminating the re-render storm.
+  const lastPositionUpdateMsRef = useRef<number>(0);
   
   // Handle playback status updates
   const handlePlaybackStatus = (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
       setIsPlaying(status.isPlaying);
-      setPosition(status.positionMillis);
+      const _v143Now = Date.now();
+      if (_v143Now - lastPositionUpdateMsRef.current >= 500) {
+        lastPositionUpdateMsRef.current = _v143Now;
+        setPosition(status.positionMillis);
+      }
       setDuration(status.durationMillis || 0);
       
       // Save watch progress periodically
@@ -2544,10 +2550,9 @@ export default function PlayerScreen() {
                   uri: streamUrl,
                   // Help ExoPlayer detect format - important for MKV/x265 streams
                   overrideFileExtensionAndroid: (isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true') ? 'm3u8' : 'mp4',
-                  /* PATCH_V152_NO_UA_OVERRIDE — removed desktop Chrome UA override.
-                     PM CDN refuses to send bytes when the redemption UA differs
-                     from what was used to obtain the URL.  ExoPlayer's default UA
-                     (ExoPlayerLib/2.x) is what Stremio uses and PM accepts. */
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  },
                 }}
                 style={styles.videoPlayer}
                 resizeMode={ResizeMode.CONTAIN}
@@ -2555,7 +2560,7 @@ export default function PlayerScreen() {
                 isLooping={false}
                 volume={1.0}
                 isMuted={false}
-                /* PATCH_V143C2_STRIPPED — reverted v143's interval cadence so FF math + auto-next read accurate playhead values */
+                progressUpdateIntervalMillis={500} /* PATCH_V143_PERF_INTERVAL — match throttle */
                 onPlaybackStatusUpdate={handlePlaybackStatus}
                 onError={(error) => {
                   console.log(`[PLAYER] Video error (attempt ${videoRetryCountRef.current + 1}/${maxVideoRetries}):`, error);

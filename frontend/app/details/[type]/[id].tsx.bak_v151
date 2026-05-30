@@ -959,65 +959,65 @@ export default function DetailsScreen() {
     }
   }, [streams, isLoadingStreams]);
 
-  // PATCH_V151_PRERESOLVE — superset of v148.  Fire start_and_wait on the
-  // FIRST stream batch (no isLoadingStreams gate) and pre-warm the top TWO
-  // hashes in parallel so a late-arriving better stream is also ready.
-  const preresolvedHashesRef = useRef<Set<string>>(new Set());
+  // PATCH_V148_PRERESOLVE — fire start_and_wait NOW so the Premiumize URL
+  // is cached server-side before user clicks Play.  When player calls
+  // start_and_wait later it will hit the cache and return in < 200 ms
+  // instead of the cold-cache 5-30 s resolve we saw in the R&M trace.
+  const preresolvedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!streams || streams.length === 0) return;
+    if (!streams || streams.length === 0 || isLoadingStreams) return;
     const sorted = sortStreamsByLanguage(streams);
-    // Pre-resolve top 2 candidates that don't already have a URL
-    const targets = sorted.slice(0, 4).filter((s: any) => s && s.infoHash && !s.url).slice(0, 2);
-    if (targets.length === 0) {
-      // All top candidates already cached — record their hashes and skip
-      for (const s of sorted.slice(0, 2)) {
-        if (s?.infoHash) preresolvedHashesRef.current.add(s.infoHash);
-      }
+    const topStream = sorted[0];
+    if (!topStream?.infoHash) return;
+    if (topStream.infoHash === preresolvedRef.current) return;
+    // Skip if the stream already has a resolved URL (cached at fetch time)
+    if ((topStream as any).url) {
+      preresolvedRef.current = topStream.infoHash;
       return;
     }
-    for (const tgt of targets) {
-      if (preresolvedHashesRef.current.has(tgt.infoHash)) continue;
-      preresolvedHashesRef.current.add(tgt.infoHash);
-      (async () => {
-        try {
-          const _authT = await AsyncStorage.getItem('auth_token');
-          const _bUrl = process.env.EXPO_PUBLIC_BACKEND_URL || (Constants.expoConfig as any)?.extra?.backendUrl || '';
-          if (!_bUrl) return;
-          const _hdrs: any = { 'Content-Type': 'application/json', ...(_authT ? { Authorization: `Bearer ${_authT}` } : {}) };
-          const _idP = ((id as string) || '').split(':');
-          const _sn = _idP.length >= 3 ? parseInt(_idP[_idP.length - 2], 10) : NaN;
-          const _en = _idP.length >= 3 ? parseInt(_idP[_idP.length - 1], 10) : NaN;
-          const _t0 = Date.now();
-          console.log('[PRERESOLVE v151] start_and_wait hash=', tgt.infoHash.slice(0, 8), 'fileIdx=', tgt.fileIdx ?? null);
-          const _ctrl = new AbortController();
-          const _to = setTimeout(() => _ctrl.abort(), 8000);
-          const _resp = await fetch(`${_bUrl}/api/stream/start_and_wait`, {
-            method: 'POST',
-            headers: _hdrs,
-            signal: _ctrl.signal,
-            body: JSON.stringify({
-              infoHash: tgt.infoHash,
-              fileIdx: tgt.fileIdx != null ? tgt.fileIdx : null,
-              filename: tgt.filename || null,
-              season: isNaN(_sn) ? null : _sn,
-              episode: isNaN(_en) ? null : _en,
-              timeout_ms: 7500,
-            }),
-          });
-          clearTimeout(_to);
-          const _data = await _resp.json().catch(() => ({}));
-          const _dt = Date.now() - _t0;
-          console.log('[PRERESOLVE v151] hash=', tgt.infoHash.slice(0, 8), 'status=', _data?.status, 'in', _dt, 'ms');
-        } catch (_e: any) {
-          if (_e?.name === 'AbortError') {
-            console.log('[PRERESOLVE v151] aborted (8s budget) hash=', tgt.infoHash.slice(0, 8));
-          } else {
-            console.log('[PRERESOLVE v151] failed:', _e?.message || _e);
-          }
+    preresolvedRef.current = topStream.infoHash;
+    (async () => {
+      try {
+        const _authT = await AsyncStorage.getItem('auth_token');
+        const _bUrl = process.env.EXPO_PUBLIC_BACKEND_URL || (Constants.expoConfig as any)?.extra?.backendUrl || '';
+        if (!_bUrl) return;
+        const _hdrs: any = { 'Content-Type': 'application/json', ...(_authT ? { Authorization: `Bearer ${_authT}` } : {}) };
+        const _idP = ((id as string) || '').split(':');
+        const _sn = _idP.length >= 3 ? parseInt(_idP[_idP.length - 2], 10) : NaN;
+        const _en = _idP.length >= 3 ? parseInt(_idP[_idP.length - 1], 10) : NaN;
+        const _t0 = Date.now();
+        console.log('[PRERESOLVE v148] start_and_wait hash=', topStream.infoHash.slice(0, 8), 'fileIdx=', (topStream as any).fileIdx ?? null);
+        // 8 s budget — long enough for cold PM, short enough to not hang on a dead torrent
+        const _ctrl = new AbortController();
+        const _to = setTimeout(() => _ctrl.abort(), 8000);
+        const _resp = await fetch(`${_bUrl}/api/stream/start_and_wait`, {
+          method: 'POST',
+          headers: _hdrs,
+          signal: _ctrl.signal,
+          body: JSON.stringify({
+            infoHash: topStream.infoHash,
+            fileIdx: (topStream as any).fileIdx != null ? (topStream as any).fileIdx : null,
+            filename: (topStream as any).filename || null,
+            season: isNaN(_sn) ? null : _sn,
+            episode: isNaN(_en) ? null : _en,
+            timeout_ms: 7500,
+          }),
+        });
+        clearTimeout(_to);
+        const _data = await _resp.json().catch(() => ({}));
+        const _dt = Date.now() - _t0;
+        console.log('[PRERESOLVE v148] status=', _data?.status, 'in', _dt, 'ms');
+        // No state update — backend already cached the result.  Next
+        // start_and_wait call (from player) will be a cache hit.
+      } catch (_e: any) {
+        if (_e?.name === 'AbortError') {
+          console.log('[PRERESOLVE v148] aborted (8s budget)');
+        } else {
+          console.log('[PRERESOLVE v148] failed:', _e?.message || _e);
         }
-      })();
-    }
-  }, [streams, id]);
+      }
+    })();
+  }, [streams, isLoadingStreams, id]);
 
   const loadContent = async () => {
     try {

@@ -10,7 +10,7 @@ import {
   Platform,
   Linking,
   Alert,
-  Animated, Easing,
+  Animated,
   Image,
   Pressable,
   DeviceEventEmitter,
@@ -314,7 +314,7 @@ export default function PlayerScreen() {
   
   // Resume position in seconds (from continue watching)
   const parsedResumePosition = resumePosition ? parseFloat(resumePosition) : null;
-  // PATCH_V143_PERF_NOLOG — removed top-level log (was firing every render)
+  console.log(`[PLAYER] Route params - resumePosition: "${resumePosition}", parsed: ${parsedResumePosition}`);
   
   const [pendingResumePosition, setPendingResumePosition] = useState<number | null>(parsedResumePosition);
   const hasResumedRef = useRef(false); // Track if we've already attempted resume
@@ -324,7 +324,7 @@ export default function PlayerScreen() {
     if (resumePosition) {
       const parsed = parseFloat(resumePosition);
       if (!isNaN(parsed) && parsed > 0) {
-        if (__DEV__) console.log(`[PLAYER] Setting pending resume position from route param: ${parsed}s`); // PATCH_V143_PERF_DEV1
+        console.log(`[PLAYER] Setting pending resume position from route param: ${parsed}s`);
         setPendingResumePosition(parsed);
         hasResumedRef.current = false; // Reset resume flag
       }
@@ -356,24 +356,14 @@ export default function PlayerScreen() {
   const breatheAnim = useRef(new Animated.Value(1)).current;
 
   // PATCH_V8_LOADBAR_ANIM — sliding gold bar for unified loading screen
-  // PATCH_V149_SMOOTH_BAR — initial offset derived from wall-clock so the
-  // bar starts where Details' AutoPlayLoadingBar was when user pressed Play.
-  // Details cycle = 1200 ms, range -100 → 260, inOut.ease.
-  const _v149InitOffset = (() => {
-    const _phase = (Date.now() % 1200) / 1200;            // 0..1 within cycle
-    // Approximate inOut.ease with a smoothstep; close enough to avoid the snap
-    const _e = _phase < 0.5 ? 2 * _phase * _phase : 1 - Math.pow(-2 * _phase + 2, 2) / 2;
-    return -100 + _e * 360;                                // span = 260 - (-100)
-  })();
-  const loadingBarAnim = useRef(new Animated.Value(_v149InitOffset)).current;
+  const loadingBarAnim = useRef(new Animated.Value(-120)).current;
   useEffect(() => {
     if (!isLoading || error) return;
     const w = Dimensions.get('window').width;
     const loop = Animated.loop(
       Animated.sequence([
-        // PATCH_V149_SMOOTH_LOOP — exact-match Details' bar (1200ms inOut.ease, -100..260)
-        Animated.timing(loadingBarAnim, { toValue: 260, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(loadingBarAnim, { toValue: -100, duration: 0, useNativeDriver: true }),
+        Animated.timing(loadingBarAnim, { toValue: w * 0.6, duration: 1400, useNativeDriver: true }),
+        Animated.timing(loadingBarAnim, { toValue: -120, duration: 0, useNativeDriver: true }),
       ])
     );
     loop.start();
@@ -882,11 +872,6 @@ export default function PlayerScreen() {
     })();
   }, [nextEpisodeId, contentType]);
   
-  // PATCH_V143C_NO_THROTTLE — reverted v143b's setPosition throttle because
-  // it desynced the UI position from the actual playhead, breaking the FF
-  // handler (which read state to compute the next seek target) and tripping
-  // credits/auto-next-episode logic at the wrong moment.
-  
   // Handle playback status updates
   const handlePlaybackStatus = (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
@@ -944,7 +929,7 @@ export default function PlayerScreen() {
         const totalDuration = status.durationMillis || 0;
         const currentPos = status.positionMillis || 0;
         
-        if (__DEV__) console.log(`[PLAYER] Resume check: pending=${pendingResumePosition}s, current=${currentPos/1000}s, duration=${totalDuration/1000}s`); // PATCH_V143_PERF_DEV2
+        console.log(`[PLAYER] Resume check: pending=${pendingResumePosition}s, current=${currentPos/1000}s, duration=${totalDuration/1000}s`);
         
         // Only attempt resume if we have duration info
         if (totalDuration > 0) {
@@ -2370,13 +2355,12 @@ export default function PlayerScreen() {
               </Text>
             ) : null}
 
-            {/* Indeterminate sliding gold bar — PATCH_V149_SMOOTH_TRACK
-                exact-match Details' AutoPlayLoadingBar (260×4 track, 100×4 slider, 0.12 alpha) */}
+            {/* Indeterminate sliding gold bar */}
             <View
               style={{
-                width: 260,
-                height: 4,
-                backgroundColor: 'rgba(255,255,255,0.12)',
+                width: Math.min(Dimensions.get('window').width * 0.6, 480),
+                height: 3,
+                backgroundColor: 'rgba(255,255,255,0.15)',
                 borderRadius: 2,
                 overflow: 'hidden',
               }}
@@ -2386,8 +2370,8 @@ export default function PlayerScreen() {
                   position: 'absolute',
                   left: 0,
                   top: 0,
-                  width: 100,
-                  height: 4,
+                  width: 120,
+                  height: '100%',
                   backgroundColor: '#B8A05C',
                   borderRadius: 2,
                   transform: [{ translateX: loadingBarAnim }],
@@ -2544,10 +2528,9 @@ export default function PlayerScreen() {
                   uri: streamUrl,
                   // Help ExoPlayer detect format - important for MKV/x265 streams
                   overrideFileExtensionAndroid: (isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true') ? 'm3u8' : 'mp4',
-                  /* PATCH_V152_NO_UA_OVERRIDE — removed desktop Chrome UA override.
-                     PM CDN refuses to send bytes when the redemption UA differs
-                     from what was used to obtain the URL.  ExoPlayer's default UA
-                     (ExoPlayerLib/2.x) is what Stremio uses and PM accepts. */
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  },
                 }}
                 style={styles.videoPlayer}
                 resizeMode={ResizeMode.CONTAIN}
@@ -2555,7 +2538,6 @@ export default function PlayerScreen() {
                 isLooping={false}
                 volume={1.0}
                 isMuted={false}
-                /* PATCH_V143C2_STRIPPED — reverted v143's interval cadence so FF math + auto-next read accurate playhead values */
                 onPlaybackStatusUpdate={handlePlaybackStatus}
                 onError={(error) => {
                   console.log(`[PLAYER] Video error (attempt ${videoRetryCountRef.current + 1}/${maxVideoRetries}):`, error);

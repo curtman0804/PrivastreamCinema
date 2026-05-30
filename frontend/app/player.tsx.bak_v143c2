@@ -2544,10 +2544,9 @@ export default function PlayerScreen() {
                   uri: streamUrl,
                   // Help ExoPlayer detect format - important for MKV/x265 streams
                   overrideFileExtensionAndroid: (isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true') ? 'm3u8' : 'mp4',
-                  /* PATCH_V152_NO_UA_OVERRIDE — removed desktop Chrome UA override.
-                     PM CDN refuses to send bytes when the redemption UA differs
-                     from what was used to obtain the URL.  ExoPlayer's default UA
-                     (ExoPlayerLib/2.x) is what Stremio uses and PM accepts. */
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  },
                 }}
                 style={styles.videoPlayer}
                 resizeMode={ResizeMode.CONTAIN}
@@ -2555,7 +2554,9 @@ export default function PlayerScreen() {
                 isLooping={false}
                 volume={1.0}
                 isMuted={false}
-                /* PATCH_V143C2_STRIPPED — reverted v143's interval cadence so FF math + auto-next read accurate playhead values */
+                {/* PATCH_V143C_REMOVED_INTERVAL — reverted v143's 500ms cadence;
+                    default expo-av reporting restored so FF math + auto-next
+                    use accurate playhead values. */}
                 onPlaybackStatusUpdate={handlePlaybackStatus}
                 onError={(error) => {
                   console.log(`[PLAYER] Video error (attempt ${videoRetryCountRef.current + 1}/${maxVideoRetries}):`, error);

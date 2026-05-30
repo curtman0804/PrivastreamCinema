@@ -12,13 +12,7 @@ import {
   findNodeHandle,
   Platform,
   InteractionManager,
-  LayoutAnimation,
-  UIManager,
 } from 'react-native';
-// PATCH_V145_LAYOUTANIM_IMPORT — enable LayoutAnimation on Android once at module load
-if (Platform.OS === 'android' && UIManager && (UIManager as any).setLayoutAnimationEnabledExperimental) {
-  try { (UIManager as any).setLayoutAnimationEnabledExperimental(true); } catch (_) {}
-}
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
@@ -31,8 +25,6 @@ import { ContentItem, api, WatchProgress } from '../../src/api/client';
 import { getCardWidth } from '../../src/components/ContentCard';
 import { colors } from '../../src/styles/colors';
 import { Image as RNImage } from 'react-native';
-// PATCH_V144_CACHE_IMPORT — disk-backed snapshot for instant cold-start paint
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
@@ -73,9 +65,6 @@ export default function DiscoverScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
-  // PATCH_V144_CACHE_STATE — snapshots loaded from AsyncStorage on cold mount
-  const [cachedDiscover, setCachedDiscover] = useState<any>(null);
-  const [cachedCW, setCachedCW] = useState<WatchProgress[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionPositions = useRef<Record<string, number>>({});
   const lastFocusedSection = useRef<string>('');
@@ -105,39 +94,6 @@ export default function DiscoverScreen() {
     fetchContinueWatching();
   }, []);
 
-  // PATCH_V144_CACHE_HYDRATE — load disk snapshot on cold start for instant paint
-  useEffect(() => {
-    (async () => {
-      try {
-        const [d, c] = await Promise.all([
-          AsyncStorage.getItem('@ps_discover_v1'),
-          AsyncStorage.getItem('@ps_cw_v1'),
-        ]);
-        if (d) {
-          try { setCachedDiscover(JSON.parse(d)); } catch (_) {}
-        }
-        if (c) {
-          try { setCachedCW(JSON.parse(c)); } catch (_) {}
-        }
-      } catch (_) {}
-    })();
-  }, []);
-
-  // PATCH_V144_CACHE_PERSIST — snapshot store data to disk on every update
-  useEffect(() => {
-    if (discoverData?.services) {
-      try {
-        AsyncStorage.setItem('@ps_discover_v1', JSON.stringify(discoverData)).catch(() => {});
-      } catch (_) {}
-    }
-  }, [discoverData]);
-
-  useEffect(() => {
-    try {
-      AsyncStorage.setItem('@ps_cw_v1', JSON.stringify(continueWatching || [])).catch(() => {});
-    } catch (_) {}
-  }, [continueWatching]);
-
   // PATCH_V47_FOCUS_THROTTLE — throttle back-nav refetches to 60s and skip force-refresh.
   // Backing from Details/Player → Discover used to fire fetchDiscover(true)
   // every time, re-rendering every row and causing back-nav lag. SWR in
@@ -164,17 +120,15 @@ export default function DiscoverScreen() {
   );
 
   // Check if there's any content to display
-  // PATCH_V144_CACHE_HASCONTENT — prefer live data, fall back to cached snapshot
   const hasContent = useMemo(() => {
-    const services = discoverData?.services || cachedDiscover?.services;
-    if (!services) return false;
-    return Object.values(services).some(
+    if (!discoverData?.services) return false;
+    return Object.values(discoverData.services).some(
       (content: any) => 
         (content?.movies?.length > 0) || 
         (content?.series?.length > 0) || 
         (content?.channels?.length > 0)
     );
-  }, [discoverData, cachedDiscover]);
+  }, [discoverData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -268,16 +222,13 @@ useEffect(() => {
 const flatRowsV54 = useMemo(() => {
   const rows: any[] = [];
 
-  // PATCH_V144_CACHE_FLATROWS — prefer live data, fall back to cached snapshot
-  const services = discoverData?.services || cachedDiscover?.services;
+  const services = discoverData?.services;
   if (!services || typeof services !== 'object') {
     return rows;
   }
 
-  const cwSource = (continueWatching && continueWatching.length > 0) ? continueWatching : cachedCW;
-
   // Continue Watching row (constant identity, no recalculation logic)
-  if (cwSource?.length > 0) {
+  if (continueWatching?.length > 0) {
     rows.push({ key: '__cw__', kind: 'cw' });
   }
 
@@ -340,8 +291,7 @@ const flatRowsV54 = useMemo(() => {
   }
 
   return rows.slice(0, 1 + maxRowsV54);
-  // PATCH_V144_CACHE_DEPS — re-evaluate when cached fallback hydrates
-}, [discoverData?.services, cachedDiscover?.services, continueWatching, cachedCW, maxRowsV54]);
+}, [discoverData?.services, continueWatching, maxRowsV54]);
 
 // Navigation handler (kept minimal for speed)
 const handleItemPress = useCallback((item: ContentItem) => {
@@ -358,10 +308,30 @@ const handleItemPress = useCallback((item: ContentItem) => {
 }, [router]);
 
   // Handle continue watching item press
-  // PATCH_V147_NO_STALE_URL — never trust a saved Premiumize URL/infoHash
-  // from yesterday.  Always route through Details which does a fresh
-  // /api/streams fetch + v141 sort + v146 audio penalty + autoPlay.
   const handleContinueWatchingPress = (item: WatchProgress) => {
+    if (item.stream_info_hash || item.stream_url) {
+      router.push({
+        pathname: '/player',
+        params: {
+          infoHash: item.stream_info_hash || '',
+          directUrl: item.stream_url || '',
+          fileIdx: item.stream_file_idx != null ? String(item.stream_file_idx) : '',
+          filename: item.stream_filename || '',
+          title: item.title || '',
+          contentType: item.content_type,
+          contentId: item.content_id,
+          poster: item.poster || '',
+          backdrop: item.backdrop || '',
+          logo: item.logo || '',
+          resumePosition: String(item.progress || 0),
+          season: item.season != null ? String(item.season) : '',
+          episode: item.episode != null ? String(item.episode) : '',
+          seriesId: item.series_id || '',
+        },
+      });
+      return;
+    }
+    
     let targetId = item.content_id;
     let targetType = item.content_type;
     
@@ -376,8 +346,6 @@ const handleItemPress = useCallback((item: ContentItem) => {
     }
     
     const encodedId = encodeURIComponent(targetId);
-    // PATCH_V147_AUTOPLAY — let details fire its built-in autoPlay path so
-    // the user lands directly on playback after a fresh stream fetch.
     router.push({
       pathname: `/details/${targetType}/${encodedId}`,
       params: {
@@ -387,32 +355,15 @@ const handleItemPress = useCallback((item: ContentItem) => {
         resumePosition: String(item.progress || 0),
         resumeSeason: item.season !== undefined ? String(item.season) : '',
         resumeEpisode: item.episode !== undefined ? String(item.episode) : '',
-        autoPlay: 'true',
       },
     });
   };
 
   // Handle removing item from continue watching
   const handleRemoveFromContinueWatching = async (item: WatchProgress) => {
-    // PATCH_V145_LAYOUTANIM_REMOVE — schedule a native 220ms easeInOut tween
-    // so the card visibly fades + collapses on the very next frame, even if
-    // the JS thread is busy re-rendering the rest of Discover afterwards.
-    try {
-      LayoutAnimation.configureNext({
-        duration: 220,
-        update: { type: LayoutAnimation.Types.easeInEaseOut },
-        delete: {
-          type: LayoutAnimation.Types.easeInEaseOut,
-          property: LayoutAnimation.Properties.opacity,
-        },
-      });
-    } catch (_) {}
-
     // Optimistic update - remove from UI immediately for instant feedback
     setContinueWatching(prev => prev.filter(i => i.content_id !== item.content_id));
-    // Also drop from the cached snapshot so a cold start won't show it again
-    setCachedCW(prev => (prev || []).filter(i => i.content_id !== item.content_id));
-
+    
     // Then delete from server in background (don't await)
     api.watchProgress.delete(item.content_id).catch(err => {
       console.log('[Discover] Error removing from continue watching:', err);
@@ -437,8 +388,7 @@ const renderContinueWatchingItem = useCallback(
 );
 
 // Show loading only on initial load
-// PATCH_V144_CACHE_SPINNER — skip the spinner entirely if we have a cached snapshot
-if (isLoadingDiscover && !discoverData && !cachedDiscover) {
+if (isLoadingDiscover && !discoverData) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.loadingContainer}>
@@ -451,8 +401,7 @@ if (isLoadingDiscover && !discoverData && !cachedDiscover) {
 return (
   <SafeAreaView style={styles.container} edges={['top']}>
     {/* Welcome Screen - No Addons and No Continue Watching */}
-    {/* PATCH_V144_CACHE_WELCOME — also consider cached CW so we don't flash "No Addons" */}
-    {!hasContent && continueWatching.length === 0 && cachedCW.length === 0 && !isLoadingDiscover ? (
+    {!hasContent && continueWatching.length === 0 && !isLoadingDiscover ? (
       <View style={{ flex: 1 }}>
         {/* Logo Header - always visible */}
         <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
@@ -544,8 +493,7 @@ return (
                   </View>
 
                   <FlatList
-                    /* PATCH_V144_CACHE_CWDATA — fall back to cached CW for cold-start paint */
-                    data={(continueWatching && continueWatching.length > 0) ? continueWatching : cachedCW}
+                    data={continueWatching}
                     renderItem={renderContinueWatchingItem}
                     keyExtractor={(cwItem) =>
                       String(cwItem.content_id)

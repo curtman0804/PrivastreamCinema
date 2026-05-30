@@ -358,10 +358,30 @@ const handleItemPress = useCallback((item: ContentItem) => {
 }, [router]);
 
   // Handle continue watching item press
-  // PATCH_V147_NO_STALE_URL — never trust a saved Premiumize URL/infoHash
-  // from yesterday.  Always route through Details which does a fresh
-  // /api/streams fetch + v141 sort + v146 audio penalty + autoPlay.
   const handleContinueWatchingPress = (item: WatchProgress) => {
+    if (item.stream_info_hash || item.stream_url) {
+      router.push({
+        pathname: '/player',
+        params: {
+          infoHash: item.stream_info_hash || '',
+          directUrl: item.stream_url || '',
+          fileIdx: item.stream_file_idx != null ? String(item.stream_file_idx) : '',
+          filename: item.stream_filename || '',
+          title: item.title || '',
+          contentType: item.content_type,
+          contentId: item.content_id,
+          poster: item.poster || '',
+          backdrop: item.backdrop || '',
+          logo: item.logo || '',
+          resumePosition: String(item.progress || 0),
+          season: item.season != null ? String(item.season) : '',
+          episode: item.episode != null ? String(item.episode) : '',
+          seriesId: item.series_id || '',
+        },
+      });
+      return;
+    }
+    
     let targetId = item.content_id;
     let targetType = item.content_type;
     
@@ -376,8 +396,6 @@ const handleItemPress = useCallback((item: ContentItem) => {
     }
     
     const encodedId = encodeURIComponent(targetId);
-    // PATCH_V147_AUTOPLAY — let details fire its built-in autoPlay path so
-    // the user lands directly on playback after a fresh stream fetch.
     router.push({
       pathname: `/details/${targetType}/${encodedId}`,
       params: {
@@ -387,7 +405,6 @@ const handleItemPress = useCallback((item: ContentItem) => {
         resumePosition: String(item.progress || 0),
         resumeSeason: item.season !== undefined ? String(item.season) : '',
         resumeEpisode: item.episode !== undefined ? String(item.episode) : '',
-        autoPlay: 'true',
       },
     });
   };
