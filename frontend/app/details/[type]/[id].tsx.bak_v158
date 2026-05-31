@@ -445,26 +445,6 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
     /* PATCH_V150_HDR — keep SDR bonus, add real HDR penalty so SDR at any
        resolution always wins over HDR (display can't tone-map → dark image). */
     if (!info.isHDR) s += 75; else s -= 800;
-    /* V158_AUDIO_PENALTY — reject lossless / ExoPlayer-incompatible audio.
-       Triggered by the real bug: GOTG 2 picked a BluRay REMUX with
-       DTS-HD MA 7.1, and ExoPlayer's AudioTrack.init() failed with
-       Config(48000, 6396, 47998).  Penalize -1500 so any AC3/AAC
-       WEB-DL/BluRay stream ranks above. */
-    {
-      const _t158 = ((stream.title || '') + ' ' + (stream.name || '')).toUpperCase();
-      const _v158_badAudio = (
-        _t158.includes('DTS-HD MA') || _t158.includes('DTS-HD.MA') || _t158.includes('DTS HD MA')
-        || _t158.includes('DTSHD-MA') || _t158.includes('DTSHD.MA')
-        || _t158.includes('DTS-HD ') || _t158.includes('DTS-HD.') || _t158.includes('DTS.HD')
-        || _t158.includes('DTS-HR') || _t158.includes('DTS-HRA')
-        || _t158.includes('DTS-X') || _t158.includes('DTS:X') || _t158.includes('DTSX')
-        || _t158.includes('TRUEHD') || _t158.includes('TRUE-HD') || _t158.includes('TRUE.HD')
-        || _t158.includes('ATMOS')
-        || _t158.includes('LPCM') || _t158.includes(' PCM ') || _t158.includes('.PCM.')
-        || _t158.includes('REMUX')
-      );
-      if (_v158_badAudio) s -= 1500;
-    }
     /* PATCH_V146_AUDIO_PENALTY — penalize audio codecs that the Google TV
        Streamer / Firestick can't initialize at runtime even when ExoPlayer
        reports format_supported=YES.  Order matters: most specific first. */

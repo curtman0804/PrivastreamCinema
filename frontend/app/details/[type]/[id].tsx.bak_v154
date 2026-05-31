@@ -34,26 +34,6 @@ const { width, height } = Dimensions.get('window');
 // Stremio-style animated indeterminate loading bar. Renders a thin gold
 // segment that slides across a dark track. Pure Animated.Value so it runs
 // on the native thread and doesn't stutter on Firestick.
-// PATCH_V154_MATCH_HELPER — sanity check that the stream we are about to play
-// actually has SOME word from the requested content title.  Returns count of
-// matching significant words; 0 means the filename is unrelated to the request.
-function _v154TitleOverlap(requestedTitle: string, streamTitle: string): number {
-  try {
-    if (!requestedTitle || !streamTitle) return 0;
-    const stop = new Set(['THE','A','AN','AND','OR','OF','IN','ON','TO','FOR','VS','VS.','PART','VOL']);
-    const norm = (s: string) => s.toUpperCase()
-      .replace(/[^A-Z0-9 ]+/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length >= 3 && !stop.has(w));
-    const reqWords = new Set(norm(requestedTitle));
-    if (reqWords.size === 0) return 99; // can't judge; assume ok
-    const streamWords = norm(streamTitle);
-    let hits = 0;
-    for (const w of streamWords) if (reqWords.has(w)) hits++;
-    return hits;
-  } catch (_) { return 99; }
-}
-
 function AutoPlayLoadingBar() {
   const translateX = useRef(new Animated.Value(-100)).current;
 
@@ -288,102 +268,7 @@ function parseStreamInfo(stream: Stream) {
 }
 
 // Sort streams: English first (by seeds desc), then other languages (by seeds desc)
-// V157_WRONG_TITLE_GUARD — module-level mutable meta holder.  The
-// details screen writes its current content here every render (before
-// any useMemo runs), and sortStreamsByLanguage reads it as its first
-// step.  This keeps the sort function's signature unchanged across
-// the ~5 existing callsites.
-let _v157_currentMeta: { title: string; year: string; isMovie: boolean } = {
-  title: '', year: '', isMovie: false,
-};
-
-function _v157_romanToInt(s: string): number | null {
-  const t = s.toUpperCase().trim();
-  const vals: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100 };
-  if (!t) return null;
-  for (let i = 0; i < t.length; i++) { if (!(t[i] in vals)) return null; }
-  let tot = 0, prev = 0;
-  for (let i = t.length - 1; i >= 0; i--) {
-    const v = vals[t[i]];
-    tot += v < prev ? -v : v;
-    prev = v;
-  }
-  return (tot >= 1 && tot <= 20) ? tot : null;
-}
-
-function _v157_extractSequelMarkers(text: string): Set<number> {
-  const out = new Set<number>();
-  if (!text) return out;
-  const re = /\b(?:vol(?:ume)?\.?|part|chapter|episode|book)\s*(\d{1,2}|[IVXLC]{1,5})\b/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    const tok = m[1];
-    let n: number | null = null;
-    if (/^\d+$/.test(tok)) n = parseInt(tok, 10);
-    else n = _v157_romanToInt(tok);
-    if (n !== null && n >= 1 && n <= 20) out.add(n);
-  }
-  // Trailing standalone number: "Rocky 4", "John Wick 2"
-  const tm = text.trim().match(/(?:^|[^A-Za-z0-9])(\d{1,2})\s*$/);
-  if (tm) {
-    const n = parseInt(tm[1], 10);
-    if (n >= 2 && n <= 20) out.add(n);
-  }
-  return out;
-}
-
-function _v157_isWrongTitleStream(stream: any, meta: { title: string; year: string; isMovie: boolean }): boolean {
-  if (!meta.isMovie || !meta.title) return false;
-  const txt = ((stream && (stream.title || '')) + ' ' + (stream && (stream.name || ''))).trim();
-  if (!txt) return false;
-
-  // 1) YEAR CHECK
-  const reqYearN = parseInt((meta.year || '').slice(0, 4), 10);
-  if (!isNaN(reqYearN) && reqYearN >= 1900 && reqYearN <= 2099) {
-    const yMatches = txt.match(/\b(19\d{2}|20\d{2})\b/g);
-    if (yMatches && yMatches.length > 0) {
-      const years = yMatches.map(y => parseInt(y, 10));
-      let anyOk = false;
-      for (const y of years) { if (Math.abs(y - reqYearN) <= 1) { anyOk = true; break; } }
-      if (!anyOk) return true; // reject — year mismatch
-    }
-  }
-
-  // 2/3) SEQUEL MARKER CHECK
-  const reqSeq = _v157_extractSequelMarkers(meta.title);
-  const strSeq = _v157_extractSequelMarkers(txt);
-  if (reqSeq.size > 0) {
-    // Requested has a marker.  If stream has marker(s) and none overlap, reject.
-    if (strSeq.size > 0) {
-      let overlap = false;
-      for (const n of strSeq) { if (reqSeq.has(n)) { overlap = true; break; } }
-      if (!overlap) return true;
-    }
-  } else {
-    // Requested has NO marker.  If stream has one, reject.
-    if (strSeq.size > 0) return true;
-  }
-  return false;
-}
-
 function sortStreamsByLanguage(streams: Stream[]): Stream[] {
-  // V157_FILTER_APPLIED — reject streams from other movies (wrong year /
-  // wrong sequel volume) before any sort runs.  Conservative: only
-  // applies for movies, never for series.  Reads _v157_currentMeta
-  // which is set by the details component on every render.
-  if (_v157_currentMeta.isMovie && _v157_currentMeta.title) {
-    const _v157_before = streams.length;
-    const _v157_kept: Stream[] = [];
-    let _v157_rej = 0;
-    for (const _s of streams) {
-      if (_v157_isWrongTitleStream(_s as any, _v157_currentMeta)) { _v157_rej++; continue; }
-      _v157_kept.push(_s);
-    }
-    if (_v157_rej > 0) {
-      console.log('[v157] wrong-title filter for', JSON.stringify(_v157_currentMeta.title), 'year=', _v157_currentMeta.year, 'kept', _v157_kept.length + '/' + _v157_before, '(rejected', _v157_rej + ')');
-    }
-    streams = _v157_kept;
-  }
   // PATCH_V16A_COMMENTARY_SINK — local commentary detector. Independent of V12/V9.
   // Tested: 'Commentary', 'Audio Commentary', 'Director Commentary',
   // 'Creator Comm', '[COMM]', 'Comm.', 'with commentary', etc.
@@ -445,26 +330,6 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
     /* PATCH_V150_HDR — keep SDR bonus, add real HDR penalty so SDR at any
        resolution always wins over HDR (display can't tone-map → dark image). */
     if (!info.isHDR) s += 75; else s -= 800;
-    /* V158_AUDIO_PENALTY — reject lossless / ExoPlayer-incompatible audio.
-       Triggered by the real bug: GOTG 2 picked a BluRay REMUX with
-       DTS-HD MA 7.1, and ExoPlayer's AudioTrack.init() failed with
-       Config(48000, 6396, 47998).  Penalize -1500 so any AC3/AAC
-       WEB-DL/BluRay stream ranks above. */
-    {
-      const _t158 = ((stream.title || '') + ' ' + (stream.name || '')).toUpperCase();
-      const _v158_badAudio = (
-        _t158.includes('DTS-HD MA') || _t158.includes('DTS-HD.MA') || _t158.includes('DTS HD MA')
-        || _t158.includes('DTSHD-MA') || _t158.includes('DTSHD.MA')
-        || _t158.includes('DTS-HD ') || _t158.includes('DTS-HD.') || _t158.includes('DTS.HD')
-        || _t158.includes('DTS-HR') || _t158.includes('DTS-HRA')
-        || _t158.includes('DTS-X') || _t158.includes('DTS:X') || _t158.includes('DTSX')
-        || _t158.includes('TRUEHD') || _t158.includes('TRUE-HD') || _t158.includes('TRUE.HD')
-        || _t158.includes('ATMOS')
-        || _t158.includes('LPCM') || _t158.includes(' PCM ') || _t158.includes('.PCM.')
-        || _t158.includes('REMUX')
-      );
-      if (_v158_badAudio) s -= 1500;
-    }
     /* PATCH_V146_AUDIO_PENALTY — penalize audio codecs that the Google TV
        Streamer / Firestick can't initialize at runtime even when ExoPlayer
        reports format_supported=YES.  Order matters: most specific first. */
@@ -506,13 +371,6 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
   if (parsed.length > 0) {
     const _top = parsed[0];
     const _topInfo = _top.info;
-    /* PATCH_V154_LOG_SORT — content mismatch trace */
-    try {
-      const _v154Req = (((content as any)?.name || (content as any)?.title || (name as any) || '') as string);
-      const _v154Pick = ((_top.stream?.title || _top.stream?.name || '') as string);
-      const _v154Hits = _v154TitleOverlap(_v154Req, _v154Pick);
-      console.log('[MATCH v154]', _v154Hits === 0 ? 'WARNING-NO-OVERLAP' : 'ok-overlap=' + _v154Hits, '| requested=', _v154Req.slice(0,60), '| pick=', _v154Pick.slice(0,80), '| hash=', (_top.stream?.infoHash || '').slice(0,8), 'fileIdx=', (_top.stream as any)?.fileIdx ?? null);
-    } catch (_) {}
     console.log('[SORT v141] picked top:', _topInfo.quality || '?', 'cached=' + (!!_top.stream.url), 'seeders=' + (_topInfo.seeders || 0), 'lang=' + (_topInfo.language || '?'), '| cached_n=' + _v141_cached.length, 'uncached_n=' + _v141_uncached.length);
   }
 
@@ -835,9 +693,7 @@ export default function DetailsScreen() {
   const isLoadingStreams = useContentStore(s => s.isLoadingStreams);
   const fetchStreams = useContentStore(s => s.fetchStreams);
   // PATCH_V19A_SORTED_MEMO — memoize the sorted streams list.
-  // V157_SORTED_MOVED — sortedStreams useMemo relocated to AFTER content
-  // declaration so the meta filter has the current content's title+year
-  // in scope.
+  const sortedStreams = useMemo(() => sortStreamsByLanguage(streams), [streams]);
   const library = useContentStore(s => s.library);
   const fetchLibrary = useContentStore(s => s.fetchLibrary);
   
@@ -854,21 +710,6 @@ export default function DetailsScreen() {
   };
   
   const [content, setContent] = useState<ContentItem | null>(initialContent);
-  // V157_META_INJECTED_HERE — synchronously update the module-level meta
-  // holder BEFORE the sort useMemo runs.  This guarantees the title/year
-  // guard in sortStreamsByLanguage sees the current content's name+year
-  // on every render.
-  try {
-    _v157_currentMeta = {
-      title: ((content && content.name) ? String(content.name) : (paramName ? String(paramName) : '')),
-      year: ((content && (content as any).year) ? String((content as any).year) : ''),
-      isMovie: (type === 'movie'),
-    };
-  } catch (_v157_e) { _v157_currentMeta = { title: '', year: '', isMovie: false }; }
-  const sortedStreams = useMemo(
-    () => sortStreamsByLanguage(streams),
-    [streams, _v157_currentMeta.title, _v157_currentMeta.year, _v157_currentMeta.isMovie]
-  );
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
@@ -1321,13 +1162,6 @@ const nextEpisodeData = nextEpisode ? {
     // Handle external URLs - route them to the internal player
     if (stream.externalUrl || stream.requiresWebView) {
       const streamUrl = stream.externalUrl || stream.url;
-      /* PATCH_V154_LOG_PLAY — content mismatch trace at play time */
-      try {
-        const _v154Req2 = (((content as any)?.name || (content as any)?.title || (name as any) || '') as string);
-        const _v154Pick2 = ((stream.title || stream.name || '') as string);
-        const _v154Hits2 = _v154TitleOverlap(_v154Req2, _v154Pick2);
-        console.log('[MATCH v154 PLAY]', _v154Hits2 === 0 ? 'WARNING-NO-OVERLAP' : 'ok-overlap=' + _v154Hits2, '| requested=', _v154Req2.slice(0,60), '| picked=', _v154Pick2.slice(0,80), '| hash=', (stream.infoHash || '').slice(0,8), 'fileIdx=', (stream as any).fileIdx ?? null, '| url=', (streamUrl || '').slice(0,80));
-      } catch (_) {}
       console.log('[DETAILS] Playing external URL in internal player:', streamUrl);
       router.push({
         pathname: '/player',
