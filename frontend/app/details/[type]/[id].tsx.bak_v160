@@ -1536,12 +1536,7 @@ const nextEpisodeData = nextEpisode ? {
   const displayName = content?.name || 'Loading...';
   // For episode pages, prefer the episode thumbnail as backdrop. Otherwise use series backdrop.
   const episodeBackdrop = isEpisodePage && currentEpisode?.thumbnail ? currentEpisode.thumbnail : null;
-  // V160_BACKDROP_NO_POSTER — don't fall back to content?.poster for
-  // the full-screen backdrop.  The portrait poster stretched across the
-  // wide landscape area causes a visible "flash" until the real
-  // content.background arrives from the meta fetch.  Showing just the
-  // dark overlay is cleaner.
-  const displayPoster = episodeBackdrop || content?.background || '';
+  const displayPoster = episodeBackdrop || content?.background || content?.poster || '';
 
   const rating = typeof content?.imdbRating === 'string' 
     ? parseFloat(content.imdbRating) 

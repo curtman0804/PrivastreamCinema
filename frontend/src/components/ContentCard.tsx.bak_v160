@@ -18,27 +18,6 @@ import Constants from 'expo-constants';
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
-// V160_POSTER_REGISTRY — single source of truth for posters across the app.
-// First valid render per IMDb-id "wins" and all later renders (any surface:
-// addon rows, search, library, continue-watching) use the same URL.  Fixes
-// the case where the same content shows different posters depending on
-// which screen rendered it first.
-const _v160PosterRegistry: Record<string, string> = {};
-export function v160RegisterPoster(imdbId: string | undefined | null, url: string | undefined | null): void {
-  if (!imdbId || !url) return;
-  // strip any episode suffix like "tt1234:1:5" so episodes share the series-level poster
-  const key = String(imdbId).split(':')[0];
-  if (!key) return;
-  if (!_v160PosterRegistry[key]) _v160PosterRegistry[key] = String(url);
-}
-export function v160GetPoster(imdbId: string | undefined | null, fallback: string | undefined | null): string {
-  if (imdbId) {
-    const key = String(imdbId).split(':')[0];
-    if (key && _v160PosterRegistry[key]) return _v160PosterRegistry[key];
-  }
-  return fallback ? String(fallback) : '';
-}
-
 // === RELEASE_STATUS_V77E ===
 // Singleton batched fetcher. Coalesces release-status requests across all
 // mounted ContentCards so we send 1 batch per 250ms (up to 50 ids).
@@ -282,13 +261,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   // HARD TV FOCUS LOCK
   const selfNode = findNodeHandle(pressableRef.current);
 
-  // V160_USE_REGISTRY — register on first valid render, look up on every
-  // render so the SAME poster URL renders no matter which surface mounted
-  // this content first.
-  const _v160_id = ((item as any).imdb_id || (item as any).id) as string | undefined;
-  if (_v160_id && (item as any).poster) v160RegisterPoster(_v160_id, (item as any).poster as string);
-  const _v160_poster = v160GetPoster(_v160_id, (item as any).poster);
-
   return (
     <Pressable
       ref={pressableRef}
@@ -333,13 +305,12 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         ]}
       >
         <View style={styles.imageWrapper}>
-          {/* V160_IMAGE_SWAPPED — use registry-resolved poster URL */}
-          {_v160_poster && !posterError ? (
+          {item.poster && !posterError ? (
             <Image
               source={{
                 uri: useProxy
-                  ? getProxiedPosterUrl(_v160_poster)
-                  : _v160_poster,
+                  ? getProxiedPosterUrl(item.poster)
+                  : item.poster,
               }}
               style={styles.posterImage}
               contentFit="cover"
