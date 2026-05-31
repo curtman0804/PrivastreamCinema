@@ -422,13 +422,6 @@ export default function PlayerScreen() {
   }
   const [torrentFallbacks, setTorrentFallbacks] = useState<FallbackTorrent[]>([]);
   const torrentFallbackIdxRef = useRef(0);
-  // V163_TORRENT_FALLBACKS_REF — the React STATE `torrentFallbacks` cannot
-  // be read from closures that were created BEFORE the state update
-  // flushed (see the parseFallbacks → startTorrentStream race in
-  // useEffect).  This ref mirrors the state and is read synchronously
-  // by tryNextFallbackTorrent so the cascade actually sees the
-  // available fallbacks.
-  const torrentFallbacksRef = useRef<any[]>([]);
   
   // NO safety timeout - let the torrent download and ExoPlayer buffer naturally.
   // First-click torrents need 30-60+ seconds for metadata + initial pieces.
@@ -1653,16 +1646,11 @@ export default function PlayerScreen() {
   
   // Try next fallback TORRENT (different infoHash) when primary torrent fails
   const tryNextFallbackTorrent = () => {
-    /* V163_TRY_NEXT_USES_REF — read from torrentFallbacksRef.current so
-       the cascade is not held hostage by React's async state update. */
-    const _v163_list: any[] = (torrentFallbacksRef.current && torrentFallbacksRef.current.length > 0)
-      ? torrentFallbacksRef.current
-      : (torrentFallbacks || []);
     const idx = torrentFallbackIdxRef.current;
-    if (idx < _v163_list.length) {
-      const fb = _v163_list[idx];
+    if (idx < torrentFallbacks.length) {
+      const fb = torrentFallbacks[idx];
       torrentFallbackIdxRef.current = idx + 1;
-      console.log(`[PLAYER] Trying fallback torrent ${idx + 1}/${_v163_list.length}: ${fb.infoHash?.slice(0,8)}... (${fb.name || fb.title || ''})`);
+      console.log(`[PLAYER] Trying fallback torrent ${idx + 1}/${torrentFallbacks.length}: ${fb.infoHash?.slice(0,8)}... (${fb.name || fb.title || ''})`);
       
       // Reset state for new torrent
       setStreamUrl(null);
@@ -1889,9 +1877,8 @@ export default function PlayerScreen() {
         const parsed = JSON.parse(fallbackTorrents);
         if (Array.isArray(parsed)) {
           setTorrentFallbacks(parsed);
-          torrentFallbacksRef.current = parsed; // V163_MIRROR_REF — read-now-safe
           torrentFallbackIdxRef.current = 0;
-          console.log('[PLAYER] Loaded', parsed.length, 'fallback torrents (ref synced)');
+          console.log('[PLAYER] Loaded', parsed.length, 'fallback torrents');
         }
       } catch (e) {
         console.log('[PLAYER] Error parsing fallback torrents:', e);

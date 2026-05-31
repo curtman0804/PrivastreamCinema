@@ -1435,13 +1435,10 @@ const nextEpisodeData = nextEpisode ? {
     
     if (stream.infoHash) {
       // Build fallback torrents from other available torrent streams (sorted by seeders)
-      // V162_WIDER_FALLBACKS — bumped from 5 to 15 so we always have a working
-      // option even when the top picks share the same codec / lossless-audio
-      // incompatibility that the device can't decode.
       const sortedStreams = sortStreamsByLanguage(streams);
       const fallbackTorrents = sortedStreams
         .filter(s => s.infoHash && s.infoHash !== stream.infoHash)
-        .slice(0, 15)
+        .slice(0, 5)
         .map(s => ({
           infoHash: s.infoHash,
           fileIdx: s.fileIdx,

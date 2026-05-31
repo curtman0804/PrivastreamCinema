@@ -342,11 +342,7 @@ export default function PlayerScreen() {
   const [isLiveTV, setIsLiveTV] = useState(false);
   const [hasAudioError, setHasAudioError] = useState(false);
   const videoRetryCountRef = useRef(0);
-  // V162_RETRIES_LOWERED — torrents used to retry 15× (~45s) on broken
-  // streams before falling through to the next fallback.  6 retries with
-  // 1-5s backoff (≤18s) is still enough headroom for buffer warmup but
-  // gives "play at all costs" a chance to advance to the next stream.
-  const maxVideoRetries = isLive === 'true' ? 10 : directUrl ? 3 : 6;
+  const maxVideoRetries = isLive === 'true' ? 10 : directUrl ? 3 : 15; // Direct URLs fail fast, torrents need more time
   
   // Track seek state to prevent URL reset during seeking
   const isSeekingRef = useRef(false);
@@ -422,13 +418,6 @@ export default function PlayerScreen() {
   }
   const [torrentFallbacks, setTorrentFallbacks] = useState<FallbackTorrent[]>([]);
   const torrentFallbackIdxRef = useRef(0);
-  // V163_TORRENT_FALLBACKS_REF — the React STATE `torrentFallbacks` cannot
-  // be read from closures that were created BEFORE the state update
-  // flushed (see the parseFallbacks → startTorrentStream race in
-  // useEffect).  This ref mirrors the state and is read synchronously
-  // by tryNextFallbackTorrent so the cascade actually sees the
-  // available fallbacks.
-  const torrentFallbacksRef = useRef<any[]>([]);
   
   // NO safety timeout - let the torrent download and ExoPlayer buffer naturally.
   // First-click torrents need 30-60+ seconds for metadata + initial pieces.
@@ -1653,16 +1642,11 @@ export default function PlayerScreen() {
   
   // Try next fallback TORRENT (different infoHash) when primary torrent fails
   const tryNextFallbackTorrent = () => {
-    /* V163_TRY_NEXT_USES_REF — read from torrentFallbacksRef.current so
-       the cascade is not held hostage by React's async state update. */
-    const _v163_list: any[] = (torrentFallbacksRef.current && torrentFallbacksRef.current.length > 0)
-      ? torrentFallbacksRef.current
-      : (torrentFallbacks || []);
     const idx = torrentFallbackIdxRef.current;
-    if (idx < _v163_list.length) {
-      const fb = _v163_list[idx];
+    if (idx < torrentFallbacks.length) {
+      const fb = torrentFallbacks[idx];
       torrentFallbackIdxRef.current = idx + 1;
-      console.log(`[PLAYER] Trying fallback torrent ${idx + 1}/${_v163_list.length}: ${fb.infoHash?.slice(0,8)}... (${fb.name || fb.title || ''})`);
+      console.log(`[PLAYER] Trying fallback torrent ${idx + 1}/${torrentFallbacks.length}: ${fb.infoHash?.slice(0,8)}... (${fb.name || fb.title || ''})`);
       
       // Reset state for new torrent
       setStreamUrl(null);
@@ -1889,9 +1873,8 @@ export default function PlayerScreen() {
         const parsed = JSON.parse(fallbackTorrents);
         if (Array.isArray(parsed)) {
           setTorrentFallbacks(parsed);
-          torrentFallbacksRef.current = parsed; // V163_MIRROR_REF — read-now-safe
           torrentFallbackIdxRef.current = 0;
-          console.log('[PLAYER] Loaded', parsed.length, 'fallback torrents (ref synced)');
+          console.log('[PLAYER] Loaded', parsed.length, 'fallback torrents');
         }
       } catch (e) {
         console.log('[PLAYER] Error parsing fallback torrents:', e);
@@ -2618,44 +2601,6 @@ export default function PlayerScreen() {
                     console.log('[PLAYER] post-seek cooldown active, ignoring onError');
                     return;
                   }
-
-                  // V162_CODEC_FAST_FAIL — detect codec / decode errors that no
-                  // amount of retrying will fix (DTS-HD MA on a Firestick, etc.).
-                  // Skip the retry loop and jump straight to the next fallback
-                  // torrent so the user actually gets playback.
-                  try {
-                    const _v162_errMsg = String(
-                      (error && typeof error === 'object' && (error as any).message)
-                        ? (error as any).message
-                        : error
-                    ).toLowerCase();
-                    // V162B_TIGHT_CODEC — match ONLY clear, permanent codec
-                    // problems.  Removed overly-broad patterns ("audiotrack"
-                    // without "init failed", bare "codec", bare "decoder",
-                    // "mediacodec", "exoplaybackexception") which matched
-                    // normal buffering errors and fast-failed every stream.
-                    const _v162_isCodecErr = (
-                      _v162_errMsg.includes('audiotrack init failed')
-                      || _v162_errMsg.includes('format not supported')
-                      || _v162_errMsg.includes('unsupported format')
-                      || _v162_errMsg.includes('no suitable decoder')
-                      || _v162_errMsg.includes('decoder init failed')
-                      || _v162_errMsg.includes('decoder failed to initialize')
-                      || _v162_errMsg.includes('not playable')
-                    );
-                    if (_v162_isCodecErr) {
-                      console.log('[v162] Codec/decode error — skipping retries, advancing to next stream:', _v162_errMsg.slice(0, 200));
-                      videoRetryCountRef.current = 0;
-                      // Prefer URL fallbacks if available (cached debrid links),
-                      // otherwise fall through to the next torrent.
-                      if (fallbackUrls.length > currentStreamIndex + 1) {
-                        tryNextStream();
-                      } else {
-                        tryNextFallbackTorrent();
-                      }
-                      return;
-                    }
-                  } catch (_v162_e) { /* ignore — fall through to normal retry */ }
 
                   // Retry aggressively - torrent data arrives progressively, each retry may succeed
                   if (videoRetryCountRef.current < maxVideoRetries) {

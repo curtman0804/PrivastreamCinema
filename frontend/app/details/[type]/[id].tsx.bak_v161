@@ -293,37 +293,9 @@ function parseStreamInfo(stream: Stream) {
 // any useMemo runs), and sortStreamsByLanguage reads it as its first
 // step.  This keeps the sort function's signature unchanged across
 // the ~5 existing callsites.
-let _v157_currentMeta: { title: string; year: string; isMovie: boolean; isSeries: boolean; seriesWords: string[] } = {
-  title: '', year: '', isMovie: false, isSeries: false, seriesWords: [],
+let _v157_currentMeta: { title: string; year: string; isMovie: boolean } = {
+  title: '', year: '', isMovie: false,
 };
-
-// V161_SERIES_TITLE_GUARD — for series, build the set of required title
-// words (length >= 3, non-stopword) and reject streams whose pre-SxxExx
-// part is missing any of them.  Catches the "How It's Made" → "How the
-// States Got Their Shapes" case.
-const _V161_STOPWORDS = new Set(['the','and','for','from','your','that','this','with','into']);
-function _v161_seriesTitleWords(title: string): string[] {
-  if (!title) return [];
-  // strip trailing year suffix like " (2001)"
-  const stripped = title.replace(/\s*\(\d{4}\)\s*$/, '');
-  const tokens = stripped.toLowerCase().split(/[^a-z0-9]+/);
-  return tokens.filter((w: string) => w.length >= 3 && !_V161_STOPWORDS.has(w));
-}
-function _v161_isWrongSeriesStream(stream: any, meta: { isSeries: boolean; seriesWords: string[] }): boolean {
-  if (!meta.isSeries || !meta.seriesWords || meta.seriesWords.length === 0) return false;
-  const raw = ((stream && (stream.title || '')) + ' ' + (stream && (stream.name || ''))).trim();
-  if (!raw) return false;
-  // Take the part BEFORE the first SxxExx so addon prefixes are kept
-  // but episode/quality suffix is excluded.
-  const m = raw.match(/^([\s\S]*?)\bS\d{1,2}E\d{1,3}\b/i);
-  const head = m ? m[1] : raw;
-  const headTokens = new Set(head.toLowerCase().split(/[^a-z0-9]+/).filter((w: string) => w.length >= 1));
-  // Require ALL meta significant words to appear in the head tokens.
-  for (const w of meta.seriesWords) {
-    if (!headTokens.has(w)) return true; // reject
-  }
-  return false;
-}
 
 function _v157_romanToInt(s: string): number | null {
   const t = s.toUpperCase().trim();
@@ -411,22 +383,6 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
       console.log('[v157] wrong-title filter for', JSON.stringify(_v157_currentMeta.title), 'year=', _v157_currentMeta.year, 'kept', _v157_kept.length + '/' + _v157_before, '(rejected', _v157_rej + ')');
     }
     streams = _v157_kept;
-  }
-  // V161_SERIES_FILTER_APPLIED — same idea as v157, but for series.
-  // Reject streams whose pre-SxxExx prefix is missing any of the
-  // required series-title words.
-  if (_v157_currentMeta.isSeries && _v157_currentMeta.seriesWords && _v157_currentMeta.seriesWords.length > 0) {
-    const _v161_before = streams.length;
-    const _v161_kept: Stream[] = [];
-    let _v161_rej = 0;
-    for (const _s of streams) {
-      if (_v161_isWrongSeriesStream(_s as any, _v157_currentMeta)) { _v161_rej++; continue; }
-      _v161_kept.push(_s);
-    }
-    if (_v161_rej > 0) {
-      console.log('[v161] series-title filter for', JSON.stringify(_v157_currentMeta.title), 'words=', JSON.stringify(_v157_currentMeta.seriesWords), 'kept', _v161_kept.length + '/' + _v161_before, '(rejected', _v161_rej + ')');
-    }
-    streams = _v161_kept;
   }
   // PATCH_V16A_COMMENTARY_SINK — local commentary detector. Independent of V12/V9.
   // Tested: 'Commentary', 'Audio Commentary', 'Director Commentary',
@@ -903,17 +859,12 @@ export default function DetailsScreen() {
   // guard in sortStreamsByLanguage sees the current content's name+year
   // on every render.
   try {
-    /* V161_META_SERIES_FIELDS */
-    const _v161_title = ((content && content.name) ? String(content.name) : (paramName ? String(paramName) : ''));
-    const _v161_isSeries = (type === 'series');
     _v157_currentMeta = {
-      title: _v161_title,
+      title: ((content && content.name) ? String(content.name) : (paramName ? String(paramName) : '')),
       year: ((content && (content as any).year) ? String((content as any).year) : ''),
       isMovie: (type === 'movie'),
-      isSeries: _v161_isSeries,
-      seriesWords: _v161_isSeries ? _v161_seriesTitleWords(_v161_title) : [],
     };
-  } catch (_v157_e) { _v157_currentMeta = { title: '', year: '', isMovie: false, isSeries: false, seriesWords: [] }; }
+  } catch (_v157_e) { _v157_currentMeta = { title: '', year: '', isMovie: false }; }
   const sortedStreams = useMemo(
     () => sortStreamsByLanguage(streams),
     [streams, _v157_currentMeta.title, _v157_currentMeta.year, _v157_currentMeta.isMovie]
@@ -1435,13 +1386,10 @@ const nextEpisodeData = nextEpisode ? {
     
     if (stream.infoHash) {
       // Build fallback torrents from other available torrent streams (sorted by seeders)
-      // V162_WIDER_FALLBACKS — bumped from 5 to 15 so we always have a working
-      // option even when the top picks share the same codec / lossless-audio
-      // incompatibility that the device can't decode.
       const sortedStreams = sortStreamsByLanguage(streams);
       const fallbackTorrents = sortedStreams
         .filter(s => s.infoHash && s.infoHash !== stream.infoHash)
-        .slice(0, 15)
+        .slice(0, 5)
         .map(s => ({
           infoHash: s.infoHash,
           fileIdx: s.fileIdx,
