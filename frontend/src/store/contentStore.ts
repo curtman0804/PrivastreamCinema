@@ -18,7 +18,10 @@ export const setStreamsCache = (key: string, data: Stream[]) => { _streamsCache[
 // PATCH_V19B_DISK_HELPERS — AsyncStorage-backed persistent cache (6h TTL).
 const STREAMS_DISK_TTL_MS = 6 * 60 * 60 * 1000;
 const STREAMS_DISK_KEY = (key: string) => '@streamsCache:' + key;
-const _pendingPrefetches = new Set<string>();
+/* V170B_PREFETCH_REGISTRY — promote from a plain Set to a Map keyed by
+   cacheKey, storing the in-flight promise so fetchStreams can await it
+   instead of starting a duplicate parallel network call. */
+const _pendingPrefetches = new Map<string, Promise<Stream[]>>();
 
 async function loadStreamsFromDisk(key: string): Promise<Stream[] | null> {
   try {
@@ -263,28 +266,32 @@ export const useContentStore = create<ContentState>((set, get) => ({
       return diskCached;
     }
 
-    // 3. Network with throttled progressive updates (max 1 set per 150ms)
-    try {
-      let _v19LastSet = 0;
-      let _v19PendingTimer: any = null;
-      let _v19PendingStreams: Stream[] = [];
-      const flushPending = () => {
-        if (_v19PendingStreams.length === 0) return;
-        _v19LastSet = Date.now();
-        set({ streams: _v19PendingStreams, isLoadingStreams: false });
-        _v19PendingStreams = [];
-      };
-      const result = await api.addons.getAllStreams(type, id, (partialStreams: Stream[]) => {
-        _v19PendingStreams = partialStreams;
-        const elapsed = Date.now() - _v19LastSet;
-        if (elapsed >= 150) {
-          if (_v19PendingTimer) { clearTimeout(_v19PendingTimer); _v19PendingTimer = null; }
-          flushPending();
-        } else if (!_v19PendingTimer) {
-          _v19PendingTimer = setTimeout(() => { _v19PendingTimer = null; flushPending(); }, 150 - elapsed);
+    /* V170B_FETCH_SHARES_PREFETCH — if a focus-prefetch is already in
+       flight for this content, await ITS promise instead of firing a
+       parallel duplicate fetch.  This kills the "2 streams -> 8" race
+       that progressive-paint partial results from the second fetch
+       caused before they merged. */
+    const _v170bInflight = _pendingPrefetches.get(cacheKey);
+    if (_v170bInflight) {
+      try {
+        const shared = await _v170bInflight;
+        if (shared && shared.length > 0) {
+          setStreamsCache(cacheKey, shared);
+          set({ streams: shared, isLoadingStreams: false, error: null });
+          return shared;
         }
-      });
-      if (_v19PendingTimer) { clearTimeout(_v19PendingTimer); _v19PendingTimer = null; }
+      } catch (_) { /* fall through to a fresh fetch */ }
+    }
+
+    // 3. Network -- single final set, no progressive paint (V170B_NO_PARTIAL_PAINT)
+    try {
+      /* V170B_NO_PARTIAL_PAINT — no progressive callback.  Await the
+         full merged result and paint once.  Trade-off: cold-cache users
+         see "Finding Streams..." until ALL sources complete (typically
+         1.5-3 s) but the count never flickers between intermediate
+         values.  Focus-prefetch (v169) carries most clicks anyway, so
+         in practice the spinner is rare. */
+      const result = await api.addons.getAllStreams(type, id);
       const allStreams = result.streams || [];
       setStreamsCache(cacheKey, allStreams);
       saveStreamsToDisk(cacheKey, allStreams); // fire-and-forget
@@ -304,7 +311,12 @@ export const useContentStore = create<ContentState>((set, get) => ({
     const cacheKey = `${type}/${id}`;
     if (getStreamsCache(cacheKey)) return;
     if (_pendingPrefetches.has(cacheKey)) return;
-    _pendingPrefetches.add(cacheKey);
+    /* V170B_PREFETCH_REGISTRY — store the in-flight promise so
+       fetchStreams (and any other prefetch caller) can await it
+       instead of firing a duplicate network call. */
+    let _v170bResolve: (v: Stream[]) => void = () => {};
+    const _v170bPromise = new Promise<Stream[]>((res) => { _v170bResolve = res; });
+    _pendingPrefetches.set(cacheKey, _v170bPromise);
     try {
       // Try disk first to avoid an unnecessary network round-trip
       const diskCached = await loadStreamsFromDisk(cacheKey);
@@ -319,7 +331,12 @@ export const useContentStore = create<ContentState>((set, get) => ({
         saveStreamsToDisk(cacheKey, allStreams);
       }
     } catch { /* prefetch is best-effort */ }
-    finally { _pendingPrefetches.delete(cacheKey); }
+    finally {
+      /* V170B_PREFETCH_REGISTRY — resolve before removal so anyone
+         awaiting can collect the final list. */
+      try { _v170bResolve(getStreamsCache(cacheKey) || []); } catch (_) {}
+      _pendingPrefetches.delete(cacheKey);
+    }
   },
 
   addToLibrary: async (item: ContentItem) => {

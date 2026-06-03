@@ -28,7 +28,7 @@ import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
 import { FlashList } from '@shopify/flash-list'; // PATCH_V54_VIRTUALIZE
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
-import { getCardWidth, v160GetPoster as _v160GetPoster, v160SubscribePoster as _v160SubscribePoster /* V166_POSTER_SUB */ } from '../../src/components/ContentCard';
+import { getCardWidth, v160GetPoster as _v160GetPoster, v160SubscribePoster as _v160SubscribePoster /* V166_POSTER_SUB */, v167PrewarmReleaseStatus as _v167PrewarmReleaseStatus /* V167_RELEASE_PREWARM */ } from '../../src/components/ContentCard';
 import { colors } from '../../src/styles/colors';
 import { Image as RNImage } from 'react-native';
 // PATCH_V144_CACHE_IMPORT — disk-backed snapshot for instant cold-start paint
@@ -137,6 +137,49 @@ export default function DiscoverScreen() {
       AsyncStorage.setItem('@ps_cw_v1', JSON.stringify(continueWatching || [])).catch(() => {});
     } catch (_) {}
   }, [continueWatching]);
+
+  // V167_RELEASE_PREWARM — fire ONE bulk /api/movie/release_status POST
+  // as soon as we know which movies are on screen.  By the time row
+  // ContentCards mount and subscribe, the cache is already hot and the
+  // IN CINEMA badge paints on the same frame as the poster.  Skips ids
+  // that are already cached or in-flight (so back-nav is a no-op).
+  useEffect(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    const collect = (rawId: any) => {
+      if (!rawId) return;
+      const id = String(rawId);
+      if (!id.startsWith('tt')) return;
+      if (seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+    const harvest = (services: any) => {
+      if (!services || typeof services !== 'object') return;
+      for (const svc of Object.values(services) as any[]) {
+        if (!svc) continue;
+        const movies = (svc as any).movies;
+        if (Array.isArray(movies)) {
+          for (const m of movies) collect(m && (m.imdb_id || m.id));
+        }
+      }
+    };
+    harvest((discoverData as any)?.services);
+    harvest((cachedDiscover as any)?.services);
+    /* Continue Watching: only fetch release status for movies. */
+    const harvestCW = (list: any) => {
+      if (!Array.isArray(list)) return;
+      for (const it of list) {
+        if (!it) continue;
+        const t = (it as any).content_type || (it as any).type;
+        if (t && t !== 'movie') continue;
+        collect((it as any).content_id || (it as any).imdb_id || (it as any).id);
+      }
+    };
+    harvestCW(continueWatching);
+    harvestCW(cachedCW);
+    if (ids.length > 0) _v167PrewarmReleaseStatus(ids);
+  }, [discoverData, cachedDiscover, continueWatching, cachedCW]);
 
   // PATCH_V47_FOCUS_THROTTLE — throttle back-nav refetches to 60s and skip force-refresh.
   // Backing from Details/Player → Discover used to fire fetchDiscover(true)

@@ -13,6 +13,13 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentItem, SearchResult, api } from '../api/client';
+import { useContentStore as _v169UseContentStore /* V169_FOCUS_STREAM_PREWARM */ } from '../store/contentStore';
+/* V170_FOCUS_DWELL_TUNE — cap concurrent focus-prefetches so D-pad
+   fly-throughs cannot saturate the JS bridge / backend.  Beyond the
+   cap, prefetches are silently dropped (the on-click fetch still
+   works, just without the warm-cache acceleration). */
+let _v170PrefetchInflight = 0;
+const _V170_PREFETCH_CAP = 2;
 import { colors, posterShapes } from '../styles/colors';
 import Constants from 'expo-constants';
 
@@ -121,6 +128,8 @@ async function _v77FlushBatch() {
   }
 }
 
+/* V167_RELEASE_PREWARM — ids currently in-flight via prewarm. */
+const _v167InFlight = new Set();
 function _v77RequestReleaseStatus(imdbId, cb) {
   if (_v77ReleaseCache.has(imdbId)) {
     cb(_v77ReleaseCache.get(imdbId));
@@ -129,12 +138,77 @@ function _v77RequestReleaseStatus(imdbId, cb) {
   if (!_v77Subscribers.has(imdbId)) _v77Subscribers.set(imdbId, new Set());
   const subs = _v77Subscribers.get(imdbId);
   subs.add(cb);
-  _v77PendingIds.add(imdbId);
-  if (!_v77FlushTimer) _v77FlushTimer = setTimeout(_v77FlushBatch, 250);
+  /* V167_RELEASE_PREWARM — if a prewarm POST already covers this id,
+     just subscribe; do NOT queue a duplicate batched request. */
+  if (!_v167InFlight.has(imdbId)) {
+    _v77PendingIds.add(imdbId);
+    if (!_v77FlushTimer) _v77FlushTimer = setTimeout(_v77FlushBatch, 250);
+  }
   return () => {
     const s = _v77Subscribers.get(imdbId);
     if (s) s.delete(cb);
   };
+}
+
+/* V167_RELEASE_PREWARM — bulk-prefetch release statuses BEFORE cards
+   mount.  Discover screen calls this the moment its data arrives, so
+   by the time individual ContentCards subscribe the cache is already
+   hot and the IN CINEMA badge paints on the same frame as the poster. */
+export function v167PrewarmReleaseStatus(imdbIds: string[] | undefined | null): void {
+  if (!Array.isArray(imdbIds) || imdbIds.length === 0) return;
+  const seen = new Set<string>();
+  const todo: string[] = [];
+  for (const raw of imdbIds) {
+    if (!raw) continue;
+    const id = String(raw);
+    if (!id.startsWith('tt')) continue;
+    if (_v77ReleaseCache.has(id)) continue;
+    if (_v167InFlight.has(id)) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    todo.push(id);
+    _v167InFlight.add(id);
+    /* Claim ownership from the regular batcher so it can't fire a
+       duplicate POST for these same ids. */
+    _v77PendingIds.delete(id);
+  }
+  if (todo.length === 0) return;
+
+  const backendUrl =
+    process.env.EXPO_PUBLIC_BACKEND_URL ||
+    (Constants as any).expoConfig?.extra?.backendUrl ||
+    '';
+
+  /* Chunk to mirror the existing 50-id batch ceiling. */
+  const chunks: string[][] = [];
+  for (let i = 0; i < todo.length; i += 50) chunks.push(todo.slice(i, i + 50));
+
+  chunks.forEach(async (ids) => {
+    const finish = (statusForAll: string | null, data: any) => {
+      ids.forEach(id => {
+        const status = data ? ((data[id] as string) || 'none') : (statusForAll || 'none');
+        _v77ReleaseCache.set(id, status);
+        _v167InFlight.delete(id);
+        const subs = _v77Subscribers.get(id);
+        if (subs) {
+          subs.forEach(cb => { try { (cb as any)(status); } catch (_) {} });
+          _v77Subscribers.delete(id);
+        }
+      });
+    };
+    try {
+      const res = await fetch(`${backendUrl}/api/movie/release_status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imdb_ids: ids }),
+      });
+      if (!res.ok) { finish('none', null); return; }
+      const data = await res.json();
+      finish(null, data);
+    } catch (_) {
+      finish('none', null);
+    }
+  });
 }
 
 
@@ -237,14 +311,56 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   const pressableRef = useRef<any>(null);
 
+  /* V169_FOCUS_STREAM_PREWARM — dwell-timer ref so we only prefetch
+     streams when the user actually lingers (>= 500ms) on a poster. */
+  const _v169PrewarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleFocus = useCallback(() => {
     setIsFocused(true);
     onCardFocus?.();
-  }, [onCardFocus]);
+    /* V169_FOCUS_STREAM_PREWARM — kick a 500ms dwell timer.  Only
+       movies get streams prefetched (series root IDs have no usable
+       streams; the v138 patch already prefetches the next episode). */
+    if (_v169PrewarmTimerRef.current) {
+      clearTimeout(_v169PrewarmTimerRef.current);
+      _v169PrewarmTimerRef.current = null;
+    }
+    const _v169_type = (item as any)?.type;
+    const _v169_cid = (item as any)?.imdb_id || (item as any)?.id;
+    if (_v169_cid && _v169_type === 'movie' && String(_v169_cid).startsWith('tt')) {
+      /* V170_FOCUS_DWELL_TUNE — 900ms dwell + concurrency cap so D-pad
+         scrolling doesn't flood the backend and the JS bridge. */
+      _v169PrewarmTimerRef.current = setTimeout(() => {
+        if (_v170PrefetchInflight >= _V170_PREFETCH_CAP) return;
+        _v170PrefetchInflight++;
+        try {
+          const _v169_pf = _v169UseContentStore.getState().prefetchStreams;
+          if (typeof _v169_pf === 'function') {
+            const _p = _v169_pf(_v169_type, String(_v169_cid));
+            if (_p && typeof (_p as any).then === 'function') {
+              (_p as any).finally(() => { _v170PrefetchInflight = Math.max(0, _v170PrefetchInflight - 1); });
+            } else {
+              _v170PrefetchInflight = Math.max(0, _v170PrefetchInflight - 1);
+            }
+          } else {
+            _v170PrefetchInflight = Math.max(0, _v170PrefetchInflight - 1);
+          }
+        } catch (_) {
+          _v170PrefetchInflight = Math.max(0, _v170PrefetchInflight - 1);
+        }
+      }, 900);
+    }
+  }, [onCardFocus, item]);
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
     onCardBlur?.();
+    /* V169_FOCUS_STREAM_PREWARM — abort the dwell timer if the user
+       moved off before 500ms; nothing to do if the prefetch already fired. */
+    if (_v169PrewarmTimerRef.current) {
+      clearTimeout(_v169PrewarmTimerRef.current);
+      _v169PrewarmTimerRef.current = null;
+    }
   }, [onCardBlur]);
 
   const handleLongPress = useCallback(async () => {

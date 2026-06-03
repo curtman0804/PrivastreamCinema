@@ -1883,7 +1883,8 @@ const nextEpisodeData = nextEpisode ? {
             <View style={styles.streamsSection}>
               {/* Play button on left + stream count */}
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                {!isLoadingStreams && streams.length > 0 && (
+                {/* V169_STREAM_COUNT_USES_SORTED — use filtered list for gating */}
+                {!isLoadingStreams && sortedStreams.length > 0 && (
                   <FocusableButton
                     onPress={async () => {
                       /* v121m-play-overlay */
@@ -1959,7 +1960,8 @@ const nextEpisodeData = nextEpisode ? {
                   </FocusableButton>
                 )}
                 <Text style={styles.sectionTitle}>
-                  {isLoadingStreams ? (type === 'tv' ? 'Verifying Live Streams...' : 'Finding Streams...') : `${streams.length} Stream${streams.length !== 1 ? 's' : ''}`}
+                  {/* V169_STREAM_COUNT_USES_SORTED — display filtered count to match list */}
+                  {isLoadingStreams ? (type === 'tv' ? 'Verifying Live Streams...' : 'Finding Streams...') : `${sortedStreams.length} Stream${sortedStreams.length !== 1 ? 's' : ''}`}
                 </Text>
               </View>
               
@@ -1970,7 +1972,8 @@ const nextEpisodeData = nextEpisode ? {
                     {type === 'tv' ? 'Checking available channels...' : 'Searching sources...'}
                   </Text>
                 </View>
-              ) : streams.length === 0 ? (
+              /* V169_STREAM_COUNT_USES_SORTED — empty-state uses filtered list */
+              ) : sortedStreams.length === 0 ? (
                 <View style={styles.noStreams}>
                   <Ionicons name="cloud-offline-outline" size={32} color="#666" />
                   <Text style={styles.noStreamsText}>No streams found</Text>
