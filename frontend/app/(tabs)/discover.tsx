@@ -28,7 +28,7 @@ import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
 import { FlashList } from '@shopify/flash-list'; // PATCH_V54_VIRTUALIZE
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
-import { getCardWidth, v160GetPoster as _v160GetPoster /* V160_IMPORT_POSTER_REGISTRY */ } from '../../src/components/ContentCard';
+import { getCardWidth, v160GetPoster as _v160GetPoster, v160SubscribePoster as _v160SubscribePoster /* V166_POSTER_SUB */ } from '../../src/components/ContentCard';
 import { colors } from '../../src/styles/colors';
 import { Image as RNImage } from 'react-native';
 // PATCH_V144_CACHE_IMPORT — disk-backed snapshot for instant cold-start paint
@@ -652,6 +652,18 @@ function ContinueWatchingItem({
   const [xFocused, setXFocused] = useState(false);
   const percentWatched = item.percent_watched || 0;
 
+  // V166_POSTER_SUB — subscribe to the canonical poster URL so this card
+  // re-renders the moment an addon-row ContentCard registers the proper
+  // poster for the same content_id.  Initial value uses the synchronous
+  // lookup so the first paint already gets whatever is in the registry.
+  const [_v166Poster, _v166SetPoster] = useState<string>(
+    () => _v160GetPoster((item as any).content_id, item.poster)
+  );
+  useEffect(() => {
+    const unsub = _v160SubscribePoster((item as any).content_id, (u: string) => _v166SetPoster(u));
+    return unsub;
+  }, [(item as any).content_id]);
+
   // Refs for explicit focus navigation between poster and X button
   const posterRef = useRef<View>(null);
   const xButtonRef = useRef<View>(null);
@@ -729,9 +741,10 @@ function ContinueWatchingItem({
               the registry so Continue Watching matches the addon-row
               poster for the same content.  Falls back to item.poster
               then item.backdrop when no registry entry exists yet. */}
-          {(_v160GetPoster((item as any).content_id, item.poster) || item.backdrop) ? (
+          {/* V166_POSTER_SUB — read the subscribed canonical URL */}
+          {(_v166Poster || item.backdrop) ? (
             <Image
-              source={{ uri: _v160GetPoster((item as any).content_id, item.poster) || item.backdrop || '' }}
+              source={{ uri: _v166Poster || item.backdrop || '' }}
               style={styles.continueImage}
               contentFit="cover"
             />

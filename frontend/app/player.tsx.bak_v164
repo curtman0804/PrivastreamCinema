@@ -1739,25 +1739,10 @@ export default function PlayerScreen() {
             console.log('[PLAYER] Playback timeout - trying next stream');
             tryNextStream();
           } else {
-            // V164_PLAYBACK_TIMEOUT_CASCADE — before surfacing a hard
-            // "Stream timed out" error, fall through to the torrent
-            // fallbacks (which v163 made reachable via ref).  This
-            // closes the second "all streams failed" leak: user backs
-            // out, clicks a different episode, the new debrid URL
-            // never starts playback within 30s, we keep trying.
-            const _v164_list: any[] = (typeof torrentFallbacksRef !== 'undefined' && torrentFallbacksRef.current && torrentFallbacksRef.current.length > 0)
-              ? torrentFallbacksRef.current
-              : (torrentFallbacks || []);
-            const _v164_idx = (typeof torrentFallbackIdxRef !== 'undefined' && torrentFallbackIdxRef.current) ? torrentFallbackIdxRef.current : 0;
-            if (_v164_idx < _v164_list.length) {
-              console.log('[v164] Playback timeout - cascading to fallback torrent', _v164_idx + 1, '/', _v164_list.length);
-              videoRetryCountRef.current = 0;
-              tryNextFallbackTorrent();
-            } else {
-              console.log('[PLAYER] Playback timeout - no more fallback streams or torrents');
-              setError('Stream timed out. The source may have too few peers. Try a different stream with more seeds.');
-              setIsLoading(false);
-            }
+            // No more fallback streams - show error to user
+            console.log('[PLAYER] Playback timeout - no more fallback streams');
+            setError('Stream timed out. The source may have too few peers. Try a different stream with more seeds.');
+            setIsLoading(false);
           }
         }
       }, 30000); // 30 seconds then try next

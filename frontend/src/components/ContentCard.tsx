@@ -24,12 +24,37 @@ const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 // the case where the same content shows different posters depending on
 // which screen rendered it first.
 const _v160PosterRegistry: Record<string, string> = {};
+// V166_POSTER_SUB — subscriber map keyed by canonical (series-level) id.
+const _v166PosterSubs: Record<string, Set<(url: string) => void>> = {};
 export function v160RegisterPoster(imdbId: string | undefined | null, url: string | undefined | null): void {
   if (!imdbId || !url) return;
   // strip any episode suffix like "tt1234:1:5" so episodes share the series-level poster
   const key = String(imdbId).split(':')[0];
   if (!key) return;
-  if (!_v160PosterRegistry[key]) _v160PosterRegistry[key] = String(url);
+  if (!_v160PosterRegistry[key]) {
+    _v160PosterRegistry[key] = String(url);
+    /* V166_POSTER_SUB — notify any subscribers (e.g. Continue Watching) */
+    const subs = _v166PosterSubs[key];
+    if (subs && subs.size) {
+      subs.forEach(cb => { try { cb(String(url)); } catch (_) {} });
+    }
+  }
+}
+/* V166_POSTER_SUB — subscribe to canonical poster URL updates for a given id.
+   Fires immediately with the current value if one exists.  Returns an
+   unsubscribe function. */
+export function v160SubscribePoster(imdbId: string | undefined | null, cb: (url: string) => void): () => void {
+  if (!imdbId || typeof cb !== 'function') return () => {};
+  const key = String(imdbId).split(':')[0];
+  if (!key) return () => {};
+  const existing = _v160PosterRegistry[key];
+  if (existing) { try { cb(existing); } catch (_) {} }
+  if (!_v166PosterSubs[key]) _v166PosterSubs[key] = new Set();
+  _v166PosterSubs[key].add(cb);
+  return () => {
+    const s = _v166PosterSubs[key];
+    if (s) { s.delete(cb); if (s.size === 0) delete _v166PosterSubs[key]; }
+  };
 }
 export function v160GetPoster(imdbId: string | undefined | null, fallback: string | undefined | null): string {
   if (imdbId) {

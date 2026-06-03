@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Pressable,
   Platform,
-  Keyboard, /* V165_IMPORT_KEYBOARD */
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -47,10 +46,6 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
   const handleSubmit = () => {
     if (query.trim()) onSearch(query.trim());
-    /* V165_DISMISS_ON_SUBMIT — close the IME and blur the input so
-       the D-pad reaches the result posters below. */
-    try { Keyboard.dismiss(); } catch (_) {}
-    try { inputRef.current?.blur && (inputRef.current as any).blur(); } catch (_) {}
   };
   const handleClear = () => {
     setQuery('');
@@ -78,7 +73,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           autoFocus={!initialValue}
           showSoftInputOnFocus={true}
           hasTVPreferredFocus={!initialValue}
-          blurOnSubmit={true} /* V165_BLUR_ON_SUBMIT — was false, kept the IME glued open on TV */
+          blurOnSubmit={false}
         />
         {query.length > 0 && (
           <Pressable
