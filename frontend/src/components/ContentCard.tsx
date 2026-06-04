@@ -8,6 +8,7 @@ import {
   Alert,
   findNodeHandle,
   Image as RNImage,
+  DeviceEventEmitter,
 } from 'react-native';
 
 import { Image } from 'expo-image';
@@ -62,6 +63,57 @@ export function v160SubscribePoster(imdbId: string | undefined | null, cb: (url:
     const s = _v166PosterSubs[key];
     if (s) { s.delete(cb); if (s.size === 0) delete _v166PosterSubs[key]; }
   };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   V172_WATCHED_REGISTRY — movie / episode watched flag, shared across every
+   poster surface (Discover, Search, Library, Continue Watching).  Single
+   source of truth: AsyncStorage["privastream_watched"].  Pub/sub so a long-
+   press unmark on one card updates every other visible card that shows the
+   same content. */
+const _V172_KEY = 'privastream_watched';
+const _v172WatchedSet = new Set<string>();
+const _v172Subs = new Set<() => void>();
+let _v172Loaded = false;
+
+async function _v172Load(): Promise<void> {
+  if (_v172Loaded) return;
+  _v172Loaded = true;
+  try {
+    const raw = await AsyncStorage.getItem(_V172_KEY);
+    if (raw) {
+      const obj = JSON.parse(raw) as Record<string, boolean>;
+      Object.keys(obj).forEach((k) => { if (obj[k]) _v172WatchedSet.add(k); });
+    }
+  } catch (_) { /* best-effort */ }
+  _v172Subs.forEach((cb) => { try { cb(); } catch (_) {} });
+}
+/* Fire-and-forget hydration on module load. */
+_v172Load();
+
+export function v172IsWatched(contentId: string | undefined | null): boolean {
+  if (!contentId) return false;
+  return _v172WatchedSet.has(String(contentId));
+}
+
+export function v172SubscribeWatched(cb: () => void): () => void {
+  _v172Subs.add(cb);
+  /* Fire once on subscribe if hydration already completed. */
+  if (_v172Loaded) { try { cb(); } catch (_) {} }
+  return () => { _v172Subs.delete(cb); };
+}
+
+export async function v172UnmarkWatched(contentId: string | undefined | null): Promise<void> {
+  if (!contentId) return;
+  const key = String(contentId);
+  _v172WatchedSet.delete(key);
+  try {
+    const raw = await AsyncStorage.getItem(_V172_KEY);
+    const obj = raw ? JSON.parse(raw) : {};
+    delete obj[key];
+    await AsyncStorage.setItem(_V172_KEY, JSON.stringify(obj));
+  } catch (_) { /* best-effort -- in-memory delete still took effect */ }
+  _v172Subs.forEach((cb) => { try { cb(); } catch (_) {} });
 }
 export function v160GetPoster(imdbId: string | undefined | null, fallback: string | undefined | null): string {
   if (imdbId) {
@@ -268,6 +320,25 @@ export const getCardWidth = (
   }
 };
 
+/* ─────────────────────────────────────────────────────────────────────────
+   V173_TV_LONGPRESS_REGISTRY — Pressable.onLongPress is unreliable on
+   Google TV / Firestick OK buttons.  Maintain a single global slot for
+   the currently-focused card's long-press handler and dispatch the
+   native 'longSelect' TV event into it. */
+let _v173FocusedLP: (() => void) | null = null;
+try {
+  /* DeviceEventEmitter is already imported at top of file. */
+  DeviceEventEmitter.addListener('onTVKeyEvent', (evt: any) => {
+    if (evt && evt.eventType === 'longSelect' && _v173FocusedLP) {
+      try { _v173FocusedLP(); } catch (_) {}
+    }
+  });
+} catch (_) { /* DeviceEventEmitter may not exist outside RN */ }
+
+export function v173RegisterLongPress(fn: (() => void) | null): void {
+  _v173FocusedLP = fn;
+}
+
 const ContentCardComponent: React.FC<ContentCardProps> = ({
   item,
   onPress,
@@ -350,7 +421,10 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         }
       }, 900);
     }
-  }, [onCardFocus, item]);
+    /* V173_TV_LONGPRESS_REGISTRY — register this card's long-press
+       handler so the global 'longSelect' listener can fire it. */
+    try { v173RegisterLongPress(handleLongPress); } catch (_) {}
+  }, [onCardFocus, item, handleLongPress]);
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
@@ -361,9 +435,30 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       clearTimeout(_v169PrewarmTimerRef.current);
       _v169PrewarmTimerRef.current = null;
     }
+    /* V173_TV_LONGPRESS_REGISTRY — clear long-press registration on blur. */
+    try { v173RegisterLongPress(null); } catch (_) {}
   }, [onCardBlur]);
 
   const handleLongPress = useCallback(async () => {
+    /* V172_WATCHED_REGISTRY — for an already-watched card, long-press
+       removes the checkmark (mirrors EpisodeCard).  Falls through to
+       the library toggle for unwatched cards. */
+    if (_v172IsWatched && _v172ContentId) {
+      const _v172Name = (item as any).name || (item as any).title || 'this title';
+      Alert.alert(
+        'Mark as Unwatched',
+        `Remove the watched checkmark from "${_v172Name}"?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Mark Unwatched',
+            style: 'destructive',
+            onPress: () => { v172UnmarkWatched(_v172ContentId); },
+          },
+        ],
+      );
+      return;
+    }
     const contentId = item.imdb_id || item.id;
 
     const contentName =
@@ -416,7 +511,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         },
       ]
     );
-  }, [item, isInLibrary, onLibraryChange]);
+  }, [item, isInLibrary, onLibraryChange, _v172IsWatched, _v172ContentId]);
 
   if (!item) return null;
 
@@ -429,6 +524,15 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const _v160_id = ((item as any).imdb_id || (item as any).id) as string | undefined;
   if (_v160_id && (item as any).poster) v160RegisterPoster(_v160_id, (item as any).poster as string);
   const _v160_poster = v160GetPoster(_v160_id, (item as any).poster);
+
+  /* V172_WATCHED_REGISTRY — per-card derived flag + re-render hook.
+     Subscribes to the module-level set so any long-press unmark (this
+     card or another instance of the same content) instantly refreshes
+     the badge across every surface. */
+  const _v172ContentId = ((item as any).content_id || _v160_id) as string | undefined;
+  const [, _v172Bump] = useState(0);
+  useEffect(() => v172SubscribeWatched(() => _v172Bump((x) => (x + 1) & 0xff)), []);
+  const _v172IsWatched = v172IsWatched(_v172ContentId);
 
   return (
     <Pressable
@@ -515,14 +619,18 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           </View>
         )}
 
-        {(watched ||
+        {/* V172_WATCHED_REGISTRY — also show the badge when our cross-surface
+            registry says this content_id is watched, even if no `watched`
+            prop was passed from the parent (Discover rows, Search, Library). */}
+        {(watched || _v172IsWatched ||
           (showProgress !== undefined &&
             showProgress >= 90)) && (
           <View style={styles.watchedBadge}>
+            {/* V172B_GOLD_CHECKMARK — match EpisodeCard's gold checkmark exactly */}
             <Ionicons
-              name="checkmark-circle"
-              size={18}
-              color="#4CAF50"
+              name="checkmark"
+              size={14}
+              color="#B8A05C"
             />
           </View>
         )}
@@ -616,13 +724,18 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 
+  /* V172B_GOLD_CHECKMARK — mirror EpisodeCard's 24x24 round badge */
   watchedBadge: {
     position: 'absolute',
-    top: 6,
-    left: 6,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 10,
-    padding: 1,
+    top: 4,
+    left: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
 
   progressContainer: {

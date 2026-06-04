@@ -1,3 +1,4 @@
+import { v173RegisterLongPress as _v173RegLP } from '../../../src/components/ContentCard';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   View,
@@ -535,6 +536,23 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
     // v141: was Math.min(log10(sd)*5, 20) — capped at +20, basically noise.
     // Now scales up to +240 so seeders meaningfully break quality ties.
     if (sd > 0) s += Math.min(Math.log10(sd + 1) * 80, 240);
+    /* V171_STABLE_TIEBREAKER — add a tiny deterministic value from a
+       stable hash of infoHash/URL/title.  Magnitude < 0.1 so it CANNOT
+       override any real score difference (quality / codec / language /
+       seeders all weigh hundreds of points), but it pins the order of
+       tied streams so back-nav + re-pick gives the SAME result every
+       time regardless of which addon source happened to respond first. */
+    {
+      const _v171Key = String((stream as any).infoHash || stream.url || stream.title || stream.name || '');
+      if (_v171Key) {
+        let _v171H = 0;
+        const _v171N = Math.min(_v171Key.length, 40);
+        for (let _v171i = 0; _v171i < _v171N; _v171i++) {
+          _v171H = ((_v171H << 5) - _v171H + _v171Key.charCodeAt(_v171i)) | 0;
+        }
+        s += ((Math.abs(_v171H) % 1000) / 10000); // range [0, 0.0999]
+      }
+    }
     return s;
   };
   // v141: HARD partition — every CACHED stream (stream.url present) sorts
@@ -737,6 +755,11 @@ function EpisodeCard({
       style={[styles.episodeCard, isFocused && styles.episodeCardFocused]}
       onPress={onPress}
       onLongPress={isWatched ? onMarkUnwatched : undefined}
+      /* V173_TV_LONGPRESS_EPISODE — register the mark-unwatched callback
+         while this card is focused so the TV 'longSelect' dispatcher in
+         ContentCard.tsx can fire it.  Skips when nothing to unmark. */
+      onFocus={() => { try { _v173RegLP(isWatched && typeof onMarkUnwatched === 'function' ? onMarkUnwatched : null); } catch (_) {} if (autoFocus) { /* preserve any existing autoFocus behaviour */ } }}
+      onBlur={() => { try { _v173RegLP(null); } catch (_) {} }}
       /* v135-focus-unlock-blur */
       onFocus={() => {
         setIsFocused(true);
@@ -1005,6 +1028,23 @@ export default function DetailsScreen() {
     );
     return idx >= 0 ? idx : 0;
   }, [episodesForSeason, targetEpisodeNumber]);
+
+  /* V139_SERIES_EPISODE_PREWARM — when the user lands on a series-root
+     page, kick off prefetchStreams for the auto-focused episode in the
+     background.  v170b's registry means the click will await the same
+     in-flight promise -- streams paint instantly with no spinner. */
+  useEffect(() => {
+    if (type !== 'series') return;
+    if (isEpisodePage) return;            // only on series root
+    if (!baseId) return;
+    if (!selectedSeason) return;
+    if (targetEpisodeNumber == null) return;
+    const epId = `${baseId}:${selectedSeason}:${targetEpisodeNumber}`;
+    try {
+      const pf = useContentStore.getState().prefetchStreams;
+      if (typeof pf === 'function') pf('series', epId);
+    } catch (_) { /* prefetch is best-effort */ }
+  }, [type, isEpisodePage, baseId, selectedSeason, targetEpisodeNumber]);
 
   useEffect(() => {
     // If we have cached meta with background, skip the meta fetch entirely
@@ -1349,7 +1389,7 @@ const nextEpisodeData = nextEpisode ? {
       return streams
         .filter(s => s !== stream)
         .filter(s => s.url && s.url.startsWith('/api/proxy/'))
-        .slice(0, 5)
+        .slice(0, 20) /* V174_WIDEN_FALLBACK */
         .map(s => {
           const separator = s.url!.includes('?') ? '&' : '?';
           const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
@@ -1441,7 +1481,7 @@ const nextEpisodeData = nextEpisode ? {
       const sortedStreams = sortStreamsByLanguage(streams);
       const fallbackTorrents = sortedStreams
         .filter(s => s.infoHash && s.infoHash !== stream.infoHash)
-        .slice(0, 15)
+        .slice(0, 20) /* V174_WIDEN_FALLBACK */
         .map(s => ({
           infoHash: s.infoHash,
           fileIdx: s.fileIdx,

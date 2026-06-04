@@ -543,6 +543,22 @@ export default function PlayerScreen() {
     return () => {
       // Save current progress on exit
       if (currentPositionRef.current > 0 && currentDurationRef.current > 0 && contentId && contentType && isLive !== 'true') {
+        /* V173_FORCE_WATCHED_ON_EXIT — if the user fast-forwarded past 90%
+           but backed out before the throttled saveProgress tick could fire,
+           write privastream_watched here so the gold checkmark lands. */
+        try {
+          const _v173Pct = (currentPositionRef.current / currentDurationRef.current) * 100;
+          if (_v173Pct >= 90) {
+            const _v173Key = 'privastream_watched';
+            AsyncStorage.getItem(_v173Key).then((raw) => {
+              const set: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+              if (!set[contentId]) {
+                set[contentId] = true;
+                return AsyncStorage.setItem(_v173Key, JSON.stringify(set));
+              }
+            }).catch(() => {});
+          }
+        } catch (_) {}
         console.log('[PLAYER] Saving progress on exit:', currentPositionRef.current / 1000, 's');
         // Use a synchronous-ish approach since we're unmounting
         api.watchProgress.save({
@@ -815,7 +831,7 @@ export default function PlayerScreen() {
             sources: _top.sources || [],
             fileIdx: _top.fileIdx != null ? _top.fileIdx : null,
             filename: _top.filename || '',
-            fallbackStreams: list.filter((s: any) => s.infoHash !== _top.infoHash).slice(0, 5),
+            fallbackStreams: list.filter((s: any) => s.infoHash !== _top.infoHash).slice(0, 20) /* V174_WIDEN_FALLBACK */,
             contentId: _nid,
             title: nextEpisodeTitle || `Episode ${_parts[_parts.length - 1] || ''}`,
             poster: (nextEpisodePoster || poster || '') as string,
@@ -870,7 +886,7 @@ export default function PlayerScreen() {
                     sources: _alt.sources || [],
                     fileIdx: _alt.fileIdx != null ? _alt.fileIdx : null,
                     filename: _alt.filename || '',
-                    fallbackStreams: list.filter((s: any) => s.infoHash !== _alt.infoHash).slice(0, 5),
+                    fallbackStreams: list.filter((s: any) => s.infoHash !== _alt.infoHash).slice(0, 20) /* V174_WIDEN_FALLBACK */,
                     contentId: _nid,
                     title: nextEpisodeTitle || `Episode ${_parts[_parts.length - 1] || ''}`,
                     poster: (nextEpisodePoster || poster || '') as string,
@@ -1075,7 +1091,7 @@ export default function PlayerScreen() {
               sources: stream.sources || [],
               fileIdx: stream.fileIdx != null ? stream.fileIdx : null,
               filename: stream.filename || '',
-              fallbackStreams: list.filter((_s: any) => _s.infoHash !== _h).slice(0, 5),
+              fallbackStreams: list.filter((_s: any) => _s.infoHash !== _h).slice(0, 20) /* V174_WIDEN_FALLBACK */,
               contentId: nextEpisodeId as string,
               title: baseTitle, poster: basePoster, backdrop: baseBackdrop,
               season: _nextSeason, episode: _nextEpisodeNum,
