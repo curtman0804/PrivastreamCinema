@@ -28,7 +28,22 @@ import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
 import { FlashList } from '@shopify/flash-list'; // PATCH_V54_VIRTUALIZE
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
-import { getCardWidth, v160GetPoster as _v160GetPoster, v160SubscribePoster as _v160SubscribePoster /* V166_POSTER_SUB */, v167PrewarmReleaseStatus as _v167PrewarmReleaseStatus /* V167_RELEASE_PREWARM */ } from '../../src/components/ContentCard';
+/* V176_LONGPRESS_MENU — extend the ContentCard import with the
+   watched/progress helpers + unified menu opener. */
+import {
+  getCardWidth,
+  v160GetPoster as _v160GetPoster,
+  v160SubscribePoster as _v160SubscribePoster /* V166_POSTER_SUB */,
+  v167PrewarmReleaseStatus as _v167PrewarmReleaseStatus /* V167_RELEASE_PREWARM */,
+  v172IsWatched as _v172IsWatched,
+  v172SubscribeWatched as _v172SubscribeWatched,
+  v176RegisterProgress as _v176RegisterProgress,
+  v176HasProgress as _v176HasProgress,
+  v176SubscribeProgress as _v176SubscribeProgress,
+  v176ShowLongPressMenu as _v176ShowLongPressMenu,
+  /* V176E_TV_LONGPRESS — register this CW card's menu handler with v173. */
+  v173RegisterLongPress as _v173RegLP,
+} from '../../src/components/ContentCard';
 import { colors } from '../../src/styles/colors';
 import { Image as RNImage } from 'react-native';
 // PATCH_V144_CACHE_IMPORT — disk-backed snapshot for instant cold-start paint
@@ -137,6 +152,19 @@ export default function DiscoverScreen() {
       AsyncStorage.setItem('@ps_cw_v1', JSON.stringify(continueWatching || [])).catch(() => {});
     } catch (_) {}
   }, [continueWatching]);
+
+  /* V176_LONGPRESS_MENU — keep the in-memory progress registry in sync
+     with the live CW list (and the disk-cached fallback) so the unified
+     long-press menu shows "Clear Progress" for items that are in CW. */
+  useEffect(() => {
+    const ids: string[] = [];
+    const live = (continueWatching && continueWatching.length > 0) ? continueWatching : cachedCW;
+    for (const it of (live || [])) {
+      const cid = (it as any).content_id || (it as any).imdb_id || (it as any).id;
+      if (cid) ids.push(String(cid));
+    }
+    _v176RegisterProgress(ids);
+  }, [continueWatching, cachedCW]);
 
   // V167_RELEASE_PREWARM — fire ONE bulk /api/movie/release_status POST
   // as soon as we know which movies are on screen.  By the time row
@@ -695,6 +723,53 @@ function ContinueWatchingItem({
   const [xFocused, setXFocused] = useState(false);
   const percentWatched = item.percent_watched || 0;
 
+  /* V176_LONGPRESS_MENU — derive watched + progress per CW card. */
+  const _v176ContentId = String((item as any).content_id || (item as any).imdb_id || (item as any).id || '');
+  const [, _v176Bump] = useState(0);
+  useEffect(() => _v172SubscribeWatched(() => _v176Bump((x) => (x + 1) & 0xff)), []);
+  useEffect(() => _v176SubscribeProgress(() => _v176Bump((x) => (x + 1) & 0xff)), []);
+  const _v176IsWatchedCW = _v172IsWatched(_v176ContentId);
+
+  const _v176OpenMenu = useCallback(() => {
+    _v176ShowLongPressMenu({
+      item: {
+        content_id: _v176ContentId,
+        content_type: (item as any).content_type || (item as any).type || 'movie',
+        title: (item as any).title,
+        name: (item as any).title,
+        poster: (item as any).poster || (item as any).backdrop,
+      },
+      inLibraryOverride: false,
+      hasProgressOverride: true,
+      onAfterChange: (action) => {
+        if (action === 'cleared') { try { onRemove && onRemove(); } catch (_) {} }
+      },
+    });
+  }, [item, _v176ContentId, onRemove]);
+
+  /* V176B_PRESS_TIMING — TV remote OK long-press detection. */
+  const _v176bLpTimer = useRef<any>(null);
+  const _v176bLpFired = useRef<boolean>(false);
+  const _v176bPressIn = useCallback(() => {
+    _v176bLpFired.current = false;
+    if (_v176bLpTimer.current) clearTimeout(_v176bLpTimer.current);
+    _v176bLpTimer.current = setTimeout(() => {
+      _v176bLpFired.current = true;
+      try { _v176OpenMenu(); } catch (_) {}
+    }, 500);
+  }, [_v176OpenMenu]);
+  const _v176bPressOut = useCallback(() => {
+    if (_v176bLpTimer.current) {
+      clearTimeout(_v176bLpTimer.current);
+      _v176bLpTimer.current = null;
+    }
+  }, []);
+  const _v176bOnPress = useCallback(() => {
+    if (_v176bLpFired.current) { _v176bLpFired.current = false; return; }
+    try { onPress && onPress(); } catch (_) {}
+  }, [onPress]);
+
+
   // V166_POSTER_SUB — subscribe to the canonical poster URL so this card
   // re-renders the moment an addon-row ContentCard registers the proper
   // poster for the same content_id.  Initial value uses the synchronous
@@ -768,9 +843,13 @@ function ContinueWatchingItem({
       {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
         ref={posterRef}
-        onPress={onPress}
-        onFocus={handleFocus}
-        onBlur={() => setIsFocused(false)}
+        onPress={_v176bOnPress}
+        onPressIn={_v176bPressIn}
+        onPressOut={_v176bPressOut}
+        onLongPress={_v176OpenMenu}
+        delayLongPress={500}
+        onFocus={() => { try { _v173RegLP(_v176OpenMenu); } catch (_) {} handleFocus(); }}
+        onBlur={() => { try { _v173RegLP(null); } catch (_) {} setIsFocused(false); }}
         android_ripple={null}
         nextFocusUp={xButtonTag}
         style={[
@@ -810,6 +889,13 @@ function ContinueWatchingItem({
           <View style={styles.progressContainer}>
             <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
           </View>
+
+          {/* V176_LONGPRESS_MENU — gold check overlay when watched. */}
+          {_v176IsWatchedCW && (
+            <View style={styles.v176CwWatchedBadge} pointerEvents="none">
+              <Ionicons name="checkmark" size={14} color="#B8A05C" />
+            </View>
+          )}
         </View>
       </Pressable>
 
@@ -829,6 +915,19 @@ function ContinueWatchingItem({
 }
 
 const styles = StyleSheet.create({
+  /* V176_LONGPRESS_MENU — mirror EpisodeCard's gold checkmark for CW. */
+  v176CwWatchedBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

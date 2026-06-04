@@ -339,23 +339,29 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
+  /* V176J_STORE_FINALLY — fetchLibrary in finally so the local cache
+     re-syncs with the server even if the API call throws (e.g. a 409
+     because the item is already present).  Without this, repeated
+     errors leave the UI permanently stale. */
   addToLibrary: async (item: ContentItem) => {
     try {
       await api.library.add(item);
-      await get().fetchLibrary();
     } catch (error: any) {
       console.log('[ContentStore] addToLibrary error:', error);
       set({ error: error.message });
+    } finally {
+      try { await get().fetchLibrary(); } catch (_) {}
     }
   },
 
   removeFromLibrary: async (type: string, id: string) => {
     try {
       await api.library.remove(type, id);
-      await get().fetchLibrary();
     } catch (error: any) {
       console.log('[ContentStore] removeFromLibrary error:', error);
       set({ error: error.message });
+    } finally {
+      try { await get().fetchLibrary(); } catch (_) {}
     }
   },
 

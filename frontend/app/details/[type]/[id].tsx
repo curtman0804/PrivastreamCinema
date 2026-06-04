@@ -29,6 +29,17 @@ const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
 
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+/* V176C_EPISODE_MENU_IMPORT — Stremio-style menu helpers for episode posters. */
+import {
+  v172IsWatched as _v176cV172IsWatched,
+  v172SubscribeWatched as _v176cV172SubWatched,
+  v172UnmarkWatched as _v176cV172Unmark,
+  v176MarkWatched as _v176cV176Mark,
+  v176HasProgress as _v176cV176HasProg,
+  v176SubscribeProgress as _v176cV176SubProg,
+  v176ClearProgress as _v176cV176Clear,
+} from '../../../src/components/ContentCard';
+import { Alert as _V176cAlert } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -748,24 +759,88 @@ function EpisodeCard({
     };
   }, [autoFocus, episode.episode]);
   const thumbUri = episode.thumbnail || fallbackPoster;
+
+  /* V176C_EPISODE_MENU — press-timing long-press (Pressable.onLongPress
+     is unreliable on Firestick / Android TV) opens a Stremio-style menu
+     for this episode.  The id must match what the player writes to
+     AsyncStorage[privastream_watched]. */
+  const _v176cEpId = ((episode as any).content_id || (episode as any).id) as string | undefined;
+  const [, _v176cBump] = useState(0);
+  useEffect(() => _v176cV172SubWatched(() => _v176cBump((x) => (x + 1) & 0xff)), []);
+  useEffect(() => _v176cV176SubProg(() => _v176cBump((x) => (x + 1) & 0xff)), []);
+
+  const _v176cOpenEpMenu = useCallback(() => {
+    const id = _v176cEpId;
+    if (!id) return;
+    const watchedNow = !!isWatched || _v176cV172IsWatched(id);
+    const hasProg = _v176cV176HasProg(id);
+    const title = `S${(episode as any).season ?? '?'} · E${(episode as any).episode ?? '?'}`
+      + ((episode as any).name ? ` — ${(episode as any).name}` : '');
+    const buttons: any[] = [];
+    if (hasProg) {
+      buttons.push({ text: 'Clear Progress', onPress: () => { _v176cV176Clear(id); } });
+    }
+    if (watchedNow) {
+      buttons.push({ text: 'Mark as Unwatched', onPress: () => { _v176cV172Unmark(id); try { onMarkUnwatched && onMarkUnwatched(); } catch (_) {} } });
+    } else {
+      buttons.push({ text: 'Mark as Watched', onPress: () => { _v176cV176Mark(id); } });
+    }
+    /* V176I_EPISODE_PAINT — Cancel removed; back button dismisses Alert. */
+    /* V176J_EPISODE_CANCELABLE — cancelable=true so hardware Back
+       dismisses the menu (Cancel button was removed in v176i). */
+    _V176cAlert.alert(title, undefined, buttons, { cancelable: true });
+  }, [episode, isWatched, onMarkUnwatched, _v176cEpId]);
+
+  /* V176I_EPISODE_PAINT — ref-of-latest-opener so the v173 dispatcher
+     never holds a stale watched-state closure between long-presses. */
+  const _v176iEpLpRef = useRef<(() => void) | null>(null);
+  _v176iEpLpRef.current = _v176cOpenEpMenu;
+
+  const _v176cLpTimer = useRef<any>(null);
+  const _v176cLpFired = useRef<boolean>(false);
+  const _v176cPressIn = useCallback(() => {
+    _v176cLpFired.current = false;
+    if (_v176cLpTimer.current) clearTimeout(_v176cLpTimer.current);
+    _v176cLpTimer.current = setTimeout(() => {
+      _v176cLpFired.current = true;
+      try { _v176cOpenEpMenu(); } catch (_) {}
+    }, 500);
+  }, [_v176cOpenEpMenu]);
+  const _v176cPressOut = useCallback(() => {
+    if (_v176cLpTimer.current) {
+      clearTimeout(_v176cLpTimer.current);
+      _v176cLpTimer.current = null;
+    }
+  }, []);
+  const _v176cOnPress = useCallback(() => {
+    if (_v176cLpFired.current) { _v176cLpFired.current = false; return; }
+    try { onPress && onPress(); } catch (_) {}
+  }, [onPress]);
   
   return (
     <Pressable
       ref={pressableRef}
       style={[styles.episodeCard, isFocused && styles.episodeCardFocused]}
-      onPress={onPress}
-      onLongPress={isWatched ? onMarkUnwatched : undefined}
-      /* V173_TV_LONGPRESS_EPISODE — register the mark-unwatched callback
-         while this card is focused so the TV 'longSelect' dispatcher in
-         ContentCard.tsx can fire it.  Skips when nothing to unmark. */
-      onFocus={() => { try { _v173RegLP(isWatched && typeof onMarkUnwatched === 'function' ? onMarkUnwatched : null); } catch (_) {} if (autoFocus) { /* preserve any existing autoFocus behaviour */ } }}
-      onBlur={() => { try { _v173RegLP(null); } catch (_) {} }}
-      /* v135-focus-unlock-blur */
+      onPress={_v176cOnPress}
+      onPressIn={_v176cPressIn}
+      onPressOut={_v176cPressOut}
+      onLongPress={_v176cOpenEpMenu}
+      /* V176H2_EPISODE_FOCUS_MERGE — ONE merged onFocus that does BOTH
+         the v135 focus-state bookkeeping AND the v173 long-press
+         registration.  The previous build had TWO onFocus props on the
+         same Pressable, so React dropped the v173 registration and
+         TV remote OK long-press never reached this card.  Now unified.
+         Also always registers (no isWatched guard) so unwatched episodes
+         can be marked watched. */
       onFocus={() => {
         setIsFocused(true);
         hasFocusedRef.current = true;
         focusGrabbedOnceRef.current = true;
         console.log('[FOCUS v135] onFocus ep=' + episode.episode + ' (one-shot guard set)');
+        /* V176I_EPISODE_PAINT — register a stable wrapper that reads
+           the latest opener from the ref, so toggling watched in the
+           menu doesn't strand the next long-press with a stale value. */
+        try { _v173RegLP(() => { try { _v176iEpLpRef.current && _v176iEpLpRef.current(); } catch (_) {} }); } catch (_) {}
       }}
       onBlur={() => {
         setIsFocused(false);
@@ -773,6 +848,7 @@ function EpisodeCard({
           userMovedRef.current = true;
           console.log('[FOCUS v135] onBlur ep=' + episode.episode + ' (userMoved=true)');
         }
+        try { _v173RegLP(null); } catch (_) {}
       }}
       delayLongPress={600}
       hasTVPreferredFocus={tvPreferred}
@@ -788,7 +864,10 @@ function EpisodeCard({
         ) : (
           <ComingSoonPlaceholder width="100%" height={90} />
         )}
-        {isWatched && (
+        {/* V176I_EPISODE_PAINT — also consult the in-memory _v172WatchedSet
+            so Mark-as-Watched lights up the gold check the instant the menu
+            closes, no parent state refresh required. */}
+        {(isWatched || (!!_v176cEpId && _v176cV172IsWatched(_v176cEpId))) && (
           <View style={styles.watchedBadge}>
             <Ionicons name="checkmark" size={14} color="#B8A05C" />
           </View>

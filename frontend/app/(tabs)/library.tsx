@@ -9,6 +9,7 @@ import {
   Pressable,
   useWindowDimensions,
   findNodeHandle,
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,7 +19,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { ContentItem } from '../../src/api/client';
 import { colors } from '../../src/styles/colors';
-import { getCardWidth } from '../../src/components/ContentCard';
+/* V176_LONGPRESS_MENU — pull the unified menu opener + watched/progress
+   subscriptions in so LibraryCard renders the gold check and routes
+   long-press through the shared Alert. */
+import {
+  getCardWidth,
+  v172IsWatched as _v172IsWatched,
+  v172SubscribeWatched as _v172SubscribeWatched,
+  v176HasProgress as _v176HasProgress,
+  v176SubscribeProgress as _v176SubscribeProgress,
+  v176ShowLongPressMenu as _v176ShowLongPressMenu,
+  /* V176E_TV_LONGPRESS — register this card's menu handler with the
+     v173 TV event dispatcher so the remote Menu button (now mapped to
+     longSelect via withTVKeyEvents.js) fires this card's menu. */
+  v173RegisterLongPress as _v173RegLP,
+} from '../../src/components/ContentCard';
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
@@ -70,6 +85,51 @@ function LibraryCard({
   const xButtonSize = isTV ? 30 : 24;
   const xRowHeight = xButtonSize + 8;
 
+  /* V176_LONGPRESS_MENU — derive watched + progress per-card; subscribe
+     so any change elsewhere (player marks watched, another long-press
+     clears progress) instantly refreshes the gold badge / menu. */
+  const _v176ContentId = ((item as any).imdb_id || (item as any).id || (item as any).content_id) as string | undefined;
+  const [, _v176Bump] = useState(0);
+  useEffect(() => _v172SubscribeWatched(() => _v176Bump((x) => (x + 1) & 0xff)), []);
+  useEffect(() => _v176SubscribeProgress(() => _v176Bump((x) => (x + 1) & 0xff)), []);
+  const _v176IsWatched = _v172IsWatched(_v176ContentId);
+  const _v176HasProg = _v176HasProgress(_v176ContentId);
+
+  const _v176OpenMenu = useCallback(() => {
+    _v176ShowLongPressMenu({
+      item: { ...(item as any), content_id: _v176ContentId, content_type: (item as any).type },
+      inLibraryOverride: true,
+      hasProgressOverride: _v176HasProg,
+      onAfterChange: (action) => {
+        if (action === 'removed') { try { onRemove && onRemove(); } catch (_) {} }
+      },
+    });
+  }, [item, _v176ContentId, _v176HasProg, onRemove]);
+
+  /* V176B_PRESS_TIMING — fire menu via onPressIn/Out timing so the
+     TV remote OK button works (Pressable.onLongPress is flaky). */
+  const _v176bLpTimer = useRef<any>(null);
+  const _v176bLpFired = useRef<boolean>(false);
+  const _v176bPressIn = useCallback(() => {
+    _v176bLpFired.current = false;
+    if (_v176bLpTimer.current) clearTimeout(_v176bLpTimer.current);
+    _v176bLpTimer.current = setTimeout(() => {
+      _v176bLpFired.current = true;
+      try { _v176OpenMenu(); } catch (_) {}
+    }, 500);
+  }, [_v176OpenMenu]);
+  const _v176bPressOut = useCallback(() => {
+    if (_v176bLpTimer.current) {
+      clearTimeout(_v176bLpTimer.current);
+      _v176bLpTimer.current = null;
+    }
+  }, []);
+  const _v176bOnPress = useCallback(() => {
+    if (_v176bLpFired.current) { _v176bLpFired.current = false; return; }
+    try { onPress && onPress(); } catch (_) {}
+  }, [onPress]);
+
+
   return (
     <View style={{ width: cardWidth, marginRight: 16 }}>
       {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
@@ -101,9 +161,13 @@ function LibraryCard({
       {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
         ref={posterRef}
-        onPress={onPress}
-        onFocus={handleFocus}
-        onBlur={() => { setIsFocused(false); onCardBlur?.(); }}
+        onPress={_v176bOnPress}
+        onPressIn={_v176bPressIn}
+        onPressOut={_v176bPressOut}
+        onLongPress={_v176OpenMenu}
+        delayLongPress={500}
+        onFocus={() => { try { _v173RegLP(_v176OpenMenu); } catch (_) {} handleFocus(); }}
+        onBlur={() => { try { _v173RegLP(null); } catch (_) {} setIsFocused(false); onCardBlur?.(); }}
         android_ripple={null}
         nextFocusUp={xButtonTag}
         style={[
@@ -120,6 +184,13 @@ function LibraryCard({
             cachePolicy="memory-disk"
           />
         </View>
+
+        {/* V176_LONGPRESS_MENU — gold check overlay when watched. */}
+        {_v176IsWatched && (
+          <View style={styles.v176WatchedBadge} pointerEvents="none">
+            <Ionicons name="checkmark" size={14} color="#B8A05C" />
+          </View>
+        )}
 
         {!item.poster && (
           <View style={styles.placeholder}>
@@ -321,6 +392,19 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
+  /* V176_LONGPRESS_MENU — mirror EpisodeCard's gold checkmark badge. */
+  v176WatchedBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
   container: {
     flex: 1,
     backgroundColor: '#000000',

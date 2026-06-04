@@ -23,6 +23,9 @@ let _v170PrefetchInflight = 0;
 const _V170_PREFETCH_CAP = 2;
 import { colors, posterShapes } from '../styles/colors';
 import Constants from 'expo-constants';
+/* V176_LONGPRESS_MENU — v172 referenced AsyncStorage but forgot to import it,
+   so hydration silently failed and gold check never appeared.  Restored here. */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
@@ -114,6 +117,145 @@ export async function v172UnmarkWatched(contentId: string | undefined | null): P
     await AsyncStorage.setItem(_V172_KEY, JSON.stringify(obj));
   } catch (_) { /* best-effort -- in-memory delete still took effect */ }
   _v172Subs.forEach((cb) => { try { cb(); } catch (_) {} });
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   V176_LONGPRESS_MENU — companion helpers to the V172 watched registry.
+   Adds Mark-as-Watched (sister to UnmarkWatched), an in-memory progress
+   registry (hydrated by discover.tsx from the CW fetch) so the menu can
+   conditionally show "Clear Progress", and a unified Alert opener that
+   every poster surface (ContentCard, LibraryCard, ContinueWatchingItem)
+   delegates to so the menu wording / button set is identical everywhere. */
+export async function v176MarkWatched(contentId: string | undefined | null): Promise<void> {
+  if (!contentId) return;
+  const key = String(contentId);
+  _v172WatchedSet.add(key);
+  try {
+    const raw = await AsyncStorage.getItem(_V172_KEY);
+    const obj = raw ? JSON.parse(raw) : {};
+    obj[key] = true;
+    await AsyncStorage.setItem(_V172_KEY, JSON.stringify(obj));
+  } catch (_) { /* best-effort */ }
+  _v172Subs.forEach((cb) => { try { cb(); } catch (_) {} });
+}
+
+/* Progress registry — populated by discover.tsx every time CW data lands. */
+const _v176ProgressSet = new Set<string>();
+const _v176ProgressSubs = new Set<() => void>();
+export function v176RegisterProgress(ids: Array<string | undefined | null>): void {
+  _v176ProgressSet.clear();
+  for (const raw of (ids || [])) {
+    if (!raw) continue;
+    _v176ProgressSet.add(String(raw));
+  }
+  _v176ProgressSubs.forEach((cb) => { try { cb(); } catch (_) {} });
+}
+export function v176HasProgress(contentId: string | undefined | null): boolean {
+  if (!contentId) return false;
+  return _v176ProgressSet.has(String(contentId));
+}
+export function v176SubscribeProgress(cb: () => void): () => void {
+  _v176ProgressSubs.add(cb);
+  return () => { _v176ProgressSubs.delete(cb); };
+}
+export async function v176ClearProgress(contentId: string | undefined | null): Promise<void> {
+  if (!contentId) return;
+  const key = String(contentId);
+  _v176ProgressSet.delete(key);
+  _v176ProgressSubs.forEach((cb) => { try { cb(); } catch (_) {} });
+  try { await (api as any).watchProgress.delete(key); } catch (_) { /* best-effort */ }
+}
+
+/* Unified long-press menu used by ContentCard, LibraryCard, and
+   ContinueWatchingItem so every surface shows the same wording.
+   Each caller supplies the context it already knows (e.g. LibraryCard
+   passes inLibrary=true). */
+export function v176ShowLongPressMenu(opts: {
+  item: any;
+  inLibraryOverride?: boolean | null;
+  hasProgressOverride?: boolean | null;
+  onAfterChange?: (action: 'watched' | 'unwatched' | 'cleared' | 'added' | 'removed') => void;
+}): void {
+  const { item, inLibraryOverride, hasProgressOverride, onAfterChange } = opts || ({} as any);
+  if (!item) return;
+  const contentId = String((item as any).content_id || (item as any).imdb_id || (item as any).id || '');
+  if (!contentId) return;
+  const title = (item as any).title || (item as any).name || 'this item';
+  const contentType = (item as any).content_type || (item as any).type || 'movie';
+
+  const isWatched = v172IsWatched(contentId);
+  const hasProgress = hasProgressOverride != null ? !!hasProgressOverride : v176HasProgress(contentId);
+  const inLibrary = !!inLibraryOverride;
+
+  const buttons: any[] = [];
+  if (hasProgress) {
+    buttons.push({
+      text: 'Clear Progress',
+      onPress: () => {
+        v176ClearProgress(contentId).then(() => { try { onAfterChange && onAfterChange('cleared'); } catch (_) {} });
+      },
+    });
+  }
+  if (isWatched) {
+    buttons.push({
+      text: 'Mark as Unwatched',
+      onPress: () => {
+        v172UnmarkWatched(contentId).then(() => { try { onAfterChange && onAfterChange('unwatched'); } catch (_) {} });
+      },
+    });
+  } else {
+    buttons.push({
+      text: 'Mark as Watched',
+      onPress: () => {
+        v176MarkWatched(contentId).then(() => { try { onAfterChange && onAfterChange('watched'); } catch (_) {} });
+      },
+    });
+  }
+  if (inLibrary) {
+    buttons.push({
+      text: 'Remove from Library',
+      style: 'destructive',
+      onPress: async () => {
+        /* V176J_MENU_REFRESH — route through contentStore so the Library tab
+           refreshes after the remove succeeds.  Direct api.library.remove()
+           left contentStore.library stale. */
+        try {
+          const removeFn = (_v169UseContentStore as any).getState().removeFromLibrary;
+          await removeFn(contentType, contentId);
+        } catch (e) { console.log('[V176J] remove error:', e); }
+        try { onAfterChange && onAfterChange('removed'); } catch (_) {}
+      },
+    });
+  } else {
+    buttons.push({
+      text: 'Add to Library',
+      onPress: async () => {
+        /* V176D_LIBRARY_PAYLOAD — server LibraryItem schema is
+           { id, type, name, poster, imdb_id? } NOT { content_id, content_type, ... }.
+           The old payload silently 422-ed and the menu closed with no effect. */
+        /* V176J_MENU_REFRESH — route through contentStore so the Library
+           tab refreshes after the add. */
+        try {
+          const addFn = (_v169UseContentStore as any).getState().addToLibrary;
+          await addFn({
+            id: contentId,
+            imdb_id: contentId && String(contentId).startsWith('tt') ? contentId : undefined,
+            name: title,
+            type: contentType,
+            poster: (item as any).poster || '',
+          });
+          console.log('[V176J] library.add OK:', contentId);
+        } catch (e) {
+          console.log('[V176J] library.add FAILED:', e);
+        }
+        try { onAfterChange && onAfterChange('added'); } catch (_) {}
+      },
+    });
+  }
+  /* V176J_MENU_REFRESH — Cancel removed; Alert.alert is invoked with
+     cancelable=true so hardware Back dismisses on Android. */
+
+  Alert.alert(title, undefined, buttons, { cancelable: true });
 }
 export function v160GetPoster(imdbId: string | undefined | null, fallback: string | undefined | null): string {
   if (imdbId) {
@@ -325,18 +467,49 @@ export const getCardWidth = (
    Google TV / Firestick OK buttons.  Maintain a single global slot for
    the currently-focused card's long-press handler and dispatch the
    native 'longSelect' TV event into it. */
+/* V176I_REF_DISPATCH — the previous v173 implementation cached a
+   frozen closure here.  When the focused card setState-updated
+   (e.g. isInLibrary flips after Add), the cached closure became
+   stale and the next longSelect fired the old behavior.  Using a
+   ref-of-ref pattern: this slot now holds a *getter* that returns
+   the most recent handler.  Each ContentCard installs its own
+   getter on focus and clears on blur.  Inside the card we keep a
+   useRef updated by every render so the getter always returns the
+   freshest closure. */
 let _v173FocusedLP: (() => void) | null = null;
+let _v176iLatestGetter: (() => (() => void) | null) | null = null;
 try {
   /* DeviceEventEmitter is already imported at top of file. */
+  /* V176F_TV_DIAG — diagnostic logs so we can SEE in logcat which TV
+     key events arrive on the JS side.  Filter with:
+         adb logcat -d -t 500 ReactNativeJS:V *:S | findstr V176F */
   DeviceEventEmitter.addListener('onTVKeyEvent', (evt: any) => {
-    if (evt && evt.eventType === 'longSelect' && _v173FocusedLP) {
-      try { _v173FocusedLP(); } catch (_) {}
+    try { console.log('[V176F] TV event:', JSON.stringify(evt), 'hasFocusedLP=', !!_v173FocusedLP); } catch (_) {}
+    if (evt && evt.eventType === 'longSelect') {
+      /* V176I_REF_DISPATCH — prefer the getter; falls back to the
+         legacy slot for any callers that still set it directly. */
+      let target: (() => void) | null = null;
+      try { if (_v176iLatestGetter) target = _v176iLatestGetter(); } catch (_) {}
+      if (!target) target = _v173FocusedLP;
+      if (target) {
+        console.log('[V176I] longSelect -> dispatching to focused card');
+        try { target(); } catch (e) { console.log('[V176I] dispatch error:', e); }
+      } else {
+        console.log('[V176I] longSelect ignored — no focused card registered');
+      }
     }
   });
 } catch (_) { /* DeviceEventEmitter may not exist outside RN */ }
 
 export function v173RegisterLongPress(fn: (() => void) | null): void {
   _v173FocusedLP = fn;
+}
+
+/* V176I_REF_DISPATCH — register a *getter* (closure-stable) that the
+   dispatcher invokes at fire-time.  Callers should pass a fn that
+   reads from a useRef whose .current is updated by every render. */
+export function v176iRegisterGetter(get: (() => (() => void) | null) | null): void {
+  _v176iLatestGetter = get;
 }
 
 const ContentCardComponent: React.FC<ContentCardProps> = ({
@@ -367,6 +540,30 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   const [isFocused, setIsFocused] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
+
+  /* V176G_LIBRARY_SUBSCRIBE — keep isInLibrary in sync with the global
+     library snapshot so removing an item from the Library tab also flips
+     the Add/Remove button on the same poster in Discover/Search.  The
+     contentStore was already imported as _v169UseContentStore for the
+     V169 prefetch path — reusing it here costs nothing extra. */
+  const _v176gLibrary = _v169UseContentStore((s: any) => s.library);
+  useEffect(() => {
+    if (!item) return;
+    const myId = String((item as any).imdb_id || (item as any).id || (item as any).content_id || '');
+    if (!myId) return;
+    const lib = _v176gLibrary;
+    if (!lib) return;
+    const all: any[] = []
+      .concat((lib as any).movies || [])
+      .concat((lib as any).series || [])
+      .concat((lib as any).channels || [])
+      .concat((lib as any).tv || []);
+    const found = all.some((it: any) => {
+      const candidate = String(it.imdb_id || it.id || it.content_id || '');
+      return candidate && candidate === myId;
+    });
+    setIsInLibrary(found);
+  }, [_v176gLibrary, item]);
   const [posterError, setPosterError] = useState(false);
   const [useProxy, setUseProxy] = useState(false);
 
@@ -423,6 +620,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     }
     /* V173_TV_LONGPRESS_REGISTRY — register this card's long-press
        handler so the global 'longSelect' listener can fire it. */
+    /* V176I_REF_DISPATCH — register a getter, not the closure itself. */
+    try { v176iRegisterGetter(() => _v176iLpRef.current); } catch (_) {}
     try { v173RegisterLongPress(handleLongPress); } catch (_) {}
   }, [onCardFocus, item, handleLongPress]);
 
@@ -436,82 +635,57 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       _v169PrewarmTimerRef.current = null;
     }
     /* V173_TV_LONGPRESS_REGISTRY — clear long-press registration on blur. */
+    try { v176iRegisterGetter(null); } catch (_) {}
     try { v173RegisterLongPress(null); } catch (_) {}
   }, [onCardBlur]);
 
-  const handleLongPress = useCallback(async () => {
-    /* V172_WATCHED_REGISTRY — for an already-watched card, long-press
-       removes the checkmark (mirrors EpisodeCard).  Falls through to
-       the library toggle for unwatched cards. */
-    if (_v172IsWatched && _v172ContentId) {
-      const _v172Name = (item as any).name || (item as any).title || 'this title';
-      Alert.alert(
-        'Mark as Unwatched',
-        `Remove the watched checkmark from "${_v172Name}"?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Mark Unwatched',
-            style: 'destructive',
-            onPress: () => { v172UnmarkWatched(_v172ContentId); },
-          },
-        ],
-      );
-      return;
-    }
-    const contentId = item.imdb_id || item.id;
-
-    const contentName =
-      item.name || item.title || 'this item';
-
-    Alert.alert(
-      isInLibrary
-        ? 'Remove from Library?'
-        : 'Add to Library?',
-      isInLibrary
-        ? `Remove "${contentName}" from your library?`
-        : `Add "${contentName}" to your library?`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: isInLibrary ? 'Remove' : 'Add',
-          style: isInLibrary
-            ? 'destructive'
-            : 'default',
-          onPress: async () => {
-            try {
-              if (isInLibrary) {
-                await api.library.remove(contentId);
-
-                setIsInLibrary(false);
-              } else {
-                await api.library.add({
-                  content_id: contentId,
-                  content_type: item.type || 'movie',
-                  name: contentName,
-                  poster: item.poster || '',
-                });
-
-                setIsInLibrary(true);
-              }
-
-              onLibraryChange?.();
-            } catch (error) {
-              console.log('Library error:', error);
-
-              Alert.alert(
-                'Error',
-                'Failed to update library'
-              );
-            }
-          },
-        },
-      ]
-    );
+  const handleLongPress = useCallback(() => {
+    /* V176_LONGPRESS_MENU — delegate to the unified Stremio-style menu.
+       inLibrary is the local component flag (parent-set OR toggled by a
+       previous Add).  After Add/Remove resolves we flip the local flag
+       and notify any parent listener. */
+    v176ShowLongPressMenu({
+      item,
+      inLibraryOverride: isInLibrary,
+      onAfterChange: (action) => {
+        if (action === 'added') setIsInLibrary(true);
+        if (action === 'removed') setIsInLibrary(false);
+        if (action === 'added' || action === 'removed') {
+          try { onLibraryChange && onLibraryChange(); } catch (_) {}
+        }
+      },
+    });
   }, [item, isInLibrary, onLibraryChange, _v172IsWatched, _v172ContentId]);
+
+  /* V176I_REF_DISPATCH — keep a ref pointing at the freshest
+     handleLongPress so the global dispatcher reads the current one
+     (not a stale closure frozen at the last onFocus). */
+  const _v176iLpRef = useRef<(() => void) | null>(null);
+  _v176iLpRef.current = handleLongPress;
+
+  /* V176B_PRESS_TIMING — Pressable.onLongPress is unreliable on
+     Firestick / Android TV OK buttons.  Do our own timing via
+     onPressIn / onPressOut so it works on touch AND TV remotes. */
+  const _v176bLpTimer = useRef<any>(null);
+  const _v176bLpFired = useRef<boolean>(false);
+  const _v176bPressIn = useCallback(() => {
+    _v176bLpFired.current = false;
+    if (_v176bLpTimer.current) clearTimeout(_v176bLpTimer.current);
+    _v176bLpTimer.current = setTimeout(() => {
+      _v176bLpFired.current = true;
+      try { handleLongPress(); } catch (_) {}
+    }, 500);
+  }, [handleLongPress]);
+  const _v176bPressOut = useCallback(() => {
+    if (_v176bLpTimer.current) {
+      clearTimeout(_v176bLpTimer.current);
+      _v176bLpTimer.current = null;
+    }
+  }, []);
+  const _v176bOnPress = useCallback(() => {
+    if (_v176bLpFired.current) { _v176bLpFired.current = false; return; }
+    try { onPress && onPress(); } catch (_) {}
+  }, [onPress]);
 
   if (!item) return null;
 
@@ -534,11 +708,17 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   useEffect(() => v172SubscribeWatched(() => _v172Bump((x) => (x + 1) & 0xff)), []);
   const _v172IsWatched = v172IsWatched(_v172ContentId);
 
+  /* V176_LONGPRESS_MENU — re-render when the CW progress registry changes
+     so the unified long-press menu shows the right buttons. */
+  useEffect(() => v176SubscribeProgress(() => _v172Bump((x) => (x + 1) & 0xff)), []);
+
   return (
     <Pressable
       ref={pressableRef}
       focusable={true}
-      onPress={onPress}
+      onPress={_v176bOnPress}
+      onPressIn={_v176bPressIn}
+      onPressOut={_v176bPressOut}
       onLongPress={handleLongPress}
       delayLongPress={500}
       onFocus={handleFocus}
@@ -715,13 +895,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundLight,
   },
 
+  /* V176H_BOOKMARK_POSITION — moved from top-right to bottom-right so it
+     doesn't collide with the IN CINEMA badge that sits top-left/center. */
   libraryBadge: {
     position: 'absolute',
-    top: 8,
+    bottom: 8,
     right: 8,
     backgroundColor: colors.primary,
     borderRadius: 4,
     padding: 4,
+    zIndex: 6,
+    elevation: 6,
   },
 
   /* V172B_GOLD_CHECKMARK — mirror EpisodeCard's 24x24 round badge */

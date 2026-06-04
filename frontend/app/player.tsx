@@ -37,6 +37,9 @@ import Constants from 'expo-constants';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Modal, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+/* V176C_PLAYER_MARK_WATCHED — keep the in-memory _v172WatchedSet in sync
+   so visible posters show the gold check immediately, no app restart. */
+import { v176MarkWatched as _v176cMark } from '../src/components/ContentCard';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as NavigationBar from 'expo-navigation-bar';
 
@@ -496,18 +499,14 @@ export default function PlayerScreen() {
     if (!force && now - lastProgressSaveRef.current < 5000) return;
     lastProgressSaveRef.current = now;
     
-    // Mark as watched in AsyncStorage FIRST — independent of API success
+    /* V176C_PLAYER_MARK_WATCHED — route through v176MarkWatched so the
+       in-memory _v172WatchedSet (used by every ContentCard) updates
+       immediately and all visible posters re-render with the gold check. */
     const percentWatched = (currentPosition / totalDuration) * 100;
     if (percentWatched >= 90 && contentId) {
       try {
-        const watchedKey = 'privastream_watched';
-        const existing = await AsyncStorage.getItem(watchedKey);
-        const watchedSet: Record<string, boolean> = existing ? JSON.parse(existing) : {};
-        if (!watchedSet[contentId]) {
-          watchedSet[contentId] = true;
-          await AsyncStorage.setItem(watchedKey, JSON.stringify(watchedSet));
-          console.log('[PLAYER] Marked as watched:', contentId);
-        }
+        await _v176cMark(contentId);
+        console.log('[PLAYER] v176c marked as watched:', contentId);
       } catch (e) {
         console.log('[PLAYER] Error saving watched status:', e);
       }
@@ -543,19 +542,16 @@ export default function PlayerScreen() {
     return () => {
       // Save current progress on exit
       if (currentPositionRef.current > 0 && currentDurationRef.current > 0 && contentId && contentType && isLive !== 'true') {
-        /* V173_FORCE_WATCHED_ON_EXIT — if the user fast-forwarded past 90%
-           but backed out before the throttled saveProgress tick could fire,
-           write privastream_watched here so the gold checkmark lands. */
+        /* V176G_EXIT_MARK_WATCHED — supersedes the v173 raw AsyncStorage
+           write.  v176MarkWatched updates the in-memory _v172WatchedSet,
+           writes AsyncStorage, AND notifies every subscribed ContentCard
+           so the gold check appears the moment the user lands back on
+           Discover — no app restart required. */
         try {
-          const _v173Pct = (currentPositionRef.current / currentDurationRef.current) * 100;
-          if (_v173Pct >= 90) {
-            const _v173Key = 'privastream_watched';
-            AsyncStorage.getItem(_v173Key).then((raw) => {
-              const set: Record<string, boolean> = raw ? JSON.parse(raw) : {};
-              if (!set[contentId]) {
-                set[contentId] = true;
-                return AsyncStorage.setItem(_v173Key, JSON.stringify(set));
-              }
+          const _v176gPct = (currentPositionRef.current / currentDurationRef.current) * 100;
+          if (_v176gPct >= 90) {
+            _v176cMark(contentId).then(() => {
+              console.log('[V176G] exit-mark watched:', contentId);
             }).catch(() => {});
           }
         } catch (_) {}

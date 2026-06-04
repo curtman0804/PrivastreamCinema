@@ -1,0 +1,160 @@
+--------- beginning of main
+06-04 06:04:16.137   694   845 E CellBroadcastUtils: getDefaultCellBroadcastReceiverPackageName: no package found
+--------- beginning of system
+06-04 06:04:16.207  1816 15913 E ActivityThread: Failed to find provider info for com.google.android.apps.youtube.tvunplugged.client.provider
+06-04 06:04:16.224  1816  1969 E OpenGLRenderer: Unable to match the desired swap behavior.
+06-04 06:04:16.321   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:16.421  1816 15913 E ActivityThread: Failed to find provider info for com.google.android.apps.youtube.tvunplugged.client.provider
+06-04 06:04:16.702   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:17.061  1816 15912 E ActivityThread: Failed to find provider info for com.google.android.apps.youtube.tvunplugged.client.provider
+06-04 06:04:17.184  1816 15912 E ActivityThread: Failed to find provider info for com.google.android.apps.youtube.tvunplugged.client.provider
+06-04 06:04:28.977   694  4680 E CellBroadcastUtils: getDefaultCellBroadcastReceiverPackageName: no package found
+06-04 06:04:28.984  1816 15916 E ActivityThread: Failed to find provider info for com.google.android.apps.youtube.tvunplugged.client.provider
+06-04 06:04:28.994   694  2306 E Transition: Trying to add a ready-group twice: Display{#0 state=ON size=1920x1080 ROTATION_0}
+06-04 06:04:29.114 14997 15015 E OpenGLRenderer: Unable to match the desired swap behavior.
+06-04 06:04:29.285   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:29.669   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:30.955   694   845 E CellBroadcastUtils: getDefaultCellBroadcastReceiverPackageName: no package found
+06-04 06:04:31.011  1816 15916 E ActivityThread: Failed to find provider info for com.google.android.apps.youtube.tvunplugged.client.provider
+06-04 06:04:31.027  1816  1969 E OpenGLRenderer: Unable to match the desired swap behavior.
+06-04 06:04:31.033  1816 15912 E ActivityThread: Failed to find provider info for com.google.android.apps.youtube.tvunplugged.client.provider
+06-04 06:04:31.135   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:31.519   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:31.895   694  2083 E CellBroadcastUtils: getDefaultCellBroadcastReceiverPackageName: no package found
+06-04 06:04:31.903  1816 15913 E ActivityThread: Failed to find provider info for com.google.android.apps.youtube.tvunplugged.client.provider
+06-04 06:04:31.911   694  1861 E Transition: Trying to add a ready-group twice: Display{#0 state=ON size=1920x1080 ROTATION_0}
+06-04 06:04:31.942 14997 15015 E OpenGLRenderer: Unable to match the desired swap behavior.
+06-04 06:04:32.035   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:32.419   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:32.505   694  1738 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+06-04 06:04:32.836 14997 15021 I ReactNativeJS: '[FOCUS v134] details focused, clearing overlay; autoPlayParam=', undefined, ' isPlayLoading-cleared'
+06-04 06:04:32.955 14997 15021 I ReactNativeJS: [FOCUS v135] onFocus ep=1 (one-shot guard set)
+06-04 06:04:34.402 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/watch-progress'
+06-04 06:04:34.405 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/discover-organized'
+06-04 06:04:35.576 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/watch-progress'
+06-04 06:04:35.601 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/discover-organized'
+06-04 06:04:36.776  1816  1969 E OpenGLRenderer: Unable to match the desired swap behavior.
+06-04 06:04:36.885   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:37.269   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:37.343 14997 15020 E unknown:SurfaceMountingManager: Stopping surface [1]
+06-04 06:04:37.418 14997 14997 E unknown:ReactNative: Tried to remove non-existent frame callback
+06-04 06:04:37.453 14997 14997 E unknown:SurfaceMountingManager: Surface [1] was stopped on SurfaceMountingManager.
+06-04 06:04:38.197   694  4680 E CellBroadcastUtils: getDefaultCellBroadcastReceiverPackageName: no package found
+06-04 06:04:38.263 14997 15021 I ReactNativeJS: Running "main"
+06-04 06:04:38.272 14997 14997 E unknown:IntBufferBatchMountItem: Skipping batch of MountItems; was stopped [1].
+06-04 06:04:38.303 14997 15015 E OpenGLRenderer: Unable to match the desired swap behavior.
+06-04 06:04:38.387   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:38.771   744   753 E mtkpower@impl: [setMode] unknown type
+06-04 06:04:38.922 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/addons'
+06-04 06:04:38.924 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/discover-organized'
+06-04 06:04:38.926 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/watch-progress'
+06-04 06:04:38.928 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Popular%20Movies/movies?skip=20&limit=100'
+06-04 06:04:38.931 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/watch-progress'
+06-04 06:04:39.879 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/watch-progress'
+06-04 06:04:39.881 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/watch-progress'
+06-04 06:04:39.904 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/discover-organized'
+06-04 06:04:40.573 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/addons'
+06-04 06:04:40.950 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Popular%20Movies/movies?skip=20&limit=100'
+06-04 06:04:40.951 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Popular%20Series/series?skip=20&limit=100'
+06-04 06:04:40.954 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/New%20Movies/movies?skip=20&limit=100'
+06-04 06:04:40.956 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/New%20Series/series?skip=20&limit=100'
+06-04 06:04:40.959 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Netflix%20Movies/movies?skip=20&limit=100'
+06-04 06:04:40.961 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Netflix%20Series/series?skip=20&limit=100'
+06-04 06:04:41.346   694  1738 E TaskPersister: File error accessing recents directory (directory doesn't exist?).
+06-04 06:04:41.382 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/meta/movie/tt32612507'
+06-04 06:04:41.426 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Netflix%20Series/series?skip=20&limit=100'
+06-04 06:04:41.541 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Netflix%20Movies/movies?skip=20&limit=100'
+06-04 06:04:41.546 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Popular%20Series/series?skip=20&limit=100'
+06-04 06:04:42.000 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt32612507'
+06-04 06:04:42.014 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/New%20Movies/movies?skip=20&limit=100'
+06-04 06:04:42.049 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/New%20Series/series?skip=20&limit=100'
+06-04 06:04:42.050 14997 15021 I ReactNativeJS: '[PREFETCH v138] kicking /api/streams for focused movie', 'tt32612507'
+06-04 06:04:42.051 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Disney%2B%20Movies/movies?skip=20&limit=100'
+06-04 06:04:42.053 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Disney%2B%20Series/series?skip=20&limit=100'
+06-04 06:04:42.064 14997 15021 I ReactNativeJS: [STREAMS] ========== Fetching streams for movie/tt32612507 ==========
+06-04 06:04:43.934 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/streams/movie/tt32612507'
+06-04 06:04:43.936 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/addon-proxy/torrentio/movie/tt32612507'
+06-04 06:04:43.938 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/addon-proxy/tpb/movie/tt32612507'
+06-04 06:04:43.976 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Disney%2B%20Movies/movies?skip=20&limit=100'
+06-04 06:04:43.992 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Disney%2B%20Series/series?skip=20&limit=100'
+06-04 06:04:43.994 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Prime%20Video%20Movies/movies?skip=20&limit=100'
+06-04 06:04:43.996 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Prime%20Video%20Series/series?skip=20&limit=100'
+06-04 06:04:43.999 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/HBO%20Max%20Movies/movies?skip=20&limit=100'
+06-04 06:04:44.002 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/HBO%20Max%20Series/series?skip=20&limit=100'
+06-04 06:04:44.004 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Hulu%20Movies/movies?skip=20&limit=100'
+06-04 06:04:44.006 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Hulu%20Series/series?skip=20&limit=100'
+06-04 06:04:44.008 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Paramount%2B%20Movies/movies?skip=20&limit=100'
+06-04 06:04:44.011 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Paramount%2B%20Series/series?skip=20&limit=100'
+06-04 06:04:44.013 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Apple%20TV%2B%20Movies/movies?skip=20&limit=100'
+06-04 06:04:44.015 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Apple%20TV%2B%20Series/series?skip=20&limit=100'
+06-04 06:04:44.017 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Peacock%20Movies/movies?skip=20&limit=100'
+06-04 06:04:44.020 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Peacock%20Series/series?skip=20&limit=100'
+06-04 06:04:44.022 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/category/Discovery%2B%20Series/series?skip=20&limit=100'
+06-04 06:04:45.443 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/addon-proxy/tpb/movie/tt32612507'
+06-04 06:04:45.445 14997 15021 I ReactNativeJS: [STREAMS] TPB+: +4 streams (total: 4) in 3381ms
+06-04 06:04:45.445 14997 15021 I ReactNativeJS: [STREAMS] Torrentio: 0 new streams in 3381ms
+06-04 06:04:45.463 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Prime%20Video%20Movies/movies?skip=20&limit=100'
+06-04 06:04:45.480 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Prime%20Video%20Series/series?skip=20&limit=100'
+06-04 06:04:45.540 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/HBO%20Max%20Movies/movies?skip=20&limit=100'
+06-04 06:04:45.562 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/HBO%20Max%20Series/series?skip=20&limit=100'
+06-04 06:04:45.585 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Hulu%20Movies/movies?skip=20&limit=100'
+06-04 06:04:45.605 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Hulu%20Series/series?skip=20&limit=100'
+06-04 06:04:45.670 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Paramount%2B%20Movies/movies?skip=20&limit=100'
+06-04 06:04:45.699 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Paramount%2B%20Series/series?skip=20&limit=100'
+06-04 06:04:46.225 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Apple%20TV%2B%20Movies/movies?skip=20&limit=100'
+06-04 06:04:46.256 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Apple%20TV%2B%20Series/series?skip=20&limit=100'
+06-04 06:04:46.272 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Peacock%20Movies/movies?skip=20&limit=100'
+06-04 06:04:46.282 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Discovery%2B%20Series/series?skip=20&limit=100'
+06-04 06:04:46.296 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/category/Peacock%20Series/series?skip=20&limit=100'
+06-04 06:04:46.983 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/meta/movie/tt34685692'
+06-04 06:04:47.062 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt34685692'
+06-04 06:04:47.530 14997 15021 I ReactNativeJS: '[PREFETCH v138] kicking /api/streams for focused movie', 'tt34685692'
+06-04 06:04:47.531 14997 15021 I ReactNativeJS: [STREAMS] ========== Fetching streams for movie/tt34685692 ==========
+06-04 06:04:47.542 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/streams/movie/tt34685692'
+06-04 06:04:47.544 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/addon-proxy/torrentio/movie/tt34685692'
+06-04 06:04:47.546 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/addon-proxy/tpb/movie/tt34685692'
+06-04 06:04:47.716 14997 15021 I ReactNativeJS: [STREAMS] TPB+: +4 streams (total: 4) in 185ms
+06-04 06:04:47.957 14997 15021 I ReactNativeJS: [STREAMS] Torrentio: +25 streams (total: 29) in 426ms
+06-04 06:04:48.556 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/addon-proxy/torrentio/movie/tt32612507'
+06-04 06:04:49.550 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/meta/movie/tt32547691'
+06-04 06:04:49.656 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt32547691'
+06-04 06:04:50.349 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/content/meta/movie/tt33100314'
+06-04 06:04:50.464 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt33100314'
+06-04 06:04:51.630 14997 15021 I ReactNativeJS: '[PREFETCH v138] kicking /api/streams for focused movie', 'tt30825738'
+06-04 06:04:51.818 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/addon-proxy/torrentio/movie/tt34685692'
+06-04 06:04:51.875 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/addon-proxy/tpb/movie/tt34685692'
+06-04 06:04:52.852 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/streams/movie/tt32612507'
+06-04 06:04:52.853 14997 15021 I ReactNativeJS: [STREAMS] v121k: Backend upgrade-merge - upgraded 3, added 13, total 17
+06-04 06:04:52.853 14997 15021 I ReactNativeJS: [STREAMS] All sources done: 17 total streams in 10789ms
+06-04 06:04:53.591 14997 15021 I ReactNativeJS: '[SORT v141] picked top:', '1080p', 'cached=true', 'seeders=411', 'lang=ENG', '| cached_n=5', 'uncached_n=12'
+06-04 06:04:53.878 14997 15021 I ReactNativeJS: '[SORT v141] picked top:', '1080p', 'cached=true', 'seeders=411', 'lang=ENG', '| cached_n=5', 'uncached_n=12'
+06-04 06:04:53.879 14997 15021 I ReactNativeJS: [PREWARM] Pre-warming top English stream: b25212d3ed9ea2fdbdd02728929e94edbe07f42b (The.Mummy.2026.1080P.WEB.H264-POKE
+06-04 06:04:53.879 14997 15021 I ReactNativeJS: 📺 1080p
+06-04 06:04:53.879 14997 15021 I ReactNativeJS: 👤 411 💾 6.59 GB)
+06-04 06:04:53.904 14997 15021 I ReactNativeJS: '[SORT v141] picked top:', '1080p', 'cached=true', 'seeders=411', 'lang=ENG', '| cached_n=5', 'uncached_n=12'
+06-04 06:04:54.032 14997 15021 I ReactNativeJS: '[FOCUS v134] details focused, clearing overlay; autoPlayParam=', undefined, ' isPlayLoading-cleared'
+06-04 06:04:54.053 14997 15021 I ReactNativeJS: '[SORT v141] picked top:', '1080p', 'cached=true', 'seeders=3', 'lang=ENG', '| cached_n=4', 'uncached_n=4'
+06-04 06:04:54.218 14997 15021 I ReactNativeJS: '[SORT v141] picked top:', '1080p', 'cached=true', 'seeders=3', 'lang=ENG', '| cached_n=4', 'uncached_n=4'
+06-04 06:04:54.219 14997 15021 I ReactNativeJS: [PREWARM] Pre-warming top English stream: 030ac2607d17c7a44b7514c24042601abd82ef02 (ThePirateBay • Disney Gallery Star Wars The Mandalorian S03E01 1080p HEVC x
+06-04 06:04:54.219 14997 15021 I ReactNativeJS: 💾 527 MB | 🌱 3 | ⚡ HD)
+06-04 06:04:54.230 14997 15021 I ReactNativeJS: '[SORT v141] picked top:', '1080p', 'cached=true', 'seeders=3', 'lang=ENG', '| cached_n=4', 'uncached_n=4'
+06-04 06:04:54.243 14997 15021 I ReactNativeJS: '[API] Request:', 'POST', 'http://71.9.152.146:8001/api/stream/prewarm/b25212d3ed9ea2fdbdd02728929e94edbe07f42b'
+06-04 06:04:54.247 14997 15021 I ReactNativeJS: '[API] Request:', 'GET', 'http://71.9.152.146:8001/api/library'
+06-04 06:04:54.363 14997 15021 I ReactNativeJS: '[API] Request:', 'POST', 'http://71.9.152.146:8001/api/stream/prewarm/030ac2607d17c7a44b7514c24042601abd82ef02'
+06-04 06:04:54.371 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/stream/prewarm/b25212d3ed9ea2fdbdd02728929e94edbe07f42b'
+06-04 06:04:54.374 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/library'
+06-04 06:04:54.479 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/stream/prewarm/030ac2607d17c7a44b7514c24042601abd82ef02'
+06-04 06:04:55.964 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/streams/movie/tt34685692'
+06-04 06:04:55.965 14997 15021 I ReactNativeJS: [STREAMS] v121k: Backend upgrade-merge - upgraded 5, added 0, total 29
+06-04 06:04:55.965 14997 15021 I ReactNativeJS: [STREAMS] All sources done: 29 total streams in 8434ms
+06-04 06:04:56.040 14997 15021 I ReactNativeJS: '[SORT v141] picked top:', '1080p', 'cached=true', 'seeders=2004', 'lang=ENG', '| cached_n=5', 'uncached_n=24'
+06-04 06:04:56.291 14997 15021 I ReactNativeJS: '[SORT v141] picked top:', '1080p', 'cached=true', 'seeders=2004', 'lang=ENG', '| cached_n=5', 'uncached_n=24'
+06-04 06:04:56.293 14997 15021 I ReactNativeJS: [PREWARM] Pre-warming top English stream: 057d5536bf8402a809c49da378c2327fa446cbf1 (Over Your Dead Body (2026) [1080p] [WEBRip] [5.1]
+06-04 06:04:56.293 14997 15021 I ReactNativeJS: 📺 1080p WEBRip
+06-04 06:04:56.293 14997 15021 I ReactNativeJS: 👤 2004 💾 1.94 GB)
+06-04 06:04:56.353 14997 15021 I ReactNativeJS: '[SORT v141] picked top:', '1080p', 'cached=true', 'seeders=2004', 'lang=ENG', '| cached_n=5', 'uncached_n=24'
+06-04 06:04:56.361 14997 15021 I ReactNativeJS: '[API] Request:', 'POST', 'http://71.9.152.146:8001/api/stream/prewarm/057d5536bf8402a809c49da378c2327fa446cbf1'
+06-04 06:04:56.493 14997 15021 I ReactNativeJS: '[API] Response OK:', '/api/stream/prewarm/057d5536bf8402a809c49da378c2327fa446cbf1'
+06-04 06:05:07.342   694   987 E serviceDiscovery: [MdnsAdvertiser.wlan0.MdnsReplySender/serviceDiscovery] TERRIBLE Unknown reply info.
+06-04 06:05:07.344   694   987 E serviceDiscovery: [MdnsAdvertiser.wlan0.MdnsReplySender/serviceDiscovery] TERRIBLE Unknown reply info.
+06-04 06:05:07.357   694   987 E serviceDiscovery: [MdnsAdvertiser.wlan0.MdnsReplySender/serviceDiscovery] TERRIBLE Unknown reply info.
