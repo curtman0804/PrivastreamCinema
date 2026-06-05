@@ -33,6 +33,7 @@ import {
      v173 TV event dispatcher so the remote Menu button (now mapped to
      longSelect via withTVKeyEvents.js) fires this card's menu. */
   v173RegisterLongPress as _v173RegLP,
+  /* V176K_POPOVER */ V176kPopover, v176kMeasureAnchor
 } from '../../src/components/ContentCard';
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
@@ -95,11 +96,16 @@ function LibraryCard({
   const _v176IsWatched = _v172IsWatched(_v176ContentId);
   const _v176HasProg = _v176HasProgress(_v176ContentId);
 
-  const _v176OpenMenu = useCallback(() => {
+  const _v176OpenMenu = useCallback(async () => {
+    /* V176K_POPOVER_MOUNTED — measure the poster so the menu anchors
+       from its corner, then emit through the existing v176 helper. */
+    let anchor: any = null;
+    try { anchor = await v176kMeasureAnchor(posterRef.current); } catch (_) {}
     _v176ShowLongPressMenu({
       item: { ...(item as any), content_id: _v176ContentId, content_type: (item as any).type },
       inLibraryOverride: true,
       hasProgressOverride: _v176HasProg,
+      anchor,
       onAfterChange: (action) => {
         if (action === 'removed') { try { onRemove && onRemove(); } catch (_) {} }
       },
@@ -132,32 +138,7 @@ function LibraryCard({
 
   return (
     <View style={{ width: cardWidth, marginRight: 16 }}>
-      {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
-      <View style={[styles.xButtonRow, { paddingTop: 8 }]}>
-        <Pressable
-          ref={xButtonRef}
-          onPress={onRemove}
-          onFocus={handleXFocus}
-          onBlur={() => setXFocused(false)}
-          accessible={true}
-          accessibilityRole="button"
-          accessibilityLabel={`Remove ${item.name || item.title} from Library`}
-          android_ripple={null}
-          nextFocusDown={posterTag}
-          style={[
-            styles.removeButtonOverlay,
-            { width: xButtonSize, height: xButtonSize, borderRadius: xButtonSize / 2 },
-            xFocused && styles.removeButtonOverlayFocused,
-          ]}
-        >
-          <Ionicons
-            name="close"
-            size={isTV ? 16 : 12}
-            color={xFocused ? '#fff' : 'rgba(255,255,255,0.9)'}
-          />
-        </Pressable>
-      </View>
-
+      {/* V176P_X_REMOVED — X overlay removed; use long-press menu. */}
       {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
         ref={posterRef}
@@ -169,10 +150,11 @@ function LibraryCard({
         onFocus={() => { try { _v173RegLP(_v176OpenMenu); } catch (_) {} handleFocus(); }}
         onBlur={() => { try { _v173RegLP(null); } catch (_) {} setIsFocused(false); onCardBlur?.(); }}
         android_ripple={null}
-        nextFocusUp={xButtonTag}
+        /* V176P_X_REMOVED — nextFocusUp target gone. */
         style={[
           styles.posterContainer,
-          { height: cardHeight, marginTop: -xRowHeight },
+          /* V176P_X_REMOVED — no more X row to overlap. */
+          { height: cardHeight },
           isFocused && styles.posterFocused,
         ]}
       >
@@ -348,6 +330,8 @@ export default function LibraryScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* V176K_POPOVER_MOUNTED — Stremio-style menu host for this screen. */}
+      <V176kPopover />
       <View style={[styles.header, isTV && styles.headerTV]}>
         <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Library</Text>
       </View>

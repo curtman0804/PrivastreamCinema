@@ -51,6 +51,9 @@ interface ContentState {
   discoverData: DiscoverResponse | null;
   addons: Addon[];
   library: LibraryResponse | null;
+  /* V176L_LIBRARY_SET — precomputed membership Set for O(1) lookup
+     by cards.  Built every time library is updated. */
+  librarySet: Set<string>;
   searchResults: SearchResult[];
   searchMovies: SearchResult[];
   searchSeries: SearchResult[];
@@ -87,6 +90,7 @@ const initialState = {
   discoverData: null,
   addons: [],
   library: null,
+  librarySet: new Set<string>(),
   searchResults: [],
   searchMovies: [],
   searchSeries: [],
@@ -183,7 +187,21 @@ export const useContentStore = create<ContentState>((set, get) => ({
     set({ isLoadingLibrary: true, error: null });
     try {
       const data = await api.library.get();
-      set({ library: data, isLoadingLibrary: false });
+      /* V176L_LIBRARY_SET — also build the membership Set so every
+         subscribed ContentCard can do O(1) lookups. */
+      const _v176lSet = new Set<string>();
+      try {
+        const _v176lArr: any[] = []
+          .concat(((data as any) && (data as any).movies) || [])
+          .concat(((data as any) && (data as any).series) || [])
+          .concat(((data as any) && (data as any).channels) || [])
+          .concat(((data as any) && (data as any).tv) || []);
+        for (const it of _v176lArr) {
+          const id = String((it && (it.imdb_id || it.id || it.content_id)) || '');
+          if (id) _v176lSet.add(id);
+        }
+      } catch (_) {}
+      set({ library: data, librarySet: _v176lSet, isLoadingLibrary: false });
     } catch (error: any) {
       console.log('[ContentStore] fetchLibrary error:', error);
       set({ error: error.message, isLoadingLibrary: false });

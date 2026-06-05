@@ -9,6 +9,15 @@ import {
   findNodeHandle,
   Image as RNImage,
   DeviceEventEmitter,
+  /* V176K_POPOVER — Stremio-style anchored popover. */
+  /* V176L_PERF_CLEANUP marker */
+  /* V176M_DIAG marker */
+  /* V176N_HOST_SINGLETON marker */
+  /* V176O_CLOSE_BROADCAST marker */
+  Modal,
+  UIManager,
+  Dimensions,
+  Platform,
 } from 'react-native';
 
 import { Image } from 'expo-image';
@@ -174,89 +183,393 @@ export function v176ShowLongPressMenu(opts: {
   item: any;
   inLibraryOverride?: boolean | null;
   hasProgressOverride?: boolean | null;
+  anchor?: { x: number; y: number; width: number; height: number } | null;
   onAfterChange?: (action: 'watched' | 'unwatched' | 'cleared' | 'added' | 'removed') => void;
 }): void {
-  const { item, inLibraryOverride, hasProgressOverride, onAfterChange } = opts || ({} as any);
+  /* V176K_POPOVER — emit the open event instead of calling Alert.alert.
+     Every screen that hosts a <V176kPopover /> will render the menu. */
+  const { item, inLibraryOverride, hasProgressOverride, anchor, onAfterChange } = opts || ({} as any);
   if (!item) return;
+  const { title, actions } = v176kBuildActions({
+    item,
+    inLibrary: !!inLibraryOverride,
+    hasProgress: hasProgressOverride == null ? undefined : !!hasProgressOverride,
+    onAfterChange,
+  });
+  if (!actions.length) return;
+  v176kEmitOpen({ anchor: anchor || null, title, actions });
+}
+/* ─── V176K_POPOVER ──────────────────────────────────────────────────────
+   Custom Stremio-style popover anchored to the focused poster.  Used by
+   ContentCard, LibraryCard, ContinueWatchingItem, and EpisodeCard via the
+   v176kEmitOpen helper below.  A single <V176kPopover /> host mounted at
+   each screen root listens for the 'v176k:open' DeviceEventEmitter event
+   and renders the Modal with the supplied actions + anchor rect.
+──────────────────────────────────────────────────────────────────────── */
+
+export type V176kAction = {
+  id: string;
+  label: string;
+  icon?: string;
+  destructive?: boolean;
+  onPress: () => void;
+};
+
+export type V176kOpenPayload = {
+  anchor?: { x: number; y: number; width: number; height: number } | null;
+  title?: string;
+  actions: V176kAction[];
+};
+
+export function v176kEmitOpen(payload: V176kOpenPayload): void {
+  try { DeviceEventEmitter.emit('v176k:open', payload); } catch (_) {}
+}
+
+/* Helper that callers can use to build the standard action list with
+   the same Stremio-style logic the Alert version used.  Centralizes the
+   business rules so all surfaces stay consistent. */
+export function v176kBuildActions(opts: {
+  item: any;
+  inLibrary: boolean;
+  hasProgress?: boolean;
+  includeLibrary?: boolean;        // default true; episodes set false
+  includeWatchedToggle?: boolean;  // default true
+  onAfterChange?: (action: 'watched' | 'unwatched' | 'cleared' | 'added' | 'removed') => void;
+}): { title: string; actions: V176kAction[] } {
+  const { item, inLibrary, hasProgress, onAfterChange } = opts;
+  const includeLibrary = opts.includeLibrary !== false;
+  const includeWatchedToggle = opts.includeWatchedToggle !== false;
   const contentId = String((item as any).content_id || (item as any).imdb_id || (item as any).id || '');
-  if (!contentId) return;
   const title = (item as any).title || (item as any).name || 'this item';
   const contentType = (item as any).content_type || (item as any).type || 'movie';
-
   const isWatched = v172IsWatched(contentId);
-  const hasProgress = hasProgressOverride != null ? !!hasProgressOverride : v176HasProgress(contentId);
-  const inLibrary = !!inLibraryOverride;
+  const hasProg = hasProgress != null ? !!hasProgress : v176HasProgress(contentId);
 
-  const buttons: any[] = [];
-  if (hasProgress) {
-    buttons.push({
-      text: 'Clear Progress',
+  const actions: V176kAction[] = [];
+  if (hasProg) {
+    actions.push({
+      id: 'clear',
+      label: 'Clear Progress',
+      icon: 'refresh-circle-outline',
       onPress: () => {
         v176ClearProgress(contentId).then(() => { try { onAfterChange && onAfterChange('cleared'); } catch (_) {} });
       },
     });
   }
-  if (isWatched) {
-    buttons.push({
-      text: 'Mark as Unwatched',
-      onPress: () => {
-        v172UnmarkWatched(contentId).then(() => { try { onAfterChange && onAfterChange('unwatched'); } catch (_) {} });
-      },
-    });
-  } else {
-    buttons.push({
-      text: 'Mark as Watched',
-      onPress: () => {
-        v176MarkWatched(contentId).then(() => { try { onAfterChange && onAfterChange('watched'); } catch (_) {} });
-      },
-    });
+  if (includeWatchedToggle) {
+    if (isWatched) {
+      actions.push({
+        id: 'unwatch',
+        label: 'Mark as Unwatched',
+        icon: 'eye-off-outline',
+        onPress: () => {
+          v172UnmarkWatched(contentId).then(() => { try { onAfterChange && onAfterChange('unwatched'); } catch (_) {} });
+        },
+      });
+    } else {
+      actions.push({
+        id: 'watch',
+        label: 'Mark as Watched',
+        icon: 'checkmark-circle-outline',
+        onPress: () => {
+          v176MarkWatched(contentId).then(() => { try { onAfterChange && onAfterChange('watched'); } catch (_) {} });
+        },
+      });
+    }
   }
-  if (inLibrary) {
-    buttons.push({
-      text: 'Remove from Library',
-      style: 'destructive',
-      onPress: async () => {
-        /* V176J_MENU_REFRESH — route through contentStore so the Library tab
-           refreshes after the remove succeeds.  Direct api.library.remove()
-           left contentStore.library stale. */
-        try {
-          const removeFn = (_v169UseContentStore as any).getState().removeFromLibrary;
-          await removeFn(contentType, contentId);
-        } catch (e) { console.log('[V176J] remove error:', e); }
-        try { onAfterChange && onAfterChange('removed'); } catch (_) {}
-      },
-    });
-  } else {
-    buttons.push({
-      text: 'Add to Library',
-      onPress: async () => {
-        /* V176D_LIBRARY_PAYLOAD — server LibraryItem schema is
-           { id, type, name, poster, imdb_id? } NOT { content_id, content_type, ... }.
-           The old payload silently 422-ed and the menu closed with no effect. */
-        /* V176J_MENU_REFRESH — route through contentStore so the Library
-           tab refreshes after the add. */
-        try {
-          const addFn = (_v169UseContentStore as any).getState().addToLibrary;
-          await addFn({
-            id: contentId,
-            imdb_id: contentId && String(contentId).startsWith('tt') ? contentId : undefined,
-            name: title,
-            type: contentType,
-            poster: (item as any).poster || '',
-          });
-          console.log('[V176J] library.add OK:', contentId);
-        } catch (e) {
-          console.log('[V176J] library.add FAILED:', e);
-        }
-        try { onAfterChange && onAfterChange('added'); } catch (_) {}
-      },
-    });
+  if (includeLibrary) {
+    if (inLibrary) {
+      actions.push({
+        id: 'remove',
+        label: 'Remove from Library',
+        icon: 'bookmark',
+        destructive: true,
+        onPress: async () => {
+          try {
+            const removeFn = (_v169UseContentStore as any).getState().removeFromLibrary;
+            await removeFn(contentType, contentId);
+          } catch (e) { console.log('[V176K] remove error:', e); }
+          try { onAfterChange && onAfterChange('removed'); } catch (_) {}
+        },
+      });
+    } else {
+      actions.push({
+        id: 'add',
+        label: 'Add to Library',
+        icon: 'bookmark-outline',
+        onPress: async () => {
+          try {
+            const addFn = (_v169UseContentStore as any).getState().addToLibrary;
+            await addFn({
+              id: contentId,
+              imdb_id: contentId && String(contentId).startsWith('tt') ? contentId : undefined,
+              name: title,
+              type: contentType,
+              poster: (item as any).poster || '',
+            });
+          } catch (e) { console.log('[V176K] add error:', e); }
+          try { onAfterChange && onAfterChange('added'); } catch (_) {}
+        },
+      });
+    }
   }
-  /* V176J_MENU_REFRESH — Cancel removed; Alert.alert is invoked with
-     cancelable=true so hardware Back dismisses on Android. */
-
-  Alert.alert(title, undefined, buttons, { cancelable: true });
+  return { title, actions };
 }
+
+/* The popover host.  Mount ONE per screen.  When multiple are mounted,
+   each receives the open event independently, but Modal renders at the
+   platform root so only the top-most is visible.  This keeps things
+   simple — no global coordination needed. */
+export const V176kPopover: React.FC = () => {
+  const [open, setOpen] = useState(false);
+  const [payload, setPayload] = useState<V176kOpenPayload | null>(null);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('v176k:open', (p: V176kOpenPayload) => {
+      setPayload(p);
+      setOpen(true);
+    });
+    const closeSub = DeviceEventEmitter.addListener('v176k:close', () => setOpen(false));
+    return () => { try { sub.remove(); } catch (_) {} try { closeSub.remove(); } catch (_) {} };
+  }, []);
+
+  /* V176O_CLOSE_BROADCAST — emit instead of local-only setOpen.
+     Every mounted V176kPopover listens for v176k:close, so this dismisses
+     ALL instances (handles the case where Discover ContentCard's singleton
+     host AND a details-screen-mounted V176kPopover are both open). */
+  const dismiss = useCallback(() => {
+    try { DeviceEventEmitter.emit('v176k:close'); } catch (_) {}
+    setOpen(false);
+  }, []);
+  const runAction = useCallback((a: V176kAction) => {
+    /* V176O_CLOSE_BROADCAST — broadcast so every mounted popover instance
+       (not just the topmost) closes on action select.  Without this, the
+       user had to press back once per stacked Modal. */
+    try { DeviceEventEmitter.emit('v176k:close'); } catch (_) {}
+    setOpen(false);
+    // Delay slightly so the close animation can start before the action
+    // triggers anything heavy (e.g. fetchLibrary).
+    setTimeout(() => { try { a.onPress(); } catch (e) { console.log('[V176K] action error:', e); } }, 50);
+  }, []);
+
+  if (!open || !payload) return null;
+
+  // Position: top-right corner of the poster, popping out RIGHT + DOWN.
+  // If that clips off-screen, fall back to centering horizontally and
+  // anchoring below the poster.
+  const win = Dimensions.get('window');
+  const POPOVER_WIDTH = 260;
+  const ROW_HEIGHT = 48;
+  const padding = 8;
+  const popoverHeight = (payload.actions.length * ROW_HEIGHT) + (payload.title ? 36 : 0) + 12;
+  let left: number;
+  let top: number;
+  if (payload.anchor) {
+    // Start at poster's right edge minus some inset so it overlaps slightly.
+    left = payload.anchor.x + Math.max(0, payload.anchor.width - 60);
+    top = payload.anchor.y + 20;
+    // Clamp horizontally.
+    if (left + POPOVER_WIDTH > win.width - padding) {
+      left = Math.max(padding, win.width - POPOVER_WIDTH - padding);
+    }
+    // Clamp vertically.
+    if (top + popoverHeight > win.height - padding) {
+      top = Math.max(padding, win.height - popoverHeight - padding);
+    }
+    if (top < padding) top = padding;
+    if (left < padding) left = padding;
+  } else {
+    left = Math.floor((win.width - POPOVER_WIDTH) / 2);
+    top = Math.floor((win.height - popoverHeight) / 2);
+  }
+
+  return (
+    <Modal
+      transparent
+      visible={open}
+      animationType="fade"
+      onRequestClose={dismiss}
+      statusBarTranslucent
+    >
+      <Pressable style={v176kStyles.backdrop} onPress={dismiss}>
+        <View
+          style={[
+            v176kStyles.popover,
+            { left, top, width: POPOVER_WIDTH },
+          ]}
+          /* Stop press propagation so tapping inside the popover does not
+             dismiss it via the backdrop. */
+          onStartShouldSetResponder={() => true}
+        >
+          {payload.title ? (
+            <Text numberOfLines={1} style={v176kStyles.title}>{payload.title}</Text>
+          ) : null}
+          {payload.actions.map((a, i) => (
+            <V176kRow key={a.id} action={a} isFirst={i === 0} onSelect={runAction} />
+          ))}
+        </View>
+      </Pressable>
+    </Modal>
+  );
+};
+
+const V176kRow: React.FC<{ action: V176kAction; isFirst: boolean; onSelect: (a: V176kAction) => void }> = ({ action, isFirst, onSelect }) => {
+  const [focused, setFocused] = useState(false);
+  return (
+    <Pressable
+      hasTVPreferredFocus={isFirst}
+      focusable={true}
+      onPress={() => onSelect(action)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      android_ripple={null}
+      style={[v176kStyles.row, focused && v176kStyles.rowFocused]}
+    >
+      {focused ? <View style={v176kStyles.focusBar} /> : null}
+      {action.icon ? (
+        <Ionicons
+          name={action.icon as any}
+          size={18}
+          color={focused ? colors.primary : (action.destructive ? '#ff5757' : 'rgba(255,255,255,0.85)')}
+          style={v176kStyles.rowIcon}
+        />
+      ) : null}
+      <Text
+        numberOfLines={1}
+        style={[
+          v176kStyles.rowLabel,
+          focused && v176kStyles.rowLabelFocused,
+          action.destructive && !focused && v176kStyles.rowLabelDestructive,
+        ]}
+      >
+        {action.label}
+      </Text>
+    </Pressable>
+  );
+};
+
+const v176kStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  popover: {
+    position: 'absolute',
+    backgroundColor: 'rgba(20, 22, 36, 0.97)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(184, 160, 92, 0.35)',
+    paddingVertical: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 24,
+  },
+  title: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    height: 48,
+    position: 'relative',
+  },
+  rowFocused: {
+    backgroundColor: 'rgba(184, 160, 92, 0.16)',
+  },
+  focusBar: {
+    position: 'absolute',
+    left: 0,
+    top: 8,
+    bottom: 8,
+    width: 3,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+  rowIcon: {
+    marginRight: 10,
+    width: 22,
+    textAlign: 'center',
+  },
+  rowLabel: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  rowLabelFocused: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  rowLabelDestructive: {
+    color: '#ff8080',
+  },
+});
+
+/* Helper measure utility callers can use to grab a poster rect before
+   emitting open.  Returns null on failure so callers can fall back to
+   centered placement. */
+export function v176kMeasureAnchor(ref: any): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    try {
+      const handle = findNodeHandle(ref);
+      if (!handle) return resolve(null);
+      UIManager.measureInWindow(handle, (x: number, y: number, width: number, height: number) => {
+        if (typeof x !== 'number' || isNaN(x)) return resolve(null);
+        resolve({ x, y, width, height });
+      });
+    } catch (_) {
+      resolve(null);
+    }
+  });
+}
+/* V176N_HOST_SINGLETON — v176k defined V176kPopover but never mounted it
+   on any screen, so long-press emitted into the void.  This singleton
+   wrapper auto-mounts ONE popover host per app instance: every
+   ContentCard renders a <V176kPopoverHost/> sibling, but only the first
+   to mount claims the slot and actually renders <V176kPopover/>.  When
+   the owner unmounts, the next claimant takes over.  Net effect: as
+   long as ANY ContentCard exists on the screen, the popover works. */
+let _v176nHostClaim: string | null = null;
+const _v176nHostSubs = new Set<() => void>();
+function _v176nTryClaim(id: string): boolean {
+  if (!_v176nHostClaim) { _v176nHostClaim = id; return true; }
+  return _v176nHostClaim === id;
+}
+function _v176nRelease(id: string): void {
+  if (_v176nHostClaim === id) {
+    _v176nHostClaim = null;
+    _v176nHostSubs.forEach((cb) => { try { cb(); } catch (_) {} });
+  }
+}
+export const V176kPopoverHost: React.FC = () => {
+  const idRef = useRef<string>(Math.random().toString(36).slice(2));
+  const [owner, setOwner] = useState<boolean>(false);
+  useEffect(() => {
+    const id = idRef.current;
+    if (_v176nTryClaim(id)) {
+      setOwner(true);
+      return () => { _v176nRelease(id); };
+    }
+    const recheck = () => { if (_v176nTryClaim(id)) setOwner(true); };
+    _v176nHostSubs.add(recheck);
+    return () => { _v176nHostSubs.delete(recheck); _v176nRelease(id); };
+  }, []);
+  if (!owner) return null;
+  return <V176kPopover />;
+};
+
+/* ─── /V176K_POPOVER ───────────────────────────────────────────────────── */
+
 export function v160GetPoster(imdbId: string | undefined | null, fallback: string | undefined | null): string {
   if (imdbId) {
     const key = String(imdbId).split(':')[0];
@@ -484,18 +797,22 @@ try {
      key events arrive on the JS side.  Filter with:
          adb logcat -d -t 500 ReactNativeJS:V *:S | findstr V176F */
   DeviceEventEmitter.addListener('onTVKeyEvent', (evt: any) => {
-    try { console.log('[V176F] TV event:', JSON.stringify(evt), 'hasFocusedLP=', !!_v173FocusedLP); } catch (_) {}
+    /* V176L_PERF_CLEANUP — diagnostic log removed (fired per keypress). */
     if (evt && evt.eventType === 'longSelect') {
+      /* V176M_DIAG — single log per long-press (NOT per keypress) so
+         we can confirm in logcat that the JS bridge received the event
+         and see whether registration was active at fire-time. */
+      try { console.log('[V176M] longSelect rx getter=' + !!_v176iLatestGetter + ' legacy=' + !!_v173FocusedLP); } catch (_) {}
       /* V176I_REF_DISPATCH — prefer the getter; falls back to the
          legacy slot for any callers that still set it directly. */
       let target: (() => void) | null = null;
       try { if (_v176iLatestGetter) target = _v176iLatestGetter(); } catch (_) {}
       if (!target) target = _v173FocusedLP;
       if (target) {
-        console.log('[V176I] longSelect -> dispatching to focused card');
-        try { target(); } catch (e) { console.log('[V176I] dispatch error:', e); }
+        /* V176L_PERF_CLEANUP — silent fast-path. */
+        try { target(); } catch (e) { console.log('[V176L] dispatch error:', e); }
       } else {
-        console.log('[V176I] longSelect ignored — no focused card registered');
+        /* V176L_PERF_CLEANUP — silent. */
       }
     }
   });
@@ -541,29 +858,19 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
 
-  /* V176G_LIBRARY_SUBSCRIBE — keep isInLibrary in sync with the global
-     library snapshot so removing an item from the Library tab also flips
-     the Add/Remove button on the same poster in Discover/Search.  The
-     contentStore was already imported as _v169UseContentStore for the
-     V169 prefetch path — reusing it here costs nothing extra. */
-  const _v176gLibrary = _v169UseContentStore((s: any) => s.library);
+  /* V176L_PERF_CLEANUP — O(1) lookup via librarySet (built once per
+     library change in contentStore).  The previous v176g version
+     flattened movies+series+channels+tv into a fresh array and ran
+     .some() on every library change for every card.  With ~50 cards
+     and ~50 items that was 2500 string comparisons per Add/Remove. */
+  const _v176lLibSet = _v169UseContentStore((s: any) => s.librarySet);
   useEffect(() => {
     if (!item) return;
     const myId = String((item as any).imdb_id || (item as any).id || (item as any).content_id || '');
     if (!myId) return;
-    const lib = _v176gLibrary;
-    if (!lib) return;
-    const all: any[] = []
-      .concat((lib as any).movies || [])
-      .concat((lib as any).series || [])
-      .concat((lib as any).channels || [])
-      .concat((lib as any).tv || []);
-    const found = all.some((it: any) => {
-      const candidate = String(it.imdb_id || it.id || it.content_id || '');
-      return candidate && candidate === myId;
-    });
-    setIsInLibrary(found);
-  }, [_v176gLibrary, item]);
+    if (!_v176lLibSet) return;
+    setIsInLibrary((_v176lLibSet as Set<string>).has(myId));
+  }, [_v176lLibSet, item]);
   const [posterError, setPosterError] = useState(false);
   const [useProxy, setUseProxy] = useState(false);
 
@@ -623,6 +930,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     /* V176I_REF_DISPATCH — register a getter, not the closure itself. */
     try { v176iRegisterGetter(() => _v176iLpRef.current); } catch (_) {}
     try { v173RegisterLongPress(handleLongPress); } catch (_) {}
+    /* V176M_DIAG — confirm registration happened on this focus. */
+    try { console.log('[V176M] focus reg id=' + String((item as any)?.imdb_id || (item as any)?.id || '?')); } catch (_) {}
   }, [onCardFocus, item, handleLongPress]);
 
   const handleBlur = useCallback(() => {
@@ -639,14 +948,15 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     try { v173RegisterLongPress(null); } catch (_) {}
   }, [onCardBlur]);
 
-  const handleLongPress = useCallback(() => {
-    /* V176_LONGPRESS_MENU — delegate to the unified Stremio-style menu.
-       inLibrary is the local component flag (parent-set OR toggled by a
-       previous Add).  After Add/Remove resolves we flip the local flag
-       and notify any parent listener. */
+  const handleLongPress = useCallback(async () => {
+    /* V176K_POPOVER — measure poster so the popover anchors from its
+       corner instead of the centered fallback. */
+    let anchor: any = null;
+    try { anchor = await v176kMeasureAnchor(pressableRef.current); } catch (_) {}
     v176ShowLongPressMenu({
       item,
       inLibraryOverride: isInLibrary,
+      anchor,
       onAfterChange: (action) => {
         if (action === 'added') setIsInLibrary(true);
         if (action === 'removed') setIsInLibrary(false);
@@ -713,6 +1023,10 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   useEffect(() => v176SubscribeProgress(() => _v172Bump((x) => (x + 1) & 0xff)), []);
 
   return (
+    /* V176N_HOST_SINGLETON — render the popover host alongside every
+       card.  Only one will actually display (singleton claim above). */
+    <React.Fragment>
+    <V176kPopoverHost />
     <Pressable
       ref={pressableRef}
       focusable={true}
@@ -858,6 +1172,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           </View>
         )}
     </Pressable>
+    </React.Fragment>
   );
 };
 

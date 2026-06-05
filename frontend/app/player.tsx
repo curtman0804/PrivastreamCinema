@@ -506,7 +506,7 @@ export default function PlayerScreen() {
     if (percentWatched >= 90 && contentId) {
       try {
         await _v176cMark(contentId);
-        console.log('[PLAYER] v176c marked as watched:', contentId);
+        /* V176L_QUIET_PLAYER — log dropped. */
       } catch (e) {
         console.log('[PLAYER] Error saving watched status:', e);
       }
@@ -551,7 +551,7 @@ export default function PlayerScreen() {
           const _v176gPct = (currentPositionRef.current / currentDurationRef.current) * 100;
           if (_v176gPct >= 90) {
             _v176cMark(contentId).then(() => {
-              console.log('[V176G] exit-mark watched:', contentId);
+              /* V176L_QUIET_PLAYER — log dropped. */
             }).catch(() => {});
           }
         } catch (_) {}

@@ -1,4 +1,6 @@
-import { v173RegisterLongPress as _v173RegLP } from '../../../src/components/ContentCard';
+import { v173RegisterLongPress as _v173RegLP,
+  /* V176K_POPOVER */ V176kPopover, v176kMeasureAnchor, v176kEmitOpen, v176kBuildActions
+} from '../../../src/components/ContentCard';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   View,
@@ -769,26 +771,30 @@ function EpisodeCard({
   useEffect(() => _v176cV172SubWatched(() => _v176cBump((x) => (x + 1) & 0xff)), []);
   useEffect(() => _v176cV176SubProg(() => _v176cBump((x) => (x + 1) & 0xff)), []);
 
-  const _v176cOpenEpMenu = useCallback(() => {
+  const _v176cOpenEpMenu = useCallback(async () => {
     const id = _v176cEpId;
     if (!id) return;
-    const watchedNow = !!isWatched || _v176cV172IsWatched(id);
+    const title = `S${(episode as any).season ?? '?'} \u00B7 E${(episode as any).episode ?? '?'}`
+      + ((episode as any).name ? ` \u2014 ${(episode as any).name}` : '');
+    /* V176K_POPOVER_MOUNTED — episodes use a custom action set (no Library). */
+    const actions: any[] = [];
     const hasProg = _v176cV176HasProg(id);
-    const title = `S${(episode as any).season ?? '?'} · E${(episode as any).episode ?? '?'}`
-      + ((episode as any).name ? ` — ${(episode as any).name}` : '');
-    const buttons: any[] = [];
     if (hasProg) {
-      buttons.push({ text: 'Clear Progress', onPress: () => { _v176cV176Clear(id); } });
+      actions.push({ id: 'clear', label: 'Clear Progress', icon: 'refresh-circle-outline',
+        onPress: () => { _v176cV176Clear(id); } });
     }
+    const watchedNow = !!isWatched || _v176cV172IsWatched(id);
     if (watchedNow) {
-      buttons.push({ text: 'Mark as Unwatched', onPress: () => { _v176cV172Unmark(id); try { onMarkUnwatched && onMarkUnwatched(); } catch (_) {} } });
+      actions.push({ id: 'unwatch', label: 'Mark as Unwatched', icon: 'eye-off-outline',
+        onPress: () => { _v176cV172Unmark(id); try { onMarkUnwatched && onMarkUnwatched(); } catch (_) {} } });
     } else {
-      buttons.push({ text: 'Mark as Watched', onPress: () => { _v176cV176Mark(id); } });
+      actions.push({ id: 'watch', label: 'Mark as Watched', icon: 'checkmark-circle-outline',
+        onPress: () => { _v176cV176Mark(id); } });
     }
-    /* V176I_EPISODE_PAINT — Cancel removed; back button dismisses Alert. */
-    /* V176J_EPISODE_CANCELABLE — cancelable=true so hardware Back
-       dismisses the menu (Cancel button was removed in v176i). */
-    _V176cAlert.alert(title, undefined, buttons, { cancelable: true });
+    if (!actions.length) return;
+    let anchor: any = null;
+    try { anchor = await v176kMeasureAnchor(pressableRef.current); } catch (_) {}
+    v176kEmitOpen({ anchor, title, actions });
   }, [episode, isWatched, onMarkUnwatched, _v176cEpId]);
 
   /* V176I_EPISODE_PAINT — ref-of-latest-opener so the v173 dispatcher
@@ -1761,6 +1767,8 @@ const nextEpisodeData = nextEpisode ? {
 
   return (
     <View style={styles.container}>
+      {/* V176K_POPOVER_MOUNTED — Stremio-style menu host for this screen. */}
+      <V176kPopover />
       {/* Background Image — lightweight RN Image, no expo-image overhead */}
       {displayPoster ? (
         <RNImage

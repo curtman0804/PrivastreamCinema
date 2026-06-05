@@ -43,6 +43,7 @@ import {
   v176ShowLongPressMenu as _v176ShowLongPressMenu,
   /* V176E_TV_LONGPRESS — register this CW card's menu handler with v173. */
   v173RegisterLongPress as _v173RegLP,
+  /* V176K_POPOVER */ V176kPopover, v176kMeasureAnchor
 } from '../../src/components/ContentCard';
 import { colors } from '../../src/styles/colors';
 import { Image as RNImage } from 'react-native';
@@ -512,6 +513,8 @@ const renderContinueWatchingItem = useCallback(
 if (isLoadingDiscover && !discoverData && !cachedDiscover) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* V176K_POPOVER_MOUNTED — Stremio-style menu host for this screen. */}
+      <V176kPopover />
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
@@ -730,7 +733,10 @@ function ContinueWatchingItem({
   useEffect(() => _v176SubscribeProgress(() => _v176Bump((x) => (x + 1) & 0xff)), []);
   const _v176IsWatchedCW = _v172IsWatched(_v176ContentId);
 
-  const _v176OpenMenu = useCallback(() => {
+  const _v176OpenMenu = useCallback(async () => {
+    /* V176K_POPOVER_MOUNTED — measure poster + emit via v176 helper. */
+    let anchor: any = null;
+    try { anchor = await v176kMeasureAnchor(posterRef.current); } catch (_) {}
     _v176ShowLongPressMenu({
       item: {
         content_id: _v176ContentId,
@@ -741,6 +747,7 @@ function ContinueWatchingItem({
       },
       inLibraryOverride: false,
       hasProgressOverride: true,
+      anchor,
       onAfterChange: (action) => {
         if (action === 'cleared') { try { onRemove && onRemove(); } catch (_) {} }
       },
@@ -814,32 +821,7 @@ function ContinueWatchingItem({
   
   return (
     <View style={[styles.continueItem, { width: posterWidth }]}>
-      {/* X button row - in normal flow ABOVE poster, right-aligned, overlaps via negative margin */}
-      <View style={[styles.xButtonRow, { paddingTop: 8 }]}>
-        <Pressable
-          ref={xButtonRef}
-          onPress={onRemove}
-          onFocus={handleXFocus}
-          onBlur={() => setXFocused(false)}
-          accessible={true}
-          accessibilityRole="button"
-          accessibilityLabel={`Remove ${item.title} from Continue Watching`}
-          android_ripple={null}
-          nextFocusDown={posterTag}
-          style={[
-            styles.removeButtonOverlay,
-            { width: xButtonSize, height: xButtonSize, borderRadius: xButtonSize / 2 },
-            xFocused && styles.removeButtonOverlayFocused,
-          ]}
-        >
-          <Ionicons
-            name="close"
-            size={isTV ? 16 : 12}
-            color={xFocused ? '#fff' : 'rgba(255,255,255,0.9)'}
-          />
-        </Pressable>
-      </View>
-
+      {/* V176P_X_REMOVED — X overlay removed; use long-press menu. */}
       {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
         ref={posterRef}
@@ -851,10 +833,10 @@ function ContinueWatchingItem({
         onFocus={() => { try { _v173RegLP(_v176OpenMenu); } catch (_) {} handleFocus(); }}
         onBlur={() => { try { _v173RegLP(null); } catch (_) {} setIsFocused(false); }}
         android_ripple={null}
-        nextFocusUp={xButtonTag}
+        /* V176P_X_REMOVED — nextFocusUp target gone. */
         style={[
           styles.continueImageWrapper,
-          { marginTop: -xRowHeight },
+          /* V176P_X_REMOVED — no more X row to overlap. */
           isFocused && styles.continueImageWrapperFocused,
         ]}
       >
