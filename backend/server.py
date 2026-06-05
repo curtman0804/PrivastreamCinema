@@ -27,6 +27,7 @@ import time
 import tempfile
 import shutil
 import subprocess
+import fcntl  # V178A_LEADER_LOCK — flock-based worker leader election
 import signal
 import atexit
 
@@ -802,6 +803,44 @@ def get_fallback_manifest(url: str) -> Optional[Dict]:
 
 # ==================== INIT DEFAULT ADMIN & TORRENT SERVER ====================
 
+# ═══ V178A_LEADER_LOCK ══════════════════════════════════════════════════
+# Under gunicorn with N>1 workers, every worker invokes the @app startup
+# event.  The torrent-server subprocess and the periodic_cleanup task
+# must only run ONCE per host.  We use a non-blocking POSIX file lock:
+# the first worker to grab /tmp/privastream_leader.lock becomes leader;
+# others skip those steps.  If the leader dies, the OS releases the lock
+# and a future worker restart will pick up leadership.
+_V178A_LEADER_LOCK_PATH = "/tmp/privastream_leader.lock"
+_v178a_leader_fd = None
+_v178a_is_leader = False
+
+def _v178a_acquire_leader_lock() -> bool:
+    """Try to become the singleton "leader" worker.  Returns True only
+    inside the worker that succeeds; subsequent calls in the same
+    process also return True (cached).  Workers that fail to acquire
+    return False and should skip leader-only startup work."""
+    global _v178a_leader_fd, _v178a_is_leader
+    if _v178a_is_leader:
+        return True
+    try:
+        fd = open(_V178A_LEADER_LOCK_PATH, "w")
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fd.write(str(os.getpid()))
+        fd.flush()
+        _v178a_leader_fd = fd  # keep FD alive — closing releases the lock
+        _v178a_is_leader = True
+        return True
+    except (IOError, OSError):
+        try:
+            if _v178a_leader_fd:
+                _v178a_leader_fd.close()
+        except Exception:
+            pass
+        _v178a_leader_fd = None
+        _v178a_is_leader = False
+        return False
+# ═══ /V178A_LEADER_LOCK ═════════════════════════════════════════════════
+
 def start_torrent_server():
     """Start the torrent-stream server as a subprocess"""
     global _torrent_server_process
@@ -866,10 +905,20 @@ atexit.register(stop_torrent_server)
 
 @app.on_event("startup")
 async def create_default_admin():
-    """Create default admin user if not exists and start torrent server"""
-    # Start torrent server first
-    start_torrent_server()
-    
+    """Create default admin user if not exists and start torrent server.
+
+    V178A_LEADER_LOCK: torrent-server subprocess and periodic cleanup
+    task are gated to a single elected leader worker so multi-worker
+    gunicorn deployments do not spawn N torrent-servers fighting over
+    port 8002.  The admin upsert is idempotent and runs in every
+    worker so each has a primed cache."""
+    _v178a_leader = _v178a_acquire_leader_lock()
+    if _v178a_leader:
+        logger.info(f"V178A: PID {os.getpid()} is the LEADER — managing torrent-server + periodic cleanup")
+        start_torrent_server()
+    else:
+        logger.info(f"V178A: PID {os.getpid()} is a FOLLOWER — skipping torrent-server start")
+
     existing = await db.users.find_one({"username": "choyt"})
     if not existing:
         admin_user = User(
@@ -888,8 +937,9 @@ async def create_default_admin():
             )
             logger.info("Updated choyt to admin status")
     
-    # Start periodic cleanup for torrent downloads
-    asyncio.create_task(periodic_cleanup())
+    # Start periodic cleanup for torrent downloads (LEADER ONLY — V178A)
+    if _v178a_leader:
+        asyncio.create_task(periodic_cleanup())
 
 
 

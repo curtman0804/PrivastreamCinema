@@ -77,3 +77,4 @@ urllib3==2.6.1
 uvicorn==0.25.0
 watchfiles==1.1.1
 yt-dlp==2025.12.8
+gunicorn>=21.2.0  # V178A — added for multi-worker production launch
