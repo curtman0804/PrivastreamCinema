@@ -958,8 +958,6 @@ export default function DetailsScreen() {
   }, [id, type, router, navigation]);
 
   const handleBack = useCallback(() => {
-    // V190_BACK_CANCEL — drop in-flight stream fetch state-writes
-    try { (useContentStore.getState() as any).cancelInFlightStreams?.(); } catch (_) {}
     // V186_BACK_INSTANT — hide heavy tree IMMEDIATELY, navigate on next frame.
     _setV186Closing(true);
     requestAnimationFrame(() => {

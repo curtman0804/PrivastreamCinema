@@ -171,7 +171,6 @@ export default function AddonsScreen() {
     if (n.includes('pirate') || n === 'tpb' || u.includes('piratebay') || u.includes('tpb.strem') || u.includes('thepiratebay')) return '970280';
     return null;
   };
-  // V190_SHARE_TEXT — wording updated to refer to this app's Addons section
   const handleShareAddon = (addon: Addon) => {
     const addonUrl = (addon as any).manifestUrl || addon.url || '';
     const addonName = addon.manifest?.name || 'Addon';

@@ -661,15 +661,6 @@ function _v77RequestReleaseStatus(imdbId, cb) {
    mount.  Discover screen calls this the moment its data arrives, so
    by the time individual ContentCards subscribe the cache is already
    hot and the IN CINEMA badge paints on the same frame as the poster. */
-// V188_NAV_COOLDOWN — module-scoped timestamp.  Bumped whenever any
-// ContentCard's onPress fires (user is heading INTO Details).  After
-// they back out (~1-3 s later) we still have ~1 s of cooldown left,
-// which suppresses focus prefetches while D-pad navigation recovers.
-export let _v188NavCooldownUntil = 0;
-export function _v188ArmNavCooldown(ms: number = 1500): void {
-  _v188NavCooldownUntil = Date.now() + Math.max(0, ms);
-}
-
 export function v167PrewarmReleaseStatus(imdbIds: string[] | undefined | null): void {
   if (!Array.isArray(imdbIds) || imdbIds.length === 0) return;
   const seen = new Set<string>();
@@ -909,10 +900,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       clearTimeout(_v169PrewarmTimerRef.current);
       _v169PrewarmTimerRef.current = null;
     }
-    /* V188_NAV_COOLDOWN — if the user just backed out of a Details page,
-       suppress focus prefetch for 1.2 s.  Lets the JS thread serve D-pad
-       focus changes without competing with network kick-offs. */
-    if (Date.now() < (_v188NavCooldownUntil as any)) return;
     const _v169_type = (item as any)?.type;
     const _v169_cid = (item as any)?.imdb_id || (item as any)?.id;
     if (_v169_cid && _v169_type === 'movie' && String(_v169_cid).startsWith('tt')) {

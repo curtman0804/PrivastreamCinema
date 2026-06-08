@@ -958,8 +958,6 @@ export default function DetailsScreen() {
   }, [id, type, router, navigation]);
 
   const handleBack = useCallback(() => {
-    // V190_BACK_CANCEL — drop in-flight stream fetch state-writes
-    try { (useContentStore.getState() as any).cancelInFlightStreams?.(); } catch (_) {}
     // V186_BACK_INSTANT — hide heavy tree IMMEDIATELY, navigate on next frame.
     _setV186Closing(true);
     requestAnimationFrame(() => {
@@ -1165,10 +1163,6 @@ export default function DetailsScreen() {
     // PATCH_V39_DEFER_MOUNT_IO — defer library fetch off the mount path
     setTimeout(() => { try { fetchLibrary(); } catch (_) {} }, 0);
     if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
-      // V188_NO_ZERO_FLASH — sync-seed loading state so the very first render
-      // shows "Finding Streams..." instead of momentarily flashing "0 Streams"
-      // (which can happen if streams=[] is left over from a prior failed load).
-      try { (useContentStore as any).setState({ streams: [], isLoadingStreams: true, error: null }); } catch (_) {}
       // PATCH_V37_DEFER_STREAMS — defer to next tick so the details page paints
       // instantly; streams load in the background and populate as they arrive.
       const _v37StreamsTimer = setTimeout(() => { try { fetchStreams(type, id); } catch (_) {} }, 0);

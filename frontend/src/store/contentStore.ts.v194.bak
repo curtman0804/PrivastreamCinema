@@ -310,30 +310,8 @@ export const useContentStore = create<ContentState>((set, get) => ({
 
     // 5. Network — with one retry on empty (3 s delay)
     try {
-      // V194_PROGRESSIVE_PAINT — paint streams as each source returns
-      // instead of waiting for the slowest (direct Torrentio/TPB from
-      // the Firestick can take 10-12 s; the backend returns in ~6 s on
-      // cold cache).  The list never shrinks; once Backend lands 5
-      // streams, the user sees them immediately.  Late-arriving direct
-      // sources can append more — they can't take any away.
-      let allStreams: any[] = [];
-      const _v194_onProgress = (partialStreams: any[]) => {
-        if (_myToken !== _v190AbortToken) return; // user navigated away
-        if (!partialStreams || partialStreams.length === 0) return;
-        // Only paint when we have STRICTLY MORE streams than before
-        // (de-dupe is already done by client.ts mergeAndNotify).
-        const _cur = get();
-        const _curCount = (_cur && _cur.streams) ? _cur.streams.length : 0;
-        if (partialStreams.length > _curCount) {
-          if (partialStreams.length > 0) {
-            try { setStreamsCache(cacheKey, partialStreams); } catch (_) {}
-          }
-          _setIf({ streams: partialStreams, isLoadingStreams: false });
-          allStreams = partialStreams;
-        }
-      };
-      const result = await api.addons.getAllStreams(type, id, _v194_onProgress);
-      allStreams = result.streams || allStreams;
+      const result = await api.addons.getAllStreams(type, id);
+      let allStreams = result.streams || [];
 
       if ((!allStreams || allStreams.length === 0) && _myToken === _v190AbortToken) {
         console.log('[ContentStore v190] 0 streams on first try — retrying once in 3s');

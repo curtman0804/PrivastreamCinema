@@ -171,7 +171,6 @@ export default function AddonsScreen() {
     if (n.includes('pirate') || n === 'tpb' || u.includes('piratebay') || u.includes('tpb.strem') || u.includes('thepiratebay')) return '970280';
     return null;
   };
-  // V190_SHARE_TEXT — wording updated to refer to this app's Addons section
   const handleShareAddon = (addon: Addon) => {
     const addonUrl = (addon as any).manifestUrl || addon.url || '';
     const addonName = addon.manifest?.name || 'Addon';
@@ -187,7 +186,7 @@ export default function AddonsScreen() {
     const { name, url, code } = shareModalData;
     const shareMessage = code
       ? `${name}\n\nDownloader Code: ${code}\nManifest URL: ${url}`
-      : `Check out this addon: ${name}\n\n${url}`;
+      : `Check out this Stremio addon: ${name}\n\n${url}`;
     try {
       await Share.share({ message: shareMessage, title: `Share ${name} Addon` });
     } catch (error) {
@@ -440,8 +439,10 @@ export default function AddonsScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, isTV && styles.modalContentTV, { borderWidth: 2, borderColor: colors.primary }]}>
             <View style={styles.modalHeader}>
-              {/* V188_SHARE_NOX — bottom Close button is enough; remove redundant X */}
               <Text style={styles.modalTitle}>Share {shareModalData?.name || 'Addon'}</Text>
+              <Pressable onPress={() => setShareModalData(null)} style={styles.actionButton}>
+                <Ionicons name="close" size={22} color="#FFFFFF" />
+              </Pressable>
             </View>
 
             {shareModalData?.code ? (
@@ -463,10 +464,9 @@ export default function AddonsScreen() {
               </Text>
             </View>
             <Text style={styles.modalHint}>
-              {/* V189_NOT_STREMIO — this app isn't Stremio; instruct user where to actually paste */}
               {shareModalData?.code
-                ? 'Recipient can enter the Downloader code on FireStick or paste the URL into the Addons section in this app.'
-                : 'Recipient can paste the manifest URL into the Addons section in this app to install this addon.'}
+                ? 'Recipient can enter the Downloader code on FireStick or paste the URL into Stremio.'
+                : 'Recipient can paste the manifest URL into Stremio to install this addon.'}
             </Text>
 
             <View style={{ flexDirection: 'row', gap: 12 }}>
