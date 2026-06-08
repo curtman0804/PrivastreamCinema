@@ -958,15 +958,7 @@ export default function DetailsScreen() {
   }, [id, type, router, navigation]);
 
   const handleBack = useCallback(() => {
-    // V186_BACK_INSTANT — hide heavy tree IMMEDIATELY, navigate on next frame.
-    _setV186Closing(true);
-    requestAnimationFrame(() => {
-      try {
-        if (!goToSeriesRootWithFocus()) router.back();
-      } catch (_) {
-        try { router.back(); } catch (__) {}
-      }
-    });
+    if (!goToSeriesRootWithFocus()) router.back();
   }, [goToSeriesRootWithFocus, router]);
 
   useEffect(() => {
@@ -976,16 +968,11 @@ export default function DetailsScreen() {
     //   3. Deep-linked (empty stack) → fall back to Discover tab
     //   4. ALWAYS return true so Android can't force-exit
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      /* v134-back-diag + V186_BACK_INSTANT */
-      console.log('[BACK v134/v186] main hwBack fired; id=', id, ' type=', type, ' autoPlay=', autoPlayParam);
-      // Hide heavy tree on this frame.
-      _setV186Closing(true);
-      // Navigate on the next frame so React can drop the subtree first.
-      requestAnimationFrame(() => {
-        try { if (goToSeriesRootWithFocus()) { console.log('[BACK v134] -> series-root-with-focus'); return; } } catch (_) {}
-        try { router.back(); console.log('[BACK v134] -> router.back()'); return; } catch (_) {}
-        try { router.replace('/(tabs)/discover'); console.log('[BACK v134] -> replace discover'); } catch (_) {}
-      });
+      /* v134-back-diag */
+      console.log('[BACK v134] main hwBack fired; id=', id, ' type=', type, ' autoPlay=', autoPlayParam);
+      try { if (goToSeriesRootWithFocus()) { console.log('[BACK v134] -> series-root-with-focus'); return true; } } catch (_) {}
+      try { router.back(); console.log('[BACK v134] -> router.back()'); return true; } catch (_) {}
+      try { router.replace('/(tabs)/discover'); console.log('[BACK v134] -> replace discover'); } catch (_) {}
       return true;
     });
     return () => sub.remove();
@@ -1041,11 +1028,6 @@ export default function DetailsScreen() {
   );
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
-  // V186_BACK_INSTANT — when true, the Details tree renders a flat placeholder
-  // so React Native drops the heavy subtree (BackgroundImage + FlatLists +
-  // dozens of FocusableButtons) on the SAME frame, then router.back() fires
-  // on the next animation frame.  Result: back feels instant on Firestick.
-  const [_v186Closing, _setV186Closing] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [watchedEpisodes, setWatchedEpisodes] = useState<Record<string, boolean>>({});
   const autoPlayTriggeredRef = useRef(false);
@@ -1828,11 +1810,6 @@ const nextEpisodeData = nextEpisode ? {
     );
   };
 
-  // V186_BACK_INSTANT — render a flat placeholder once the user has pressed
-  // back.  The heavy subtree dismounts on this frame; navigation runs next.
-  if (_v186Closing) {
-    return <View style={styles.container} />;
-  }
   return (
     <View style={styles.container}>
       {/* V176K_POPOVER_MOUNTED — Stremio-style menu host for this screen. */}

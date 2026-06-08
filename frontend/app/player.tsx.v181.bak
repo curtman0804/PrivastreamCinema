@@ -1190,15 +1190,13 @@ export default function PlayerScreen() {
             }
             console.log('[PLAYER v126] BINGE FAST PATH: direct /player nav,', _pre.directUrl ? 'pre-resolved URL' : 'hash-only');
             preResolveRef.current = null;
-            /* V181_BINGE_REPLACE — replace instead of push so the old player
-               unmounts atomically; eliminates the black-frame flash. */
-            router.replace({ pathname: '/player', params: _params } as any);
+            router.push({ pathname: '/player', params: _params });
           } else {
-            // V181_BINGE_REPLACE — replace, not push (same reason as B1).
-            router.replace({
+            // Fallback (pre-resolve incomplete) — original autoplay flow.
+            router.push({
               pathname: `/details/series/${nextEpisodeId}`,
               params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '', nextPoster: (nextEpisodePoster || poster || '') as string, nextBackdrop: (backdrop || '') as string },
-            } as any);
+            });
           }
           return 0;
         }
@@ -1277,14 +1275,13 @@ export default function PlayerScreen() {
       }
       console.log('[PLAYER v126] BINGE FAST PATH (manual): direct /player nav,', _preM.directUrl ? 'pre-resolved URL' : 'hash-only');
       preResolveRef.current = null;
-      /* V181_BINGE_REPLACE — manual next-episode also uses replace. */
-      router.replace({ pathname: '/player', params: _paramsM } as any);
+      router.push({ pathname: '/player', params: _paramsM });
     } else {
-      // V181_BINGE_REPLACE — same.
-      router.replace({
+      // Fallback (pre-resolve not ready) — original autoplay flow.
+      router.push({
         pathname: `/details/series/${nextEpisodeId}`,
         params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '' },
-      } as any);
+      });
     }
   };
   

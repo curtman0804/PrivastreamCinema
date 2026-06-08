@@ -107,10 +107,6 @@ const initialState = {
   isLoadingMoreSearch: false,
   isLoadingStreams: false,
   error: null,
-  // V180_FLASH_FIX — tracks which (type/id) is currently visible so
-  // refetches of the SAME show keep stale streams on screen instead
-  // of flashing the list to [].
-  currentStreamsKey: null as string | null,
 };
 
 export const useContentStore = create<ContentState>((set, get) => ({
@@ -267,25 +263,12 @@ export const useContentStore = create<ContentState>((set, get) => ({
     // 1. Memory cache — instant
     const cached = getStreamsCache(cacheKey);
     if (cached && cached.length > 0) {
-      // V180_FLASH_FIX — also record the key so future refetches treat
-      // this as the current show.
-      set({ streams: cached, isLoadingStreams: false, error: null, currentStreamsKey: cacheKey } as any);
+      set({ streams: cached, isLoadingStreams: false, error: null });
       return cached;
     }
 
     // 2. AsyncStorage disk cache — ~10ms
-    // V180_FLASH_FIX — only clear `streams` if the user switched to
-    // a DIFFERENT show.  Refetching the SAME show keeps the stale
-    // list visible during the disk/network round-trip, eliminating
-    // the "streams → 0 → streams" flash on back-navigation.
-    {
-      const _v180Prev = (get() as any).currentStreamsKey;
-      if (_v180Prev !== cacheKey) {
-        set({ isLoadingStreams: true, streams: [], error: null, currentStreamsKey: cacheKey } as any);
-      } else {
-        set({ isLoadingStreams: true, error: null } as any);
-      }
-    }
+    set({ isLoadingStreams: true, streams: [], error: null });
     // PATCH_V46_WATCHDOG — force-clear isLoadingStreams if fetchStreams hangs >30s.
     // The if-guard makes this a no-op in the happy path; no cleanup needed.
     setTimeout(() => {

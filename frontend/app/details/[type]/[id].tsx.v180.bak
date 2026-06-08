@@ -958,15 +958,7 @@ export default function DetailsScreen() {
   }, [id, type, router, navigation]);
 
   const handleBack = useCallback(() => {
-    // V186_BACK_INSTANT — hide heavy tree IMMEDIATELY, navigate on next frame.
-    _setV186Closing(true);
-    requestAnimationFrame(() => {
-      try {
-        if (!goToSeriesRootWithFocus()) router.back();
-      } catch (_) {
-        try { router.back(); } catch (__) {}
-      }
-    });
+    if (!goToSeriesRootWithFocus()) router.back();
   }, [goToSeriesRootWithFocus, router]);
 
   useEffect(() => {
@@ -976,16 +968,11 @@ export default function DetailsScreen() {
     //   3. Deep-linked (empty stack) → fall back to Discover tab
     //   4. ALWAYS return true so Android can't force-exit
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      /* v134-back-diag + V186_BACK_INSTANT */
-      console.log('[BACK v134/v186] main hwBack fired; id=', id, ' type=', type, ' autoPlay=', autoPlayParam);
-      // Hide heavy tree on this frame.
-      _setV186Closing(true);
-      // Navigate on the next frame so React can drop the subtree first.
-      requestAnimationFrame(() => {
-        try { if (goToSeriesRootWithFocus()) { console.log('[BACK v134] -> series-root-with-focus'); return; } } catch (_) {}
-        try { router.back(); console.log('[BACK v134] -> router.back()'); return; } catch (_) {}
-        try { router.replace('/(tabs)/discover'); console.log('[BACK v134] -> replace discover'); } catch (_) {}
-      });
+      /* v134-back-diag */
+      console.log('[BACK v134] main hwBack fired; id=', id, ' type=', type, ' autoPlay=', autoPlayParam);
+      try { if (goToSeriesRootWithFocus()) { console.log('[BACK v134] -> series-root-with-focus'); return true; } } catch (_) {}
+      try { router.back(); console.log('[BACK v134] -> router.back()'); return true; } catch (_) {}
+      try { router.replace('/(tabs)/discover'); console.log('[BACK v134] -> replace discover'); } catch (_) {}
       return true;
     });
     return () => sub.remove();
@@ -1041,11 +1028,6 @@ export default function DetailsScreen() {
   );
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
-  // V186_BACK_INSTANT — when true, the Details tree renders a flat placeholder
-  // so React Native drops the heavy subtree (BackgroundImage + FlatLists +
-  // dozens of FocusableButtons) on the SAME frame, then router.back() fires
-  // on the next animation frame.  Result: back feels instant on Firestick.
-  const [_v186Closing, _setV186Closing] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [watchedEpisodes, setWatchedEpisodes] = useState<Record<string, boolean>>({});
   const autoPlayTriggeredRef = useRef(false);
@@ -1168,51 +1150,6 @@ export default function DetailsScreen() {
       const _v37StreamsTimer = setTimeout(() => { try { fetchStreams(type, id); } catch (_) {} }, 0);
     }
   }, [id, type]);
-
-  /* V180_PREWARM — when sortedStreams populates, fire-and-forget POST to
-     /api/stream/start/<infoHash> for the top 3 cached candidates.  The
-     backend (v179b) writes the resolved PM URL to Redis, so by the time
-     the user clicks Play the status poll lands on "ready" immediately
-     instead of waiting through 8-12 s of "resolving".
-
-     Torrentio strips infoHash in debrid mode; pull the 40-hex hash out
-     of behaviorHints.bingeGroup (`torrentio|<hash>`) instead. */
-  const _v180_prewarmedRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (!sortedStreams || sortedStreams.length === 0) return;
-    try {
-      const _backend = (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/$/, "");
-      if (!_backend) return;
-      let _kicked = 0;
-      for (let i = 0; i < sortedStreams.length && _kicked < 3; i++) {
-        const s: any = sortedStreams[i];
-        const _bh: any = s && s.behaviorHints;
-        let _hash: string = (s && s.infoHash) ? String(s.infoHash).toLowerCase() : "";
-        if (!_hash && _bh && typeof _bh.bingeGroup === "string") {
-          const _m = _bh.bingeGroup.match(/\b([0-9a-f]{40})\b/i);
-          if (_m) _hash = _m[1].toLowerCase();
-        }
-        if (!_hash || _hash.length !== 40) continue;
-        if (_v180_prewarmedRef.current.has(_hash)) continue;
-        _v180_prewarmedRef.current.add(_hash);
-        // Fire-and-forget — never await, never bubble errors.
-        try {
-          fetch(`${_backend}/api/stream/start/${_hash}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              season: (typeof season === "number") ? season : undefined,
-              episode: (typeof episode === "number") ? episode : undefined,
-            }),
-          }).catch(() => {});
-        } catch (_) {}
-        _kicked++;
-      }
-      if (_kicked > 0) {
-        console.log("[PREWARM v180] kicked", _kicked, "PM resolves for top cached streams");
-      }
-    } catch (_) { /* never break UI */ }
-  }, [sortedStreams]);
 
   useEffect(() => {
     if (seasons.length === 0) return;
@@ -1828,11 +1765,6 @@ const nextEpisodeData = nextEpisode ? {
     );
   };
 
-  // V186_BACK_INSTANT — render a flat placeholder once the user has pressed
-  // back.  The heavy subtree dismounts on this frame; navigation runs next.
-  if (_v186Closing) {
-    return <View style={styles.container} />;
-  }
   return (
     <View style={styles.container}>
       {/* V176K_POPOVER_MOUNTED — Stremio-style menu host for this screen. */}

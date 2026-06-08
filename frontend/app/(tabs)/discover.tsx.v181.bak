@@ -72,11 +72,6 @@ function LazyMount({ delay, children, placeholder }: { delay: number; children: 
   return <>{children}</>;
 }
 
-// V181_DISCOVER_THROTTLE — module-scope timestamp survives unmount/remount.
-// Initial value = 0 means "never fetched", so the FIRST mount always fetches.
-let _v181_lastDiscoverFetch: number = 0;
-
-
 export default function DiscoverScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
@@ -215,12 +210,11 @@ export default function DiscoverScreen() {
     if (ids.length > 0) _v167PrewarmReleaseStatus(ids);
   }, [discoverData, cachedDiscover, continueWatching, cachedCW]);
 
-  // PATCH_V47_FOCUS_THROTTLE + V181_DISCOVER_THROTTLE — same throttle but
-  // backed by a module-scope timestamp (see top of file) so the cooldown
-  // survives unmount/remount.  Previously the useRef was component-scoped
-  // → every back-nav reset the clock → every back-nav re-fetched → 1-3 s
-  // JS-thread freeze on the D-pad.  Module scope = real persistence.
-  const lastDiscoverFetchTime = { get current(){ return _v181_lastDiscoverFetch; }, set current(v: number){ _v181_lastDiscoverFetch = v; } };
+  // PATCH_V47_FOCUS_THROTTLE — throttle back-nav refetches to 60s and skip force-refresh.
+  // Backing from Details/Player → Discover used to fire fetchDiscover(true)
+  // every time, re-rendering every row and causing back-nav lag. SWR in
+  // the store already keeps data fresh; we only force-refetch every 60s.
+  const lastDiscoverFetchTime = useRef<number>(Date.now());
   useFocusEffect(
     useCallback(() => {
       const now = Date.now();

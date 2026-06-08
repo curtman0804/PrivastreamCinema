@@ -67,10 +67,6 @@ export default function AddonsScreen() {
   const [codeFocused, setCodeFocused] = useState(false);
   const [urlTabFocused, setUrlTabFocused] = useState(false);
   const [codeTabFocused, setCodeTabFocused] = useState(false);
-  // V187_SHARE_MODAL — themed dialog state + focus tracking
-  const [shareModalData, setShareModalData] = useState<{ name: string; url: string; code: string | null } | null>(null);
-  const [shareCopyFocused, setShareCopyFocused] = useState(false);
-  const [shareCloseFocused, setShareCloseFocused] = useState(false);
   
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
@@ -160,40 +156,32 @@ export default function AddonsScreen() {
     }
   };
 
-  // V187_SHARE_MODAL — themed dialog (no more native Alert).
-  // Downloader-code map (from v186, preserved):
-  const _v186DownloaderCodeFor = (name: string, url: string): string | null => {
-    const n = (name || '').toLowerCase();
-    const u = (url || '').toLowerCase();
-    if (n.includes('cinemeta') || u.includes('cinemeta.strem.io')) return '8762337';
-    if (n.includes('netflix') || u.includes('netflix')) return '201839';
-    if (n.includes('torrentio') || u.includes('torrentio.strem')) return '2519255';
-    if (n.includes('pirate') || n === 'tpb' || u.includes('piratebay') || u.includes('tpb.strem') || u.includes('thepiratebay')) return '970280';
-    return null;
-  };
-  const handleShareAddon = (addon: Addon) => {
+  const handleShareAddon = async (addon: Addon) => {
     const addonUrl = (addon as any).manifestUrl || addon.url || '';
     const addonName = addon.manifest?.name || 'Addon';
+    
     if (!addonUrl) {
       Alert.alert('No URL', 'This addon does not have a shareable URL.');
       return;
     }
-    const code = _v186DownloaderCodeFor(addonName, addonUrl);
-    setShareModalData({ name: addonName, url: addonUrl, code });
-  };
-  const handleShareConfirm = async () => {
-    if (!shareModalData) return;
-    const { name, url, code } = shareModalData;
-    const shareMessage = code
-      ? `${name}\n\nDownloader Code: ${code}\nManifest URL: ${url}`
-      : `Check out this Stremio addon: ${name}\n\n${url}`;
-    try {
-      await Share.share({ message: shareMessage, title: `Share ${name} Addon` });
-    } catch (error) {
-      console.log('Share error:', error);
-    } finally {
-      setShareModalData(null);
-    }
+    
+    Alert.alert(
+      `Share ${addonName}`,
+      `${addonUrl}`,
+      [
+        { text: 'Copy & Share', onPress: async () => {
+          try {
+            await Share.share({
+              message: `Check out this Stremio addon: ${addonName}\n\n${addonUrl}`,
+              title: `Share ${addonName} Addon`,
+            });
+          } catch (error) {
+            console.log('Share error:', error);
+          }
+        }},
+        { text: 'OK', style: 'cancel' },
+      ]
+    );
   };
 
   const handleUninstall = (addon: Addon) => {
@@ -425,71 +413,6 @@ export default function AddonsScreen() {
                 </FocusButton>
               </>
             )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* V187_SHARE_MODAL — themed Share dialog (dark/gold like the rest of the app) */}
-      <Modal
-        visible={shareModalData != null}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setShareModalData(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, isTV && styles.modalContentTV, { borderWidth: 2, borderColor: colors.primary }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Share {shareModalData?.name || 'Addon'}</Text>
-              <Pressable onPress={() => setShareModalData(null)} style={styles.actionButton}>
-                <Ionicons name="close" size={22} color="#FFFFFF" />
-              </Pressable>
-            </View>
-
-            {shareModalData?.code ? (
-              <>
-                <Text style={styles.modalLabel}>Downloader Code</Text>
-                <View style={[styles.modalInput, { minHeight: 0, paddingVertical: 16 }]}>
-                  <Text style={{ color: colors.primary, fontSize: 24, fontWeight: '700', letterSpacing: 2, textAlign: 'center' }}>
-                    {shareModalData.code}
-                  </Text>
-                </View>
-                <View style={{ height: 12 }} />
-              </>
-            ) : null}
-
-            <Text style={styles.modalLabel}>Manifest URL</Text>
-            <View style={[styles.modalInput, { minHeight: 0, paddingVertical: 14 }]}>
-              <Text style={{ color: '#FFFFFF', fontSize: 13 }} selectable={true}>
-                {shareModalData?.url || ''}
-              </Text>
-            </View>
-            <Text style={styles.modalHint}>
-              {shareModalData?.code
-                ? 'Recipient can enter the Downloader code on FireStick or paste the URL into Stremio.'
-                : 'Recipient can paste the manifest URL into Stremio to install this addon.'}
-            </Text>
-
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Pressable
-                onPress={handleShareConfirm}
-                onFocus={() => setShareCopyFocused(true)}
-                onBlur={() => setShareCopyFocused(false)}
-                style={[styles.modalButton, { flex: 1 }, shareCopyFocused && styles.modalButtonFocused]}
-              >
-                <View style={styles.buttonRow}>
-                  <Ionicons name="share-outline" size={18} color={colors.primary} />
-                  <Text style={[styles.modalButtonText, { marginLeft: 8 }]}>Copy & Share</Text>
-                </View>
-              </Pressable>
-              <Pressable
-                onPress={() => setShareModalData(null)}
-                onFocus={() => setShareCloseFocused(true)}
-                onBlur={() => setShareCloseFocused(false)}
-                style={[styles.modalButton, { flex: 1, backgroundColor: '#2A2A2E' }, shareCloseFocused && styles.modalButtonFocused]}
-              >
-                <Text style={[styles.modalButtonText, { color: '#AAAAAA' }]}>Close</Text>
-              </Pressable>
-            </View>
           </View>
         </View>
       </Modal>
