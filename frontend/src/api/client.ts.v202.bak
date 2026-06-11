@@ -6,7 +6,7 @@ import { Platform } from 'react-native';
 // ============================================
 // HARDCODED BACKEND URL - CHANGE THIS IF NEEDED
 // ============================================
-const BACKEND_URL = 'https://api.privastreamsolutions.com'; // V202_HETZNER_URL — production Hetzner backend
+const BACKEND_URL = 'http://71.9.152.146:8001';
 
 // Get the backend URL based on environment
 const getBaseUrl = () => {

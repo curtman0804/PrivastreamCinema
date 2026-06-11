@@ -1,0 +1,789 @@
+==== diag_v200_frontend report ====
+date: 2026-06-11T12:55:49.283Z
+node: v24.13.1
+cwd: C:\Users\Curtm\PrivastreamCinema\frontend
+
+---- [1] files found ----
+  contentStore: C:\Users\Curtm\PrivastreamCinema\frontend\src\store\contentStore.ts
+  discover: C:\Users\Curtm\PrivastreamCinema\frontend\app\(tabs)\discover.tsx
+  addons: C:\Users\Curtm\PrivastreamCinema\frontend\app\(tabs)\addons.tsx
+  cacheUtil: C:\Users\Curtm\PrivastreamCinema\frontend\src\utils\cache.ts
+  client: C:\Users\Curtm\PrivastreamCinema\frontend\src\api\client.ts
+
+---- [2] .bak files (patch history evidence) ----
+  contentStore.ts.bak.v19b.1778330288901  (9337 bytes, mtime 2026-03-26T23:07:43.085Z)
+  contentStore.ts.bak.v24.1778339880979  (9337 bytes, mtime 2026-03-26T23:07:43.085Z)
+  contentStore.ts.bak.v25.1778341045772  (10867 bytes, mtime 2026-05-09T15:18:00.995Z)
+  contentStore.ts.bak.v30.1778765146332  (12413 bytes, mtime 2026-05-09T15:37:25.788Z)
+  contentStore.ts.bak.v46.1778871650920  (12707 bytes, mtime 2026-05-14T16:38:29.255Z)
+  contentStore.ts.bak.v55.1778931193765  (13120 bytes, mtime 2026-05-15T19:00:50.947Z)
+  contentStore.ts.bak.v57.1778934171241  (15087 bytes, mtime 2026-05-16T11:33:13.769Z)
+  contentStore.ts.bak.v72.1779373668748  (13385 bytes, mtime 2026-05-21T14:27:48.749Z)
+  contentStore.ts.v180.bak  (15658 bytes, mtime 2026-06-07T15:46:27.645Z)
+  contentStore.ts.v190.bak  (16538 bytes, mtime 2026-06-08T15:52:28.310Z)
+  contentStore.ts.v194.bak  (15251 bytes, mtime 2026-06-08T17:11:31.166Z)
+  contentStore.ts.v199.bak  (16498 bytes, mtime 2026-06-11T12:18:32.129Z)
+  discover.tsx.bak.v108b.1779643102701  (28169 bytes, mtime 2026-05-24T17:18:22.708Z)
+  discover.tsx.bak.v109.1779644200797  (28948 bytes, mtime 2026-05-24T17:36:40.800Z)
+  discover.tsx.bak_v138  (29005 bytes, mtime 2026-05-29T19:02:14.982Z)
+  discover.tsx.bak_v144  (30288 bytes, mtime 2026-05-29T22:00:30.784Z)
+  discover.tsx.bak_v145  (32513 bytes, mtime 2026-05-29T22:00:43.542Z)
+  discover.tsx.bak_v147  (33545 bytes, mtime 2026-05-29T23:03:54.870Z)
+  discover.tsx.bak_v160  (33071 bytes, mtime 2026-05-31T13:19:49.356Z)
+  discover.tsx.v181.bak  (39433 bytes, mtime 2026-06-07T21:10:25.251Z)
+  discover.tsx.v199.bak  (39779 bytes, mtime 2026-06-11T12:18:32.191Z)
+  addons.tsx.v182.bak  (23586 bytes, mtime 2026-06-07T20:47:30.627Z)
+  addons.tsx.v186.bak  (23788 bytes, mtime 2026-06-08T13:42:04.229Z)
+  addons.tsx.v187.bak  (25157 bytes, mtime 2026-06-08T14:25:24.692Z)
+  addons.tsx.v188.bak  (28109 bytes, mtime 2026-06-08T15:01:38.442Z)
+  addons.tsx.v189.bak  (28009 bytes, mtime 2026-06-08T15:42:51.803Z)
+  addons.tsx.v190.bak  (28153 bytes, mtime 2026-06-08T15:52:28.306Z)
+  addons.tsx.v199.bak  (28236 bytes, mtime 2026-06-11T12:18:32.200Z)
+  client.ts.bak.v121c  (28773 bytes, mtime 2026-04-13T14:31:05.425Z)
+  client.ts.bak.v121h  (29619 bytes, mtime 2026-05-25T12:14:26.192Z)
+  client.ts.bak.v121k  (29883 bytes, mtime 2026-05-25T20:26:45.343Z)
+
+---- [3] marker counts ----
+  contentStore: V199_TRUE_WIPE=2, V198_NUKE_DISCOVER=1, PATCH_V144_CACHE_STATE=0, PATCH_V144_CACHE_FLATROWS=0, PATCH_V144_CACHE_HYDRATE=0, V190_STORE_DEF=5, discoverNukeStamp=1, nukeDiscoverCache=2
+  discover: V199_TRUE_WIPE=1, V198_NUKE_DISCOVER=0, PATCH_V144_CACHE_STATE=1, PATCH_V144_CACHE_FLATROWS=1, PATCH_V144_CACHE_HYDRATE=1, V190_STORE_DEF=0, discoverNukeStamp=4, nukeDiscoverCache=0
+  addons: V199_TRUE_WIPE=3, V198_NUKE_DISCOVER=0, PATCH_V144_CACHE_STATE=0, PATCH_V144_CACHE_FLATROWS=0, PATCH_V144_CACHE_HYDRATE=0, V190_STORE_DEF=0, discoverNukeStamp=0, nukeDiscoverCache=3
+  cacheUtil: V199_TRUE_WIPE=0, V198_NUKE_DISCOVER=0, PATCH_V144_CACHE_STATE=0, PATCH_V144_CACHE_FLATROWS=0, PATCH_V144_CACHE_HYDRATE=0, V190_STORE_DEF=0, discoverNukeStamp=0, nukeDiscoverCache=0
+  client: V199_TRUE_WIPE=0, V198_NUKE_DISCOVER=0, PATCH_V144_CACHE_STATE=0, PATCH_V144_CACHE_FLATROWS=0, PATCH_V144_CACHE_HYDRATE=0, V190_STORE_DEF=0, discoverNukeStamp=0, nukeDiscoverCache=0
+
+---- [4] contentStore.ts: nukeDiscoverCache + fetchDiscover ----
+  >>> nukeDiscoverCache @ line 84:
+  |   nukeDiscoverCache: () => Promise<void>;
+  |   // V190_STORE_DEF
+  |   cancelInFlightStreams: () => void;
+  |   // PATCH_V19B_INTERFACE
+  |   prefetchStreams: (type: string, id: string) => Promise<void>;
+  |   addToLibrary: (item: ContentItem) => Promise<void>;
+  |   removeFromLibrary: (type: string, id: string) => Promise<void>;
+  |   clearSearch: () => void;
+  |   setCurrentPlaying: (info: CurrentPlaying | null) => void;
+  |   resetStore: () => void;
+  | }
+  | 
+  | const initialState = {
+  |   discoverData: null,
+
+  >>> nukeDiscoverCache @ line 384:
+  |   nukeDiscoverCache: async () => {
+  |     try { set({ discoverData: null, isLoadingDiscover: false, discoverNukeStamp: Date.now() } as any); } catch (_) {}
+  |     try {
+  |       const AS = require('@react-native-async-storage/async-storage').default;
+  |       const keys = await AS.getAllKeys();
+  |       const targets = (keys || []).filter((k) => typeof k === 'string' && k.toLowerCase().indexOf('discover') !== -1);
+  |       if (targets.length > 0) { await AS.multiRemove(targets); }
+  |     } catch (_) {}
+  |   },
+  | 
+  |   // V190_STORE_DEF — drop any in-flight fetch's state-writes
+  |   cancelInFlightStreams: () => {
+  |     _v190AbortToken++;
+  |   },
+
+  >>> fetchDiscover @ line 137:
+  |   fetchDiscover: async (forceRefresh = false) => {
+  |     const currentData = get().discoverData;
+  | 
+  |     // Background background-refresh path (already have data)
+  |     if (currentData && !forceRefresh) {
+  |       try {
+  |         const data: any = await (api.content as any).getDiscover();
+  |         if (data) {
+  |           set({ discoverData: data });
+  |           setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
+  |         }
+  |       } catch (err) {
+  |         console.log('[ContentStore] Background refresh error:', err);
+  |       }
+  |       return;
+  |     }
+  | 
+  |     // First open: try local cache for instant paint
+  |     if (!currentData && !forceRefresh) {
+  |       const cached = await getCached<DiscoverResponse>('discover_data');
+  |       if (cached) {
+  |         set({ discoverData: cached, isLoadingDiscover: false });
+  |       }
+  |     }
+  | 
+  |     set({ isLoadingDiscover: true, error: null });
+  |     try {
+  |       // PATCH_V57_FULL_FETCH — always fetch full discover (no backend pagination).
+  |       // V54 frontend already staggers render so cold start stays fast,
+  |       // and we need ALL addons (Streaming Catalogs especially) for proper
+  |       // row population.
+  |       let firstPage: any = null;
+  |       try {
+  |         firstPage = await (api.content as any).getDiscover();
+  |       } catch (err) {
+  |         console.log('[ContentStore] discover fetch failed:', err);
+  |         throw err;
+  |       }
+  | 
+  |       if (firstPage) {
+  |         set({ discoverData: firstPage, isLoadingDiscover: false });
+  |         setCache('discover_data', firstPage, CACHE_DURATIONS.MEDIUM);
+  | }
+  |     } catch (error: any) {
+  |       console.log('[ContentStore] fetchDiscover error:', error);
+
+---- [5] addons.tsx: install/uninstall handlers ----
+  >>> fetch/nuke callsite @ line 79:
+  |     fetchAddons(true);
+  |   }, []);
+  | 
+  |   const onRefresh = useCallback(async () => {
+  |     setRefreshing(true);
+  |     await fetchAddons(true);
+  |     setRefreshing(false);
+  |   }, []);
+
+  >>> fetch/nuke callsite @ line 84:
+  |     await fetchAddons(true);
+  |     setRefreshing(false);
+  |   }, []);
+  | 
+  |   const handleResolveAndInstall = async () => {
+  |     const code = shortCode.trim();
+  |     if (!code) {
+  |       Alert.alert('Error', 'Please enter a Downloader code');
+
+  >>> fetch/nuke callsite @ line 108:
+  |       try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
+  |       await fetchAddons(true);
+  |       fetchDiscover(true);
+  |         Alert.alert('Success', 'Addon installed!');
+  |       } catch (error: any) {
+  |         const msg = error?.response?.data?.detail || error.message || 'Failed to install addon';
+  |         Alert.alert('Install Failed', msg);
+  |       } finally {
+
+  >>> fetch/nuke callsite @ line 109:
+  |       await fetchAddons(true);
+  |       fetchDiscover(true);
+  |         Alert.alert('Success', 'Addon installed!');
+  |       } catch (error: any) {
+  |         const msg = error?.response?.data?.detail || error.message || 'Failed to install addon';
+  |         Alert.alert('Install Failed', msg);
+  |       } finally {
+  |         setIsInstalling(false);
+
+  >>> fetch/nuke callsite @ line 152:
+  |       try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
+  |       await fetchAddons(true);
+  |       fetchDiscover(true);
+  |     }
+  | 
+  |     if (failCount > 0) {
+  |       Alert.alert(
+  |         'Installation Results',
+
+  >>> fetch/nuke callsite @ line 153:
+  |       await fetchAddons(true);
+  |       fetchDiscover(true);
+  |     }
+  | 
+  |     if (failCount > 0) {
+  |       Alert.alert(
+  |         'Installation Results',
+  |         `${successCount} addon(s) installed successfully, ${failCount} failed.`
+
+  >>> fetch/nuke callsite @ line 218:
+  |       try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
+  |       await fetchAddons(true);
+  |       fetchDiscover(true);
+  |             } catch (error: any) {
+  |               Alert.alert('Error', error?.response?.data?.detail || 'Failed to uninstall addon');
+  |             } finally {
+  |               setDeletingAddonId(null);
+  |             }
+
+  >>> fetch/nuke callsite @ line 219:
+  |       await fetchAddons(true);
+  |       fetchDiscover(true);
+  |             } catch (error: any) {
+  |               Alert.alert('Error', error?.response?.data?.detail || 'Failed to uninstall addon');
+  |             } finally {
+  |               setDeletingAddonId(null);
+  |             }
+  |           }
+
+  >>> uninstall handler @ line 204:
+  |   const handleUninstall = (addon: Addon) => {
+  |     Alert.alert(
+  |       'Uninstall Addon',
+  |       `Remove "${addon.manifest?.name || 'addon'}"? This will remove all content from this addon.`,
+  |       [
+  |         { text: 'Cancel', style: 'cancel' },
+  |         {
+  |           text: 'Uninstall',
+  |           style: 'destructive',
+  |           onPress: async () => {
+  |             setDeletingAddonId(addon.id);
+  |             try {
+  |               await api.addons.uninstall(addon.id);
+  |               // V199_TRUE_WIPE — wipe ALL frontend discover caches before re-fetching
+  |       try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
+  |       await fetchAddons(true);
+  |       fetchDiscover(true);
+  |             } catch (error: any) {
+  |               Alert.alert('Error', error?.response?.data?.detail || 'Failed to uninstall addon');
+  |             } finally {
+  |               setDeletingAddonId(null);
+  |             }
+  |           }
+  |         },
+  |       ]
+  |     );
+  |   };
+  | 
+  |   const getAddonIcon = (types?: string[]) => {
+  |     if (!types) return 'extension-puzzle-outline';
+
+  >>> uninstall handler @ line 206:
+  |       'Uninstall Addon',
+  |       `Remove "${addon.manifest?.name || 'addon'}"? This will remove all content from this addon.`,
+  |       [
+  |         { text: 'Cancel', style: 'cancel' },
+  |         {
+  |           text: 'Uninstall',
+  |           style: 'destructive',
+  |           onPress: async () => {
+  |             setDeletingAddonId(addon.id);
+  |             try {
+  |               await api.addons.uninstall(addon.id);
+  |               // V199_TRUE_WIPE — wipe ALL frontend discover caches before re-fetching
+  |       try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
+  |       await fetchAddons(true);
+  |       fetchDiscover(true);
+  |             } catch (error: any) {
+  |               Alert.alert('Error', error?.response?.data?.detail || 'Failed to uninstall addon');
+  |             } finally {
+  |               setDeletingAddonId(null);
+  |             }
+  |           }
+  |         },
+  |       ]
+  |     );
+  |   };
+  | 
+  |   const getAddonIcon = (types?: string[]) => {
+  |     if (!types) return 'extension-puzzle-outline';
+  |     if (types.includes('movie')) return 'film-outline';
+  |     if (types.includes('series')) return 'tv-outline';
+
+  >>> uninstall handler @ line 211:
+  |           text: 'Uninstall',
+  |           style: 'destructive',
+  |           onPress: async () => {
+  |             setDeletingAddonId(addon.id);
+  |             try {
+  |               await api.addons.uninstall(addon.id);
+  |               // V199_TRUE_WIPE — wipe ALL frontend discover caches before re-fetching
+  |       try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
+  |       await fetchAddons(true);
+  |       fetchDiscover(true);
+  |             } catch (error: any) {
+  |               Alert.alert('Error', error?.response?.data?.detail || 'Failed to uninstall addon');
+  |             } finally {
+  |               setDeletingAddonId(null);
+  |             }
+  |           }
+  |         },
+  |       ]
+  |     );
+  |   };
+  | 
+  |   const getAddonIcon = (types?: string[]) => {
+  |     if (!types) return 'extension-puzzle-outline';
+  |     if (types.includes('movie')) return 'film-outline';
+  |     if (types.includes('series')) return 'tv-outline';
+  |     if (types.includes('tv')) return 'radio-outline';
+  |     return 'extension-puzzle-outline';
+  |   };
+  | 
+  |   const renderAddon = ({ item }: { item: Addon }) => {
+
+  >>> uninstall handler @ line 216:
+  |               await api.addons.uninstall(addon.id);
+  |               // V199_TRUE_WIPE — wipe ALL frontend discover caches before re-fetching
+  |       try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
+  |       await fetchAddons(true);
+  |       fetchDiscover(true);
+  |             } catch (error: any) {
+  |               Alert.alert('Error', error?.response?.data?.detail || 'Failed to uninstall addon');
+  |             } finally {
+  |               setDeletingAddonId(null);
+  |             }
+  |           }
+  |         },
+  |       ]
+  |     );
+  |   };
+  | 
+  |   const getAddonIcon = (types?: string[]) => {
+  |     if (!types) return 'extension-puzzle-outline';
+  |     if (types.includes('movie')) return 'film-outline';
+  |     if (types.includes('series')) return 'tv-outline';
+  |     if (types.includes('tv')) return 'radio-outline';
+  |     return 'extension-puzzle-outline';
+  |   };
+  | 
+  |   const renderAddon = ({ item }: { item: Addon }) => {
+  |     if (!item || !item.manifest) return null;
+  |     
+  |     return (
+  |       <AddonCard 
+  |         addon={item}
+
+  >>> uninstall handler @ line 222:
+  |               Alert.alert('Error', error?.response?.data?.detail || 'Failed to uninstall addon');
+  |             } finally {
+  |               setDeletingAddonId(null);
+  |             }
+  |           }
+  |         },
+  |       ]
+  |     );
+  |   };
+  | 
+  |   const getAddonIcon = (types?: string[]) => {
+  |     if (!types) return 'extension-puzzle-outline';
+  |     if (types.includes('movie')) return 'film-outline';
+  |     if (types.includes('series')) return 'tv-outline';
+  |     if (types.includes('tv')) return 'radio-outline';
+  |     return 'extension-puzzle-outline';
+  |   };
+  | 
+  |   const renderAddon = ({ item }: { item: Addon }) => {
+  |     if (!item || !item.manifest) return null;
+  |     
+  |     return (
+  |       <AddonCard 
+  |         addon={item}
+  |         isTV={isTV}
+  |         onShare={() => handleShareAddon(item)}
+  |         onUninstall={() => handleUninstall(item)}
+  |         isDeleting={deletingAddonId === item.id}
+  |         getAddonIcon={getAddonIcon}
+  |       />
+
+  >>> uninstall handler @ line 248:
+  |         onUninstall={() => handleUninstall(item)}
+  |         isDeleting={deletingAddonId === item.id}
+  |         getAddonIcon={getAddonIcon}
+  |       />
+  |     );
+  |   };
+  | 
+  |   return (
+  |     <SafeAreaView style={styles.container} edges={['top']}>
+  |       {/* Header */}
+  |       <View style={[styles.header, isTV && styles.headerTV]}>
+  |         <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Addons</Text>
+  |         <Pressable
+  |           style={[styles.addButton, addBtnFocused && styles.addButtonFocused]}
+  |           onFocus={() => setAddBtnFocused(true)}
+  |           onBlur={() => setAddBtnFocused(false)}
+  |           onPress={() => setShowModal(true)}
+  |         >
+  |           <Ionicons name="add" size={24} color="#FFFFFF" />
+  |         </Pressable>
+  |       </View>
+  | 
+  |       {/* Disclaimer */}
+  |       <View style={styles.disclaimer}>
+  |         <Ionicons name="alert-circle" size={22} color={colors.primary} style={{ marginRight: 8, marginTop: 2 }} />
+  |         <Text style={styles.disclaimerText}>
+  |           This app enables third-party addons. All content is provided externally; the app developer assumes no responsibility for its legality, accuracy, or availability.
+  |         </Text>
+  |       </View>
+  | 
+
+  >>> uninstall handler @ line 511:
+  |   onUninstall, 
+  |   isDeleting,
+  |   getAddonIcon,
+  | }: {
+  |   addon: Addon;
+  |   isTV: boolean;
+  |   onShare: () => void;
+  |   onUninstall: () => void;
+  |   isDeleting: boolean;
+  |   getAddonIcon: (types?: string[]) => string;
+  | }) {
+  |   const [shareFocused, setShareFocused] = useState(false);
+  |   const [trashFocused, setTrashFocused] = useState(false);
+  | 
+  |   return (
+  |     <View style={styles.addonCard}>
+  |       <View style={styles.addonIconContainer}>
+  |         {addon.manifest.logo ? (
+  |           <Image
+  |             source={{ uri: addon.manifest.logo }}
+  |             style={styles.addonLogo}
+  |             contentFit="contain"
+  |           />
+  |         ) : (
+  |           <Ionicons
+  |             name={getAddonIcon(addon.manifest.types) as any}
+  |             size={28}
+  |             color={colors.primary}
+  |           />
+  |         )}
+
+  >>> uninstall handler @ line 518:
+  |   onUninstall: () => void;
+  |   isDeleting: boolean;
+  |   getAddonIcon: (types?: string[]) => string;
+  | }) {
+  |   const [shareFocused, setShareFocused] = useState(false);
+  |   const [trashFocused, setTrashFocused] = useState(false);
+  | 
+  |   return (
+  |     <View style={styles.addonCard}>
+  |       <View style={styles.addonIconContainer}>
+  |         {addon.manifest.logo ? (
+  |           <Image
+  |             source={{ uri: addon.manifest.logo }}
+  |             style={styles.addonLogo}
+  |             contentFit="contain"
+  |           />
+  |         ) : (
+  |           <Ionicons
+  |             name={getAddonIcon(addon.manifest.types) as any}
+  |             size={28}
+  |             color={colors.primary}
+  |           />
+  |         )}
+  |       </View>
+  |       <View style={styles.addonInfo}>
+  |         <Text style={styles.addonName}>{addon.manifest.name || 'Unknown Addon'}</Text>
+  |         <Text style={styles.addonVersion}>v{addon.manifest.version || '?'}</Text>
+  |         <Text style={styles.addonDescription} numberOfLines={2}>
+  |           {addon.manifest.description || 'No description'}
+  |         </Text>
+
+  >>> uninstall handler @ line 569:
+  |           onPress={onUninstall} 
+  |           disabled={isDeleting}
+  |         >
+  |           {isDeleting ? (
+  |             <ActivityIndicator size="small" color={colors.error} />
+  |           ) : (
+  |             <Ionicons name="trash-outline" size={22} color="#FF4444" />
+  |           )}
+  |         </Pressable>
+  |       </View>
+  |     </View>
+  |   );
+  | }
+  | 
+  | const styles = StyleSheet.create({
+  |   container: {
+  |     flex: 1,
+  |     backgroundColor: colors.background,
+  |   },
+  |   header: {
+  |     flexDirection: 'row',
+  |     justifyContent: 'space-between',
+  |     alignItems: 'center',
+  |     paddingHorizontal: 20,
+  |     paddingVertical: 16,
+  |     borderBottomWidth: 1,
+  |     borderBottomColor: 'rgba(255,255,255,0.1)',
+  |   },
+  |   headerTV: {
+  |     paddingHorizontal: 40,
+
+---- [6] discover.tsx: V199 effect + flatRows fallback + focus effect ----
+  >>> V199 nuke-stamp effect @ line 100:
+  |   const discoverNukeStamp = useContentStore((s: any) => (s as any).discoverNukeStamp);
+  |   useEffect(() => {
+  |     if (discoverNukeStamp) {
+  |       try { setCachedDiscover(null); } catch (_) {}
+  |     }
+  |   }, [discoverNukeStamp]);
+  |   const [cachedCW, setCachedCW] = useState<WatchProgress[]>([]);
+  |   const scrollViewRef = useRef<ScrollView>(null);
+  |   const sectionPositions = useRef<Record<string, number>>({});
+  |   const lastFocusedSection = useRef<string>('');
+
+  >>> V199 nuke-stamp effect @ line 102:
+  |     if (discoverNukeStamp) {
+  |       try { setCachedDiscover(null); } catch (_) {}
+  |     }
+  |   }, [discoverNukeStamp]);
+  |   const [cachedCW, setCachedCW] = useState<WatchProgress[]>([]);
+  |   const scrollViewRef = useRef<ScrollView>(null);
+  |   const sectionPositions = useRef<Record<string, number>>({});
+  |   const lastFocusedSection = useRef<string>('');
+  |   const lastCWFetchTime = useRef<number>(0);
+  | 
+
+  >>> V199 nuke-stamp effect @ line 105:
+  |   }, [discoverNukeStamp]);
+  |   const [cachedCW, setCachedCW] = useState<WatchProgress[]>([]);
+  |   const scrollViewRef = useRef<ScrollView>(null);
+  |   const sectionPositions = useRef<Record<string, number>>({});
+  |   const lastFocusedSection = useRef<string>('');
+  |   const lastCWFetchTime = useRef<number>(0);
+  | 
+  |   // Use same card width calculation as ContentCard for consistency
+  |   const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
+  |   const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
+
+  >>> flatRows/hasContent fallback @ line 254:
+  |     const services = discoverData?.services || cachedDiscover?.services;
+  |     if (!services) return false;
+  |     return Object.values(services).some(
+  |       (content: any) => 
+  |         (content?.movies?.length > 0) || 
+  |         (content?.series?.length > 0) || 
+
+  >>> flatRows/hasContent fallback @ line 357:
+  |   const services = discoverData?.services || cachedDiscover?.services;
+  |   if (!services || typeof services !== 'object') {
+  |     return rows;
+  |   }
+  | 
+  |   const cwSource = (continueWatching && continueWatching.length > 0) ? continueWatching : cachedCW;
+
+  >>> flatRows/hasContent fallback @ line 429:
+  | }, [discoverData?.services, cachedDiscover?.services, continueWatching, cachedCW, maxRowsV54]);
+  | 
+  | // Navigation handler (kept minimal for speed)
+  | const handleItemPress = useCallback((item: ContentItem) => {
+  |   const id = item.imdb_id || item.id;
+  |   if (!id) return;
+
+  >>> focus effect @ line 23:
+  | import { useRouter, useFocusEffect } from 'expo-router';
+  | import { Image } from 'expo-image';
+  | import { Ionicons } from '@expo/vector-icons';
+  | import { useContentStore } from '../../src/store/contentStore';
+  | import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
+  | import { FlashList } from '@shopify/flash-list'; // PATCH_V54_VIRTUALIZE
+  | import { ServiceRow } from '../../src/components/ServiceRow';
+  | import { ContentItem, api, WatchProgress } from '../../src/api/client';
+  | /* V176_LONGPRESS_MENU — extend the ContentCard import with the
+  |    watched/progress helpers + unified menu opener. */
+  | import {
+  |   getCardWidth,
+  |   v160GetPoster as _v160GetPoster,
+  |   v160SubscribePoster as _v160SubscribePoster /* V166_POSTER_SUB */,
+  |   v167PrewarmReleaseStatus as _v167PrewarmReleaseStatus /* V167_RELEASE_PREWARM */,
+  |   v172IsWatched as _v172IsWatched,
+  |   v172SubscribeWatched as _v172SubscribeWatched,
+  |   v176RegisterProgress as _v176RegisterProgress,
+  |   v176HasProgress as _v176HasProgress,
+  |   v176SubscribeProgress as _v176SubscribeProgress,
+  |   v176ShowLongPressMenu as _v176ShowLongPressMenu,
+  |   /* V176E_TV_LONGPRESS — register this CW card's menu handler with v173. */
+
+  >>> focus effect @ line 231:
+  |   useFocusEffect(
+  |     useCallback(() => {
+  |       const now = Date.now();
+  |       const cwElapsed = now - lastCWFetchTime.current;
+  |       const discoverElapsed = now - lastDiscoverFetchTime.current;
+  |       // Always cheap CW refresh after 30s; only heavy discover refresh after 60s.
+  |       if (cwElapsed < 30000 && discoverElapsed < 60000) {
+  |         return; // recent enough — back-nav stays instant
+  |       }
+  |       const handle = InteractionManager.runAfterInteractions(() => {
+  |         if (cwElapsed >= 30000) fetchContinueWatching();
+  |         if (discoverElapsed >= 60000) {
+  |           lastDiscoverFetchTime.current = Date.now();
+  |           fetchDiscover(); // no force flag — SWR pattern from store
+  |         }
+  |       });
+  |       return () => handle.cancel();
+  |     }, [fetchContinueWatching])
+  |   );
+  | 
+  |   // Check if there's any content to display
+  |   // PATCH_V144_CACHE_HASCONTENT — prefer live data, fall back to cached snapshot
+
+---- [7] src/utils/cache.ts FULL FILE (reveals key prefix) ----
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  expiresAt: number;
+}
+
+// Cache durations in milliseconds
+export const CACHE_DURATIONS = {
+  SHORT: 5 * 60 * 1000,      // 5 minutes - for frequently changing data
+  MEDIUM: 30 * 60 * 1000,    // 30 minutes - for catalog data
+  LONG: 2 * 60 * 60 * 1000,  // 2 hours - for metadata
+  VERY_LONG: 24 * 60 * 60 * 1000, // 24 hours - for static content
+};
+
+// In-memory cache for fast access
+const memoryCache = new Map<string, CacheEntry<any>>();
+
+/**
+ * Get data from cache (memory first, then AsyncStorage)
+ */
+export async function getCached<T>(key: string): Promise<T | null> {
+  // Check memory cache first
+  const memEntry = memoryCache.get(key);
+  if (memEntry && Date.now() < memEntry.expiresAt) {
+    return memEntry.data;
+  }
+  
+  // Check AsyncStorage
+  try {
+    const stored = await AsyncStorage.getItem(`cache_${key}`);
+    if (stored) {
+      const entry: CacheEntry<T> = JSON.parse(stored);
+      if (Date.now() < entry.expiresAt) {
+        // Update memory cache
+        memoryCache.set(key, entry);
+        return entry.data;
+      } else {
+        // Expired - remove from storage
+        await AsyncStorage.removeItem(`cache_${key}`);
+      }
+    }
+  } catch (e) {
+    console.log('[Cache] Error reading cache:', e);
+  }
+  
+  return null;
+}
+
+/**
+ * Set data in cache (both memory and AsyncStorage)
+ */
+export async function setCache<T>(key: string, data: T, duration: number = CACHE_DURATIONS.MEDIUM): Promise<void> {
+  const entry: CacheEntry<T> = {
+    data,
+    timestamp: Date.now(),
+    expiresAt: Date.now() + duration,
+  };
+  
+  // Set in memory cache
+  memoryCache.set(key, entry);
+  
+  // Set in AsyncStorage (don't await to avoid blocking)
+  AsyncStorage.setItem(`cache_${key}`, JSON.stringify(entry)).catch(e => {
+    console.log('[Cache] Error writing cache:', e);
+  });
+}
+
+/**
+ * Clear specific cache entry
+ */
+export async function clearCache(key: string): Promise<void> {
+  memoryCache.delete(key);
+  await AsyncStorage.removeItem(`cache_${key}`);
+}
+
+/**
+ * Clear all cache entries
+ */
+export async function clearAllCache(): Promise<void> {
+  memoryCache.clear();
+  
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const cacheKeys = keys.filter(k => k.startsWith('cache_'));
+    await AsyncStorage.multiRemove(cacheKeys);
+  } catch (e) {
+    console.log('[Cache] Error clearing cache:', e);
+  }
+}
+
+/**
+ * Wrapper for API calls with caching
+ */
+export async function cachedFetch<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  duration: number = CACHE_DURATIONS.MEDIUM
+): Promise<T> {
+  // Try to get from cache first
+  const cached = await getCached<T>(key);
+  if (cached !== null) {
+    console.log(`[Cache] Hit: ${key}`);
+    return cached;
+  }
+  
+  // Fetch fresh data
+  console.log(`[Cache] Miss: ${key}`);
+  const data = await fetcher();
+  
+  // Cache the result
+  await setCache(key, data, duration);
+  
+  return data;
+}
+
+
+---- [8] client.ts: uninstall + discover API calls ----
+  >>> addon api @ line 258:
+  |       const response = await apiClient.get(`/api/addons/${addonId}/stream/${type}/${id}`);
+  |       return response.data;
+  |     },
+  |     getAllStreams: async (type: string, id: string, onProgress?: (streams: Stream[]) => void): Promise<{ streams: Stream[] }> => {
+  |       console.log(`[STREAMS] ========== Fetching streams for ${type}/${id} ==========`);
+  |       const startTime = Date.now();
+  |       
+  |       const cacheKey = `streams:${type}:${id}`;
+
+  >>> addon api @ line 620:
+  |       const response = await apiClient.post('/api/addons/install', { manifestUrl });
+  |       return response.data;
+  |     },
+  |     uninstall: async (addonId: string): Promise<void> => {
+  |       await apiClient.delete(`/api/addons/${addonId}`);
+  |     },
+  |     resolveCode: async (code: string): Promise<{ url: string; code: string }> => {
+  |       const response = await apiClient.get(`/api/addons/resolve-code/${code}`);
+
+  >>> addon api @ line 623:
+  |     uninstall: async (addonId: string): Promise<void> => {
+  |       await apiClient.delete(`/api/addons/${addonId}`);
+  |     },
+  |     resolveCode: async (code: string): Promise<{ url: string; code: string }> => {
+  |       const response = await apiClient.get(`/api/addons/resolve-code/${code}`);
+  |       return response.data;
+  |     },
+  |   },
+
+  >>> addon api @ line 624:
+  |       await apiClient.delete(`/api/addons/${addonId}`);
+  |     },
+  |     resolveCode: async (code: string): Promise<{ url: string; code: string }> => {
+  |       const response = await apiClient.get(`/api/addons/resolve-code/${code}`);
+  |       return response.data;
+  |     },
+  |   },
+  |   library: {
+
+  >>> addon api @ line 627:
+  |       const response = await apiClient.get(`/api/addons/resolve-code/${code}`);
+  |       return response.data;
+  |     },
+  |   },
+  |   library: {
+  |     get: async (): Promise<LibraryResponse> => {
+  |       const response = await apiClient.get('/api/library');
+  |       return response.data;
+
+  >>> getDiscover @ line 228:
+  |     getDiscover: async (): Promise<DiscoverResponse> => {
+  |       const response = await apiClient.get('/api/content/discover-organized', { timeout: 120000 });
+  |       return response.data;
+  |     },
+  |     search: async (query: string, skip: number = 0, limit: number = 30): Promise<{ movies: SearchResult[]; series: SearchResult[]; hasMore: boolean; total: number }> => {
+  |       const response = await apiClient.get(`/api/content/search?q=${encodeURIComponent(query)}&skip=${skip}&limit=${limit}`);
+  |       return response.data;
+  |     },

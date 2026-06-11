@@ -104,10 +104,8 @@ export default function AddonsScreen() {
         await api.addons.install(resolvedUrl);
         setShowModal(false);
         setShortCode('');
-        // V199_TRUE_WIPE — wipe ALL frontend discover caches before re-fetching
-      try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
-      await fetchAddons(true);
-      fetchDiscover(true);
+        await fetchAddons(true);
+        fetchDiscover(true);
         Alert.alert('Success', 'Addon installed!');
       } catch (error: any) {
         const msg = error?.response?.data?.detail || error.message || 'Failed to install addon';
@@ -148,8 +146,6 @@ export default function AddonsScreen() {
     if (successCount > 0) {
       setShowModal(false);
       setAddonUrl('');
-      // V199_TRUE_WIPE — wipe ALL frontend discover caches before re-fetching
-      try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
       await fetchAddons(true);
       fetchDiscover(true);
     }
@@ -214,10 +210,8 @@ export default function AddonsScreen() {
             setDeletingAddonId(addon.id);
             try {
               await api.addons.uninstall(addon.id);
-              // V199_TRUE_WIPE — wipe ALL frontend discover caches before re-fetching
-      try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
-      await fetchAddons(true);
-      fetchDiscover(true);
+              await fetchAddons(true);
+              fetchDiscover(true);
             } catch (error: any) {
               Alert.alert('Error', error?.response?.data?.detail || 'Failed to uninstall addon');
             } finally {

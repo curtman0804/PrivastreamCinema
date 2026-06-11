@@ -96,13 +96,6 @@ export default function DiscoverScreen() {
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
   // PATCH_V144_CACHE_STATE — snapshots loaded from AsyncStorage on cold mount
   const [cachedDiscover, setCachedDiscover] = useState<any>(null);
-  // V199_TRUE_WIPE — when the store nukes discover caches, drop the local v144 snapshot too
-  const discoverNukeStamp = useContentStore((s: any) => (s as any).discoverNukeStamp);
-  useEffect(() => {
-    if (discoverNukeStamp) {
-      try { setCachedDiscover(null); } catch (_) {}
-    }
-  }, [discoverNukeStamp]);
   const [cachedCW, setCachedCW] = useState<WatchProgress[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionPositions = useRef<Record<string, number>>({});

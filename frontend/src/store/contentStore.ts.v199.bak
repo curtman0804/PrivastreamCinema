@@ -80,8 +80,6 @@ interface ContentState {
   search: (query: string) => Promise<void>;
   loadMoreSearch: () => Promise<void>;
   fetchStreams: (type: string, id: string) => Promise<Stream[]>;
-  // V199_TRUE_WIPE
-  nukeDiscoverCache: () => Promise<void>;
   // V190_STORE_DEF
   cancelInFlightStreams: () => void;
   // PATCH_V19B_INTERFACE
@@ -378,17 +376,6 @@ export const useContentStore = create<ContentState>((set, get) => ({
       _setIf({ streams: [], isLoadingStreams: false });
       return [];
     }
-  },
-
-  // V198_NUKE_DISCOVER / V199_TRUE_WIPE — clear EVERY discover cache layer
-  nukeDiscoverCache: async () => {
-    try { set({ discoverData: null, isLoadingDiscover: false, discoverNukeStamp: Date.now() } as any); } catch (_) {}
-    try {
-      const AS = require('@react-native-async-storage/async-storage').default;
-      const keys = await AS.getAllKeys();
-      const targets = (keys || []).filter((k) => typeof k === 'string' && k.toLowerCase().indexOf('discover') !== -1);
-      if (targets.length > 0) { await AS.multiRemove(targets); }
-    } catch (_) {}
   },
 
   // V190_STORE_DEF — drop any in-flight fetch's state-writes
