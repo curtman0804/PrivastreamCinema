@@ -13,7 +13,6 @@ import {
   Platform,
   Share,
   useWindowDimensions,
-  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -105,11 +104,10 @@ export default function AddonsScreen() {
         await api.addons.install(resolvedUrl);
         setShowModal(false);
         setShortCode('');
-        // V204_SOFT_REFRESH — install: keep posters on screen (soft nuke) and
-      // defer the heavy refetch until D-pad interactions settle.
-      try { await (useContentStore.getState() as any).nukeDiscoverCache?.(true); } catch (_) {}
+        // V199_TRUE_WIPE — wipe ALL frontend discover caches before re-fetching
+      try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
       await fetchAddons(true);
-      InteractionManager.runAfterInteractions(() => { fetchDiscover(true); });
+      fetchDiscover(true);
         Alert.alert('Success', 'Addon installed!');
       } catch (error: any) {
         const msg = error?.response?.data?.detail || error.message || 'Failed to install addon';
@@ -150,11 +148,10 @@ export default function AddonsScreen() {
     if (successCount > 0) {
       setShowModal(false);
       setAddonUrl('');
-      // V204_SOFT_REFRESH — install: keep posters on screen (soft nuke) and
-      // defer the heavy refetch until D-pad interactions settle.
-      try { await (useContentStore.getState() as any).nukeDiscoverCache?.(true); } catch (_) {}
+      // V199_TRUE_WIPE — wipe ALL frontend discover caches before re-fetching
+      try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
       await fetchAddons(true);
-      InteractionManager.runAfterInteractions(() => { fetchDiscover(true); });
+      fetchDiscover(true);
     }
 
     if (failCount > 0) {
@@ -217,11 +214,10 @@ export default function AddonsScreen() {
             setDeletingAddonId(addon.id);
             try {
               await api.addons.uninstall(addon.id);
-              // V204_HARD_REFRESH — uninstall: posters vanish instantly, heavy
-              // refetch deferred so the Addons screen stays responsive.
-              try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
-              await fetchAddons(true);
-              InteractionManager.runAfterInteractions(() => { fetchDiscover(true); });
+              // V199_TRUE_WIPE — wipe ALL frontend discover caches before re-fetching
+      try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
+      await fetchAddons(true);
+      fetchDiscover(true);
             } catch (error: any) {
               Alert.alert('Error', error?.response?.data?.detail || 'Failed to uninstall addon');
             } finally {

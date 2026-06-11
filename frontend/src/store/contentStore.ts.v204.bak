@@ -80,8 +80,8 @@ interface ContentState {
   search: (query: string) => Promise<void>;
   loadMoreSearch: () => Promise<void>;
   fetchStreams: (type: string, id: string) => Promise<Stream[]>;
-  // V199_TRUE_WIPE / V204_SOFT_NUKE
-  nukeDiscoverCache: (soft?: boolean) => Promise<void>;
+  // V199_TRUE_WIPE
+  nukeDiscoverCache: () => Promise<void>;
   // V190_STORE_DEF
   cancelInFlightStreams: () => void;
   // PATCH_V19B_INTERFACE
@@ -142,13 +142,6 @@ export const useContentStore = create<ContentState>((set, get) => ({
       try {
         const data: any = await (api.content as any).getDiscover();
         if (data) {
-          // V204_SKIP_IDENTICAL — same payload => keep the same object reference
-          // so flatRows memos don't recompute and no row re-renders (this was
-          // the post-back-nav D-pad freeze).
-          try {
-            const prev = get().discoverData;
-            if (prev && JSON.stringify(prev) === JSON.stringify(data)) return;
-          } catch (_) {}
           set({ discoverData: data });
           setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
         }
@@ -181,17 +174,8 @@ export const useContentStore = create<ContentState>((set, get) => ({
       }
 
       if (firstPage) {
-        let identical = false; // V204_SKIP_IDENTICAL
-        try {
-          const prev = get().discoverData;
-          identical = !!prev && JSON.stringify(prev) === JSON.stringify(firstPage);
-        } catch (_) {}
-        if (identical) {
-          set({ isLoadingDiscover: false });
-        } else {
-          set({ discoverData: firstPage, isLoadingDiscover: false });
-          setCache('discover_data', firstPage, CACHE_DURATIONS.MEDIUM);
-        }
+        set({ discoverData: firstPage, isLoadingDiscover: false });
+        setCache('discover_data', firstPage, CACHE_DURATIONS.MEDIUM);
 }
     } catch (error: any) {
       console.log('[ContentStore] fetchDiscover error:', error);
@@ -397,14 +381,8 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   // V198_NUKE_DISCOVER / V199_TRUE_WIPE — clear EVERY discover cache layer
-  nukeDiscoverCache: async (soft = false) => {
-    // V204_SOFT_NUKE — soft keeps current posters on screen (no blank flash, no
-    // extra Discover re-render while the user is on Addons); fresh data simply
-    // replaces them when the forced refetch lands.
-    try {
-      if (soft) set({ discoverNukeStamp: Date.now() } as any);
-      else set({ discoverData: null, isLoadingDiscover: false, discoverNukeStamp: Date.now() } as any);
-    } catch (_) {}
+  nukeDiscoverCache: async () => {
+    try { set({ discoverData: null, isLoadingDiscover: false, discoverNukeStamp: Date.now() } as any); } catch (_) {}
     try {
       const AS = require('@react-native-async-storage/async-storage').default;
       const keys = await AS.getAllKeys();

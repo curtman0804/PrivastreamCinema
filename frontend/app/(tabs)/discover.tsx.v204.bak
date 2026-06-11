@@ -118,12 +118,7 @@ export default function DiscoverScreen() {
     try {
       setIsLoadingProgress(true);
       const response = await api.watchProgress.getAll();
-      const _v204Next = response.continueWatching || [];
-      // V204_SKIP_IDENTICAL — unchanged CW => keep previous array reference (no re-render)
-      setContinueWatching(prev => {
-        try { if (JSON.stringify(prev) === JSON.stringify(_v204Next)) return prev; } catch (_) {}
-        return _v204Next;
-      });
+      setContinueWatching(response.continueWatching || []);
       lastCWFetchTime.current = Date.now();
     } catch (err) {
       console.log('[Discover] Error fetching continue watching:', err);
@@ -158,14 +153,11 @@ export default function DiscoverScreen() {
 
   // PATCH_V144_CACHE_PERSIST — snapshot store data to disk on every update
   useEffect(() => {
-    if (!discoverData?.services) return;
-    // V204_DEFER_PERSIST — big JSON.stringify + disk write off the critical frame
-    const h = InteractionManager.runAfterInteractions(() => {
+    if (discoverData?.services) {
       try {
         AsyncStorage.setItem('@ps_discover_v1', JSON.stringify(discoverData)).catch(() => {});
       } catch (_) {}
-    });
-    return () => { try { h.cancel(); } catch (_) {} };
+    }
   }, [discoverData]);
 
   useEffect(() => {
