@@ -210,6 +210,9 @@ export default function PlayerScreen() {
     seriesId,
     season,
     episode,
+    // v241 — episode name passed by details so player's loading screen
+    // shows the SAME 3-line layout as details' autoplay overlay.
+    episodeName,
     // Visual assets
     backdrop,
     poster,
@@ -237,6 +240,7 @@ export default function PlayerScreen() {
     seriesId?: string;
     season?: string;
     episode?: string;
+    episodeName?: string;
     backdrop?: string;
     poster?: string;
     logo?: string;
@@ -2390,35 +2394,79 @@ export default function PlayerScreen() {
           {/* Dark overlay for legibility */}
           <View style={styles.loadingDarkOverlay} />
 
-          {/* Centered content — series logo + episode title + thin gold bar */}
+          {/* Centered content — v241: pixel-identical to details' autoPlayOverlay
+              (logo 280x90 mb20  /  episodeName 20|600 mb6  /  S?E? 14|gold mb36
+              /  gold sliding bar 260x4  /  "Loading..." 13|#CCC mt14) so the
+              transition from details overlay → player overlay is invisible. */}
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
-            {logo ? (
-              <Image
-                source={{ uri: logo }}
-                style={{ width: 280, height: 90, marginBottom: 18 }}
-                resizeMode="contain"
-              />
-            ) : null}
+            {(() => {
+              const _v241ValidNum = (n: any) =>
+                n != null && n !== '' && !Number.isNaN(Number(n));
+              const isSeries = _v241ValidNum(season) && _v241ValidNum(episode);
+              // Prefer the explicit episodeName param from details; fall back
+              // to stripping the "S3E6 - " prefix off the combined title.
+              const cleanedTitle = (title || '').replace(/^S\d+E\d+\s*-\s*/i, '').trim();
+              const epName = (episodeName && String(episodeName).trim())
+                ? String(episodeName).trim()
+                : cleanedTitle;
 
-            {title ? (
-              <Text
-                style={{
-                  color: '#FFFFFF',
-                  fontSize: 22,
-                  fontWeight: '700',
-                  textAlign: 'center',
-                  marginBottom: 28,
-                  paddingHorizontal: 16,
-                  letterSpacing: 0.3,
-                }}
-                numberOfLines={2}
-              >
-                {title}
-              </Text>
-            ) : null}
+              return (
+                <>
+                  {logo ? (
+                    <Image
+                      source={{ uri: logo }}
+                      style={{ width: 280, height: 90, marginBottom: 20 }}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <Text
+                      style={{
+                        color: '#FFF',
+                        fontSize: 32,
+                        fontWeight: '800',
+                        textAlign: 'center',
+                        marginBottom: 16,
+                        letterSpacing: 0.5,
+                      }}
+                      numberOfLines={2}
+                    >
+                      {isSeries ? (title || '').replace(/\s*-\s*.*$/, '') : (title || '')}
+                    </Text>
+                  )}
 
-            {/* Indeterminate sliding gold bar — PATCH_V149_SMOOTH_TRACK
-                exact-match Details' AutoPlayLoadingBar (260×4 track, 100×4 slider, 0.12 alpha) */}
+                  {isSeries && epName ? (
+                    <Text
+                      style={{
+                        color: '#FFF',
+                        fontSize: 20,
+                        fontWeight: '600',
+                        textAlign: 'center',
+                        marginBottom: 6,
+                      }}
+                      numberOfLines={2}
+                    >
+                      {epName}
+                    </Text>
+                  ) : null}
+
+                  {isSeries ? (
+                    <Text
+                      style={{
+                        color: '#B8A05C',
+                        fontSize: 14,
+                        fontWeight: '600',
+                        marginBottom: 36,
+                        letterSpacing: 1,
+                      }}
+                    >
+                      {`S${season} E${episode}`}
+                    </Text>
+                  ) : null}
+                </>
+              );
+            })()}
+
+            {/* Indeterminate sliding gold bar — exact match to details' AutoPlayLoadingBar */}
             <View
               style={{
                 width: 260,
@@ -2444,14 +2492,13 @@ export default function PlayerScreen() {
 
             <Text
               style={{
-                color: 'rgba(255,255,255,0.7)',
+                color: '#CCC',
                 fontSize: 13,
-                marginTop: 16,
+                marginTop: 14,
                 fontWeight: '500',
-                letterSpacing: 0.5,
               }}
             >
-              Loading…
+              {'Loading...'}
             </Text>
           </View>
         </View>
@@ -3000,6 +3047,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   // Stremio-style Loading Screen
+  // v241 — EXACT visual parity with details' autoPlayOverlay so the
+  // hand-off from details → player is invisible:
+  //   • container bg: rgba(15,15,17,0.95)  (was solid #000)
+  //   • backdrop opacity: 1.0              (was 0.4 — backdrop now matches details)
+  //   • dim overlay:    rgba(0,0,0,0.65)   (was 0.6)
   stremioLoadingContainer: {
     position: 'absolute',
     top: 0,
@@ -3007,7 +3059,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 50,
-    backgroundColor: '#000',
+    backgroundColor: 'rgba(15, 15, 17, 0.95)',
   },
   loadingBackdrop: {
     position: 'absolute',
@@ -3015,7 +3067,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    opacity: 0.4,
   },
   loadingDarkOverlay: {
     position: 'absolute',
@@ -3023,7 +3074,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
   },
   loadingContent: {
     flex: 1,

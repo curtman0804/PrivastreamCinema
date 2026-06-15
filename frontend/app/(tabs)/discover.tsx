@@ -1,5 +1,6 @@
 // v212 loading isolation
-import React, { useEffect, useCallback, useState, useMemo, useRef, startTransition } from 'react';
+// v241 — useDeferredValue: deprioritise flatRows mapping to keep JS thread free
+import React, { useEffect, useCallback, useState, useMemo, useRef, startTransition, useDeferredValue } from 'react';
 import {
   View,
   Text,
@@ -502,6 +503,12 @@ const flatRowsV54 = useMemo(() => {
   // PATCH_V144_CACHE_DEPS — re-evaluate when cached fallback hydrates
 }, [discoverData?.services, cachedDiscover?.services, continueWatching, cachedCW, maxRowsV54]);
 
+// PATCH_V241_DEFER_FLATROWS — deprioritise the heavy row-mapping render so the
+// JS thread stays free for navigation taps/D-pad on low-CPU devices like
+// Firestick.  React keeps the previous deferred value visible while the new
+// one is computed in the background.
+const deferredFlatRows = useDeferredValue(flatRowsV54);
+
 // Navigation handler (kept minimal for speed)
 const handleItemPress = useCallback((item: ContentItem) => {
   const id = item.imdb_id || item.id;
@@ -703,7 +710,9 @@ return (
             />
           }
         >
-          {flatRowsV54.map((item: any) => {
+          {/* PATCH_V241_USE_DEFERRED — render from deferredFlatRows so heavy
+              row map is non-blocking */}
+          {deferredFlatRows.map((item: any) => {
             if (item.kind === 'cw') {
               // V108_ROW_SNAP: record CW row Y for back-scroll
               return (
