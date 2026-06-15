@@ -26,16 +26,6 @@ import { Image } from 'expo-image';
 import Constants from 'expo-constants';
 import { useContentStore, getMetaCache, setMetaCache } from '../../../src/store/contentStore';
 
-// v238 cache buster — append &_t=<ts> to ANY URL handed to the player so
-// Firestick's aggressive media cache can't replay a stale wrong-content
-// stream URL. Safe for proxy, torrent-video, and external CDN URLs.
-function _v237_bustUrl(u: any) {
-  if (!u || typeof u !== "string") return u;
-  const sep = u.includes("?") ? "&" : "?";
-  return u + sep + "_t=" + Date.now();
-}
-
-
 // Fallback image for missing posters
 const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
 
@@ -118,25 +108,18 @@ function AutoPlayLoadingBar() {
 }
 
 // Focusable Button Component
-// v238c — helper used in both player metadata + autoPlayOverlay text.
-// MUST be module-level (was nested inside handleStreamSelect → caused
-// ReferenceError when the overlay tried to render).
-const _v238ValidNum = (n: any) => (n != null && !Number.isNaN(Number(n)));
-
 function FocusableButton({ 
   onPress, 
   style, 
   focusedStyle,
   children,
   disabled = false,
-  hasTVPreferredFocus = false,
 }: {
   onPress?: () => void;
   style: any;
   focusedStyle?: any;
   children: React.ReactNode;
   disabled?: boolean;
-  hasTVPreferredFocus?: boolean;
 }) {
   const [isFocused, setIsFocused] = useState(false);
   
@@ -147,7 +130,6 @@ function FocusableButton({
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       disabled={disabled}
-      hasTVPreferredFocus={hasTVPreferredFocus}
     >
       {children}
     </Pressable>
@@ -342,7 +324,6 @@ function _v161_seriesTitleWords(title: string): string[] {
   return tokens.filter((w: string) => w.length >= 3 && !_V161_STOPWORDS.has(w));
 }
 function _v161_isWrongSeriesStream(stream: any, meta: { isSeries: boolean; seriesWords: string[] }): boolean {
-  return false; // v233 client filters disabled — backend already returns only id-matched streams
   if (!meta.isSeries || !meta.seriesWords || meta.seriesWords.length === 0) return false;
   const raw = ((stream && (stream.title || '')) + ' ' + (stream && (stream.name || ''))).trim();
   if (!raw) return false;
@@ -394,7 +375,6 @@ function _v157_extractSequelMarkers(text: string): Set<number> {
 }
 
 function _v157_isWrongTitleStream(stream: any, meta: { title: string; year: string; isMovie: boolean }): boolean {
-  return false; // v233 client filters disabled — backend already returns only id-matched streams
   if (!meta.isMovie || !meta.title) return false;
   const txt = ((stream && (stream.title || '')) + ' ' + (stream && (stream.name || ''))).trim();
   if (!txt) return false;
@@ -918,9 +898,6 @@ export default function DetailsScreen() {
     resumeEpisode,
     // Display data passed via route params for INSTANT rendering
     name: paramName, poster: paramPoster,
-    // v238 — accept backdrop + logo from caller for INSTANT detail-page paint
-    background: paramBackground,
-    logo: paramLogo,
     autoPlay: autoPlayParam,
     selectedSeason: paramSelectedSeason,
     selectedEpisode: paramSelectedEpisode,
@@ -935,8 +912,6 @@ export default function DetailsScreen() {
     resumeSeason?: string;
     resumeEpisode?: string;
     name?: string; poster?: string;
-    background?: string;
-    logo?: string;
     autoPlay?: string;
     nextTitle?: string;
     nextPoster?: string;
@@ -1539,20 +1514,10 @@ export default function DetailsScreen() {
     // Always pass current-episode metadata for series content so the
 // player's loading screen can render "S3E6 - Rest and Ricklaxation"
 // with the correct backdrop, regardless of whether there's a next ep.
-// v238c — also defend against NaN.  Some CW entries (porn / JT / PT
-// addons) have content_id="pt:NaN:1054329" or "jt:NaN:NaN" — parseInt
-// returns NaN, NaN != null is TRUE, String(NaN) === "NaN" → player
-// rendered "Episode NaN"/"Episode null".  Fall back through valid
-// resumeSeason/resumeEpisode then empty string.
-const _v238ValidNum = (n: any) => (n != null && !Number.isNaN(Number(n)));
 const currentEpisodeMeta = type === 'series' ? {
   seriesId: baseId || id,
-  season: _v238ValidNum(episodeSeason)
-    ? String(episodeSeason)
-    : (_v238ValidNum(resumeSeason) ? String(resumeSeason) : ''),
-  episode: _v238ValidNum(episodeNumber)
-    ? String(episodeNumber)
-    : (_v238ValidNum(resumeEpisode) ? String(resumeEpisode) : ''),
+  season: String(episodeSeason),
+  episode: String(episodeNumber),
   episodeName: currentEpisode?.name || '',
 } : {};
 
@@ -1610,7 +1575,7 @@ const nextEpisodeData = nextEpisode ? {
       router.push({
         pathname: '/player',
         params: { 
-          directUrl: _v237_bustUrl(streamUrl),
+          directUrl: streamUrl,
           title: contentTitle,
           isLive: 'false',
           contentType: cType,
@@ -1645,7 +1610,7 @@ const nextEpisodeData = nextEpisode ? {
       router.push({
         pathname: '/player',
         params: { 
-          directUrl: _v237_bustUrl(absoluteUrl),
+          directUrl: absoluteUrl,
           title: contentTitle,
           isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
@@ -1696,9 +1661,6 @@ const nextEpisodeData = nextEpisode ? {
           filename: stream.filename || '',
           season: seasonNum,
           episode: episodeNum,
-          // v238 cache buster — forces Firestick to refetch torrent-video URL
-          // even when infoHash hasn't changed (e.g. retrying same stream).
-          cacheBust: String(Date.now()),
           // Prefer loaded content metadata, but fall back to carried-over params
           // from the previous episode's player so the loading screen ALWAYS has
           // a backdrop/poster/logo — even when navigating fast via auto-play
@@ -1767,7 +1729,7 @@ const nextEpisodeData = nextEpisode ? {
       router.push({
         pathname: '/player',
         params: { 
-          directUrl: _v237_bustUrl(streamUrl),
+          directUrl: streamUrl,
           title: contentTitle,
           isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
@@ -1817,15 +1779,15 @@ const nextEpisodeData = nextEpisode ? {
   };
 
   // Use content data for display - available immediately from store
-  // v238 — fall back to params from the caller BEFORE the generic
-  // "Loading..." text so the user sees the actual title instantly.
-  const displayName = content?.name || (paramName as string) || 'Loading...';
+  const displayName = content?.name || 'Loading...';
   // For episode pages, prefer the episode thumbnail as backdrop. Otherwise use series backdrop.
   const episodeBackdrop = isEpisodePage && currentEpisode?.thumbnail ? currentEpisode.thumbnail : null;
-  // v238 — backdrop fallback chain: episode thumb -> backend backdrop ->
-  // param backdrop -> param poster (blurred/dark-overlaid is still better
-  // than a black screen) -> empty.  Eliminates the black-flash on Details.
-  const displayPoster = episodeBackdrop || content?.background || (paramBackground as string) || (paramPoster as string) || '';
+  // V160_BACKDROP_NO_POSTER — don't fall back to content?.poster for
+  // the full-screen backdrop.  The portrait poster stretched across the
+  // wide landscape area causes a visible "flash" until the real
+  // content.background arrives from the meta fetch.  Showing just the
+  // dark overlay is cleaner.
+  const displayPoster = episodeBackdrop || content?.background || '';
 
   const rating = typeof content?.imdbRating === 'string' 
     ? parseFloat(content.imdbRating) 
@@ -1896,16 +1858,7 @@ const nextEpisodeData = nextEpisode ? {
       {/* Auto-play loading — Stremio-style cinematic transition */}
       {/* v121m-play-overlay: also fires on isPlayLoading */}
       {/* v124y-overlay-persists: keep overlay up the WHOLE autoplay so user never sees episode card */}
-      {/* v238b — REMOVED `|| isPlayLoading` branch.  When user taps Play,
-          router.push to /player mounts the player INSTANTLY on top with
-          its own (visually rich) PATCH_V8 loading screen.  Showing the
-          details overlay first with extra "Episode N" + "S1 E1" text
-          made it look like "2 different loading screens" — now Play
-          tap just goes straight to player's single unified loading.
-          The overlay still fires for the autoPlayParam path (Continue
-          Watching → details → auto-play to player), where the details
-          overlay IS the entry point. */}
-      {(autoPlayParam === 'true') && (
+      {((autoPlayParam === 'true') || isPlayLoading) && (
         <View style={styles.autoPlayOverlay}>
           {/* Full-screen series backdrop (blurred). Priority: loaded content
               backdrop (the real series art) → passed-in backdrop param → poster. */}
@@ -1937,33 +1890,14 @@ const nextEpisodeData = nextEpisode ? {
 
             {type === 'series' && (
               <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '600', textAlign: 'center', marginBottom: 6 }}>
-                {nextTitleParam
-                  ? String(nextTitleParam)
-                  : (currentEpisode?.name
-                      || (
-                        _v238ValidNum(episodeNumber)
-                          ? `Episode ${episodeNumber}`
-                          : (_v238ValidNum(resumeEpisode)
-                              ? `Episode ${resumeEpisode}`
-                              : '')
-                      )
-                    )}
+                {nextTitleParam ? String(nextTitleParam) : (currentEpisode?.name || `Episode ${episodeNumber}`)}
               </Text>
             )}
-            {type === 'series' && (() => {
-              // v238c — was rendering "Snull Enull" when URL had no episode
-              // segment (CW navigates to series root + resumeSeason/Episode
-              // params).  Fall back to resume params, hide line entirely
-              // if neither is a valid number.
-              const sNum = _v238ValidNum(episodeSeason) ? episodeSeason : (_v238ValidNum(resumeSeason) ? resumeSeason : null);
-              const eNum = _v238ValidNum(episodeNumber) ? episodeNumber : (_v238ValidNum(resumeEpisode) ? resumeEpisode : null);
-              if (sNum == null && eNum == null) return null;
-              return (
-                <Text style={{ color: '#B8A05C', fontSize: 14, fontWeight: '600', marginBottom: 36, letterSpacing: 1 }}>
-                  {sNum != null ? `S${sNum}` : ''}{eNum != null ? ` E${eNum}` : ''}
-                </Text>
-              );
-            })()}
+            {type === 'series' && (
+              <Text style={{ color: '#B8A05C', fontSize: 14, fontWeight: '600', marginBottom: 36, letterSpacing: 1 }}>
+                S{episodeSeason} E{episodeNumber}
+              </Text>
+            )}
 
             {/* Indeterminate animated loading bar */}
             <AutoPlayLoadingBar />
@@ -2034,7 +1968,6 @@ const nextEpisodeData = nextEpisode ? {
           {/* Add to Library - under description */}
           <View style={styles.fixedActionRow}>
             <FocusableButton 
-              hasTVPreferredFocus={true}
               style={styles.libraryButton}
               focusedStyle={styles.libraryButtonFocused}
               onPress={toggleLibrary}
@@ -2052,15 +1985,10 @@ const nextEpisodeData = nextEpisode ? {
         </View>
 
         {/* Scrollable Content - everything below the pinned area */}
-        <ScrollView
+        <ScrollView 
           style={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContentContainer}
-          // v214b details bounded — stop the Android TV over-scroll past
-          // the bottom padding so DOWN at the last section does nothing
-          // instead of revealing a blank void (which confused focus search).
-          overScrollMode="never"
-          bounces={false}
         >
           {/* Genre */}
           {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
@@ -2160,38 +2088,70 @@ const nextEpisodeData = nextEpisode ? {
                 {!isLoadingStreams && sortedStreams.length > 0 && (
                   <FocusableButton
                     onPress={async () => {
-                      /* v238b — Play button picks the FIRST resolved stream
-                         (one with a real URL: stream.url / externalUrl /
-                         direct_url).  Only if no streams are resolved does
-                         it fall back to an infoHash-only stream (porn /
-                         uncached torrents).  This restores Euphoria, Hoppers
-                         and other Real-Debrid cached content while keeping
-                         the OnlyTarts torrent-server path working. */
+                      /* v121m-play-overlay */
                       setIsPlayLoading(true);
+                      /* v121d-play-wait */
+                      /* v130-force-upgrade-refetch */
+                      // v130: ALWAYS refetch with ?upgrade=1 on Play click. The
+                      // previous `if (!hasResolved(pool))` guard short-circuited
+                      // the refetch because the page-mount fetch had already
+                      // populated streams with backend-resolved entries — which
+                      // meant v129's `?upgrade=1` query never reached backend.
+                      let pool = streams;
                       try {
-                        const list = (sortedStreams && sortedStreams.length > 0) ? sortedStreams : streams;
-                        const resolved = list.find((s: any) => s && (s.url || s.externalUrl || s.direct_url));
-                        const infoHashOnly = list.find((s: any) => s && (s.infoHash || (s as any).info_hash));
-                        let picked: any = resolved || infoHashOnly || list[0] || null;
-                        // Normalize info_hash -> infoHash so handleStreamSelect's downstream
-                        // checks find what they expect.
-                        if (picked && !picked.infoHash && (picked as any).info_hash) {
-                          picked = { ...picked, infoHash: (picked as any).info_hash } as any;
-                        }
-                        if (picked) {
-                          console.log('[v238b PLAY] picked stream:',
-                            picked.name || picked.title || '(unnamed)',
-                            'hasUrl=', !!(picked.url || picked.externalUrl || picked.direct_url),
-                            'hasHash=', !!picked.infoHash);
-                          handleStreamSelect(picked);
+                        const authToken = await AsyncStorage.getItem('auth_token');
+                        const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL
+                          || (Constants.expoConfig as any)?.extra?.backendUrl
+                          || '';
+                        const encodedId = encodeURIComponent(id as string);
+                        console.log('[DETAILS v130] fetching streams with ?upgrade=1 for', type, encodedId);
+                        const resp = await fetch(
+                          `${backendUrl}/api/streams/${type}/${encodedId}?upgrade=1`,
+                          { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} }
+                        );
+                        if (resp.ok) {
+                          const data = await resp.json();
+                          if (Array.isArray(data?.streams) && data.streams.length > 0) {
+                            pool = data.streams;
+                            const _upcount = pool.filter((s: any) => s?.upgrade_candidate).length;
+                            console.log('[DETAILS v130] got', pool.length, 'streams,', _upcount, 'upgrade candidates');
+                          }
                         } else {
-                          console.log('[v238b PLAY] no streams to play');
-                          setIsPlayLoading(false);
+                          console.log('[DETAILS v130] upgrade fetch non-ok:', resp.status);
                         }
                       } catch (e) {
-                        console.log('[v238b PLAY] error:', e);
-                        setIsPlayLoading(false);
+                        console.log('[DETAILS v130] upgrade fetch failed:', e);
                       }
+                      /* v121d3-resolved-only */
+                      /* v129-prefer-upgrade */
+                      // Auto-pick from pre-resolved (cached) streams. If the
+                      // backend (v128b) returned upgrade_candidate items (uncached,
+                      // strictly higher quality tier), prefer the top one — the
+                      // race in handleStreamSelect will try to resolve it and
+                      // auto-fallback to the top cached if PM can't cache in time.
+                      /* v131-normalize-upgrade */
+                      // v131: don't require infoHash on filter (some streams from
+                      // aggregation use info_hash snake_case).  We normalize the
+                      // chosen stream's infoHash field a few lines below instead.
+                      const upgradeCandidates = pool.filter((s: any) => s?.upgrade_candidate && (s?.infoHash || s?.info_hash));
+                      const resolved = pool.filter((s: any) => s && (s.url || s.externalUrl || s.direct_url));
+                      const candidates = resolved.length > 0 ? resolved : pool;
+                      const sorted = sortStreamsByLanguage(candidates);
+                      let picked: any = sorted[0];
+                      if (upgradeCandidates.length > 0) {
+                        const upgradeSorted = sortStreamsByLanguage(upgradeCandidates);
+                        if (upgradeSorted[0]) {
+                          /* v131-normalize-pick */
+                          picked = upgradeSorted[0];
+                          // Normalize: some streams come back with info_hash (snake_case).
+                          // Copy to infoHash so downstream code (handleStreamSelect, start_and_wait) works.
+                          if (!picked.infoHash && (picked as any).info_hash) {
+                            picked = { ...picked, infoHash: (picked as any).info_hash } as any;
+                          }
+                          console.log('[DETAILS v129/v131] preferring upgrade candidate:', picked.name || '', 'hash=', String(picked.infoHash || '').slice(0, 8));
+                        }
+                      }
+                      if (picked) handleStreamSelect(picked);
                     }}
                     style={styles.playButton}
                     focusedStyle={styles.playButtonFocused}
@@ -2273,12 +2233,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    // v238b — REVERTED back to original 0.95 dark.  Player.tsx's loading
-    // screen (PATCH_V8_UNIFIED_LOADING) was designed to visually match
-    // this overlay (blurred backdrop + logo + sliding gold bar + Loading…).
-    // My earlier change to solid black broke the unification.  Both
-    // overlays now use the same backdrop-aware dark scheme — user sees
-    // one continuous cinematic transition.
     backgroundColor: 'rgba(15, 15, 17, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2316,10 +2270,7 @@ const styles = StyleSheet.create({
   },
   scrollContentContainer: {
     paddingHorizontal: 20,
-    // v238 — was paddingBottom: 40 which created a 40px void user could
-    // scroll into past the stream cards.  No bottom pad now; ScrollView
-    // ends exactly at the last stream card.
-    paddingBottom: 0,
+    paddingBottom: 40,
   },
   fixedTitleArea: {
     paddingTop: 60,

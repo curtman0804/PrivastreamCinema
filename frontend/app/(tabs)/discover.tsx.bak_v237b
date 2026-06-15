@@ -337,26 +337,29 @@ export default function DiscoverScreen() {
   const _v211FocusCooldown = useRef<number>(0);
   const _v211PendingFrame = useRef<number | null>(null);
   const handleSectionFocus = useCallback((sectionKey: string) => {
+    if (lastFocusedSection.current === sectionKey) return;
+    const now = Date.now();
+    // Drop duplicate D-pad fires within 80ms — fixes "skips 2 rows" and
+    // "press does nothing" symptoms caused by overlapping focus events.
+    if (now - _v211FocusCooldown.current < 80) return;
+    _v211FocusCooldown.current = now;
+    lastFocusedSection.current = sectionKey;
+
+    // Coalesce scroll-to into one rAF — never queue multiple scrollTos.
     if (_v211PendingFrame.current != null) {
       cancelAnimationFrame(_v211PendingFrame.current);
       _v211PendingFrame.current = null;
     }
-    const sectionY = sectionPositions.current[sectionKey];
-    if (sectionY === undefined || !scrollViewRef.current) return;
-    const target = Math.max(0, sectionY - 12);
-    scrollViewRef.current.scrollTo({ y: target, animated: false });
-    // v238g — ONLY for CW (top row, target<=0): fire a delayed re-scroll
-    // 50ms later to defeat the "first UP press to CW doesn't snap"
-    // bug.  Doesn't affect DOWN nav (target>0 → skipped, no late
-    // callback to fight against).
-    if (target === 0) {
-      setTimeout(() => {
-        if (scrollViewRef.current) {
-          scrollViewRef.current.scrollTo({ y: 0, animated: false });
-        }
-      }, 50);
-    }
-    lastFocusedSection.current = sectionKey;
+    _v211PendingFrame.current = requestAnimationFrame(() => {
+      _v211PendingFrame.current = null;
+      const sectionY = sectionPositions.current[sectionKey];
+      if (sectionY === undefined || !scrollViewRef.current) return;
+      // Frame focused row near the top third: title is visible above and
+      // the next row's title peeks at the bottom — Stremio-style rhythm.
+      // (Was sectionY - 10; now sectionY - 32 keeps title comfortably clear.)
+      const target = Math.max(0, sectionY - 32);
+      scrollViewRef.current.scrollTo({ y: target, animated: false });
+    });
   }, []);
 
   // Row sync: keep all rows scrolled to the same horizontal offset
@@ -510,12 +513,8 @@ const handleItemPress = useCallback((item: ContentItem) => {
   router.push({
     pathname: `/details/${item.type}/${encodeURIComponent(id)}`,
     params: {
-      // v238 — pass everything the details page needs to paint INSTANTLY
-      // so the user never sees a black screen + generic "Loading..." text.
       name: item.name || '',
       poster: item.poster || '',
-      background: (item as any).background || (item as any).backdrop || '',
-      logo: (item as any).logo || '',
     },
   });
 }, [router]);
@@ -528,28 +527,15 @@ const handleItemPress = useCallback((item: ContentItem) => {
     let targetId = item.content_id;
     let targetType = item.content_type;
     
-    // v238b — for series CW, navigate DIRECTLY to the episode page so
-    // /api/streams returns the episode's streams and autoplay fires.
-    // Previously this code stripped ":1:1" and navigated to the series
-    // ROOT — but the series root has zero streams, so autoPlay never
-    // triggered.  Result was "click CW series item → no playback".
-    //
-    // We still expose series_id (if present) but build the URL with the
-    // full episode-qualified content_id.
     if (item.series_id) {
+      targetId = item.series_id;
       targetType = 'series';
-      // If content_id already encodes ":season:episode", use it as-is.
-      // Otherwise build from series_id + season/episode fields.
-      if (item.content_id && item.content_id.includes(':')) {
-        targetId = item.content_id;
-      } else if (item.season != null && item.episode != null) {
-        targetId = `${item.series_id}:${item.season}:${item.episode}`;
-      } else {
-        targetId = item.series_id;
+    } else if (item.content_type === 'series' && item.content_id.includes(':')) {
+      const parts = item.content_id.split(':');
+      if (parts.length >= 1) {
+        targetId = parts[0];
       }
     }
-    // If content_id is already in tt12345:1:1 form, leave it — that's
-    // exactly the episode-page URL the details screen expects.
     
     const encodedId = encodeURIComponent(targetId);
     // PATCH_V147_AUTOPLAY — let details fire its built-in autoPlay path so
@@ -561,11 +547,8 @@ const handleItemPress = useCallback((item: ContentItem) => {
         poster: item.poster || '',
         resumeEpisodeId: item.content_type === 'series' ? item.content_id : '',
         resumePosition: String(item.progress || 0),
-        // v238b — was `item.season !== undefined` which let `null` slip
-        // through, then String(null) became the literal string "null"
-        // and details showed "Episode null".  Use loose != to catch both.
-        resumeSeason: (item.season != null) ? String(item.season) : '',
-        resumeEpisode: (item.episode != null) ? String(item.episode) : '',
+        resumeSeason: item.season !== undefined ? String(item.season) : '',
+        resumeEpisode: item.episode !== undefined ? String(item.episode) : '',
         autoPlay: 'true',
       },
     });
@@ -609,7 +592,7 @@ const renderContinueWatchingItem = useCallback(
       isTV={isTV}
       onPress={() => handleContinueWatchingPress(item)}
       onRemove={() => handleRemoveFromContinueWatching(item)}
-      onSectionFocus={() => handleSectionFocus('__cw__')}
+      onSectionFocus={() => handleSectionFocus('continue-watching')}
     />
   ),
   [isTV]
@@ -774,11 +757,7 @@ return (
                   title={item.title}
                   serviceName={item.serviceName}
                   contentType={item.contentType}
-                  /* v238 — cap initial mount to 15 posters per row.  ServiceRow's
-                     fetchMore() will load more as the user scrolls right.  This
-                     drops cold-boot render work to ~225 ContentCards across 15
-                     rows instead of 1500+.  Pagination still gives full catalog. */
-                  items={(item.items || []).slice(0, 15)}
+                  items={item.items}
                   onItemPress={handleItemPress}
                   onItemFocus={
                     item.contentType !== 'channels'
@@ -1046,10 +1025,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   bottomPadding: {
-    // v238 — reduced from 100 to 16 so user can't scroll into a large
-    // empty void past the last row.  The _v213ScrollPad above already
-    // adds 24px of comfortable bottom margin.
-    height: 16,
+    height: 100,
   },
   // Welcome Screen
   welcomeContainer: {

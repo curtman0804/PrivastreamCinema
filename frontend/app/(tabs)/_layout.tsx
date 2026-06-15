@@ -125,6 +125,10 @@ export default function TabsLayout() {
               {...props}
               {...trap}
               focusable={true}
+              /* v238 — cold-boot focus lands on the Discover tab button.
+                 Without this, no element claimed initial TV focus and the
+                 selector ring was invisible until the user pressed a key. */
+              hasTVPreferredFocus={isFirst}
               onLayout={grabTag}
               onFocus={() => { setIsFocused(true); grabTag(); }}
               onBlur={() => setIsFocused(false)}

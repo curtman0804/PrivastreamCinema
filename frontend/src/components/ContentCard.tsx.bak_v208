@@ -44,22 +44,12 @@ const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 // the case where the same content shows different posters depending on
 // which screen rendered it first.
 const _v160PosterRegistry: Record<string, string> = {};
-// v215 poster key uniqueness — only collapse IMDB-style ids ("tt1234:1:5")
-// to the series prefix ("tt1234").  Custom addon ids like "jerktank:1" or
-// "porndb:abc" are kept UNIQUE so each card in the row paints its own
-// addon-supplied poster instead of all sharing the first-rendered poster.
-function _v215PosterKey(id: string | undefined | null): string {
-  if (!id) return '';
-  const s = String(id);
-  if (/^tt\d+/.test(s)) return s.split(':')[0];
-  return s;
-}
 // V166_POSTER_SUB — subscriber map keyed by canonical (series-level) id.
 const _v166PosterSubs: Record<string, Set<(url: string) => void>> = {};
 export function v160RegisterPoster(imdbId: string | undefined | null, url: string | undefined | null): void {
   if (!imdbId || !url) return;
   // strip any episode suffix like "tt1234:1:5" so episodes share the series-level poster
-  const key = _v215PosterKey(imdbId);
+  const key = String(imdbId).split(':')[0];
   if (!key) return;
   if (!_v160PosterRegistry[key]) {
     _v160PosterRegistry[key] = String(url);
@@ -75,7 +65,7 @@ export function v160RegisterPoster(imdbId: string | undefined | null, url: strin
    unsubscribe function. */
 export function v160SubscribePoster(imdbId: string | undefined | null, cb: (url: string) => void): () => void {
   if (!imdbId || typeof cb !== 'function') return () => {};
-  const key = _v215PosterKey(imdbId);
+  const key = String(imdbId).split(':')[0];
   if (!key) return () => {};
   const existing = _v160PosterRegistry[key];
   if (existing) { try { cb(existing); } catch (_) {} }
@@ -182,6 +172,8 @@ export async function v176ClearProgress(contentId: string | undefined | null): P
   const key = String(contentId);
   _v176ProgressSet.delete(key);
   _v176ProgressSubs.forEach((cb) => { try { cb(); } catch (_) {} });
+  // v206 — optimistic CW poster removal: emit BEFORE the network call
+  try { DeviceEventEmitter.emit('v206:cw:remove', { contentId: key }); } catch (_) {}
   try { await (api as any).watchProgress.delete(key); } catch (_) { /* best-effort */ }
 }
 
@@ -262,11 +254,7 @@ export function v176kBuildActions(opts: {
       label: 'Clear Progress',
       icon: 'refresh-circle-outline',
       onPress: () => {
-        // v238 — optimistic UI: fire the parent callback FIRST so the poster
-        // disappears from CW instantly.  Backend sync runs in background;
-        // the user-perceived "5s lag" was the awaited HTTP roundtrip.
-        try { onAfterChange && onAfterChange('cleared'); } catch (_) {}
-        v176ClearProgress(contentId).catch((e) => console.log('[V176K] clear failed:', e));
+        v176ClearProgress(contentId).then(() => { try { onAfterChange && onAfterChange('cleared'); } catch (_) {} });
       },
     });
   }
@@ -277,9 +265,7 @@ export function v176kBuildActions(opts: {
         label: 'Mark as Unwatched',
         icon: 'eye-off-outline',
         onPress: () => {
-          // v238 — optimistic.
-          try { onAfterChange && onAfterChange('unwatched'); } catch (_) {}
-          v172UnmarkWatched(contentId).catch((e) => console.log('[V176K] unwatch failed:', e));
+          v172UnmarkWatched(contentId).then(() => { try { onAfterChange && onAfterChange('unwatched'); } catch (_) {} });
         },
       });
     } else {
@@ -288,9 +274,7 @@ export function v176kBuildActions(opts: {
         label: 'Mark as Watched',
         icon: 'checkmark-circle-outline',
         onPress: () => {
-          // v238 — optimistic.
-          try { onAfterChange && onAfterChange('watched'); } catch (_) {}
-          v176MarkWatched(contentId).catch((e) => console.log('[V176K] watch failed:', e));
+          v176MarkWatched(contentId).then(() => { try { onAfterChange && onAfterChange('watched'); } catch (_) {} });
         },
       });
     }
@@ -590,7 +574,7 @@ export const V176kPopoverHost: React.FC = () => {
 
 export function v160GetPoster(imdbId: string | undefined | null, fallback: string | undefined | null): string {
   if (imdbId) {
-    const key = _v215PosterKey(imdbId);
+    const key = String(imdbId).split(':')[0];
     if (key && _v160PosterRegistry[key]) return _v160PosterRegistry[key];
   }
   return fallback ? String(fallback) : '';
@@ -908,18 +892,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     if (item.type === 'series' || item.type === 'tv' || item.type === 'channel' || item.type === 'episode') return;
     const imdbId = item.imdb_id || item.id;
     if (!imdbId || !String(imdbId).startsWith('tt')) return;
-    // v238 — defer release-status fetch by 250ms so cold-boot rendering
-    // of 200+ ContentCards completes BEFORE batched backend roundtrips kick
-    // in.  The _v77 fetcher debounces to 250ms anyway, so this just moves
-    // when the first batch fires — the # of network calls is unchanged.
-    let cleanup: (() => void) | undefined;
-    const t = setTimeout(() => {
-      cleanup = _v77RequestReleaseStatus(String(imdbId), setReleaseStatus);
-    }, 250);
-    return () => {
-      clearTimeout(t);
-      if (cleanup) { try { cleanup(); } catch (_) {} }
-    };
+    return _v77RequestReleaseStatus(String(imdbId), setReleaseStatus);
   }, [item]);
 
   const pressableRef = useRef<any>(null);
@@ -1054,31 +1027,15 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   /* V172_WATCHED_REGISTRY — per-card derived flag + re-render hook.
      Subscribes to the module-level set so any long-press unmark (this
      card or another instance of the same content) instantly refreshes
-     the badge across every surface.
-     v238 — subscriptions deferred 250ms after mount.  Cold boot
-     mounts ~225 cards; firing 450 subscription effects synchronously
-     was the cause of the 10s post-paint freeze. */
+     the badge across every surface. */
   const _v172ContentId = ((item as any).content_id || _v160_id) as string | undefined;
   const [, _v172Bump] = useState(0);
-  useEffect(() => {
-    let unsub: (() => void) | undefined;
-    const t = setTimeout(() => {
-      unsub = v172SubscribeWatched(() => _v172Bump((x) => (x + 1) & 0xff));
-    }, 250);
-    return () => { clearTimeout(t); if (unsub) try { unsub(); } catch (_) {} };
-  }, []);
+  useEffect(() => v172SubscribeWatched(() => _v172Bump((x) => (x + 1) & 0xff)), []);
   const _v172IsWatched = v172IsWatched(_v172ContentId);
 
   /* V176_LONGPRESS_MENU — re-render when the CW progress registry changes
-     so the unified long-press menu shows the right buttons.
-     v238 — also deferred 250ms (same reason as v172 above). */
-  useEffect(() => {
-    let unsub: (() => void) | undefined;
-    const t = setTimeout(() => {
-      unsub = v176SubscribeProgress(() => _v172Bump((x) => (x + 1) & 0xff));
-    }, 250);
-    return () => { clearTimeout(t); if (unsub) try { unsub(); } catch (_) {} };
-  }, []);
+     so the unified long-press menu shows the right buttons. */
+  useEffect(() => v176SubscribeProgress(() => _v172Bump((x) => (x + 1) & 0xff)), []);
 
   return (
     /* V176N_HOST_SINGLETON — render the popover host alongside every

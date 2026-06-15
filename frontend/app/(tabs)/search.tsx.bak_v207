@@ -35,6 +35,14 @@ export default function SearchScreen() {
   const sectionPositions = useRef<Record<string, number>>({});
   const lastFocusedSection = useRef<string>('');
   const pagesLoaded = useRef<number>(0);
+  // v207 — scroll-triggered pagination
+  const _v207ScrollY = useRef<number>(0);
+  const _v207ContentH = useRef<number>(0);
+  const _v207ViewH = useRef<number>(0);
+  const _v207NearBottom = () => {
+    if (_v207ContentH.current <= 0 || _v207ViewH.current <= 0) return true; // before first layout
+    return (_v207ScrollY.current + _v207ViewH.current) > (_v207ContentH.current - 400);
+  };
 
   // Auto-trigger search when navigated to with a query parameter
   useEffect(() => {
@@ -59,22 +67,19 @@ export default function SearchScreen() {
 
   // V119_TRANSITION_LAG: defer auto-paging until AFTER nav transition completes
   // so the Discover->Search animation doesn't stutter on the JS thread.
-  // v238 — also IGNORE backend's `searchHasMore=false` after the first
-  // page if we got a full page of results.  The backend's hasMore flag
-  // mis-fires on genre + multi-word queries and was capping results at
-  // 30.  We keep paginating until we get a partial/empty page back.
   useEffect(() => {
     if (!hasSearched) return;
     if (isLoadingSearch || isLoadingMoreSearch) return;
-    const totalSoFar = searchMovies.length + searchSeries.length;
-    // Trust hasMore for stop-condition only if we got fewer than 30 the
-    // last time around (real end of stream).  Otherwise keep pulling.
-    const looksTruncated = !searchHasMore && totalSoFar > 0 && totalSoFar % 30 === 0;
-    if (!searchHasMore && !looksTruncated) return;
-    if (pagesLoaded.current >= 15) return;
+    if (!searchHasMore) return;
+    // v207 — hard cap lifted; backend hasMore now controls termination
     const handle = InteractionManager.runAfterInteractions(() => {
-      pagesLoaded.current += 1;
-      loadMoreSearch();
+      const total = (searchMovies?.length || 0) + (searchSeries?.length || 0);
+      // v207 — only auto-load if we still have very few results OR user has
+      // scrolled near the bottom.  Prevents the eager 15-page flood.
+      if (total < 60 || _v207NearBottom()) {
+        pagesLoaded.current += 1;
+        loadMoreSearch();
+      }
     });
     return () => handle.cancel();
   }, [hasSearched, isLoadingSearch, isLoadingMoreSearch, searchHasMore, loadMoreSearch, searchMovies.length, searchSeries.length]);
@@ -105,22 +110,6 @@ export default function SearchScreen() {
     setCurrentQuery(query);
     setHasSearched(true);
     await search(query);
-    // v238 — if a multi-word query returned ZERO movies AND ZERO series,
-    // retry once with a more lenient form (drop short stop-words like
-    // "of", "the", "a", "an" — addons that index titles literally will
-    // miss "pirates of the caribbean" but match "pirates caribbean").
-    const { searchMovies: m2, searchSeries: s2 } = useContentStore.getState();
-    if (m2.length === 0 && s2.length === 0 && /\s/.test(query.trim())) {
-      const lean = query
-        .trim()
-        .split(/\s+/)
-        .filter(w => !/^(of|the|a|an|and|in|on|at|to|for|with|de|la|el)$/i.test(w))
-        .join(' ');
-      if (lean && lean !== query.trim()) {
-        console.log('[search v238] retrying with stripped query:', lean);
-        await search(lean);
-      }
-    }
   }, [search, clearSearch]);
 
   const handleItemPress = (item: SearchResult) => {
@@ -161,8 +150,18 @@ export default function SearchScreen() {
           <Text style={styles.emptySubtext}>Find your favorite content</Text>
         </View>
       ) : (
-        <ScrollView 
+        <ScrollView
           ref={scrollViewRef}
+          onScroll={(e) => {
+            _v207ScrollY.current = e.nativeEvent.contentOffset.y;
+            _v207ViewH.current = e.nativeEvent.layoutMeasurement.height;
+            if (_v207NearBottom() && searchHasMore && !isLoadingMoreSearch && !isLoadingSearch) {
+              loadMoreSearch();
+            }
+          }}
+          scrollEventThrottle={120}
+          onContentSizeChange={(_w, h) => { _v207ContentH.current = h; }}
+          onLayout={(e) => { _v207ViewH.current = e.nativeEvent.layout.height; }}
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}

@@ -14,6 +14,13 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useAuthStore } from '../../src/store/authStore';
+// v238 — clear contentStore on logout so the next user doesn't see the
+// previous user's Continue Watching / library / addons / discover data.
+import { useContentStore } from '../../src/store/contentStore';
+// v238b — must ALSO wipe AsyncStorage keys @ps_discover_v1 + @ps_cw_v1.
+// discover.tsx reads these on mount and would otherwise show the
+// previous user's cached data until the next network refresh.
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../../src/styles/colors';
 
 export default function ProfileScreen() {
@@ -24,6 +31,16 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     const doLogout = async () => {
+      // v238 — wipe in-memory store + on-disk caches BEFORE auth logout
+      // so the next user doesn't see Continue Watching / library / addons
+      // / discover catalog from the previous account.
+      try { useContentStore.getState().resetStore(); } catch (_) {}
+      try {
+        await AsyncStorage.multiRemove([
+          '@ps_discover_v1',
+          '@ps_cw_v1',
+        ]);
+      } catch (_) {}
       await logout();
       router.replace('/(auth)/login');
     };

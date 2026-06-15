@@ -1,0 +1,546 @@
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  ActivityIndicator,
+  RefreshControl,
+  Pressable,
+  useWindowDimensions,
+  findNodeHandle,
+  Alert
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Image } from 'expo-image';
+import { Image as RNImage } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useContentStore } from '../../src/store/contentStore';
+import { ContentItem } from '../../src/api/client';
+import { colors } from '../../src/styles/colors';
+/* V176_LONGPRESS_MENU — pull the unified menu opener + watched/progress
+   subscriptions in so LibraryCard renders the gold check and routes
+   long-press through the shared Alert. */
+import {
+  getCardWidth,
+  v172IsWatched as _v172IsWatched,
+  v172SubscribeWatched as _v172SubscribeWatched,
+  v176HasProgress as _v176HasProgress,
+  v176SubscribeProgress as _v176SubscribeProgress,
+  v176ShowLongPressMenu as _v176ShowLongPressMenu,
+  /* V176E_TV_LONGPRESS — register this card's menu handler with the
+     v173 TV event dispatcher so the remote Menu button (now mapped to
+     longSelect via withTVKeyEvents.js) fires this card's menu. */
+  v173RegisterLongPress as _v173RegLP,
+  /* V176K_POPOVER */ V176kPopover, v176kMeasureAnchor
+} from '../../src/components/ContentCard';
+
+const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
+
+type FilterType = 'movies' | 'series' | 'tv';
+
+// Library card — EXACT same X-button pattern as ContinueWatchingCard in discover.tsx
+function LibraryCard({
+  item,
+  cardWidth,
+  cardHeight,
+  isTV,
+  onPress,
+  onRemove,
+  onCardBlur,
+}: {
+  item: ContentItem;
+  cardWidth: number;
+  cardHeight: number;
+  isTV: boolean;
+  onPress: () => void;
+  onRemove: () => void;
+  onCardBlur?: () => void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [xFocused, setXFocused] = useState(false);
+
+  // Refs for explicit focus navigation between poster and X button
+  const posterRef = useRef<View>(null);
+  const xButtonRef = useRef<View>(null);
+  const [posterTag, setPosterTag] = useState<number | undefined>(undefined);
+  const [xButtonTag, setXButtonTag] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    // Get native node handles after mount for nextFocusUp/Down wiring
+    const pTag = posterRef.current ? findNodeHandle(posterRef.current) : null;
+    const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
+    if (pTag) setPosterTag(pTag);
+    if (xTag) setXButtonTag(xTag);
+  }, []);
+
+  const handleFocus = () => {
+    setIsFocused(true);
+  };
+
+  const handleXFocus = () => {
+    setXFocused(true);
+  };
+
+  const xButtonSize = isTV ? 30 : 24;
+  const xRowHeight = xButtonSize + 8;
+
+  /* V176_LONGPRESS_MENU — derive watched + progress per-card; subscribe
+     so any change elsewhere (player marks watched, another long-press
+     clears progress) instantly refreshes the gold badge / menu. */
+  const _v176ContentId = ((item as any).imdb_id || (item as any).id || (item as any).content_id) as string | undefined;
+  const [, _v176Bump] = useState(0);
+  useEffect(() => _v172SubscribeWatched(() => _v176Bump((x) => (x + 1) & 0xff)), []);
+  useEffect(() => _v176SubscribeProgress(() => _v176Bump((x) => (x + 1) & 0xff)), []);
+  const _v176IsWatched = _v172IsWatched(_v176ContentId);
+  const _v176HasProg = _v176HasProgress(_v176ContentId);
+
+  const _v176OpenMenu = useCallback(async () => {
+    /* V176K_POPOVER_MOUNTED — measure the poster so the menu anchors
+       from its corner, then emit through the existing v176 helper. */
+    let anchor: any = null;
+    try { anchor = await v176kMeasureAnchor(posterRef.current); } catch (_) {}
+    _v176ShowLongPressMenu({
+      item: { ...(item as any), content_id: _v176ContentId, content_type: (item as any).type },
+      inLibraryOverride: true,
+      hasProgressOverride: _v176HasProg,
+      anchor,
+      onAfterChange: (action) => {
+        if (action === 'removed') { try { onRemove && onRemove(); } catch (_) {} }
+      },
+    });
+  }, [item, _v176ContentId, _v176HasProg, onRemove]);
+
+  /* V176B_PRESS_TIMING — fire menu via onPressIn/Out timing so the
+     TV remote OK button works (Pressable.onLongPress is flaky). */
+  const _v176bLpTimer = useRef<any>(null);
+  const _v176bLpFired = useRef<boolean>(false);
+  const _v176bPressIn = useCallback(() => {
+    _v176bLpFired.current = false;
+    if (_v176bLpTimer.current) clearTimeout(_v176bLpTimer.current);
+    _v176bLpTimer.current = setTimeout(() => {
+      _v176bLpFired.current = true;
+      try { _v176OpenMenu(); } catch (_) {}
+    }, 500);
+  }, [_v176OpenMenu]);
+  const _v176bPressOut = useCallback(() => {
+    if (_v176bLpTimer.current) {
+      clearTimeout(_v176bLpTimer.current);
+      _v176bLpTimer.current = null;
+    }
+  }, []);
+  const _v176bOnPress = useCallback(() => {
+    if (_v176bLpFired.current) { _v176bLpFired.current = false; return; }
+    try { onPress && onPress(); } catch (_) {}
+  }, [onPress]);
+
+
+  return (
+    <View style={{ width: cardWidth, marginRight: 16 }}>
+      {/* V176P_X_REMOVED — X overlay removed; use long-press menu. */}
+      {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
+      <Pressable
+        ref={posterRef}
+        onPress={_v176bOnPress}
+        onPressIn={_v176bPressIn}
+        onPressOut={_v176bPressOut}
+        onLongPress={_v176OpenMenu}
+        delayLongPress={500}
+        onFocus={() => { try { _v173RegLP(_v176OpenMenu); } catch (_) {} handleFocus(); }}
+        onBlur={() => { try { _v173RegLP(null); } catch (_) {} setIsFocused(false); onCardBlur?.(); }}
+        android_ripple={null}
+        /* V176P_X_REMOVED — nextFocusUp target gone. */
+        style={[
+          styles.posterContainer,
+          /* V176P_X_REMOVED — no more X row to overlap. */
+          { height: cardHeight },
+          isFocused && styles.posterFocused,
+        ]}
+      >
+        <View style={styles.imageWrapper}>
+          <Image
+            source={{ uri: item.poster }}
+            style={styles.posterImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
+        </View>
+
+        {/* V176_LONGPRESS_MENU — gold check overlay when watched. */}
+        {_v176IsWatched && (
+          <View style={styles.v176WatchedBadge} pointerEvents="none">
+            <Ionicons name="checkmark" size={14} color="#B8A05C" />
+          </View>
+        )}
+
+        {!item.poster && (
+          <View style={styles.placeholder}>
+            <RNImage
+              source={NO_POSTER_IMAGE}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="cover"
+            />
+          </View>
+        )}
+      </Pressable>
+
+      {/* Title below poster */}
+      <View style={styles.titleContainer}>
+        <Text style={[styles.cardTitle, isTV && styles.cardTitleTV]} numberOfLines={2}>
+          {item.name || item.title}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+export default function LibraryScreen() {
+  const router = useRouter();
+  const { width, height } = useWindowDimensions();
+  const isTV = width > height || width > 800;
+  const library = useContentStore(s => s.library);
+  const isLoadingLibrary = useContentStore(s => s.isLoadingLibrary);
+  const fetchLibrary = useContentStore(s => s.fetchLibrary);
+  const removeFromLibrary = useContentStore(s => s.removeFromLibrary);
+  const [filter, setFilter] = useState<FilterType>('movies');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const cardWidth = getCardWidth(width, isTV, 'medium');
+  const cardHeight = cardWidth * 1.5;
+  const itemTotalWidth = cardWidth + 16;
+  const paddingLeft = isTV ? 48 : 16;
+
+  // Track horizontal nav for scroll behavior
+  const isNavigatingRef = useRef(false);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flatListRef = useRef<FlatList>(null);
+  const TV_SCROLL_ANCHOR = 4;
+
+  useEffect(() => {
+    fetchLibrary();
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchLibrary(true);
+    setRefreshing(false);
+  }, []);
+
+  const handleItemPress = useCallback((item: ContentItem) => {
+    const id = item.imdb_id || item.id;
+    const encodedId = encodeURIComponent(id);
+    router.push({
+      pathname: `/details/${item.type}/${encodedId}`,
+      params: {
+        name: item.name || '',
+        poster: item.poster || '',
+      },
+    });
+  }, [router]);
+
+  const handleRemoveItem = useCallback(async (item: ContentItem) => {
+    const contentId = item.imdb_id || item.id;
+    const contentType = item.type || 'movie';
+    try {
+      await removeFromLibrary(contentType, contentId);
+    } catch (error) {
+      console.log('Remove error:', error);
+    }
+  }, [removeFromLibrary]);
+
+  const getFilteredContent = (): ContentItem[] => {
+    if (!library) return [];
+    switch (filter) {
+      case 'movies': return library.movies || [];
+      case 'series': return library.series || [];
+      case 'tv': return library.channels || [];
+      default: return library.movies || [];
+    }
+  };
+
+  const filteredContent = getFilteredContent();
+
+  const handleCardFocus = useCallback((index: number) => {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    if (isTV && flatListRef.current && isNavigatingRef.current) {
+      const targetOffset = Math.max(0, (index - TV_SCROLL_ANCHOR) * itemTotalWidth);
+      flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
+    }
+    isNavigatingRef.current = true;
+  }, [itemTotalWidth, isTV]);
+
+  const handleCardBlur = useCallback(() => {
+    blurTimerRef.current = setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 150);
+  }, []);
+
+  const getItemLayout = useCallback((_data: any, index: number) => ({
+    length: itemTotalWidth,
+    offset: paddingLeft + (index * itemTotalWidth),
+    index,
+  }), [itemTotalWidth, paddingLeft]);
+
+  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
+    <LibraryCard
+      item={item}
+      onPress={() => { handleCardFocus(index); handleItemPress(item); }}
+      onRemove={() => handleRemoveItem(item)}
+      cardWidth={cardWidth}
+      cardHeight={cardHeight}
+      isTV={isTV}
+      onCardBlur={handleCardBlur}
+    />
+  ), [handleItemPress, handleRemoveItem, cardWidth, cardHeight, isTV, handleCardBlur, handleCardFocus]);
+
+  const FilterButton = ({ type, label }: { type: FilterType; label: string }) => {
+    const isActive = filter === type;
+    const [btnFocused, setBtnFocused] = useState(false);
+    return (
+      <Pressable
+        onPress={() => setFilter(type)}
+        onFocus={() => setBtnFocused(true)}
+        onBlur={() => setBtnFocused(false)}
+        style={[
+          styles.filterButton,
+          isActive && styles.filterButtonActive,
+          btnFocused && styles.filterButtonFocused,
+        ]}
+      >
+        <Text style={[styles.filterText, isActive && styles.filterTextActive, btnFocused && styles.filterTextFocused]}>
+          {label}
+        </Text>
+      </Pressable>
+    );
+  };
+
+  if (isLoadingLibrary && !library) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* V176K_POPOVER_MOUNTED — Stremio-style menu host for this screen. */}
+      <V176kPopover />
+      <View style={[styles.header, isTV && styles.headerTV]}>
+        <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Library</Text>
+      </View>
+
+      <View style={[styles.filterContainer, isTV && styles.filterContainerTV]}>
+        <FilterButton type="movies" label="Movies" />
+        <FilterButton type="series" label="Series" />
+        <FilterButton type="tv" label="TV Channels" />
+      </View>
+
+      {filteredContent.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="bookmark-outline" size={64} color={colors.primaryDark} />
+          <Text style={styles.emptyText}>Your library is empty</Text>
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          horizontal
+          data={filteredContent}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.imdb_id || item.id || item.name || ''}
+          getItemLayout={getItemLayout}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.listContent, isTV && styles.listContentTV]}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          removeClippedSubviews={true}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  /* V176_LONGPRESS_MENU — mirror EpisodeCard's gold checkmark badge. */
+  v176WatchedBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
+  },
+  headerTV: {
+    paddingHorizontal: 48,
+    paddingVertical: 16,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  headerTitleTV: {
+    fontSize: 32,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  filterContainerTV: {
+    paddingHorizontal: 48,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  filterButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  filterButtonFocused: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.3)',
+    transform: [{ scale: 1.1 }],
+  },
+  filterText: {
+    color: '#888888',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  filterTextActive: {
+    color: '#FFFFFF',
+  },
+  filterTextFocused: {
+    color: '#FFFFFF',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    color: colors.primary,
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    color: colors.primaryDark,
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  listContent: {
+    paddingLeft: 16,
+    paddingRight: 48,
+    paddingTop: 8,
+  },
+  listContentTV: {
+    paddingLeft: 48,
+    paddingRight: 128,
+  },
+  // X button row - sits above poster, right-aligned (matches discover.tsx)
+  xButtonRow: {
+    alignItems: 'flex-end',
+    zIndex: 10,
+    paddingRight: 8,
+  },
+  removeButtonOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  removeButtonOverlayFocused: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(184, 160, 92, 0.5)',
+    transform: [{ scale: 1.2 }],
+  },
+  // Poster
+  posterContainer: {
+    borderRadius: 6,
+    overflow: 'visible',
+    backgroundColor: '#1a1a1a',
+    position: 'relative',
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  posterFocused: {
+    borderColor: colors.primary,
+  },
+  imageWrapper: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  posterImage: {
+    width: '100%',
+    height: '100%',
+  },
+  placeholder: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+  },
+  titleContainer: {
+    paddingTop: 6,
+    paddingHorizontal: 2,
+    height: 38,
+  },
+  cardTitle: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  cardTitleTV: {
+    fontSize: 13,
+  },
+});

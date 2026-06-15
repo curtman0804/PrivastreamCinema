@@ -29,20 +29,17 @@ const MOBILE_PADDING = 16;
 
 const TV_SCROLL_ANCHOR = 4;
 
-// v238 — eager-mount top 3 rows so user sees a "full" Discover screen
-// in the first frame instead of 1 row + empty space.  Rows 3+ paint at
-// 20ms steps (cap 400ms total) — fast enough to feel simultaneous.
 const LazyMount: React.FC<{
   height: number;
   rowIndex: number;
   children: React.ReactNode;
 }> = memo(({ height, rowIndex, children }) => {
-  const [shouldRender, setShouldRender] = useState(rowIndex <= 2);
+  const [shouldRender, setShouldRender] = useState(rowIndex === 0);
 
   useEffect(() => {
     if (shouldRender) return;
 
-    const delayMs = Math.min((rowIndex - 2) * 20, 400);
+    const delayMs = Math.min(rowIndex * 30, 600);
 
     const t = setTimeout(() => {
       setShouldRender(true);
@@ -117,10 +114,9 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
     itemCountRef.current = validItems.length;
 
-    // v238 — DO NOT early-return here.  Hooks below this point MUST run
-    // every render or React throws "Rendered more/fewer hooks than during
-    // the previous render".  The empty-state guard is moved AFTER all
-    // hooks (see further down).
+    if (validItems.length === 0) {
+      return null;
+    }
 
     const fetchMore = useCallback(async () => {
       const now = Date.now();
@@ -275,13 +271,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
       []
     );
 
-    // v238 — SAFE empty-state guard: every hook above has already been
-    // called this render, so React's hook order is stable across renders
-    // regardless of whether validItems is empty.
-    if (validItems.length === 0) {
-      return null;
-    }
-
     return (
       <LazyMount height={200} rowIndex={rowIndex}>
         <View style={styles.container}>
@@ -315,7 +304,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
                 : styles.scrollContent
             }
             estimatedItemSize={itemTotalWidth}
-            drawDistance={itemTotalWidth * 1.5}
+            drawDistance={itemTotalWidth * 3}
             onEndReached={handleEndReached}
             onEndReachedThreshold={3}
           />
