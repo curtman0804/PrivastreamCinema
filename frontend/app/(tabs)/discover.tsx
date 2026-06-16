@@ -25,7 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useContentStore } from '../../src/store/contentStore';
+import { useContentStore, useDiscoverData } from '../../src/store/contentStore'; // PATCH_V245_OWNERSHIP
 import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
 import { FlashList } from '@shopify/flash-list'; // PATCH_V54_VIRTUALIZE
 import { ServiceRow } from '../../src/components/ServiceRow';
@@ -88,7 +88,11 @@ export default function DiscoverScreen() {
   // Without selectors, the Discover page re-renders when ANY store field changes
   // (e.g., when Details page loads streams), causing hundreds of poster images
   // to re-render and blocking the JS thread for 3+ seconds.
-  const discoverData = useContentStore(s => s.discoverData);
+  // PATCH_V245_OWNERSHIP — useDiscoverData() returns null when the data's
+  // owner UID doesn't match the currently-logged-in JWT user.  This prevents
+  // stale posters from a previous user (test) bleeding into the new user
+  // (choyt) session during the first render after a warm logout/login.
+  const discoverData = useDiscoverData();
   const isLoadingDiscover = useContentStore(s => s.isLoadingDiscover);
   const fetchDiscover = useContentStore(s => s.fetchDiscover);
   const fetchAddons = useContentStore(s => s.fetchAddons);
@@ -783,11 +787,12 @@ return (
                   title={item.title}
                   serviceName={item.serviceName}
                   contentType={item.contentType}
-                  /* v238 — cap initial mount to 15 posters per row.  ServiceRow's
-                     fetchMore() will load more as the user scrolls right.  This
-                     drops cold-boot render work to ~225 ContentCards across 15
-                     rows instead of 1500+.  Pagination still gives full catalog. */
-                  items={(item.items || []).slice(0, 15)}
+                  /* v249 — bump cap from 15 → 100 posters per row so each
+                     row feels Cinemeta-like.  ServiceRow's fetchMore still
+                     kicks in beyond 100 if backend has more items.  Cold
+                     boot adds ~85 ContentCards per row but React.memo on
+                     the card + memoized rows keeps re-renders flat. */
+                  items={(item.items || []).slice(0, 100)}
                   onItemPress={handleItemPress}
                   onItemFocus={
                     item.contentType !== 'channels'

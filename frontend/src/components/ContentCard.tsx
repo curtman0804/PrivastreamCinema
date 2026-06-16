@@ -23,7 +23,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentItem, SearchResult, api } from '../api/client';
-import { useContentStore as _v169UseContentStore /* V169_FOCUS_STREAM_PREWARM */ } from '../store/contentStore';
+import { useContentStore as _v169UseContentStore /* V169_FOCUS_STREAM_PREWARM */, getMetaCache, setMetaCache } from '../store/contentStore'; // PATCH_V248_HOVER_META
 /* V170_FOCUS_DWELL_TUNE — cap concurrent focus-prefetches so D-pad
    fly-throughs cannot saturate the JS bridge / backend.  Beyond the
    cap, prefetches are silently dropped (the on-click fetch still
@@ -927,6 +927,11 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   /* V169_FOCUS_STREAM_PREWARM — dwell-timer ref so we only prefetch
      streams when the user actually lingers (>= 500ms) on a poster. */
   const _v169PrewarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // PATCH_V248_HOVER_META — 200ms META prefetch timer (separate from
+  // the v169 STREAM dwell).  Fires fast so a brief D-pad pause warms
+  // the addon's /meta endpoint and seeds _metaCache + disk.  When the
+  // user actually clicks, Details paints instantly from memory.
+  const _v248MetaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -937,6 +942,22 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     if (_v169PrewarmTimerRef.current) {
       clearTimeout(_v169PrewarmTimerRef.current);
       _v169PrewarmTimerRef.current = null;
+    }
+    // PATCH_V248_HOVER_META — clear + re-arm 200ms META prefetch timer.
+    if (_v248MetaTimerRef.current) {
+      clearTimeout(_v248MetaTimerRef.current);
+      _v248MetaTimerRef.current = null;
+    }
+    {
+      const _v248_t = (item as any)?.type;
+      const _v248_c = (item as any)?.imdb_id || (item as any)?.id;
+      if (_v248_c && (_v248_t === 'movie' || _v248_t === 'series') && !getMetaCache(_v248_c)) {
+        _v248MetaTimerRef.current = setTimeout(() => {
+          (api as any)?.content?.getMeta?.(_v248_t, _v248_c)
+            .then((data: any) => { if (data) setMetaCache(_v248_c, data); })
+            .catch(() => { /* best-effort */ });
+        }, 100); // V249 — dropped 200ms → 100ms; faster hover-to-instant
+      }
     }
     /* V188_NAV_COOLDOWN — if the user just backed out of a Details page,
        suppress focus prefetch for 1.2 s.  Lets the JS thread serve D-pad
@@ -985,6 +1006,11 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       clearTimeout(_v169PrewarmTimerRef.current);
       _v169PrewarmTimerRef.current = null;
     }
+    // PATCH_V248_HOVER_META — also abort the 200ms META timer on blur.
+    if (_v248MetaTimerRef.current) {
+      clearTimeout(_v248MetaTimerRef.current);
+      _v248MetaTimerRef.current = null;
+    }
     /* V173_TV_LONGPRESS_REGISTRY — clear long-press registration on blur. */
     try { v176iRegisterGetter(null); } catch (_) {}
     try { v173RegisterLongPress(null); } catch (_) {}
@@ -1027,7 +1053,20 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       _v176bLpFired.current = true;
       try { handleLongPress(); } catch (_) {}
     }, 500);
-  }, [handleLongPress]);
+    // PATCH_V249_PRESSIN_PREFETCH — fire meta prefetch IMMEDIATELY on press
+    // (before the click resolves into a navigation).  This guarantees the
+    // network round-trip starts ASAP even when the user clicks faster than
+    // the 100ms hover dwell.  Skips if already cached.
+    try {
+      const _v249_t = (item as any)?.type;
+      const _v249_c = (item as any)?.imdb_id || (item as any)?.id;
+      if (_v249_c && (_v249_t === 'movie' || _v249_t === 'series') && !getMetaCache(_v249_c)) {
+        (api as any)?.content?.getMeta?.(_v249_t, _v249_c)
+          .then((data: any) => { if (data) setMetaCache(_v249_c, data); })
+          .catch(() => { /* best-effort */ });
+      }
+    } catch (_) {}
+  }, [handleLongPress, item]);
   const _v176bPressOut = useCallback(() => {
     if (_v176bLpTimer.current) {
       clearTimeout(_v176bLpTimer.current);

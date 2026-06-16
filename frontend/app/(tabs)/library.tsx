@@ -38,7 +38,7 @@ import {
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
-type FilterType = 'movies' | 'series' | 'tv';
+type FilterType = 'movies' | 'series'; // v241 — TV Channels removed
 
 // Library card — EXACT same X-button pattern as ContinueWatchingCard in discover.tsx
 function LibraryCard({
@@ -254,7 +254,6 @@ export default function LibraryScreen() {
     switch (filter) {
       case 'movies': return library.movies || [];
       case 'series': return library.series || [];
-      case 'tv': return library.channels || [];
       default: return library.movies || [];
     }
   };
@@ -339,7 +338,7 @@ export default function LibraryScreen() {
       <View style={[styles.filterContainer, isTV && styles.filterContainerTV]}>
         <FilterButton type="movies" label="Movies" />
         <FilterButton type="series" label="Series" />
-        <FilterButton type="tv" label="TV Channels" />
+        {/* v241 — TV Channels filter removed */}
       </View>
 
       {filteredContent.length === 0 ? (

@@ -24,7 +24,7 @@ import { useNavigation, CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import Constants from 'expo-constants';
-import { useContentStore, getMetaCache, setMetaCache } from '../../../src/store/contentStore';
+import { useContentStore, getMetaCache, setMetaCache, hydrateMetaFromDisk } from '../../../src/store/contentStore';
 
 // v238 cache buster — append &_t=<ts> to ANY URL handed to the player so
 // Firestick's aggressive media cache can't replay a stale wrong-content
@@ -123,7 +123,11 @@ function AutoPlayLoadingBar() {
 // ReferenceError when the overlay tried to render).
 const _v238ValidNum = (n: any) => (n != null && !Number.isNaN(Number(n)));
 
-function FocusableButton({ 
+// PATCH_V244_MEMO — kill re-render storms during stream loading on Firestick.
+// FocusableButton/ChipButton/EpisodeCard each render dozens of times per page;
+// without React.memo every parent re-render (stream progress, focus change,
+// stream sort) re-renders ALL of them.  React.memo skips when props are equal.
+const FocusableButton = React.memo(function FocusableButton({ 
   onPress, 
   style, 
   focusedStyle,
@@ -152,10 +156,11 @@ function FocusableButton({
       {children}
     </Pressable>
   );
-}
+});
 
 // Clickable chip for genre/cast/director - routes to search
-function ChipButton({ label, onPress, hasTVPreferredFocus = false }: { label: string; onPress: () => void; hasTVPreferredFocus?: boolean }) {
+// PATCH_V244_MEMO — see FocusableButton above.
+const ChipButton = React.memo(function ChipButton({ label, onPress, hasTVPreferredFocus = false }: { label: string; onPress: () => void; hasTVPreferredFocus?: boolean }) {
   const [isFocused, setIsFocused] = useState(false);
   return (
     <Pressable
@@ -168,7 +173,7 @@ function ChipButton({ label, onPress, hasTVPreferredFocus = false }: { label: st
       <Text style={[styles.chipText, isFocused && styles.chipTextFocused]}>{label}</Text>
     </Pressable>
   );
-}
+});
 
 
 // Parse stream info helper - used by StreamCard and sorting
@@ -704,7 +709,11 @@ function ComingSoonPlaceholder({ width, height }: { width: number | string; heig
   );
 }
 
-function EpisodeCard({
+// PATCH_V244_MEMO — EpisodeCard re-renders on every parent state change.
+// With ~20+ episodes per series page, that's 20+ Pressable re-renders per
+// D-pad tick on Firestick.  React.memo skips when episode/onPress identity
+// doesn't change — Episodes are passed by reference from a memoized list.
+const EpisodeCard = React.memo(function EpisodeCard({
   episode,
   fallbackPoster,
   onPress,
@@ -906,7 +915,7 @@ function EpisodeCard({
       </View>
     </Pressable>
   );
-}
+});
 
 export default function DetailsScreen() {
   const { 
@@ -1046,6 +1055,27 @@ export default function DetailsScreen() {
   };
   
   const [content, setContent] = useState<ContentItem | null>(initialContent);
+
+  // PATCH_V244_META_HYDRATE — on cold start, in-memory _metaCache is
+  // empty so Details would paint with just (paramName + paramPoster)
+  // while waiting ~7s for the network /meta call.  Try the 24h disk
+  // cache FIRST — typically yields a full meta object in ~30-80ms,
+  // so the user sees cast / plot / episodes almost immediately.
+  // Network refresh still runs after to pull any updates.
+  useEffect(() => {
+    if (!id) return;
+    if (cachedMeta) return; // already painted from memory
+    let cancelled = false;
+    (async () => {
+      try {
+        const fromDisk = await hydrateMetaFromDisk(id);
+        if (cancelled) return;
+        if (fromDisk) setContent(fromDisk);
+      } catch (_) {}
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
   // V157_META_INJECTED_HERE — synchronously update the module-level meta
   // holder BEFORE the sort useMemo runs.  This guarantees the title/year
   // guard in sortStreamsByLanguage sees the current content's name+year
@@ -2170,26 +2200,37 @@ const nextEpisodeData = nextEpisode ? {
                       setIsPlayLoading(true);
                       try {
                         const list = (sortedStreams && sortedStreams.length > 0) ? sortedStreams : streams;
-                        const resolved = list.find((s: any) => s && (s.url || s.externalUrl || s.direct_url));
-                        const infoHashOnly = list.find((s: any) => s && (s.infoHash || (s as any).info_hash));
-                        let picked: any = resolved || infoHashOnly || list[0] || null;
+                        // v241 — for porn (PT/JT) prefer list[0] to match the
+                        // first stream card (correct content mapping). For
+                        // mainstream content prefer first URL-resolved stream
+                        // (instant cached debrid playback).
+                        const _v241IsPorn = typeof id === 'string' && (
+                          id.startsWith('pt:') || id.startsWith('jt:') ||
+                          id.startsWith('porn') || id.startsWith('xxx:'));
+                        let picked: any = null;
+                        if (_v241IsPorn) {
+                          const _v241Playable = (s: any) =>
+                            !!(s && (s.url || s.externalUrl || s.direct_url || s.infoHash || (s as any).info_hash));
+                          picked = list[0] && _v241Playable(list[0]) ? list[0] : null;
+                        }
+                        if (!picked) {
+                          const resolved = list.find((s: any) => s && (s.url || s.externalUrl || s.direct_url));
+                          const infoHashOnly = list.find((s: any) => s && (s.infoHash || (s as any).info_hash));
+                          picked = resolved || infoHashOnly || list[0] || null;
+                        }
                         // Normalize info_hash -> infoHash so handleStreamSelect's downstream
                         // checks find what they expect.
                         if (picked && !picked.infoHash && (picked as any).info_hash) {
                           picked = { ...picked, infoHash: (picked as any).info_hash } as any;
                         }
                         if (picked) {
-                          console.log('[v238b PLAY] picked stream:',
-                            picked.name || picked.title || '(unnamed)',
-                            'hasUrl=', !!(picked.url || picked.externalUrl || picked.direct_url),
-                            'hasHash=', !!picked.infoHash);
+                          console.log('[v241 PLAY] picked:', picked.name || picked.title, 'isPorn=', _v241IsPorn);
                           handleStreamSelect(picked);
                         } else {
-                          console.log('[v238b PLAY] no streams to play');
                           setIsPlayLoading(false);
                         }
                       } catch (e) {
-                        console.log('[v238b PLAY] error:', e);
+                        console.log('[v241 PLAY] error:', e);
                         setIsPlayLoading(false);
                       }
                     }}

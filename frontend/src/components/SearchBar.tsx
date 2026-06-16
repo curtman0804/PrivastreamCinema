@@ -21,7 +21,7 @@ interface SearchBarProps {
 
 export const SearchBar: React.FC<SearchBarProps> = ({
   onSearch,
-  placeholder = 'Search movies & TV shows...',
+  placeholder = 'You can search for anything...', // v241 — copy update
   initialValue = '',
 }) => {
   const [query, setQuery] = useState(initialValue);

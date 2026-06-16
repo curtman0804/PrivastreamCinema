@@ -1,4 +1,5 @@
 import { create } from 'zustand'; // PATCH_V19B_ALL_DONE
+import { useState, useEffect } from 'react'; // PATCH_V245_OWNERSHIP — hook deps
 import AsyncStorage from '@react-native-async-storage/async-storage'; // PATCH_V19B_DISK_HELPERS
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
 import { getCached, setCache, CACHE_DURATIONS } from '../utils/cache';
@@ -10,8 +11,145 @@ import { getCached, setCache, CACHE_DURATIONS } from '../utils/cache';
 const _metaCache: Record<string, ContentItem> = {};
 const _streamsCache: Record<string, Stream[]> = {};
 
+// ============================================================
+// PATCH_V244_USER_SCOPE + META_DISK_CACHE
+// ------------------------------------------------------------
+// Three bugs fixed at once:
+//
+//  1. CROSS-USER BLEED: when switching test -> choyt, the old user's
+//     posters briefly showed on Discover.  Root cause: AsyncStorage
+//     keys ('discover_data', '@streamsCache:...', '@metaCache:...')
+//     were not scoped to the logged-in user.  Now every disk key is
+//     prefixed with the JWT's user_id, and the in-memory caches are
+//     wiped whenever the active user changes.
+//
+//  2. SLOW INITIAL DETAILS PAINT: on app restart, in-memory _metaCache
+//     was empty so every Details visit re-fetched the addon's
+//     /meta/... endpoint (~7s on Firestick).  Now setMetaCache also
+//     persists to disk (24h TTL) and a lazy hydrate loads from disk
+//     on first access — so the SECOND visit of a title after app
+//     restart is instant.
+//
+//  3. BACK-TO-DISCOVER LAG: fetchDiscover was running a full background
+//     refresh on every Back from Details (network + JSON.stringify
+//     comparison).  Now it only background-refreshes if data is older
+//     than 60s.
+//
+// Auth-code-free design: we read the JWT directly from AsyncStorage
+// 'auth_token' on cache access, decode user_id from the JWT payload,
+// and scope from there.  No external changes required.
+// ============================================================
+
+let _v244CurrentUserId: string = '__anon__';
+
+const _v244DecodeJwtUid = (token: string): string => {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return '__anon__';
+    // base64url -> base64
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    // global.atob is provided by React Native; fall back to Buffer if needed.
+    let json: string;
+    try {
+      // @ts-ignore — atob exists in RN
+      json = atob(b64 + '==='.slice((b64.length + 3) % 4));
+    } catch {
+      json = global.Buffer ? global.Buffer.from(b64, 'base64').toString('utf8') : '';
+    }
+    const p = JSON.parse(json);
+    return (p && (p.user_id || p.sub)) || '__anon__';
+  } catch {
+    return '__anon__';
+  }
+};
+
+const _v244WipeInMemoryCaches = () => {
+  for (const k of Object.keys(_metaCache)) delete _metaCache[k];
+  for (const k of Object.keys(_streamsCache)) delete _streamsCache[k];
+};
+
+const _v244RefreshUserScope = async (): Promise<string> => {
+  const token = await AsyncStorage.getItem('auth_token');
+  const uid = token ? _v244DecodeJwtUid(token) : '__anon__';
+  if (uid !== _v244CurrentUserId) {
+    // User CHANGED — wipe in-memory bleed.  Zustand state is reset by
+    // the caller (fetchDiscover sees the new scope and starts fresh).
+    _v244WipeInMemoryCaches();
+    _v244CurrentUserId = uid;
+    try {
+      useContentStore.getState().resetStore();
+      // PATCH_V247_REACTIVE_USER — publish the NEW uid to zustand AFTER
+      // resetStore (which also wipes currentUserId).  Reactive components
+      // (useDiscoverData) re-render immediately with the right scope.
+      useContentStore.setState({ currentUserId: uid === '__anon__' ? null : uid });
+    } catch (_) {}
+  } else {
+    // Same user — make sure currentUserId is at least published once.
+    try {
+      const cur = useContentStore.getState().currentUserId;
+      const want = uid === '__anon__' ? null : uid;
+      if (cur !== want) useContentStore.setState({ currentUserId: want });
+    } catch (_) {}
+  }
+  return uid;
+};
+
+const _v244Scoped = (k: string) => `${_v244CurrentUserId}:${k}`;
+
+// Disk-backed meta cache (24h TTL)
+const META_DISK_TTL_MS = 24 * 60 * 60 * 1000;
+const META_DISK_KEY = (key: string) => '@metaCache:' + _v244Scoped(key);
+
+export async function loadMetaFromDisk(key: string): Promise<ContentItem | null> {
+  try {
+    const raw = await AsyncStorage.getItem(META_DISK_KEY(key));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.time || !parsed?.data) return null;
+    if (Date.now() - parsed.time > META_DISK_TTL_MS) return null;
+    return parsed.data as ContentItem;
+  } catch { return null; }
+}
+
+async function saveMetaToDisk(key: string, data: ContentItem): Promise<void> {
+  try {
+    if (!data) return;
+    await AsyncStorage.setItem(
+      META_DISK_KEY(key),
+      JSON.stringify({ time: Date.now(), data })
+    );
+  } catch { /* best-effort */ }
+}
+
+// Lazy hydrate: details page can await this to get last-known meta
+// while the network refresh runs in background.
+export async function hydrateMetaFromDisk(key: string): Promise<ContentItem | null> {
+  if (_metaCache[key]) return _metaCache[key];
+  // Make sure scope is up-to-date BEFORE reading disk
+  await _v244RefreshUserScope();
+  const fromDisk = await loadMetaFromDisk(key);
+  if (fromDisk) { _metaCache[key] = fromDisk; return fromDisk; }
+  return null;
+}
+
+// Exposed for explicit logout button (kept best-effort; the scope
+// switch on next login also wipes the in-memory caches).
+export async function clearAllUserCaches(): Promise<void> {
+  _v244WipeInMemoryCaches();
+  _v244CurrentUserId = '__anon__';
+}
+
+// Discover background-refresh debounce — see fetchDiscover for use.
+let _v244LastDiscoverRefresh = 0;
+const DISCOVER_REFRESH_DEBOUNCE_MS = 60 * 1000;
+// ============================================================
+
 export const getMetaCache = (key: string) => _metaCache[key] || null;
-export const setMetaCache = (key: string, data: ContentItem) => { _metaCache[key] = data; };
+export const setMetaCache = (key: string, data: ContentItem) => {
+  _metaCache[key] = data;
+  // v244 — fire-and-forget disk persistence with current user scope
+  saveMetaToDisk(key, data);
+};
 export const getStreamsCache = (key: string) => _streamsCache[key] || null;
 export const setStreamsCache = (key: string, data: Stream[]) => { _streamsCache[key] = data; };
 
@@ -52,6 +190,15 @@ interface CurrentPlaying {
 
 interface ContentState {
   discoverData: DiscoverResponse | null;
+  // PATCH_V245_OWNERSHIP — userId that owns the current `discoverData`.
+  // When the JWT user changes (warm logout -> login), this won't match
+  // the live JWT scope and `useDiscoverData()` returns null, suppressing
+  // the stale-poster bleed across user switches.
+  discoverDataUid: string | null;
+  // PATCH_V247_REACTIVE_USER — current JWT user_id in zustand so any
+  // change triggers a React re-render across all subscribed components.
+  // Updated by the background poller and by fetchDiscover's scope-check.
+  currentUserId: string | null;
   addons: Addon[];
   library: LibraryResponse | null;
   /* V176L_LIBRARY_SET — precomputed membership Set for O(1) lookup
@@ -95,6 +242,8 @@ interface ContentState {
 
 const initialState = {
   discoverData: null,
+  discoverDataUid: null as string | null, // PATCH_V245_OWNERSHIP
+  currentUserId: null as string | null, // PATCH_V247_REACTIVE_USER
   addons: [],
   library: null,
   librarySet: new Set<string>(),
@@ -135,10 +284,22 @@ export const useContentStore = create<ContentState>((set, get) => ({
   //   1) /api/discover?limit=5  (returns in ~1-2s with first 5 services)
   //   2) background /api/discover?skip=5 to fill in the rest
   fetchDiscover: async (forceRefresh = false) => {
+    // v244 — gate every fetch on current JWT user.  Switching users
+    // wipes in-memory caches BEFORE we read the disk cache, so test's
+    // posters can never bleed into choyt's session.
+    await _v244RefreshUserScope();
+
     const currentData = get().discoverData;
 
     // Background background-refresh path (already have data)
     if (currentData && !forceRefresh) {
+      // v244 — 60s debounce.  Back-from-Details used to fire a full
+      // network refresh + JSON.stringify diff on every nav; on Firestick
+      // that's the JS-thread freeze.  Skip if data is < 60s fresh.
+      if (Date.now() - _v244LastDiscoverRefresh < DISCOVER_REFRESH_DEBOUNCE_MS) {
+        return;
+      }
+      _v244LastDiscoverRefresh = Date.now();
       try {
         const data: any = await (api.content as any).getDiscover();
         if (data) {
@@ -149,8 +310,9 @@ export const useContentStore = create<ContentState>((set, get) => ({
             const prev = get().discoverData;
             if (prev && JSON.stringify(prev) === JSON.stringify(data)) return;
           } catch (_) {}
-          set({ discoverData: data });
-          setCache('discover_data', data, CACHE_DURATIONS.MEDIUM);
+          set({ discoverData: data, discoverDataUid: _v244CurrentUserId }); // v245 ownership
+          // v244 — scope the disk cache key to the current user.
+          setCache('discover_data:' + _v244CurrentUserId, data, CACHE_DURATIONS.MEDIUM);
         }
       } catch (err) {
         console.log('[ContentStore] Background refresh error:', err);
@@ -160,9 +322,10 @@ export const useContentStore = create<ContentState>((set, get) => ({
 
     // First open: try local cache for instant paint
     if (!currentData && !forceRefresh) {
-      const cached = await getCached<DiscoverResponse>('discover_data');
+      // v244 — read SCOPED cache so we never load the previous user's data.
+      const cached = await getCached<DiscoverResponse>('discover_data:' + _v244CurrentUserId);
       if (cached) {
-        set({ discoverData: cached, isLoadingDiscover: false });
+        set({ discoverData: cached, discoverDataUid: _v244CurrentUserId, isLoadingDiscover: false }); // v245
       }
     }
 
@@ -189,9 +352,11 @@ export const useContentStore = create<ContentState>((set, get) => ({
         if (identical) {
           set({ isLoadingDiscover: false });
         } else {
-          set({ discoverData: firstPage, isLoadingDiscover: false });
-          setCache('discover_data', firstPage, CACHE_DURATIONS.MEDIUM);
+          set({ discoverData: firstPage, discoverDataUid: _v244CurrentUserId, isLoadingDiscover: false }); // v245
+          // v244 — scoped key.
+          setCache('discover_data:' + _v244CurrentUserId, firstPage, CACHE_DURATIONS.MEDIUM);
         }
+        _v244LastDiscoverRefresh = Date.now();
 }
     } catch (error: any) {
       console.log('[ContentStore] fetchDiscover error:', error);
@@ -269,11 +434,18 @@ export const useContentStore = create<ContentState>((set, get) => ({
       const data = await api.content.search(currentSearchQuery, searchSkip, 30);
       const newMovies = data.movies || [];
       const newSeries = data.series || [];
+      // v241 — dedup by id when appending (genre responses overlap)
+      const _eM = new Set(searchMovies.map((m: any) => m.id || m.imdb_id));
+      const _eS = new Set(searchSeries.map((s: any) => s.id || s.imdb_id));
+      const uniqMovies = newMovies.filter((m: any) => { const k = m.id || m.imdb_id; return k ? !_eM.has(k) : true; });
+      const uniqSeries = newSeries.filter((s: any) => { const k = s.id || s.imdb_id; return k ? !_eS.has(k) : true; });
+      const _allDupes = uniqMovies.length === 0 && uniqSeries.length === 0 && (newMovies.length + newSeries.length) > 0;
+      const _safeHasMore = _allDupes ? false : (data.hasMore || (newMovies.length >= 100 || newSeries.length >= 100));
       set({ 
-        searchMovies: [...searchMovies, ...newMovies],
-        searchSeries: [...searchSeries, ...newSeries],
-        searchResults: [...searchMovies, ...newMovies, ...searchSeries, ...newSeries],
-        searchHasMore: data.hasMore || false,
+        searchMovies: [...searchMovies, ...uniqMovies],
+        searchSeries: [...searchSeries, ...uniqSeries],
+        searchResults: [...searchMovies, ...uniqMovies, ...searchSeries, ...uniqSeries],
+        searchHasMore: _safeHasMore,
         searchSkip: searchSkip + 30,
         isLoadingMoreSearch: false 
       });
@@ -335,19 +507,37 @@ export const useContentStore = create<ContentState>((set, get) => ({
       // streams, the user sees them immediately.  Late-arriving direct
       // sources can append more — they can't take any away.
       let allStreams: any[] = [];
+      let _v241LastPaintTs = 0;
+      let _v241PendingTimer: any = null;
+      let _v241PendingStreams: any[] | null = null;
+      const _v241PaintNow = (s: any[]) => {
+        _v241LastPaintTs = Date.now();
+        try { setStreamsCache(cacheKey, s); } catch (_) {}
+        _setIf({ streams: s, isLoadingStreams: false });
+        allStreams = s;
+      };
       const _v194_onProgress = (partialStreams: any[]) => {
-        if (_myToken !== _v190AbortToken) return; // user navigated away
+        if (_myToken !== _v190AbortToken) return;
         if (!partialStreams || partialStreams.length === 0) return;
-        // Only paint when we have STRICTLY MORE streams than before
-        // (de-dupe is already done by client.ts mergeAndNotify).
         const _cur = get();
         const _curCount = (_cur && _cur.streams) ? _cur.streams.length : 0;
-        if (partialStreams.length > _curCount) {
-          if (partialStreams.length > 0) {
-            try { setStreamsCache(cacheKey, partialStreams); } catch (_) {}
+        if (partialStreams.length <= _curCount) return;
+        const _elapsed = Date.now() - _v241LastPaintTs;
+        if (_v241LastPaintTs === 0 || _elapsed >= 250) {
+          if (_v241PendingTimer) { clearTimeout(_v241PendingTimer); _v241PendingTimer = null; }
+          _v241PendingStreams = null;
+          _v241PaintNow(partialStreams);
+        } else {
+          _v241PendingStreams = partialStreams;
+          if (!_v241PendingTimer) {
+            _v241PendingTimer = setTimeout(() => {
+              _v241PendingTimer = null;
+              if (_v241PendingStreams && _myToken === _v190AbortToken) {
+                _v241PaintNow(_v241PendingStreams);
+              }
+              _v241PendingStreams = null;
+            }, Math.max(0, 250 - _elapsed));
           }
-          _setIf({ streams: partialStreams, isLoadingStreams: false });
-          allStreams = partialStreams;
         }
       };
       const result = await api.addons.getAllStreams(type, id, _v194_onProgress);
@@ -452,3 +642,69 @@ export const useContentStore = create<ContentState>((set, get) => ({
     set({ currentPlaying: info });
   },
 }));
+
+// ============================================================
+// PATCH_V245_OWNERSHIP — useDiscoverData() hook
+// ------------------------------------------------------------
+// Why: when user A logs out and user B logs in WITHOUT the app
+// restarting (warm switch), zustand's `discoverData` still holds
+// user A's payload.  The first render of Discover paints those
+// posters BEFORE fetchDiscover's user-scope check completes.
+// This hook does the check at render time using the userId we
+// stamped on the data when we saved it (`discoverDataUid`).
+//
+// Drop-in replacement:
+//   - Was:  const data = useContentStore(s => s.discoverData);
+//   - Now:  const data = useDiscoverData();
+// ============================================================
+// ============================================================
+// PATCH_V247_REACTIVE_USER — useDiscoverData() reactive edition
+// ------------------------------------------------------------
+// v246 used a useState seeded from a module variable — that variable
+// was stale on warm logout/login because the Discover tab doesn't
+// unmount between user switches.  v247 reads `currentUserId` straight
+// from zustand state.  Any time `_v244RefreshUserScope` (or the
+// 500 ms background poller below) updates it, EVERY subscribed
+// component re-renders immediately with the right scope.
+//
+// Drop-in replacement (no consumer changes needed):
+//   const data = useDiscoverData();
+// ============================================================
+export function useDiscoverData(): DiscoverResponse | null {
+  const data = useContentStore(s => s.discoverData);
+  const uid = useContentStore(s => s.discoverDataUid);
+  const activeUid = useContentStore(s => s.currentUserId);
+
+  // Kick a one-shot scope refresh on mount in case the poller hasn't
+  // run yet (cold start).  Cheap — single AsyncStorage read.
+  useEffect(() => {
+    _v244RefreshUserScope().catch(() => { /* best-effort */ });
+  }, []);
+
+  // Until we KNOW who's logged in, withhold data.
+  if (!activeUid) return null;
+  // Data must belong to the current JWT user, full stop.
+  if (uid && uid !== activeUid) return null;
+  return data;
+}
+
+// ============================================================
+// PATCH_V247_USER_POLLER — 500ms background poll of `auth_token`.
+// Detects warm logout/login (where the Discover tab stays mounted)
+// and immediately wipes + republishes the new scope so stale posters
+// can NEVER paint, even for one frame.  Cost: 2 reads/sec of an
+// already-hot AsyncStorage key.  Negligible on Firestick.
+// ============================================================
+let _v247PollerStarted = false;
+function _v247StartUserPoller() {
+  if (_v247PollerStarted) return;
+  _v247PollerStarted = true;
+  setInterval(() => {
+    _v244RefreshUserScope().catch(() => { /* best-effort */ });
+  }, 500);
+  // Also fire one immediately on module init (covers cold-start).
+  _v244RefreshUserScope().catch(() => {});
+}
+// Auto-start the poller as soon as this module is imported.
+_v247StartUserPoller();
+

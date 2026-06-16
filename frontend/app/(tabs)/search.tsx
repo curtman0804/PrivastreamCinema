@@ -157,7 +157,7 @@ export default function SearchScreen() {
       ) : !hasSearched ? (
         <View style={styles.centerContainer}>
           <Ionicons name="film-outline" size={64} color="#444444" />
-          <Text style={styles.emptyText}>Search for movies & TV shows</Text>
+          <Text style={styles.emptyText}>You can search for anything...</Text>
           <Text style={styles.emptySubtext}>Find your favorite content</Text>
         </View>
       ) : (
