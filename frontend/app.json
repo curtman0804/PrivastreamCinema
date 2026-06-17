@@ -3,11 +3,21 @@
     "name": "Privastream Cinema",
     "slug": "privastreamcinema",
     "version": "1.7.1",
+    "runtimeVersion": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "privastreamcinema",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "updates": {
+      "enabled": true,
+      "url": "https://api.privastreamsolutions.com/api/expo-updates/manifest",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 5000,
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.privastream.cinema"
@@ -25,7 +35,7 @@
       },
       "package": "com.privastream.cinema",
       "allowBackup": false,
-      "versionCode": 21
+      "versionCode": 22
     },
     "web": {
       "bundler": "metro",
@@ -55,7 +65,8 @@
           }
         }
       ],
-      "expo-video"
+      "expo-video",
+      "expo-updates"
     ],
     "experiments": {
       "typedRoutes": true

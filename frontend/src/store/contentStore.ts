@@ -141,7 +141,11 @@ export async function clearAllUserCaches(): Promise<void> {
 
 // Discover background-refresh debounce — see fetchDiscover for use.
 let _v244LastDiscoverRefresh = 0;
-const DISCOVER_REFRESH_DEBOUNCE_MS = 60 * 1000;
+// PATCH_V253_DEBOUNCE — bumped 60s → 300s (5 min).  Warm-relaunch from
+// background (Firestick app return-to-foreground) now never re-fetches
+// Discover within 5 minutes, eliminating the brief loading flash + JSON
+// stringify-diff CPU spike on back-to-Discover navigation.
+const DISCOVER_REFRESH_DEBOUNCE_MS = 5 * 60 * 1000;
 // ============================================================
 
 export const getMetaCache = (key: string) => _metaCache[key] || null;

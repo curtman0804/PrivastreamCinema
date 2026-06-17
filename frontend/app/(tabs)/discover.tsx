@@ -16,6 +16,8 @@ import {
   InteractionManager,
   LayoutAnimation,
   UIManager,
+  AppState,            // PATCH_V253_APPSTATE
+  AppStateStatus,      // PATCH_V253_APPSTATE
 } from 'react-native';
 // PATCH_V145_LAYOUTANIM_IMPORT — enable LayoutAnimation on Android once at module load
 if (Platform.OS === 'android' && UIManager && (UIManager as any).setLayoutAnimationEnabledExperimental) {
@@ -299,13 +301,16 @@ export default function DiscoverScreen() {
       const now = Date.now();
       const cwElapsed = now - lastCWFetchTime.current;
       const discoverElapsed = now - lastDiscoverFetchTime.current;
-      // Always cheap CW refresh after 30s; only heavy discover refresh after 60s.
-      if (cwElapsed < 30000 && discoverElapsed < 60000) {
-        return; // recent enough — back-nav stays instant
+      // PATCH_V253_WARM_RESUME — Discover refresh debounce bumped 60s → 5min
+      // and CW debounce bumped 30s → 90s.  Back-from-Details + return-from-
+      // background no longer triggers a heavy SWR refresh during normal
+      // browsing.  Pull-to-refresh still works (onRefresh forces both).
+      if (cwElapsed < 90 * 1000 && discoverElapsed < 5 * 60 * 1000) {
+        return; // recent enough — back-nav / warm-resume stays instant
       }
       const handle = InteractionManager.runAfterInteractions(() => {
-        if (cwElapsed >= 30000) fetchContinueWatching();
-        if (discoverElapsed >= 60000) {
+        if (cwElapsed >= 90 * 1000) fetchContinueWatching();
+        if (discoverElapsed >= 5 * 60 * 1000) {
           lastDiscoverFetchTime.current = Date.now();
           fetchDiscover(); // no force flag — SWR pattern from store
         }
@@ -313,6 +318,28 @@ export default function DiscoverScreen() {
       return () => handle.cancel();
     }, [fetchContinueWatching])
   );
+
+  // PATCH_V253_APPSTATE — when the app returns from background (warm resume)
+  // we don't refetch Discover unless it's been > 5 min.  This keeps the
+  // Firestick instant-on; the screen the user left is the screen they get
+  // back to.  Cold-launch / force-stop still hydrates from disk first via
+  // the existing PATCH_V144_CACHE_HYDRATE path.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState !== 'active') return;
+      const elapsed = Date.now() - _v181_lastDiscoverFetch;
+      if (elapsed < 5 * 60 * 1000) {
+        // Fresh enough — skip everything.  UI shows whatever was last loaded.
+        return;
+      }
+      _v181_lastDiscoverFetch = Date.now();
+      InteractionManager.runAfterInteractions(() => {
+        try { fetchDiscover(); } catch (_) {}
+        try { fetchContinueWatching(); } catch (_) {}
+      });
+    });
+    return () => { try { sub.remove(); } catch (_) {} };
+  }, [fetchContinueWatching, fetchDiscover]);
 
   // Check if there's any content to display
   // PATCH_V144_CACHE_HASCONTENT — prefer live data, fall back to cached snapshot

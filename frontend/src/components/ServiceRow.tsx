@@ -19,7 +19,8 @@ import { FlashList } from '@shopify/flash-list';
 
 import { ContentCard, getCardWidth } from './ContentCard';
 import { ContentItem } from '../api/client';
-import apiClient from '../api/client';
+import apiClient, { api } from '../api/client';
+import { getMetaCache, setMetaCache } from '../store/contentStore'; // PATCH_V250_VIEWPORT_PREFETCH
 import { colors } from '../styles/colors';
 
 const ITEM_GAP = 16;
@@ -28,6 +29,16 @@ const TV_PADDING_RIGHT = 48;
 const MOBILE_PADDING = 16;
 
 const TV_SCROLL_ANCHOR = 4;
+
+// PATCH_V250_BACK_NAV_FOCUS — module-level map of rowKey -> last-focused content_id.
+// When user backs out of Details, ServiceRow re-mounts and gives the previously
+// focused poster hasTVPreferredFocus=true, so the highlight appears in the same
+// frame as the row renders (no D-pad-poll latency, no scroll glitch).
+const _v250_lastFocusedByRow = new Map<string, string>();
+
+// PATCH_V250_VIEWPORT_PREFETCH — track which ids we've already kicked
+// off a /meta prefetch for (per app session). Avoids duplicate hits.
+const _v250_prefetched = new Set<string>();
 
 // v238 — eager-mount top 3 rows so user sees a "full" Discover screen
 // in the first frame instead of 1 row + empty space.  Rows 3+ paint at
@@ -183,6 +194,18 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
         const focusedItem = validItems[index];
 
+        // PATCH_V250_BACK_NAV_FOCUS — remember which poster was focused
+        // in this row, so the highlight returns to it on Back nav.
+        if (focusedItem) {
+          const cid = focusedItem.imdb_id || focusedItem.id;
+          if (cid) {
+            _v250_lastFocusedByRow.set(
+              `${rowIndex}:${serviceName || title || ''}`,
+              cid
+            );
+          }
+        }
+
         if (focusedItem && onItemFocus) {
           onItemFocus(focusedItem);
         }
@@ -254,7 +277,12 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
             onCardBlur={handleCardBlur}
             showTitle={true}
             hasTVPreferredFocus={
-              isFirstRow && index === 0
+              (isFirstRow && index === 0) ||
+              // PATCH_V250_BACK_NAV_FOCUS — restore last-focused poster
+              // in this row when user returns from Details.
+              (_v250_lastFocusedByRow.get(
+                `${rowIndex}:${serviceName || title || ''}`
+              ) === (item.imdb_id || item.id))
             }
             isFirstInRow={isFirst}
             isLastInRow={isLast}
@@ -266,6 +294,9 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         handleCardFocus,
         handleCardBlur,
         isFirstRow,
+        rowIndex,
+        serviceName,
+        title,
       ]
     );
 
@@ -274,6 +305,33 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         item.id || item.imdb_id || `${item.name}`,
       []
     );
+
+    // PATCH_V250_VIEWPORT_PREFETCH — when posters scroll into view, fire
+    // their meta prefetch immediately (no dwell needed).  This is the real
+    // fix for "spotty" hover-to-instant: by the time the user's D-pad
+    // lands on ANY visible poster, /meta has already been warmed.
+    // Throttled by _v250_prefetched Set so we never duplicate per session.
+    const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+      if (!viewableItems || !viewableItems.length) return;
+      for (const v of viewableItems) {
+        const it = v.item;
+        if (!it) continue;
+        const cid = it.imdb_id || it.id;
+        const t = it.type;
+        if (!cid || (t !== 'movie' && t !== 'series')) continue;
+        if (_v250_prefetched.has(cid)) continue;
+        if (getMetaCache(cid)) { _v250_prefetched.add(cid); continue; }
+        _v250_prefetched.add(cid);
+        (api as any)?.content?.getMeta?.(t, cid)
+          .then((d: any) => { if (d) setMetaCache(cid, d); })
+          .catch(() => { /* best-effort */ });
+      }
+    }).current;
+
+    const viewabilityConfig = useRef({
+      itemVisiblePercentThreshold: 30, // fire when 30% of poster visible
+      minimumViewTime: 150,             // 150ms in-viewport before counting (debounces fast scrolls)
+    }).current;
 
     // v238 — SAFE empty-state guard: every hook above has already been
     // called this render, so React's hook order is stable across renders
@@ -315,9 +373,11 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
                 : styles.scrollContent
             }
             estimatedItemSize={itemTotalWidth}
-            drawDistance={itemTotalWidth * 1.5}
+            drawDistance={itemTotalWidth * 3} // V250 — was 1.5x; gives more pre-rendered cards = smoother D-pad
             onEndReached={handleEndReached}
             onEndReachedThreshold={3}
+            onViewableItemsChanged={onViewableItemsChanged} // PATCH_V250_VIEWPORT_PREFETCH
+            viewabilityConfig={viewabilityConfig}
           />
         </View>
       </LazyMount>
