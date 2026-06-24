@@ -1,3 +1,15 @@
+// ============================================================
+// V285_PROFILE — STREAMLINED PREMIUMIZE
+// ============================================================
+// Replaces v284.  Drops the redundant "Get Premiumize API Key"
+// and "Sign up for Premiumize" menu items — those are now both
+// inside the modal in PrivacySettingsBlock.  Result: the entire
+// streaming section is one self-contained card.
+//
+// Save THIS file as:
+//   app/(tabs)/profile.tsx
+// ============================================================
+
 import React, { useState } from 'react';
 import {
   View,
@@ -14,14 +26,10 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useAuthStore } from '../../src/store/authStore';
-// v238 — clear contentStore on logout so the next user doesn't see the
-// previous user's Continue Watching / library / addons / discover data.
 import { useContentStore } from '../../src/store/contentStore';
-// v238b — must ALSO wipe AsyncStorage keys @ps_discover_v1 + @ps_cw_v1.
-// discover.tsx reads these on mount and would otherwise show the
-// previous user's cached data until the next network refresh.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../../src/styles/colors';
+import { PrivacySettingsBlock } from '../../src/components/PrivacySettingsBlock';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -31,24 +39,16 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     const doLogout = async () => {
-      // v238 — wipe in-memory store + on-disk caches BEFORE auth logout
-      // so the next user doesn't see Continue Watching / library / addons
-      // / discover catalog from the previous account.
       try { useContentStore.getState().resetStore(); } catch (_) {}
       try {
-        await AsyncStorage.multiRemove([
-          '@ps_discover_v1',
-          '@ps_cw_v1',
-        ]);
+        await AsyncStorage.multiRemove(['@ps_discover_v1', '@ps_cw_v1']);
       } catch (_) {}
       await logout();
       router.replace('/(auth)/login');
     };
 
     if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to logout?')) {
-        doLogout();
-      }
+      if (window.confirm('Are you sure you want to logout?')) doLogout();
     } else {
       Alert.alert(
         'Logout',
@@ -95,6 +95,12 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* V285 — streamlined Streaming section: single card, single CTA. */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>STREAMING</Text>
+          <PrivacySettingsBlock />
+        </View>
+
         {/* General Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>GENERAL</Text>
@@ -128,15 +134,8 @@ export default function ProfileScreen() {
   );
 }
 
-// Menu Item Component
 function MenuItem({
-  icon,
-  title,
-  subtitle,
-  onPress,
-  showArrow = true,
-  danger = false,
-  isTV = false,
+  icon, title, subtitle, onPress, showArrow = true, danger = false, isTV = false,
 }: {
   icon: string;
   title: string;
@@ -147,7 +146,6 @@ function MenuItem({
   isTV?: boolean;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-
   return (
     <Pressable
       style={[styles.menuItem, isFocused && styles.menuItemFocused]}
@@ -157,136 +155,38 @@ function MenuItem({
       disabled={!onPress}
     >
       <View style={[styles.menuIcon, danger && styles.menuIconDanger]}>
-        <Ionicons
-          name={icon as any}
-          size={22}
-          color={danger ? colors.error : colors.primary}
-        />
+        <Ionicons name={icon as any} size={22} color={danger ? colors.error : colors.primary} />
       </View>
       <View style={styles.menuTextContainer}>
-        <Text style={[styles.menuTitle, danger && styles.menuTitleDanger]}>
-          {title}
-        </Text>
+        <Text style={[styles.menuTitle, danger && styles.menuTitleDanger]}>{title}</Text>
         {subtitle && <Text style={styles.menuSubtitle}>{subtitle}</Text>}
       </View>
-      {showArrow && (
-        <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-      )}
+      {showArrow && <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerTV: {
-    paddingHorizontal: 32,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  headerTitleTV: {
-    fontSize: 28,
-  },
-  profileSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.backgroundLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileInfo: {
-    marginLeft: 16,
-  },
-  username: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  email: {
-    fontSize: 14,
-    color: colors.primaryDark,
-    marginTop: 4,
-  },
-  section: {
-    marginTop: 24,
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textMuted,
-    marginBottom: 8,
-    marginLeft: 4,
-    letterSpacing: 1,
-  },
-  menuCard: {
-    backgroundColor: colors.backgroundLight,
-    borderRadius: 12,
-    overflow: 'hidden',
-    alignSelf: 'stretch',
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    minHeight: 72,
-    maxHeight: 72,
-    borderWidth: 3,
-    borderColor: 'transparent',
-    borderRadius: 12,
-  },
-  menuItemFocused: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(184, 160, 92, 0.15)',
-  },
-  menuIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  menuIconDanger: {
-    backgroundColor: 'rgba(244, 67, 54, 0.1)',
-  },
-  menuTextContainer: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  menuTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: colors.primary,
-  },
-  menuTitleDanger: {
-    color: colors.error,
-  },
-  menuSubtitle: {
-    fontSize: 13,
-    color: colors.primaryDark,
-    marginTop: 2,
-  },
-  bottomPadding: {
-    height: 40,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerTV: { paddingHorizontal: 32 },
+  headerTitle: { fontSize: 24, fontWeight: '600', color: colors.primary },
+  headerTitleTV: { fontSize: 28 },
+  profileSection: { flexDirection: 'row', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border },
+  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.backgroundLight, justifyContent: 'center', alignItems: 'center' },
+  profileInfo: { marginLeft: 16 },
+  username: { fontSize: 20, fontWeight: '600', color: colors.primary },
+  email: { fontSize: 14, color: colors.primaryDark, marginTop: 4 },
+  section: { marginTop: 24, paddingHorizontal: 16 },
+  sectionTitle: { fontSize: 12, fontWeight: '600', color: colors.textMuted, marginBottom: 8, marginLeft: 4, letterSpacing: 1 },
+  menuCard: { backgroundColor: colors.backgroundLight, borderRadius: 12, overflow: 'hidden', alignSelf: 'stretch' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, minHeight: 72, maxHeight: 72, borderWidth: 3, borderColor: 'transparent', borderRadius: 12 },
+  menuItemFocused: { borderColor: colors.primary, backgroundColor: 'rgba(184, 160, 92, 0.15)' },
+  menuIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center' },
+  menuIconDanger: { backgroundColor: 'rgba(244, 67, 54, 0.1)' },
+  menuTextContainer: { flex: 1, marginLeft: 12 },
+  menuTitle: { fontSize: 16, fontWeight: '500', color: colors.primary },
+  menuTitleDanger: { color: colors.error },
+  menuSubtitle: { fontSize: 13, color: colors.primaryDark, marginTop: 2 },
+  bottomPadding: { height: 40 },
 });

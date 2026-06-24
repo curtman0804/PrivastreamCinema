@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   DeviceEventEmitter,
   findNodeHandle,
   BackHandler,
+  PanResponder,
 } from 'react-native';
 
 // Safe TV event handler imports - these may not exist in all RN versions
@@ -101,11 +102,15 @@ function TVFocusButton({
 // CRITICAL: Uses nextFocusLeft/nextFocusRight pointing to self to TRAP focus,
 // so D-pad left/right doesn't move focus away. Instead, the DeviceEventEmitter
 // handler detects left/right when this bar is focused and seeks the video.
+// V264_DRAG_TO_SEEK — also supports touch drag (tap, drag, release) on mobile
+// without interfering with TV D-pad seek.  While dragging, we display a
+// "scrubPosition" preview locally and only fire onSeek when the finger lifts.
 function SeekableProgressBar({
   position,
   duration,
   onSeek,
   onFocusChange,
+  onScrubChange,
   style,
   focusedStyle,
 }: {
@@ -113,12 +118,40 @@ function SeekableProgressBar({
   duration: number;
   onSeek: (newPosition: number) => void;
   onFocusChange?: (focused: boolean) => void;
+  // V266_STICKY_CONTROLS_DURING_SCRUB — parent listens so it can keep
+  // the chrome on-screen and pause the auto-hide timer while the user
+  // is actively dragging the thumb.
+  onScrubChange?: (scrubbing: boolean) => void;
   style?: any;
   focusedStyle?: any;
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const barRef = useRef<View>(null);
   const [selfTag, setSelfTag] = useState<number>(0);
+  // V264_DRAG_TO_SEEK — refs/state for touch-drag scrub.
+  // V266_FIX — track the bar's screen-absolute X+width via measureInWindow so
+  // touch pageX coordinates can be mapped reliably even when the finger
+  // crosses child Views (locationX was relative to whichever child received
+  // the touch, causing the thumb to jump around erratically).
+  const barLayoutRef = useRef<{ pageX: number; width: number }>({ pageX: 0, width: 0 });
+  const [scrubPosition, setScrubPosition] = useState<number | null>(null);
+  const isDraggingRef = useRef(false);
+  const lastScrubRef = useRef<number>(0);
+
+  // V266_FIX — measure the bar's absolute screen position whenever layout
+  // changes.  Called from onLayout via measureInWindow.
+  const _measureBar = () => {
+    try {
+      if (!barRef.current) return;
+      (barRef.current as any).measureInWindow?.(
+        (x: number, _y: number, w: number, _h: number) => {
+          if (typeof x === 'number' && typeof w === 'number' && w > 0) {
+            barLayoutRef.current = { pageX: x, width: w };
+          }
+        }
+      );
+    } catch (_) {}
+  };
   
   // Get native tag for self-referencing focus trap
   useEffect(() => {
@@ -136,8 +169,66 @@ function SeekableProgressBar({
     }, 200);
     return () => clearTimeout(timer);
   }, []);
-  
-  const percentage = duration > 0 ? (position / duration) * 100 : 0;
+
+  // V264_DRAG_TO_SEEK — translate an absolute screen X-coordinate into a
+  // seconds-position clamped to [0, duration].  V266_FIX uses pageX
+  // (absolute) instead of locationX (child-relative) so child Views inside
+  // the bar (fill, thumb) don't make the position jitter.
+  const _v264TouchToPos = (pageX: number): number => {
+    const { pageX: barX, width: w } = barLayoutRef.current;
+    if (!w || w <= 0 || !duration || duration <= 0) return 0;
+    const rel = pageX - barX;
+    const ratio = Math.max(0, Math.min(1, rel / w));
+    return ratio * duration;
+  };
+
+  // V264_DRAG_TO_SEEK — PanResponder.  onStartShouldSetPanResponder=true so
+  // we own the touch from the first tap.  D-pad navigation is untouched
+  // because Android TV remote events never go through PanResponder.
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponderCapture: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponderCapture: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: (evt) => {
+      isDraggingRef.current = true;
+      // V266_STICKY_CONTROLS_DURING_SCRUB — tell parent so it pins the
+      // chrome on-screen and stops its auto-hide timer.
+      try { onScrubChange?.(true); } catch (_) {}
+      // V266_FIX — re-measure on grant in case layout shifted since mount.
+      _measureBar();
+      const p = _v264TouchToPos(evt.nativeEvent.pageX ?? 0);
+      lastScrubRef.current = p;
+      setScrubPosition(p);
+    },
+    onPanResponderMove: (evt) => {
+      const p = _v264TouchToPos(evt.nativeEvent.pageX ?? 0);
+      lastScrubRef.current = p;
+      setScrubPosition(p);
+    },
+    onPanResponderRelease: () => {
+      const target = lastScrubRef.current;
+      isDraggingRef.current = false;
+      setScrubPosition(null);
+      // V266_STICKY_CONTROLS_DURING_SCRUB — release: tell parent to
+      // resume its auto-hide timer.
+      try { onScrubChange?.(false); } catch (_) {}
+      if (typeof target === 'number' && target >= 0) {
+        try { onSeek(target); } catch (_) {}
+      }
+    },
+    onPanResponderTerminate: () => {
+      isDraggingRef.current = false;
+      setScrubPosition(null);
+      try { onScrubChange?.(false); } catch (_) {}
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [duration]);
+
+  // Use scrubPosition while dragging, otherwise the real playback position.
+  const displayPos = scrubPosition !== null ? scrubPosition : position;
+  const percentage = duration > 0 ? (displayPos / duration) * 100 : 0;
   
   // Build focus trap props - when focused, left/right stays on this bar
   const focusTrapProps: any = {};
@@ -147,21 +238,43 @@ function SeekableProgressBar({
   }
   
   return (
-    <Pressable
+    <View
       ref={barRef}
+      focusable={true}
+      accessibilityRole="adjustable"
       style={[styles.progressBarContainer, style, isFocused && (focusedStyle || styles.progressBarFocused)]}
       onFocus={() => { setIsFocused(true); onFocusChange?.(true); }}
       onBlur={() => { setIsFocused(false); onFocusChange?.(false); }}
+      onLayout={() => { _measureBar(); }}
+      {...panResponder.panHandlers}
       {...focusTrapProps}
     >
       <View style={[styles.progressBarFill, { width: `${percentage}%` }]} />
       <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
-      {isFocused && (
+      {isFocused && scrubPosition === null && (
         <View style={styles.seekHint}>
           <Text style={styles.seekHintText}>◀ -10s  |  +10s ▶</Text>
         </View>
       )}
-    </Pressable>
+      {scrubPosition !== null && duration > 0 && (
+        <View style={[styles.seekHint, { left: `${Math.max(0, Math.min(100, percentage))}%` }]}>
+          <Text style={styles.seekHintText}>
+            {(() => {
+              // V264_DRAG_TO_SEEK fix — duration is in ms in this codebase;
+              // convert before formatting.  Otherwise we displayed e.g.
+              // "642:53:40" for a ~100min movie at the 37% mark.
+              const secs = Math.floor(scrubPosition / 1000);
+              const h = Math.floor(secs / 3600);
+              const m = Math.floor((secs % 3600) / 60);
+              const s = secs % 60;
+              return h > 0
+                ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+                : `${m}:${String(s).padStart(2, '0')}`;
+            })()}
+          </Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -245,6 +358,42 @@ export default function PlayerScreen() {
     fallbackTorrents?: string;
   }>();
   const router = useRouter();
+
+  // V273_NAN_ID_GUARD — some addons (PornTube, JustWatch) return content
+  // IDs shaped like "pt:NaN:1054329" or "jt:NaN:NaN" because the addon
+  // couldn't parse a numeric segment.  Earlier code paths that did
+  // parseInt(segment, 10) on these would yield NaN and either crash the
+  // player (e.g., when seeking, persisting watch progress, or pre-warming
+  // the next episode) or render "Episode NaN".  Detect early and treat
+  // the player as a deep-link error so the user gets a clean back-out
+  // instead of an opaque crash.
+  const _v273ContentIdLooksValid = useMemo(() => {
+    const cid = (contentId as string) || '';
+    if (!cid) return true;          // no contentId at all is allowed
+    if (cid.indexOf('NaN') !== -1) return false;
+    const segs = cid.split(':');
+    // For series-style "imdb:S:E", parseInt the last two segments and
+    // fail if either turns NaN.
+    if (segs.length >= 3) {
+      const _s = parseInt(segs[segs.length - 2], 10);
+      const _e = parseInt(segs[segs.length - 1], 10);
+      if (Number.isNaN(_s) || Number.isNaN(_e)) return false;
+    }
+    return true;
+  }, [contentId]);
+  useEffect(() => {
+    if (!_v273ContentIdLooksValid) {
+      console.warn('[V273_NAN_ID_GUARD] malformed contentId=', contentId, '— bailing back to previous screen.');
+      try {
+        if ((router as any).canGoBack && (router as any).canGoBack()) {
+          router.back();
+        } else {
+          (router as any).replace('/(tabs)/discover');
+        }
+      } catch (_) {}
+    }
+    // intentional: only re-check if validity changes
+  }, [_v273ContentIdLooksValid]);
 
   // ============================================================
   // BACK_BUTTON_INTERCEPTOR_V2 (Stremio-style binge-stack killer)
@@ -463,6 +612,10 @@ export default function PlayerScreen() {
   durationRef.current = duration;
   const progressBarFocusedRef = useRef(false);
   const showControlsWithTimeoutRef = useRef<(() => void) | null>(null);
+  // V266_STICKY_CONTROLS_DURING_SCRUB — set true while the user is
+  // actively dragging the SeekableProgressBar thumb on mobile.  All
+  // auto-hide timers must bail out while this is true.
+  const isScrubbingRef = useRef(false);
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const continuePollingRef = useRef(true);
@@ -1568,6 +1721,13 @@ export default function PlayerScreen() {
   
   // Fade controls in/out
   const fadeControls = (show: boolean) => {
+    // V266_STICKY_CONTROLS_DURING_SCRUB — refuse to fade out while the
+    // user is actively scrubbing the progress bar.  We still allow
+    // fade-IN requests through so anything that wants to ensure the
+    // chrome is visible still works.
+    if (!show && isScrubbingRef.current) {
+      return;
+    }
     // Clear any existing timeout
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
@@ -1586,6 +1746,8 @@ export default function PlayerScreen() {
       // Auto-hide controls after 8 seconds on TV (longer for D-pad navigation), 3 seconds on mobile
       const hideTimeout = isTV ? 8000 : 3000;
       controlsTimeoutRef.current = setTimeout(() => {
+        // V266_STICKY_CONTROLS_DURING_SCRUB — guard auto-hide.
+        if (isScrubbingRef.current) return;
         fadeControls(false);
       }, hideTimeout);
     }
@@ -1607,6 +1769,13 @@ export default function PlayerScreen() {
         duration: 300,
         useNativeDriver: true,
       }).start();
+    }
+    
+    // V266_STICKY_CONTROLS_DURING_SCRUB — if a drag is in progress,
+    // do not schedule the auto-hide; the release handler will call
+    // showControlsWithTimeout() again to restart the countdown.
+    if (isScrubbingRef.current) {
+      return;
     }
     
     // Set new auto-hide timeout (longer on TV)
@@ -1722,6 +1891,8 @@ export default function PlayerScreen() {
         clearTimeout(controlsTimeoutRef.current);
       }
       controlsTimeoutRef.current = setTimeout(() => {
+        // V266_STICKY_CONTROLS_DURING_SCRUB — bail out if user is dragging.
+        if (isScrubbingRef.current) return;
         if (isPlaying) fadeControls(false);
       }, 4000);
     }
@@ -2393,7 +2564,11 @@ export default function PlayerScreen() {
               />
             ) : null}
 
-            {title ? (
+            {/* V273_LOADING_TITLE_FALLBACK_ONLY — the gold-bordered logo
+                already names the title for series/movies that ship a logo.
+                Only show the plain-text title when NO logo is present,
+                so we don't double up on names with a generic-font header. */}
+            {!logo && title ? (
               <Text
                 style={{
                   color: '#FFFFFF',
@@ -2444,7 +2619,7 @@ export default function PlayerScreen() {
                 letterSpacing: 0.5,
               }}
             >
-              Loading…
+              Starting playback
             </Text>
           </View>
         </View>
@@ -2791,6 +2966,29 @@ export default function PlayerScreen() {
                     duration={duration}
                     onSeek={seekToMs}
                     onFocusChange={(focused: boolean) => { progressBarFocusedRef.current = focused; }}
+                    onScrubChange={(scrubbing: boolean) => {
+                      // V266_STICKY_CONTROLS_DURING_SCRUB — pin controls while
+                      // user is dragging the thumb; on release, restart the
+                      // auto-hide countdown by calling showControlsWithTimeout.
+                      isScrubbingRef.current = scrubbing;
+                      if (scrubbing) {
+                        // Clear any pending fade-out timer.
+                        if (controlsTimeoutRef.current) {
+                          clearTimeout(controlsTimeoutRef.current);
+                          controlsTimeoutRef.current = null;
+                        }
+                        // Force chrome fully visible.
+                        setShowControls(true);
+                        Animated.timing(controlsOpacity, {
+                          toValue: 1,
+                          duration: 120,
+                          useNativeDriver: true,
+                        }).start();
+                      } else {
+                        // Drag ended -> resume normal auto-hide cycle.
+                        showControlsWithTimeoutRef.current?.();
+                      }
+                    }}
                   />
                   <Text style={styles.timeText}>{formatRemainingTime(position, duration)}</Text>
                 </View>
@@ -3010,7 +3208,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    opacity: 0.4,
+    // V276_MATCH_DETAILS_OVERLAY — was `opacity: 0.4`, which dimmed the
+    // backdrop way more than the details auto-play overlay (which uses
+    // full-opacity backdrop + 65% dark layer).  Removed so the two
+    // loading screens look visually identical.
   },
   loadingDarkOverlay: {
     position: 'absolute',
@@ -3018,7 +3219,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    // V276_MATCH_DETAILS_OVERLAY — bump 0.6 → 0.65 to match details.
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
   },
   loadingContent: {
     flex: 1,

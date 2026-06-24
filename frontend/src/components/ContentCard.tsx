@@ -675,96 +675,6 @@ function _v77RequestReleaseStatus(imdbId, cb) {
   };
 }
 
-// =====================================================================
-// PATCH_V253_STREAMING_GATE — Batched streaming-provider availability
-// fetcher.  Behaves like the v77 release-status fetcher above: we coalesce
-// requests across all mounted ContentCards into a single POST per 300ms.
-// The backend caches each (type,id) for 6h, and we keep our own in-process
-// cache so a card already-rendered never re-fires.  The gate is used to
-// HIDE the "IN CINEMA" badge for titles that aren't watchable here.
-// =====================================================================
-const _v253StreamingCache = new Map(); // key = `${type}:${id}` -> bool
-const _v253PendingItems = new Map(); // key -> { type, id }
-const _v253Subscribers = new Map();  // key -> Set<cb>
-let _v253FlushTimer: any = null;
-
-async function _v253FlushBatch() {
-  _v253FlushTimer = null;
-  if (_v253PendingItems.size === 0) return;
-  const entries = Array.from(_v253PendingItems.entries()).slice(0, 50);
-  entries.forEach(([k]) => _v253PendingItems.delete(k));
-
-  const notifyAll = (val: boolean) => {
-    entries.forEach(([k]) => {
-      const subs = _v253Subscribers.get(k);
-      if (subs) {
-        subs.forEach((cb: any) => { try { cb(val); } catch (_) {} });
-        _v253Subscribers.delete(k);
-      }
-    });
-  };
-
-  try {
-    const backendUrl =
-      process.env.EXPO_PUBLIC_BACKEND_URL ||
-      Constants.expoConfig?.extra?.backendUrl ||
-      '';
-    const items = entries.map(([_, v]) => v);
-    const res = await fetch(`${backendUrl}/api/content/streaming-providers/batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items }),
-    });
-    if (!res.ok) {
-      // If the endpoint isn't deployed yet (older backend), assume "available"
-      // so we don't accidentally hide every "IN CINEMA" badge.
-      notifyAll(true);
-      return;
-    }
-    const data = await res.json();
-    const results = (data && data.results) || {};
-    entries.forEach(([k, v]) => {
-      const r = results[v.id] || { available: false };
-      const val = !!r.available;
-      _v253StreamingCache.set(k, val);
-      const subs = _v253Subscribers.get(k);
-      if (subs) {
-        subs.forEach((cb: any) => { try { cb(val); } catch (_) {} });
-        _v253Subscribers.delete(k);
-      }
-    });
-  } catch (_e) {
-    // Network failure -> err on the side of showing the badge (true).
-    notifyAll(true);
-  }
-
-  if (_v253PendingItems.size > 0 && !_v253FlushTimer) {
-    _v253FlushTimer = setTimeout(_v253FlushBatch, 150);
-  }
-}
-
-function _v253RequestStreamingAvailable(
-  type: 'movie' | 'series',
-  id: string,
-  cb: (available: boolean) => void,
-): () => void {
-  const key = `${type}:${id}`;
-  if (_v253StreamingCache.has(key)) {
-    cb(_v253StreamingCache.get(key) as boolean);
-    return () => {};
-  }
-  if (!_v253Subscribers.has(key)) _v253Subscribers.set(key, new Set());
-  (_v253Subscribers.get(key) as Set<any>).add(cb);
-  if (!_v253PendingItems.has(key)) {
-    _v253PendingItems.set(key, { type, id });
-    if (!_v253FlushTimer) _v253FlushTimer = setTimeout(_v253FlushBatch, 300);
-  }
-  return () => {
-    const s = _v253Subscribers.get(key);
-    if (s) s.delete(cb);
-  };
-}
-
 /* V167_RELEASE_PREWARM — bulk-prefetch release statuses BEFORE cards
    mount.  Discover screen calls this the moment its data arrives, so
    by the time individual ContentCards subscribe the cache is already
@@ -1010,30 +920,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       clearTimeout(t);
       if (cleanup) { try { cleanup(); } catch (_) {} }
     };
-  }, [item]);
-
-  // PATCH_V253_STREAMING_GATE — fetch streaming-provider availability so we
-  // can gate the "IN CINEMA" badge on whether the title is ACTUALLY watchable
-  // via Netflix / Hulu / Disney+ / Max / Prime / etc.  Theatrical-only titles
-  // no longer show the badge (the user can't watch them here anyway).
-  // Batched + 6h memory cache backend-side, plus a module-level dedupe
-  // cache below so two ContentCards for the same title share one request.
-  const [streamingAvailable, setStreamingAvailable] = useState<boolean | null>(null);
-  useEffect(() => {
-    if (!item) return;
-    if (item.type === 'channel' || item.type === 'episode') return;
-    // Only relevant for the "IN CINEMA" badge path = movies/series.
-    const cid = item.imdb_id || item.id;
-    if (!cid) return;
-    const tkey = item.type === 'series' || item.type === 'tv' ? 'series' : 'movie';
-    let alive = true;
-    const t = setTimeout(() => {
-      _v253RequestStreamingAvailable(tkey, String(cid), (avail) => {
-        if (!alive) return;
-        setStreamingAvailable(avail);
-      });
-    }, 280);
-    return () => { alive = false; clearTimeout(t); };
   }, [item]);
 
   const pressableRef = useRef<any>(null);
@@ -1306,11 +1192,20 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
               }}
             />
           ) : (
-            <RNImage
-              source={NO_POSTER_IMAGE}
-              style={styles.posterImage}
-              resizeMode="cover"
-            />
+            // V274_LOGO_PLACEHOLDER — was the "Coming Soon" wordmark PNG;
+            // replaced with a dark card showing just the Privastream logo.
+            <View
+              style={[
+                styles.posterImage,
+                { backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center' },
+              ]}
+            >
+              <RNImage
+                source={require('../../assets/images/logo_header.png')}
+                style={{ width: '60%', height: '35%', opacity: 0.55 }}
+                resizeMode="contain"
+              />
+            </View>
           )}
         </View>
 
@@ -1340,13 +1235,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           </View>
         )}
 
-        {/* PATCH_V254_BADGE_FIX — show IN CINEMA whenever the title is
-            actually in theaters, regardless of streaming availability.
-            The previous "streamingAvailable === true" requirement was
-            self-contradictory: titles still in theaters are by definition
-            NOT yet on Netflix/Hulu/Max, so the gate hid 100% of legitimate
-            badges.  Keep the streaming gate as an enrichment signal only —
-            don't use it to suppress the badge. */}
         {releaseStatus === 'in_cinemas' && (
           <View style={styles.inCinemasBadgeWrap} pointerEvents="none"><View style={styles.inCinemasBadgePill}>
             <Ionicons name="ticket" size={10} color={colors.textPrimary} style={styles.inCinemasBadgeIcon} /><Text style={styles.inCinemasBadgeText}>IN CINEMA</Text></View>

@@ -5,6 +5,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid, findNodeHandle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// V261_TAB_FOCUS_CHAIN — module-level map of route.name -> native tag.
+// Populated as each tab button mounts.  Used to wire every tab's
+// nextFocusLeft / nextFocusRight to its adjacent sibling so D-pad LEFT/RIGHT
+// stays inside the tab bar instead of jumping into the content posters.
+const _v261TabOrder: string[] = ['discover', 'search', 'library', 'addons', 'profile'];
+const _v261Tags: Record<string, number> = {};
+const _v261Listeners: Array<() => void> = [];
+function _v261Register(name: string, tag: number) {
+  if (!name || !tag || tag <= 0) return;
+  if (_v261Tags[name] === tag) return;
+  _v261Tags[name] = tag;
+  // Notify so siblings can re-read their nextFocus* props.
+  _v261Listeners.slice().forEach((fn) => { try { fn(); } catch (_) {} });
+}
+function _v261Subscribe(fn: () => void) {
+  _v261Listeners.push(fn);
+  return () => {
+    const i = _v261Listeners.indexOf(fn);
+    if (i >= 0) _v261Listeners.splice(i, 1);
+  };
+}
+
 export default function TabsLayout() {
   // PATCH_V71_BACK_ROUTE_AWARE - hardware back is route-aware now.
   //   Nested screens -> router.back()
@@ -71,13 +93,16 @@ export default function TabsLayout() {
           styles.tabBarItem,
           isTV && styles.tabBarItemTV,
         ],
-        tabBarButton: (props) => {
-          // PATCH_V71B_TAB_FOCUS_TRAP - hardened trap with multi-source tag detection. (PATCH_V71C_UP_ENABLED)
+        tabBarButton: (props: any) => {
+          // V261_TAB_FOCUS_CHAIN — every tab button now explicitly wires
+          // nextFocusLeft / nextFocusRight to its adjacent tab's tag so the
+          // D-pad never escapes the tab bar horizontally.  The first tab
+          // traps LEFT to itself; the last tab traps RIGHT to itself.
           const [isFocused, setIsFocused] = useState(false);
-          const btnRef = useRef(null);
-          const [selfTag, setSelfTag] = useState(0);
+          const btnRef = useRef<any>(null);
+          const [, _force] = useState(0);
 
-          // Detect first/last tab from any available source.
+          // Figure out which tab this button represents.
           const blob = String(
             (props.accessibilityLabel || '') + ' ' +
             (props.to || '') + ' ' +
@@ -85,12 +110,20 @@ export default function TabsLayout() {
             (props.route?.name || '') + ' ' +
             (props.target || '')
           ).toLowerCase();
-          const isFirst = blob.includes('discover');
-          const isLast = blob.includes('profile');
+          let myName: string = '';
+          for (const n of _v261TabOrder) {
+            if (blob.indexOf(n) !== -1) { myName = n; break; }
+          }
+          const myIdx = _v261TabOrder.indexOf(myName);
+          const isFirst = myIdx === 0;
+          const isLast = myIdx === _v261TabOrder.length - 1;
+          const leftName = myIdx > 0 ? _v261TabOrder[myIdx - 1] : '';
+          const rightName = myIdx >= 0 && myIdx < _v261TabOrder.length - 1
+            ? _v261TabOrder[myIdx + 1] : '';
 
-          // Try to grab a valid native tag from multiple sources.
+          // Grab this button's native tag and register it.
           const grabTag = () => {
-            if (!btnRef.current || !(isFirst || isLast)) return;
+            if (!btnRef.current || !myName) return;
             const r = btnRef.current;
             let tag = 0;
             try {
@@ -99,25 +132,49 @@ export default function TabsLayout() {
             } catch (_) {}
             if (!tag && r._nativeTag && r._nativeTag > 0) tag = r._nativeTag;
             if (!tag && r.__nativeTag && r.__nativeTag > 0) tag = r.__nativeTag;
-            if (tag && tag !== selfTag) setSelfTag(tag);
+            if (tag) _v261Register(myName, tag);
           };
 
-          // Ladder of retries so we don't depend on a single mount-time call.
+          // Subscribe to sibling registrations so this button re-renders
+          // once neighbor tags become available.
           useEffect(() => {
-            if (!(isFirst || isLast)) return;
-            const timers = [50, 200, 500, 1000, 2000].map((ms) => setTimeout(grabTag, ms));
-            return () => { timers.forEach(clearTimeout); };
-          }, [isFirst, isLast]);
+            if (!myName) return;
+            const unsub = _v261Subscribe(() => _force((n) => n + 1));
+            return unsub;
+          }, [myName]);
 
-          const trap = {};
-          if (selfTag > 0) {
-            if (isFirst) {
-              trap.nextFocusLeft = selfTag;
-            }
-            if (isLast) {
-              trap.nextFocusRight = selfTag;
-            }
+          // Ladder of retries — mount, layout, plus delayed attempts.
+          useEffect(() => {
+            if (!myName) return;
+            const timers = [0, 80, 250, 600, 1500].map((ms) => setTimeout(grabTag, ms));
+            return () => { timers.forEach(clearTimeout); };
+          }, [myName]);
+
+          const selfTag = _v261Tags[myName] || 0;
+          const leftTag = leftName ? (_v261Tags[leftName] || 0) : 0;
+          const rightTag = rightName ? (_v261Tags[rightName] || 0) : 0;
+
+          const trap: any = {};
+          if (isFirst && selfTag > 0) {
+            // Trap LEFT on first tab so it doesn't leave the bar.
+            trap.nextFocusLeft = selfTag;
+          } else if (leftTag > 0) {
+            trap.nextFocusLeft = leftTag;
           }
+          if (isLast && selfTag > 0) {
+            // Trap RIGHT on last tab so it doesn't leave the bar.
+            trap.nextFocusRight = selfTag;
+          } else if (rightTag > 0) {
+            trap.nextFocusRight = rightTag;
+          }
+          // Trap DOWN so user can't fall off the bottom into nothing.
+          if (selfTag > 0) {
+            trap.nextFocusDown = selfTag;
+          }
+          // UP is intentionally NOT set — Android TV's positional search
+          // will find the closest poster directly above the focused tab,
+          // which is exactly what the user wants ("up from a tab button
+          // goes to the first poster above it").
 
           return (
             <Pressable
@@ -132,7 +189,7 @@ export default function TabsLayout() {
               onLayout={grabTag}
               onFocus={() => { setIsFocused(true); grabTag(); }}
               onBlur={() => setIsFocused(false)}
-              style={({ focused }) => [
+              style={({ focused }: any) => [
                 props.style,
                 (focused || isFocused) && styles.tabItemFocused,
               ]}

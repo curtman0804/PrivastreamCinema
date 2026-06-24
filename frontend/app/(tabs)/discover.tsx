@@ -16,8 +16,8 @@ import {
   InteractionManager,
   LayoutAnimation,
   UIManager,
-  AppState,            // PATCH_V253_APPSTATE
-  AppStateStatus,      // PATCH_V253_APPSTATE
+  Animated,
+  Easing,
 } from 'react-native';
 // PATCH_V145_LAYOUTANIM_IMPORT — enable LayoutAnimation on Android once at module load
 if (Platform.OS === 'android' && UIManager && (UIManager as any).setLayoutAnimationEnabledExperimental) {
@@ -55,6 +55,124 @@ import { Image as RNImage } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
+
+// ============================================================
+// V274_LOGO_SKELETON
+// ============================================================
+// Cold-boot skeleton: instead of a single ActivityIndicator (or the
+// reverted "Awesomeness Awaits" splash), we paint two rows of
+// logo-only placeholder cards.  Same visual language as the no-poster
+// fallback elsewhere, so the screen immediately has STRUCTURE even
+// before live data arrives.  No copy, no spinners — just the layout
+// the user will see once posters load.
+// ============================================================
+function LogoSkeleton() {
+  const cardW = 120;
+  const cardH = 180;
+  const gap = 12;
+  const cards = Array.from({ length: 6 });
+  const Row = ({ title }: { title: string }) => (
+    <View style={{ marginBottom: 28 }}>
+      <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
+        <View
+          style={{
+            width: 160,
+            height: 18,
+            backgroundColor: 'rgba(255,255,255,0.08)',
+            borderRadius: 4,
+          }}
+        />
+      </View>
+      <View style={{ flexDirection: 'row', paddingHorizontal: 16 }}>
+        {cards.map((_, i) => (
+          <View
+            key={i}
+            style={{
+              width: cardW,
+              height: cardH,
+              marginRight: i === cards.length - 1 ? 0 : gap,
+              backgroundColor: '#1a1a1a',
+              borderRadius: 6,
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+            }}
+          >
+            <RNImage
+              source={require('../../assets/images/logo_header.png')}
+              style={{ width: '60%', height: '30%', opacity: 0.35 }}
+              resizeMode="contain"
+            />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+  return (
+    <View style={{ flex: 1, paddingTop: 24 }}>
+      <Row title="Continue Watching" />
+      <Row title="Trending" />
+      <Row title="Popular Movies" />
+    </View>
+  );
+}
+
+// ============================================================
+// V271_COLD_BOOT_ACCELERATOR
+// ============================================================
+// Read the cached Discover snapshot from AsyncStorage as soon as this
+// module is imported (i.e., at app boot, BEFORE the Discover screen
+// mounts).  The previous code did the read in a useEffect, which fires
+// AFTER the first render and delays the cached-paint by ~50–300 ms on
+// Firestick.  Now the read is in-flight while the JS bundle is still
+// initialising — by the time Discover's first useEffect runs, the
+// result is usually already resolved.
+//
+// We also kick off `expo-image.prefetch(...)` on the top ~24 posters
+// from the cached snapshot at module load, so by the time ContentCards
+// mount their <Image>, the bytes are already in expo-image's
+// memory-disk cache → near-instant paint.
+// ============================================================
+type _V271Snapshot = { discover: any | null; cw: any[] | null };
+const _v271BootSnapshotPromise: Promise<_V271Snapshot> = (async () => {
+  try {
+    const [d, c] = await Promise.all([
+      AsyncStorage.getItem('@ps_discover_v1'),
+      AsyncStorage.getItem('@ps_cw_v1'),
+    ]);
+    const snap: _V271Snapshot = {
+      discover: d ? (() => { try { return JSON.parse(d); } catch (_) { return null; } })() : null,
+      cw: c ? (() => { try { return JSON.parse(c); } catch (_) { return null; } })() : null,
+    };
+    // Kick off poster prefetch on top ~24 posters from the cached
+    // snapshot.  Fire-and-forget — expo-image dedupes URLs internally.
+    try {
+      const urls: string[] = [];
+      const services = (snap.discover as any)?.services || {};
+      for (const svc of Object.values(services)) {
+        for (const bucket of ['movies', 'series', 'channels']) {
+          const list = (svc as any)?.[bucket] || [];
+          for (const it of list.slice(0, 6)) {
+            if (it && it.poster) urls.push(String(it.poster));
+          }
+        }
+        if (urls.length >= 24) break;
+      }
+      if (urls.length > 0) {
+        const { Image: _ExpoImage } = require('expo-image');
+        _ExpoImage.prefetch(urls, 'memory-disk');
+        console.log('[V271_BOOT] prefetched', urls.length, 'cached posters at module load');
+      }
+    } catch (_) {}
+    return snap;
+  } catch (_) {
+    return { discover: null, cw: null };
+  }
+})();
+
+// Synchronous accessor (returns null until the promise resolves).
+let _v271ResolvedSnapshot: _V271Snapshot | null = null;
+_v271BootSnapshotPromise.then((s) => { _v271ResolvedSnapshot = s; }).catch(() => {});
 
 // PATCH_V15B_LAZYMOUNT_COMPONENT
 // Defers child mounting by `delay` ms then waits for the next idle window
@@ -101,6 +219,11 @@ export default function DiscoverScreen() {
   const addons = useContentStore(s => s.addons);
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
+  // V274_CW_INSTANT_REMOVE — hard hide gate for the CW row.  Set true
+  // when the user clears the LAST CW item; bypasses useDeferredValue
+  // lag on flatRows so the row disappears in the very same frame as
+  // the button press.  Cleared automatically when new CW data arrives.
+  const [cwForceHidden, setCwForceHidden] = useState(false);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
   // PATCH_V144_CACHE_STATE — snapshots loaded from AsyncStorage on cold mount
   const [cachedDiscover, setCachedDiscover] = useState<any>(null);
@@ -127,6 +250,12 @@ export default function DiscoverScreen() {
       setIsLoadingProgress(true);
       const response = await api.watchProgress.getAll();
       const _v204Next = response.continueWatching || [];
+      // V274_CW_INSTANT_REMOVE — fresh CW data arrived; if it has items,
+      // the force-hidden gate is no longer needed (user added something
+      // new, or backend returned content they haven't seen locally).
+      if (_v204Next.length > 0 && cwForceHidden) {
+        setCwForceHidden(false);
+      }
       // v212 loading isolation — defer the CW re-render so D-pad focus events
       // arriving in the same tick are NOT blocked by reconciliation.
       startTransition(() => {
@@ -162,13 +291,21 @@ export default function DiscoverScreen() {
   // discover posters so they paint instantly as they enter the viewport.
   // Deferred via InteractionManager so the prefetch network burst can't
   // compete with the first paint frame.
+  // V271_COLD_BOOT_ACCELERATOR — also fires on cachedDiscover so we
+  // warm cache from the disk snapshot before live data arrives.
+  // V276_HOLD_SPINNER_TILL_POSTERS — also flip postersReady AFTER the
+  // top-row prefetch resolves so the spinner stays up until the visible
+  // posters are actually in expo-image's disk/memory cache.  Hard cap
+  // at 4s so we never get stuck if a poster URL is dead.
   const _v213PrefetchDone = useRef(false);
+  const [postersReady, setPostersReady] = useState(false);
   useEffect(() => {
     if (_v213PrefetchDone.current) return;
-    if (!discoverData) return;
+    const source: any = discoverData || cachedDiscover;
+    if (!source) return;
     const urls: string[] = [];
     try {
-      const services = (discoverData as any).services || {};
+      const services = (source as any).services || {};
       for (const svc of Object.values(services)) {
         for (const bucket of ['movies', 'series', 'channels']) {
           const list = (svc as any)?.[bucket] || [];
@@ -179,39 +316,69 @@ export default function DiscoverScreen() {
         if (urls.length >= 24) break;
       }
     } catch (_) {}
-    if (urls.length === 0) return;
+    if (urls.length === 0) {
+      // No posters to prefetch — flip ready immediately.
+      setPostersReady(true);
+      return;
+    }
     _v213PrefetchDone.current = true;
+
+    // V276 — hard 4s cap so the spinner can never get stuck if a CDN
+    // is slow or a URL is dead.
+    const _capTimer = setTimeout(() => setPostersReady(true), 4000);
+
     const h = InteractionManager.runAfterInteractions(() => {
       try {
-        // Lazy-require so we don't add a top-of-file import collision risk.
         const { Image: _ExpoImage } = require('expo-image');
-        _ExpoImage.prefetch(urls, 'memory-disk');
-      } catch (_) {}
+        // expo-image.prefetch returns a Promise that resolves when the
+        // batch is in cache (memory + disk).  Await it then unblock the UI.
+        const _p = _ExpoImage.prefetch(urls, 'memory-disk');
+        if (_p && typeof _p.then === 'function') {
+          _p.then(() => {
+            clearTimeout(_capTimer);
+            setPostersReady(true);
+          }).catch(() => {
+            clearTimeout(_capTimer);
+            setPostersReady(true);
+          });
+        } else {
+          // Fallback: legacy expo-image returned void → assume ready next tick.
+          setTimeout(() => {
+            clearTimeout(_capTimer);
+            setPostersReady(true);
+          }, 800);
+        }
+      } catch (_) {
+        clearTimeout(_capTimer);
+        setPostersReady(true);
+      }
     });
-    return () => { try { (h as any).cancel && (h as any).cancel(); } catch (_) {} };
-  }, [discoverData]);
+    return () => {
+      try { (h as any).cancel && (h as any).cancel(); } catch (_) {}
+      clearTimeout(_capTimer);
+    };
+  }, [discoverData, cachedDiscover]);
 
-  // PATCH_V144_CACHE_HYDRATE — load disk snapshot on cold start for instant paint
+  // PATCH_V144_CACHE_HYDRATE — load disk snapshot on cold start for instant paint.
+  // V271_COLD_BOOT_ACCELERATOR — the AsyncStorage read was kicked off at module
+  // load (above), so the promise is usually already resolved by the time this
+  // effect runs.  We also drop the `startTransition` wrapper so the cached
+  // paint is treated as URGENT (it's the only thing on screen, no other state
+  // updates to compete with).
   useEffect(() => {
+    // Fast path: synchronous resolved snapshot.
+    if (_v271ResolvedSnapshot) {
+      if (_v271ResolvedSnapshot.discover) setCachedDiscover(_v271ResolvedSnapshot.discover);
+      if (_v271ResolvedSnapshot.cw) setCachedCW(_v271ResolvedSnapshot.cw);
+      return;
+    }
+    // Slow path: await the in-flight boot promise (still faster than firing
+    // a fresh getItem here).
     (async () => {
       try {
-        const [d, c] = await Promise.all([
-          AsyncStorage.getItem('@ps_discover_v1'),
-          AsyncStorage.getItem('@ps_cw_v1'),
-        ]);
-        // v212 loading isolation — both cache-hydration sets are non-urgent
-        if (d) {
-          try {
-            const parsed = JSON.parse(d);
-            startTransition(() => { setCachedDiscover(parsed); });
-          } catch (_) {}
-        }
-        if (c) {
-          try {
-            const parsed = JSON.parse(c);
-            startTransition(() => { setCachedCW(parsed); });
-          } catch (_) {}
-        }
+        const snap = await _v271BootSnapshotPromise;
+        if (snap.discover) setCachedDiscover(snap.discover);
+        if (snap.cw) setCachedCW(snap.cw);
       } catch (_) {}
     })();
   }, []);
@@ -301,16 +468,13 @@ export default function DiscoverScreen() {
       const now = Date.now();
       const cwElapsed = now - lastCWFetchTime.current;
       const discoverElapsed = now - lastDiscoverFetchTime.current;
-      // PATCH_V253_WARM_RESUME — Discover refresh debounce bumped 60s → 5min
-      // and CW debounce bumped 30s → 90s.  Back-from-Details + return-from-
-      // background no longer triggers a heavy SWR refresh during normal
-      // browsing.  Pull-to-refresh still works (onRefresh forces both).
-      if (cwElapsed < 90 * 1000 && discoverElapsed < 5 * 60 * 1000) {
-        return; // recent enough — back-nav / warm-resume stays instant
+      // Always cheap CW refresh after 30s; only heavy discover refresh after 60s.
+      if (cwElapsed < 30000 && discoverElapsed < 60000) {
+        return; // recent enough — back-nav stays instant
       }
       const handle = InteractionManager.runAfterInteractions(() => {
-        if (cwElapsed >= 90 * 1000) fetchContinueWatching();
-        if (discoverElapsed >= 5 * 60 * 1000) {
+        if (cwElapsed >= 30000) fetchContinueWatching();
+        if (discoverElapsed >= 60000) {
           lastDiscoverFetchTime.current = Date.now();
           fetchDiscover(); // no force flag — SWR pattern from store
         }
@@ -318,28 +482,6 @@ export default function DiscoverScreen() {
       return () => handle.cancel();
     }, [fetchContinueWatching])
   );
-
-  // PATCH_V253_APPSTATE — when the app returns from background (warm resume)
-  // we don't refetch Discover unless it's been > 5 min.  This keeps the
-  // Firestick instant-on; the screen the user left is the screen they get
-  // back to.  Cold-launch / force-stop still hydrates from disk first via
-  // the existing PATCH_V144_CACHE_HYDRATE path.
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
-      if (nextState !== 'active') return;
-      const elapsed = Date.now() - _v181_lastDiscoverFetch;
-      if (elapsed < 5 * 60 * 1000) {
-        // Fresh enough — skip everything.  UI shows whatever was last loaded.
-        return;
-      }
-      _v181_lastDiscoverFetch = Date.now();
-      InteractionManager.runAfterInteractions(() => {
-        try { fetchDiscover(); } catch (_) {}
-        try { fetchContinueWatching(); } catch (_) {}
-      });
-    });
-    return () => { try { sub.remove(); } catch (_) {} };
-  }, [fetchContinueWatching, fetchDiscover]);
 
   // Check if there's any content to display
   // PATCH_V144_CACHE_HASCONTENT — prefer live data, fall back to cached snapshot
@@ -368,25 +510,45 @@ export default function DiscoverScreen() {
   // v211 discover clean — throttled focus + top-third framing
   const _v211FocusCooldown = useRef<number>(0);
   const _v211PendingFrame = useRef<number | null>(null);
+  // V278_CW_SNAPBACK — millisecond timestamp until which the ScrollView's
+  // onScroll handler will actively snap any y>0 scroll back to 0.  Engaged
+  // whenever the CW section receives focus.  500ms is enough to cover
+  // Android TV's `requestRectangleOnScreen` animation cycle.
+  const cwFocusLockUntilRef = useRef<number>(0);
   const handleSectionFocus = useCallback((sectionKey: string) => {
+    // V279_DIAG — trace every section focus event with timestamp + current
+    // scroll position so we can see whether the FIRST UP press is even
+    // calling this for the CW row.
+    console.log('[V279_DIAG] handleSectionFocus key=' + sectionKey + ' t=' + Date.now());
     if (_v211PendingFrame.current != null) {
       cancelAnimationFrame(_v211PendingFrame.current);
       _v211PendingFrame.current = null;
     }
     const sectionY = sectionPositions.current[sectionKey];
+    console.log('[V279_DIAG]   sectionY=' + sectionY + ' lastFocusedSection=' + lastFocusedSection.current);
     if (sectionY === undefined || !scrollViewRef.current) return;
     const target = Math.max(0, sectionY - 12);
     scrollViewRef.current.scrollTo({ y: target, animated: false });
-    // v238g — ONLY for CW (top row, target<=0): fire a delayed re-scroll
-    // 50ms later to defeat the "first UP press to CW doesn't snap"
-    // bug.  Doesn't affect DOWN nav (target>0 → skipped, no late
-    // callback to fight against).
+    console.log('[V279_DIAG]   scrollTo(' + target + ')');
+    // V277_CW_SNAP_HARDER — v238g only retried ONCE at 50ms which left the
+    // CW row "halfway up" because Android TV's `requestRectangleOnScreen`
+    // fires AFTER our scroll and re-positions to "just visible".  Now:
+    // four retries spread across the next ~320ms (0, 80, 180, 320) so we
+    // win the race even on slow Firestick frames.  Only fires for the
+    // top row (target === 0) — other rows are unaffected.
     if (target === 0) {
-      setTimeout(() => {
+      // V278_CW_SNAPBACK — engage 500ms onScroll lock so any system-driven
+      // re-scroll during this window is force-snapped back to y=0.
+      cwFocusLockUntilRef.current = Date.now() + 500;
+      const _snap = () => {
         if (scrollViewRef.current) {
           scrollViewRef.current.scrollTo({ y: 0, animated: false });
         }
-      }, 50);
+      };
+      setTimeout(_snap, 0);
+      setTimeout(_snap, 80);
+      setTimeout(_snap, 180);
+      setTimeout(_snap, 320);
     }
     lastFocusedSection.current = sectionKey;
   }, []);
@@ -611,12 +773,17 @@ const handleItemPress = useCallback((item: ContentItem) => {
 
   // Handle removing item from continue watching
   const handleRemoveFromContinueWatching = async (item: WatchProgress) => {
-    // PATCH_V145_LAYOUTANIM_REMOVE — schedule a native 220ms easeInOut tween
-    // so the card visibly fades + collapses on the very next frame, even if
-    // the JS thread is busy re-rendering the rest of Discover afterwards.
+    // V275_CW_INSTANT_REMOVE_FIX — was using stale closure values
+    // of continueWatching/cachedCW captured by the memoized
+    // renderContinueWatchingItem (dep array [isTV] never invalidated).
+    // The check evaluated 0===0 && 0===0 → true → ALL rows hidden after
+    // removing just 1.  Now: use functional updaters so the next-state
+    // values are computed from the LATEST state, and only flip the
+    // force-hidden gate once we've confirmed both lists are actually
+    // empty.
     try {
       LayoutAnimation.configureNext({
-        duration: 220,
+        duration: 120,
         update: { type: LayoutAnimation.Types.easeInEaseOut },
         delete: {
           type: LayoutAnimation.Types.easeInEaseOut,
@@ -625,10 +792,23 @@ const handleItemPress = useCallback((item: ContentItem) => {
       });
     } catch (_) {}
 
-    // Optimistic update - remove from UI immediately for instant feedback
-    setContinueWatching(prev => prev.filter(i => i.content_id !== item.content_id));
-    // Also drop from the cached snapshot so a cold start won't show it again
-    setCachedCW(prev => (prev || []).filter(i => i.content_id !== item.content_id));
+    let nextLive: WatchProgress[] = [];
+    let nextCached: WatchProgress[] = [];
+    setContinueWatching(prev => {
+      nextLive = (prev || []).filter(i => i.content_id !== item.content_id);
+      return nextLive;
+    });
+    setCachedCW(prev => {
+      nextCached = (prev || []).filter(i => i.content_id !== item.content_id);
+      return nextCached;
+    });
+
+    // Only hide the entire row if BOTH the live AND cached lists are
+    // empty after this removal.  Computed from the functional-updater
+    // results above, so it's correct regardless of closure staleness.
+    if (nextLive.length === 0 && nextCached.length === 0) {
+      setCwForceHidden(true);
+    }
 
     // Then delete from server in background (don't await)
     api.watchProgress.delete(item.content_id).catch(err => {
@@ -655,10 +835,33 @@ const renderContinueWatchingItem = useCallback(
 
 // Show loading only on initial load
 // PATCH_V144_CACHE_SPINNER — skip the spinner entirely if we have a cached snapshot
-if (isLoadingDiscover && !discoverData && !cachedDiscover) {
+// V275_REVERT_SKELETON — user feedback: the LogoSkeleton looked off (layout
+// didn't match real Discover).  Going back to a bare ActivityIndicator.
+// V276_HOLD_SPINNER_TILL_POSTERS — also keep spinner up while the top-row
+// posters are still warming the expo-image cache, so the play interface
+// never appears with blank cards.  Cached-data boots skip this check
+// (since posters are usually already on disk from a previous session).
+if (
+  (isLoadingDiscover || (!cachedDiscover && !postersReady))
+  && !discoverData
+  && !cachedDiscover
+) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* V176K_POPOVER_MOUNTED — Stremio-style menu host for this screen. */}
+      <V176kPopover />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    </SafeAreaView>
+  );
+}
+// V276_HOLD_SPINNER_TILL_POSTERS — even after fresh data arrives, hold
+// the spinner one more pass if the prefetch hasn't resolved yet AND we
+// don't have a cached snapshot to paint from.
+if (discoverData && !cachedDiscover && !postersReady) {
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
       <V176kPopover />
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -732,6 +935,25 @@ return (
           contentContainerStyle={styles._v213ScrollPad}
           overScrollMode="never"
           bounces={false}
+          // V278_CW_SNAPBACK — Android TV's `requestRectangleOnScreen`
+          // animates the scroll over multiple frames AFTER our manual
+          // scrollTo(0) resolves.  So even with multi-retry from v277,
+          // the system can drag the scroll position back to e.g. y=80
+          // mid-animation.  Solution: while a CW focus event is active
+          // (cwFocusLockUntilRef), intercept every onScroll and snap
+          // back to y=0 if the system tries to push it down.
+          onScroll={(e) => {
+            const y = e.nativeEvent?.contentOffset?.y ?? 0;
+            const lockUntil = cwFocusLockUntilRef.current || 0;
+            const inLock = Date.now() < lockUntil;
+            if (y > 0) {
+              console.log('[V279_DIAG] onScroll y=' + y.toFixed(1) + ' inLock=' + inLock + ' t=' + Date.now());
+            }
+            if (inLock && y > 0 && scrollViewRef.current) {
+              scrollViewRef.current.scrollTo({ y: 0, animated: false });
+              console.log('[V279_DIAG]   → SNAP BACK to 0');
+            }
+          }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -744,6 +966,10 @@ return (
           {/* PATCH_V241_USE_DEFERRED — render from deferredFlatRows so heavy
               row map is non-blocking */}
           {deferredFlatRows.map((item: any) => {
+            // V274_CW_INSTANT_REMOVE — bypass useDeferredValue lag: when
+            // the user just cleared the last CW item, hide the row in
+            // the SAME frame as the press.
+            if (item.kind === 'cw' && cwForceHidden) return null;
             if (item.kind === 'cw') {
               // V108_ROW_SNAP: record CW row Y for back-scroll
               return (
@@ -754,11 +980,17 @@ return (
                     sectionPositions.current[item.key] = e.nativeEvent.layout.y;
                   }}
                 >
+                  {/* V280_NON_FOCUSABLE — explicitly mark the CW header
+                      View as non-focusable so Android TV's focus search
+                      can't accidentally land here on the first UP press. */}
                   <View
                     style={[
                       styles.sectionHeader,
                       isTV && styles.sectionHeaderTV,
                     ]}
+                    focusable={false}
+                    accessible={false}
+                    importantForAccessibility="no"
                   >
                     <Text
                       style={[
@@ -947,6 +1179,11 @@ function ContinueWatchingItem({
     return unsub;
   }, [(item as any).content_id]);
 
+  // V280_FIRST_CW_TAG — shared module-level reference to the first CW
+  // poster's native tag.  Set by the FIRST ContinueWatchingItem (index 0)
+  // after mount.  Used as nextFocusUp on first-row ContentCards so UP
+  // from any non-CW row routes directly to a CW poster.
+  // V279_DIAG — kept the section header trace.
   // Refs for explicit focus navigation between poster and X button
   const posterRef = useRef<View>(null);
   const xButtonRef = useRef<View>(null);
@@ -961,9 +1198,20 @@ function ContinueWatchingItem({
     const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
     if (pTag) setPosterTag(pTag);
     if (xTag) setXButtonTag(xTag);
+    // V280_FIRST_CW_TAG — broadcast first-mounted CW item's tag.
+    if (pTag) {
+      try {
+        const g: any = globalThis as any;
+        if (!g.__firstCWPosterTag) {
+          g.__firstCWPosterTag = pTag;
+          console.log('[V280_FIRST_CW_TAG] first-mounted CW poster tag=' + pTag);
+        }
+      } catch (_) {}
+    }
   }, []);
 
   const handleFocus = () => {
+    console.log('[V279_DIAG] CW poster onFocus t=' + Date.now());
     setIsFocused(true);
     onSectionFocus?.();
   };

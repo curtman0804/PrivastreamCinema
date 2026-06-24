@@ -18,6 +18,7 @@ import {
   Easing,
   BackHandler,
   Platform,
+  findNodeHandle,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useNavigation, CommonActions } from '@react-navigation/native';
@@ -524,10 +525,23 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
     else if (info.language === 'MULTI') s += 900;
     else s += 100;
     s += QUALITY_PTS[info.quality] || 0;
-    /* v121e-codec-penalty */ /* v127-codec-rebalance */ if (!info.isHEVC) s += 100;
+    /* v121e-codec-penalty */ /* v127-codec-rebalance */ /* V272_FIRESTICK_HEVC — Firestick's HEVC decoder is unreliable; bump non-HEVC bonus from +100 to +300 and add explicit HEVC penalty. */ if (!info.isHEVC) s += 300; else s -= 300;
     /* PATCH_V150_HDR — keep SDR bonus, add real HDR penalty so SDR at any
-       resolution always wins over HDR (display can't tone-map → dark image). */
-    if (!info.isHDR) s += 75; else s -= 800;
+       resolution always wins over HDR (display can't tone-map → dark image).
+       V272_SDR_FIRESTICK — Firestick output washes HDR colors on SDR TVs.
+       Bumped HDR penalty -800 → -3000 so SDR ALWAYS wins when both exist,
+       while still allowing HDR-only titles to play (cascading fallback). */
+    if (!info.isHDR) s += 75; else s -= 3000;
+    /* V272_DOLBY_VISION — DV is worst on non-DV displays (green/purple tint).
+       Extra penalty so HDR10 beats DV when both are available. */
+    {
+      const _v272t = ((stream.title || '') + ' ' + (stream.name || '')).toUpperCase();
+      const _v272IsDV = (
+        _v272t.includes('DOLBY VISION') || _v272t.includes('DOLBYVISION')
+        || /\bDV\b/.test(_v272t) || /[\.\- ]DV[\.\- ]/.test(_v272t)
+      );
+      if (_v272IsDV) s -= 1500;
+    }
     /* V158_AUDIO_PENALTY — reject lossless / ExoPlayer-incompatible audio.
        Triggered by the real bug: GOTG 2 picked a BluRay REMUX with
        DTS-HD MA 7.1, and ExoPlayer's AudioTrack.init() failed with
@@ -640,13 +654,30 @@ const StreamCard = React.memo(function StreamCardInner({
   const [isFocused, setIsFocused] = useState(false);
   const { quality, source, size, seeders, language, isForeign, isCommentary } = parseStreamInfo(stream);
   const isRD = !!stream.infoHash; // Torrent streams go through Real-Debrid
+
+  // V277_STREAMS_NO_OVERSCROLL — when the user is on a stream card and
+  // presses DOWN, Android TV searches for a focusable below.  Because
+  // there's nothing below the streams row but ScrollView empty space,
+  // the system was scrolling the ScrollView a few pixels further before
+  // giving up.  Pin nextFocusDown to THIS card's own native tag so the
+  // system sees an explicit "stay here" and never tries to scroll.
+  const cardRef = useRef<any>(null);
+  const [selfTag, setSelfTag] = useState<number | null>(null);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const t = cardRef.current ? findNodeHandle(cardRef.current) : null;
+    if (t) setSelfTag(t);
+  }, []);
   
   return (
     <Pressable
+      ref={cardRef}
       style={[styles.streamCard, isFocused && styles.streamCardFocused]}
       onPress={onPress}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
+      // V277_STREAMS_NO_OVERSCROLL — block DOWN so ScrollView can't shift.
+      nextFocusDown={selfTag ?? undefined}
     >
       {/* PATCH_V18_TOPRIGHT_BUBBLE — gold chat-bubble at top-right when stream is commentary */}
       {isCommentary && (
@@ -700,12 +731,28 @@ const StreamCard = React.memo(function StreamCardInner({
 // Episode Card Component
 // Placeholder component for missing posters/thumbnails
 function ComingSoonPlaceholder({ width, height }: { width: number | string; height: number | string }) {
+  // V274_LOGO_PLACEHOLDER — strip "Coming Soon" wordmark, show ONLY the
+  // Privastream logo centered on a dark card so the same placeholder is
+  // reused as a skeleton everywhere (poster fallbacks, missing thumbs,
+  // cold-boot skeleton).
   return (
-    <RNImage
-      source={NO_POSTER_IMAGE}
-      style={{ width: width as any, height: height as any }}
-      resizeMode="cover"
-    />
+    <View
+      style={{
+        width: width as any,
+        height: height as any,
+        backgroundColor: '#1a1a1a',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 4,
+        overflow: 'hidden',
+      }}
+    >
+      <RNImage
+        source={require('../../../assets/images/logo_header.png')}
+        style={{ width: '60%', height: '35%', opacity: 0.55 }}
+        resizeMode="contain"
+      />
+    </View>
   );
 }
 
@@ -733,6 +780,15 @@ const EpisodeCard = React.memo(function EpisodeCard({
   // v124ab-inject-useref: declare pressableRef + retry-focus effect for EpisodeCard.
   /* v128-focus-cancel */
   const pressableRef = useRef<any>(null);
+  // V278_EPISODES_NO_OVERSCROLL — pin nextFocusDown to self so Android TV
+  // doesn't shift the ScrollView past the episode row.  Same approach as
+  // V277 for StreamCard.
+  const [selfTag, setSelfTag] = useState<number | null>(null);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const t = pressableRef.current ? findNodeHandle(pressableRef.current) : null;
+    if (t) setSelfTag(t);
+  }, []);
   /* v135-focus-unlock */
   // v128 tracked "user moved away" via onBlur to stop the retry timers
   // re-grabbing focus, but on Android TV onBlur races the next focus event
@@ -860,6 +916,9 @@ const EpisodeCard = React.memo(function EpisodeCard({
       onPressIn={_v176cPressIn}
       onPressOut={_v176cPressOut}
       onLongPress={_v176cOpenEpMenu}
+      // V278_EPISODES_NO_OVERSCROLL — stop Android TV from shifting the
+      // ScrollView past the episode row when DOWN is pressed.
+      nextFocusDown={selfTag ?? undefined}
       /* V176H2_EPISODE_FOCUS_MERGE — ONE merged onFocus that does BOTH
          the v135 focus-state bookkeeping AND the v173 long-press
          registration.  The previous build had TWO onFocus props on the
@@ -1399,15 +1458,16 @@ export default function DetailsScreen() {
       const bestStream = sorted[0];
       if (bestStream) {
         console.log('[AUTOPLAY] Content ready:', contentReady, '- selecting best stream for', id, '->', bestStream.title || bestStream.name);
-        // v125b FIX A: keep the cinematic overlay continuously visible.
-        // setIsPlayLoading(true) must fire BEFORE we flip the trigger ref
-        // or clear the autoPlay param, otherwise the overlay condition
-        // (autoPlay && !triggered) || isPlayLoading goes false for one
-        // frame and the bare episode card paints (the "flash").
+        // V274_SEAMLESS_CW_LOADING — was clearing autoPlay param + waiting
+        // 200ms before navigating, which caused the overlay condition
+        // `autoPlayParam === 'true'` to flip false → details flash → 200ms
+        // gap → player loading screen.  Now: keep the loading overlay up,
+        // fire navigation IMMEDIATELY.  The details page unmounts on the
+        // navigation tick and the player's loading screen takes over with
+        // no visible gap.
         setIsPlayLoading(true);
         autoPlayTriggeredRef.current = true;
-        try { router.setParams({ autoPlay: '' } as any); } catch (_) {}
-        setTimeout(() => handleStreamSelect(bestStream), 200);
+        handleStreamSelect(bestStream);
       } else {
         autoPlayTriggeredRef.current = true;
         try { router.setParams({ autoPlay: '' } as any); } catch (_) {}

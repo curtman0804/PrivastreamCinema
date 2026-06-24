@@ -1,6 +1,52 @@
 import { create } from 'zustand'; // PATCH_V19B_ALL_DONE
 import { useState, useEffect } from 'react'; // PATCH_V245_OWNERSHIP — hook deps
 import AsyncStorage from '@react-native-async-storage/async-storage'; // PATCH_V19B_DISK_HELPERS
+
+// V265_SQLITE_SWALLOW — monkey-patch AsyncStorage globally so that any
+// SQLITE_FULL exception during writes is SWALLOWED instead of propagating.
+// This loads before any other screen/store imports.  Without this, the
+// login flow's auth_token write was throwing SQLITE_FULL and surfacing as
+// "Login failed: database or disk is full" — completely locking the user
+// out.  After this patch, write failures are logged but ignored; zustand
+// in-memory state still drives the UI normally for the current session.
+(() => {
+  if ((AsyncStorage as any).__v265_patched) return;
+  (AsyncStorage as any).__v265_patched = true;
+  const _isFull = (e: any) => {
+    const m = String(e?.message || e || '');
+    return m.indexOf('SQLITE_FULL') !== -1 || m.indexOf('disk is full') !== -1 || m.indexOf('database or disk is full') !== -1;
+  };
+  const _origSet = AsyncStorage.setItem.bind(AsyncStorage);
+  const _origMultiSet = AsyncStorage.multiSet ? AsyncStorage.multiSet.bind(AsyncStorage) : null;
+  const _origMerge = (AsyncStorage as any).mergeItem ? (AsyncStorage as any).mergeItem.bind(AsyncStorage) : null;
+  (AsyncStorage as any).setItem = async (k: string, v: string) => {
+    try { return await _origSet(k, v); }
+    catch (e: any) {
+      if (_isFull(e)) { console.warn('[V265_SWALLOW] setItem SQLITE_FULL key=', k); return; }
+      throw e;
+    }
+  };
+  if (_origMultiSet) {
+    (AsyncStorage as any).multiSet = async (pairs: any) => {
+      try { return await _origMultiSet(pairs); }
+      catch (e: any) {
+        if (_isFull(e)) { console.warn('[V265_SWALLOW] multiSet SQLITE_FULL n=', (pairs || []).length); return; }
+        throw e;
+      }
+    };
+  }
+  if (_origMerge) {
+    (AsyncStorage as any).mergeItem = async (k: string, v: string) => {
+      try { return await _origMerge(k, v); }
+      catch (e: any) {
+        if (_isFull(e)) { console.warn('[V265_SWALLOW] mergeItem SQLITE_FULL key=', k); return; }
+        throw e;
+      }
+    };
+  }
+  console.log('[V265_SQLITE_SWALLOW] AsyncStorage write methods now SQLITE_FULL-safe');
+})();
+
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
 import { getCached, setCache, CACHE_DURATIONS } from '../utils/cache';
 
@@ -164,6 +210,13 @@ const STREAMS_DISK_KEY = (key: string) => '@streamsCache:' + key;
    cacheKey, storing the in-flight promise so fetchStreams can await it
    instead of starting a duplicate parallel network call. */
 const _pendingPrefetches = new Map<string, Promise<Stream[]>>();
+// V257_FETCH_DEDUP — single source of truth for in-flight fetchStreams.
+// Both the Discover focus prefetcher AND the Details page mount call
+// fetchStreams.  Without this map they raced and double-fetched, doubling
+// JS thread load (two sort passes, two prewarm cycles) and delaying paint
+// of the Details page by 2-3s.  Anyone calling fetchStreams for the same
+// (type,id) within the same fetch window gets the SAME promise.
+const _inFlightFetches = new Map<string, Promise<Stream[]>>();
 // V190_STORE_DEF — abort token incremented on Back from Details so
 // late-arriving fetch results don't clobber a successfully-rendered list.
 let _v190AbortToken = 0;
@@ -183,8 +236,80 @@ async function saveStreamsToDisk(key: string, streams: Stream[]): Promise<void> 
   try {
     if (!streams || streams.length === 0) return;
     await AsyncStorage.setItem(STREAMS_DISK_KEY(key), JSON.stringify({ time: Date.now(), streams }));
-  } catch { /* swallow — disk cache is best-effort */ }
+  } catch (e: any) {
+    // V259_SQLITE_FULL_RECOVERY — AsyncStorage uses SQLite on Android; once
+    // it fills, EVERY future write (auth tokens, library, image cache,
+    // discover persist) starts silently failing.  When we detect SQLITE_FULL,
+    // synchronously evict the oldest stream-cache entries to reclaim space.
+    const msg = String(e?.message || e || '');
+    if (msg.indexOf('SQLITE_FULL') !== -1 || msg.indexOf('disk is full') !== -1) {
+      try { await _v259EvictOldestStreams(40); } catch (_) {}
+    }
+  }
 }
+
+// V259_SQLITE_FULL_RECOVERY — evict oldest stream-cache entries beyond the
+// `keepNewest` count.  Each stream payload is 10-50 KB; uncapped accumulation
+// over weeks of usage fills SQLite and breaks every subsequent write.
+async function _v259EvictOldestStreams(keepNewest: number): Promise<void> {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const streamKeys = (keys || []).filter((k: string) =>
+      typeof k === 'string' && k.indexOf('@streamsCache:') === 0
+    );
+    if (streamKeys.length <= keepNewest) return;
+    // Read timestamps in parallel
+    const stamped = await Promise.all(streamKeys.map(async (k) => {
+      try {
+        const raw = await AsyncStorage.getItem(k);
+        const parsed = raw ? JSON.parse(raw) : null;
+        return { k, t: (parsed && parsed.time) ? parsed.time : 0 };
+      } catch { return { k, t: 0 }; }
+    }));
+    stamped.sort((a, b) => b.t - a.t); // newest first
+    const toDelete = stamped.slice(keepNewest).map((x) => x.k);
+    if (toDelete.length === 0) return;
+    await AsyncStorage.multiRemove(toDelete);
+    console.log('[V259_SQLITE] evicted', toDelete.length, 'stream cache entries, kept', keepNewest);
+  } catch (e) {
+    console.log('[V259_SQLITE] eviction failed', e);
+  }
+}
+
+// V259_SQLITE_FULL_RECOVERY — one-shot purge on module load.  Reclaims space
+// proactively so the FIRST write after a long absence doesn't hit SQLITE_FULL.
+(async () => {
+  try { await _v259EvictOldestStreams(50); } catch (_) {}
+  // V260_AGGRESSIVE_NUKE — the targeted stream-cache eviction wasn't enough;
+  // disk is being filled by image cache / watch-progress / meta cache writes.
+  // Dump key counts by prefix so we can SEE what's eating space, then nuke
+  // every cache prefix EXCEPT auth (login token + user settings).
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const buckets: Record<string, number> = {};
+    (keys || []).forEach((k: string) => {
+      const prefix = k.split(':')[0] || k.substring(0, 24);
+      buckets[prefix] = (buckets[prefix] || 0) + 1;
+    });
+    console.log('[V260_NUKE] AsyncStorage key buckets:', JSON.stringify(buckets), 'total=', (keys || []).length);
+    // KEEP only auth / settings / discoverDataUid / currentUserId.
+    const KEEP_PREFIXES = ['auth_token', '@auth', 'user_', 'jwt', 'discoverDataUid', 'currentUserId', 'libraryCache'];
+    const toDelete = (keys || []).filter((k: string) => {
+      if (typeof k !== 'string') return false;
+      for (const p of KEEP_PREFIXES) {
+        if (k === p || k.indexOf(p) === 0) return false;
+      }
+      return true;
+    });
+    if (toDelete.length > 0) {
+      // Delete in chunks of 200 to avoid blocking on huge batches
+      for (let i = 0; i < toDelete.length; i += 200) {
+        try { await AsyncStorage.multiRemove(toDelete.slice(i, i + 200)); } catch (_) {}
+      }
+      console.log('[V260_NUKE] purged', toDelete.length, 'cache entries; kept', (keys || []).length - toDelete.length);
+    }
+  } catch (e) { console.log('[V260_NUKE] failed', e); }
+})();
 
 interface CurrentPlaying {
   contentType: string;
@@ -460,8 +585,23 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   fetchStreams: async (type: string, id: string) => {
-    // V190_STORE_DEF — retry-once on empty + abort-token gate + don't-clobber
+    // V257_FETCH_DEDUP — if another fetchStreams call for the same (type,id)
+    // is already in flight, await it instead of starting a duplicate.
+    // This catches the Discover-prefetch + Details-mount race that was
+    // doubling network requests, sort passes, and prewarm cycles.
     const cacheKey = `${type}/${id}`;
+    const _existing = _inFlightFetches.get(cacheKey);
+    if (_existing) {
+      console.log('[V257_DEDUP] await existing fetch', cacheKey);
+      try {
+        return await _existing;
+      } catch (_) {
+        // Existing promise failed — fall through and start a fresh one
+      }
+    }
+
+    const _doFetch = (async (): Promise<Stream[]> => {
+    // V190_STORE_DEF — retry-once on empty + abort-token gate + don't-clobber
     const _myToken = _v190AbortToken;
     const _setIf = (patch: any) => { if (_myToken === _v190AbortToken) set(patch); };
 
@@ -588,6 +728,19 @@ export const useContentStore = create<ContentState>((set, get) => ({
       _setIf({ streams: [], isLoadingStreams: false });
       return [];
     }
+    })();
+
+    // V257_FETCH_DEDUP — register so concurrent callers reuse this promise.
+    // Always unregister in finally so a future fetch (e.g. user re-enters
+    // the same Details page) starts fresh and can retry the network.
+    _inFlightFetches.set(cacheKey, _doFetch);
+    try {
+      return await _doFetch;
+    } finally {
+      if (_inFlightFetches.get(cacheKey) === _doFetch) {
+        _inFlightFetches.delete(cacheKey);
+      }
+    }
   },
 
   // V198_NUKE_DISCOVER / V199_TRUE_WIPE — clear EVERY discover cache layer
@@ -610,6 +763,10 @@ export const useContentStore = create<ContentState>((set, get) => ({
   // V190_STORE_DEF — drop any in-flight fetch's state-writes
   cancelInFlightStreams: () => {
     _v190AbortToken++;
+    // V257_FETCH_DEDUP — also clear the in-flight map so a re-open of the
+    // same content starts a fresh fetch instead of awaiting a stale promise
+    // whose state-writes are now no-ops.
+    _inFlightFetches.clear();
   },
 
   /* V176J_STORE_FINALLY — fetchLibrary in finally so the local cache

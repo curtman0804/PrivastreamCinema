@@ -2,11 +2,80 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+// V287_PREMIUMIZE_MIDDLE_ISOLATION
+import { resolveMagnet as _pmResolveMagnet } from '../services/premiumizeClient';
+
+// ============================================================
+// V287 — Premiumize client-side resolver cache.
+// When a Premiumize key is stored in @pm_key_v1, all stream
+// resolution happens on-device.  Backend is bypassed entirely
+// for /api/stream/start, /status, /video.
+// ============================================================
+const _PM_KEY_STORAGE = '@pm_key_v1';
+const _pmResolved = new Map<string, string>();        // infoHash -> absolute PM URL
+const _pmInFlight = new Map<string, Promise<string | null>>();
+const _pmFailed = new Set<string>();                  // infoHash that PM rejected
+
+async function _hasPMKey(): Promise<boolean> {
+  try {
+    const k = await AsyncStorage.getItem(_PM_KEY_STORAGE);
+    return !!(k && k.trim());
+  } catch (_) { return false; }
+}
+
+function _normHash(h: string): string {
+  return (h || '').toLowerCase().trim();
+}
+
+function _findMagnet(sources?: string[]): string | undefined {
+  if (!sources) return undefined;
+  return sources.find(s => typeof s === 'string' && s.toLowerCase().startsWith('magnet:'));
+}
+
+function _kickPmResolve(opts: {
+  infoHash: string;
+  magnet?: string;
+  season?: number;
+  episode?: number;
+}): void {
+  const h = _normHash(opts.infoHash);
+  if (!h) return;
+  if (_pmResolved.has(h) || _pmInFlight.has(h)) return;
+  const magnet = opts.magnet || `magnet:?xt=urn:btih:${h}`;
+  const p = _pmResolveMagnet({
+    infoHash: h,
+    magnet,
+    season: opts.season,
+    episode: opts.episode,
+  })
+    .then(url => {
+      _pmInFlight.delete(h);
+      if (url) {
+        _pmResolved.set(h, url);
+        _pmFailed.delete(h);
+        console.log('[PM v287] resolved', h.slice(0, 8), '→', String(url).slice(0, 60));
+      } else {
+        _pmFailed.add(h);
+        console.warn('[PM v287] resolve returned null for', h.slice(0, 8));
+      }
+      return url;
+    })
+    .catch(err => {
+      _pmInFlight.delete(h);
+      _pmFailed.add(h);
+      console.warn('[PM v287] resolve threw for', h.slice(0, 8), String(err?.message || err));
+      return null;
+    });
+  _pmInFlight.set(h, p);
+}
 
 // ============================================
-// HARDCODED BACKEND URL - CHANGE THIS IF NEEDED
+// V288 — Backend URL corrected: 71.9.152.146 was the
+// ProtonVPN/Gluetun exit IP (outbound only).  The actual
+// Hetzner public IPv4 is 5.161.49.99.  Inbound traffic
+// must hit that address.
 // ============================================
-const BACKEND_URL = 'https://api.privastreamsolutions.com'; // V202_HETZNER_URL — production Hetzner backend
+const BACKEND_URL = 'http://5.161.49.99:8001';
 
 // Get the backend URL based on environment
 const getBaseUrl = () => {
@@ -289,33 +358,6 @@ export const api = {
       const existingHashes = new Set<string>();
       
       const mergeAndNotify = (newStreams: Stream[], sourceName: string) => {
-        /* v121k-upgrade-merge */
-        // When backend returns pre-resolved streams, UPGRADE existing
-        // entries in place (add url/externalUrl to matching hashes) and
-        // append any new ones. The list doesn't shrink, so no flicker.
-        if (sourceName === 'Backend' && newStreams.some((s: any) => s.externalUrl || s.url || s.direct_url)) {
-          let upgraded = 0;
-          let added = 0;
-          for (const newS of newStreams as any[]) {
-            const newHash = (newS.infoHash || '').toLowerCase();
-            if (!newHash) continue;
-            const idx = allStreams.findIndex((s: any) => (s.infoHash || '').toLowerCase() === newHash);
-            if (idx >= 0) {
-              if (newS.url || newS.externalUrl || newS.direct_url) {
-                Object.assign(allStreams[idx], newS);
-                upgraded++;
-              }
-            } else {
-              allStreams.push(newS);
-              existingHashes.add(newHash);
-              added++;
-            }
-          }
-          allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
-          console.log(`[STREAMS] v121k: Backend upgrade-merge - upgraded ${upgraded}, added ${added}, total ${allStreams.length}`);
-          if (onProgress) onProgress(allStreams.slice());
-          return;
-        }
         const deduplicated = newStreams.filter((s: Stream) => {
           if (s.infoHash) {
             const hash = s.infoHash.toLowerCase();
@@ -671,6 +713,30 @@ export const api = {
   },
   stream: {
     start: async (infoHash: string, fileIdx?: number, filename?: string, sources?: string[], season?: number, episode?: number): Promise<{ status: string; info_hash: string }> => {
+      // V287_PM_MIDDLE_ISOLATION — if a Premiumize key is stored, resolve
+      // on-device.  Backend is never touched for this hash.
+      if (await _hasPMKey()) {
+        const h = _normHash(infoHash);
+        _kickPmResolve({
+          infoHash: h,
+          magnet: _findMagnet(sources),
+          season,
+          episode,
+        });
+        // V288 — wait for the resolve to finish before returning so the
+        // next status() poll hits 'ready' immediately.  Hard cap at 8s
+        // so a slow Premiumize doesn't freeze the whole player thread.
+        const inflight = _pmInFlight.get(h);
+        if (inflight) {
+          try {
+            await Promise.race([
+              inflight,
+              new Promise((_, rej) => setTimeout(() => rej(new Error('pm_timeout')), 8000)),
+            ]);
+          } catch (_) { /* fall through; status() will surface failure */ }
+        }
+        return { status: 'starting', info_hash: h };
+      }
       const params = new URLSearchParams();
       if (fileIdx !== undefined && fileIdx !== null) {
         params.append('fileIdx', String(fileIdx));
@@ -703,6 +769,38 @@ export const api = {
       video_size?: number;
       downloaded?: number;
     }> => {
+      // V287_PM_MIDDLE_ISOLATION — short-circuit when PM has resolved.
+      // Critically we do NOT return `debrid_url` here (player concatenates
+      // BACKEND_URL with it).  Player will call getVideoUrl(infoHash) which
+      // returns the absolute Premiumize URL directly.
+      const h = _normHash(infoHash);
+      if (_pmResolved.has(h)) {
+        return {
+          status: 'ready',
+          progress: 100,
+          ready_progress: 100,
+          peers: 0,
+          video_file: 'premiumize.mkv',
+          video_size: 1,
+        };
+      }
+      if (_pmInFlight.has(h)) {
+        return {
+          status: 'downloading',
+          progress: 50,
+          ready_progress: 0,
+          peers: 0,
+        };
+      }
+      if (_pmFailed.has(h)) {
+        return { status: 'error', progress: 0 };
+      }
+      if (await _hasPMKey()) {
+        // Key set but resolve never kicked — return a soft "not_found" so
+        // the player retries / picks another stream rather than hammering
+        // the (now stripped) backend.
+        return { status: 'not_found', progress: 0 };
+      }
       const response = await apiClient.get(`/api/stream/status/${infoHash}`);
       return response.data;
     },
@@ -719,6 +817,12 @@ export const api = {
       }
     },
     getVideoUrl: (infoHash: string, fileIdx?: number, torrServerUrl?: string): string => {
+      // V287_PM_MIDDLE_ISOLATION — if Premiumize has resolved this hash,
+      // return the absolute PM URL.  No backend prefix.
+      const h = _normHash(infoHash);
+      const pmUrl = _pmResolved.get(h);
+      if (pmUrl) return pmUrl;
+
       if (torrServerUrl) {
         const magnetLink = `magnet:?xt=urn:btih:${infoHash}`;
         const idxParam = fileIdx !== undefined && fileIdx !== null ? `&index=${fileIdx}` : '&index=0';
