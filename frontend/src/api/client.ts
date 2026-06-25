@@ -669,6 +669,13 @@ export const api = {
       const response = await apiClient.get(`/api/addons/resolve-code/${code}`);
       return response.data;
     },
+    // V309_CREATE_SHARE_CODE — generate a 7-digit share code for any
+    // manifest URL.  Backend stores {code, url} in MongoDB; same URL
+    // always returns the same code (idempotent).
+    createShareCode: async (manifestUrl: string): Promise<{ url: string; code: string }> => {
+      const response = await apiClient.post('/api/addons/share-code', { url: manifestUrl });
+      return response.data;
+    },
   },
   library: {
     get: async (): Promise<LibraryResponse> => {
@@ -723,18 +730,9 @@ export const api = {
           season,
           episode,
         });
-        // V288 — wait for the resolve to finish before returning so the
-        // next status() poll hits 'ready' immediately.  Hard cap at 8s
-        // so a slow Premiumize doesn't freeze the whole player thread.
-        const inflight = _pmInFlight.get(h);
-        if (inflight) {
-          try {
-            await Promise.race([
-              inflight,
-              new Promise((_, rej) => setTimeout(() => rej(new Error('pm_timeout')), 8000)),
-            ]);
-          } catch (_) { /* fall through; status() will surface failure */ }
-        }
+        // V289D — return IMMEDIATELY.  Player will poll status() and see
+        // 'downloading' (spinner shown) until _pmResolved.has(h) flips
+        // to 'ready'.  Never block the UI thread on the PM resolve.
         return { status: 'starting', info_hash: h };
       }
       const params = new URLSearchParams();

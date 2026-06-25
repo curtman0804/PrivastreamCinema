@@ -604,6 +604,49 @@ const _v77PendingIds = new Set();
 const _v77Subscribers = new Map();
 let _v77FlushTimer = null;
 
+// V304_RELEASE_CACHE_PERSISTENT_BUILD_TAG — make releaseStatus persist
+// across cold boots AND seed the per-card useState synchronously from
+// this cache.  Before V304: every ContentCard mounted with releaseStatus
+// = null, then 250ms later subscribed, then re-rendered when the batch
+// resolved.  Result: posters land first, IN CINEMA badges pop in later,
+// and the burst of 50+ simultaneous setState calls froze the selector
+// for ~1s on cold boot.  V304 hydrates from disk at module load so the
+// cache is hot the very first time any card mounts, and persists writes
+// (debounced) so subsequent boots are instant.
+const _V304_BUILD_TAG = 'V304_RELEASE_CACHE_PERSISTENT_BUILD_TAG';
+void _V304_BUILD_TAG;
+const _V304_STORAGE_KEY = '@v304_release_status_cache_v1';
+let _v304PersistTimer: any = null;
+function _v304SchedulePersist(): void {
+  if (_v304PersistTimer) return;
+  _v304PersistTimer = setTimeout(async () => {
+    _v304PersistTimer = null;
+    try {
+      const obj: any = {};
+      _v77ReleaseCache.forEach((v, k) => { obj[k] = v; });
+      await AsyncStorage.setItem(_V304_STORAGE_KEY, JSON.stringify(obj));
+    } catch (_) {}
+  }, 2000);
+}
+// One-shot hydrate on module load.  Failures are non-fatal — cache just
+// stays empty and the existing batched-fetch logic populates it as usual.
+(async () => {
+  try {
+    const _raw = await AsyncStorage.getItem(_V304_STORAGE_KEY);
+    if (!_raw) return;
+    const _obj = JSON.parse(_raw);
+    if (!_obj || typeof _obj !== 'object') return;
+    let _n = 0;
+    for (const _k of Object.keys(_obj)) {
+      if (!_v77ReleaseCache.has(_k)) {
+        _v77ReleaseCache.set(_k, _obj[_k]);
+        _n++;
+      }
+    }
+    if (_n > 0) console.log('[v304] hydrated', _n, 'release statuses from disk');
+  } catch (_) {}
+})();
+
 async function _v77FlushBatch() {
   _v77FlushTimer = null;
   if (_v77PendingIds.size === 0) return;
@@ -643,6 +686,7 @@ async function _v77FlushBatch() {
           _v77Subscribers.delete(id);
         }
       });
+      _v304SchedulePersist();
     }
   } catch (e) {
     notifyAll('none');
@@ -729,6 +773,9 @@ export function v167PrewarmReleaseStatus(imdbIds: string[] | undefined | null): 
           _v77Subscribers.delete(id);
         }
       });
+      // V304: persist after every prewarm batch — so subsequent cold
+      // boots paint the IN CINEMA badge on the first frame.
+      _v304SchedulePersist();
     };
     try {
       const res = await fetch(`${backendUrl}/api/movie/release_status`, {
@@ -901,13 +948,29 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const [posterError, setPosterError] = useState(false);
   const [useProxy, setUseProxy] = useState(false);
 
-  const [releaseStatus, setReleaseStatus] = useState(null);
+  // V304: seed releaseStatus from the in-memory cache synchronously so
+  // the first render already has the badge if either (a) v167PrewarmRelease
+  // hydrated this id, or (b) AsyncStorage hydration on module load
+  // restored it from a previous session.  Eliminates the cold-boot
+  // "badges pop in after posters" jank AND removes the setState burst
+  // that was freezing the selector for ~1s while 50+ cards re-rendered.
+  const [releaseStatus, setReleaseStatus] = useState<any>(() => {
+    if (!item) return null;
+    const _t = (item as any).type;
+    if (_t === 'series' || _t === 'tv' || _t === 'channel' || _t === 'episode') return null;
+    const _id = String((item as any).imdb_id || (item as any).id || '');
+    if (!_id.startsWith('tt')) return null;
+    return _v77ReleaseCache.has(_id) ? _v77ReleaseCache.get(_id) : null;
+  });
 
   useEffect(() => {
     if (!item) return;
     if (item.type === 'series' || item.type === 'tv' || item.type === 'channel' || item.type === 'episode') return;
     const imdbId = item.imdb_id || item.id;
     if (!imdbId || !String(imdbId).startsWith('tt')) return;
+    // V304: if cache already has a value (seeded synchronously above),
+    // skip the subscription entirely — no work, no re-render storm.
+    if (_v77ReleaseCache.has(String(imdbId))) return;
     // v238 — defer release-status fetch by 250ms so cold-boot rendering
     // of 200+ ContentCards completes BEFORE batched backend roundtrips kick
     // in.  The _v77 fetcher debounces to 250ms anyway, so this just moves

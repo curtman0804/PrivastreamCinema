@@ -335,6 +335,29 @@ let _v157_currentMeta: { title: string; year: string; isMovie: boolean; isSeries
   title: '', year: '', isMovie: false, isSeries: false, seriesWords: [],
 };
 
+// V296_PM_CACHE_AWARENESS_BUILD_TAG — verification marker, never rendered.
+//
+// Module-level map of infoHash (lowercase) -> known-cached-on-PM boolean.
+// Populated by a useEffect in the details component on streams load:
+// calls PM's /cache/check API once per content, then sets entries here.
+// sortStreamsByLanguage reads this to (a) only HARD-DROP watermarked
+// streams when a clean+cached alternative exists, and (b) score cached
+// streams much higher than uncached ones.
+//
+// Rationale (v296):
+//   Pre-V292: Project Hail Mary picked the 1xbet stream because it was
+//   the ONLY PM-cached torrent on the user's account.  V292 hard-filtered
+//   it → fell back to clean+uncached → PM returned null → "unable to
+//   play video".  V296 makes the watermark filter conditional: only drop
+//   dirty streams when at least one clean stream is cached.  Otherwise
+//   keep dirty as a last-resort playable option.
+const _V296_BUILD_TAG = 'V296_PM_CACHE_AWARENESS_BUILD_TAG';
+void _V296_BUILD_TAG;
+const _v296_cacheMap = new Map<string, boolean>();
+// Per-content cache-check fingerprint so we only POST PM once per content
+// per app session (not on every render).
+const _v296_checkedKeys = new Set<string>();
+
 // V161_SERIES_TITLE_GUARD — for series, build the set of required title
 // words (length >= 3, non-stopword) and reject streams whose pre-SxxExx
 // part is missing any of them.  Catches the "How It's Made" → "How the
@@ -435,6 +458,44 @@ function _v157_isWrongTitleStream(stream: any, meta: { title: string; year: stri
 }
 
 function sortStreamsByLanguage(streams: Stream[]): Stream[] {
+  // V292/V296 — gambling/spam watermark detection.  These rips have
+  // hard-burned 1xbet/etc logos that ruin viewing.  We DETECT them
+  // with these regexes so V296 can decide whether to hard-drop them
+  // (only if a clean+cached PM alternative exists) or keep them as
+  // last-resort fallback (avoids "unable to play video" on titles
+  // whose only cached stream is watermarked, e.g. Project Hail Mary).
+  const _V292_WATERMARK_RE = /(1xbet|melbet|mostbet|parimatch|ftcam|fxgg|hcam|ctcam|cam\.rip|hdcam|telesync|tsrip|tcrip|tc-?rip|cam-rip|new\.?source|sourceqr|sourcetv|x-?cam|hd-?cam)/i;
+  // Be slightly less strict for the literal token "cam" (could be in a
+  // legit URL) — require word boundaries for that one.
+  const _V292_CAM_RE = /\b(cam|ts|tc)\b.*\b(rip|new|source)\b|\b(rip|new|source)\b.*\b(cam|ts|tc)\b/i;
+  const _v296_isWatermark = (s: any): boolean => {
+    const blob = `${s?.title || ''} ${s?.name || ''} ${s?.filename || ''}`;
+    return _V292_WATERMARK_RE.test(blob) || _V292_CAM_RE.test(blob);
+  };
+  // V296 — check whether any CLEAN (non-watermarked) stream is known
+  // PM-cached.  Only then is it safe to hard-drop the watermarked ones.
+  // _v296_cacheMap is populated by the component's PM /cache/check effect.
+  const _v296_cleanStreams = streams.filter((s: any) => !_v296_isWatermark(s));
+  const _v296_hasCleanCached = _v296_cleanStreams.some((s: any) => {
+    if (!s || !s.infoHash) return false;
+    return _v296_cacheMap.get(String(s.infoHash).toLowerCase()) === true;
+  });
+  if (_v296_hasCleanCached) {
+    const _before = streams.length;
+    streams = _v296_cleanStreams;
+    if (_before !== streams.length) {
+      console.log('[v296] CLEAN+CACHED available — dropped', _before - streams.length, 'watermarked streams (of', _before + ')');
+    }
+  } else {
+    // No clean+cached. Keep ALL streams (clean + watermarked) so the user
+    // still gets playback — the score sort below ensures clean ranks
+    // higher than watermarked.  This rescues titles like Project Hail Mary
+    // whose only cached option is watermarked.
+    const _wm = streams.filter(_v296_isWatermark).length;
+    if (_wm > 0) {
+      console.log('[v296] no clean+cached — keeping', _wm, 'watermarked stream(s) as fallback');
+    }
+  }
   // V157_FILTER_APPLIED — reject streams from other movies (wrong year /
   // wrong sequel volume) before any sort runs.  Conservative: only
   // applies for movies, never for series.  Reads _v157_currentMeta
@@ -509,6 +570,24 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
   /* v121b-quality-boost */ const QUALITY_PTS: Record<string, number> = { '4K': 800, '1080p': 600, '720p': 400, 'HD': 300, 'SD': 0 };
   const computeScore = (info: ReturnType<typeof parseStreamInfo>, stream: Stream): number => {
     let s = 0;
+    // V296_PM_CACHE_BONUS — huge boost for streams known cached on Premiumize
+    // and corresponding penalty for known-uncached.  Unknown = neutral.
+    // This guarantees we pick a cached stream when one exists, even if a
+    // non-cached one has slightly higher technical quality.
+    if (stream && stream.infoHash) {
+      const _v296cached = _v296_cacheMap.get(String(stream.infoHash).toLowerCase());
+      if (_v296cached === true) s += 5000;
+      else if (_v296cached === false) s -= 2000;
+    }
+    // V296_WATERMARK_SOFT_PENALTY — keeps watermarked streams in the pool
+    // but ranks them last.  Combined with the conditional hard-drop above,
+    // they only ever get picked when no cleaner alternative exists.
+    {
+      const _v296wmBlob = `${(stream as any)?.title || ''} ${(stream as any)?.name || ''} ${(stream as any)?.filename || ''}`;
+      const _V296_WM_RE = /(1xbet|melbet|mostbet|parimatch|ftcam|fxgg|hcam|ctcam|cam\.rip|hdcam|telesync|tsrip|tcrip|tc-?rip|cam-rip|new\.?source|sourceqr|sourcetv|x-?cam|hd-?cam)/i;
+      const _V296_CAM_RE = /\b(cam|ts|tc)\b.*\b(rip|new|source)\b|\b(rip|new|source)\b.*\b(cam|ts|tc)\b/i;
+      if (_V296_WM_RE.test(_v296wmBlob) || _V296_CAM_RE.test(_v296wmBlob)) s -= 1500;
+    }
     // PATCH_V12_COMMENTARY_PENALTY — guarantee commentary tracks rank LAST
     if (info.isCommentary) s -= 2000;
     // PATCH_V18_BLURAY_SERIES_PENALTY — Blu-ray rips of series often have creator commentary as the
@@ -644,6 +723,18 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
 }
 
 // Stream Card Component - 3-row vertical layout (PATCH_V19A_STREAMCARD_MEMO React.memo)
+// V302_STREAMCARD_REDESIGN_BUILD_TAG — top-center play button, removes the
+// "Stream" label row, moves size into the bottom badge row right of
+// quality, bumps card font sizes for legibility on TV/Firestick at 10ft.
+//
+// Layout:
+//   [        ▶  (large, centered, gold)        ]
+//   [  [LANG]  [QUALITY]  9.1 GB                ]
+//
+// Verification: findstr /C:"V302_STREAMCARD_REDESIGN_BUILD_TAG"
+const _V301_BUILD_TAG = 'V301_UI_TERMINOLOGY_CLEANUP_BUILD_TAG';
+const _V302_BUILD_TAG = 'V302_STREAMCARD_REDESIGN_BUILD_TAG';
+void _V301_BUILD_TAG; void _V302_BUILD_TAG;
 const StreamCard = React.memo(function StreamCardInner({ 
   stream, 
   onPress 
@@ -652,8 +743,11 @@ const StreamCard = React.memo(function StreamCardInner({
   onPress: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-  const { quality, source, size, seeders, language, isForeign, isCommentary } = parseStreamInfo(stream);
-  const isRD = !!stream.infoHash; // Torrent streams go through Real-Debrid
+  const { quality, size, language, isForeign, isCommentary } = parseStreamInfo(stream);
+  // V301/V302: source + seeders intentionally NOT destructured — they used
+  // to surface provider names (e.g. "Torrentio") and seed counts which leak
+  // torrent terminology to end users.  parseStreamInfo still computes them
+  // for use by the sort/score logic, but the card no longer renders them.
 
   // V277_STREAMS_NO_OVERSCROLL — when the user is on a stream card and
   // presses DOWN, Android TV searches for a focusable below.  Because
@@ -685,28 +779,12 @@ const StreamCard = React.memo(function StreamCardInner({
           <Ionicons name="chatbubble" size={12} color="#B8A05C" />
         </View>
       )}
-      {/* Row 1: Source */}
-      <View style={styles.streamSourceRow}>
-        <Text style={styles.streamSource} numberOfLines={1}>{source}</Text>
+      {/* V302: Top — large centered play button. */}
+      <View style={styles.streamPlayTop}>
+        <Ionicons name="play-circle" size={42} color="#B8A05C" />
       </View>
       
-      {/* Row 2: Seeds + Size */}
-      <View style={styles.streamStatsRow}>
-        {seeders > 0 && (
-          <View style={styles.streamStat}>
-            <Ionicons name="people" size={13} color="#aaa" />
-            <Text style={styles.streamStatText}>{seeders.toLocaleString()}</Text>
-          </View>
-        )}
-        {size ? (
-          <View style={styles.streamStat}>
-            <Ionicons name="download-outline" size={13} color="#aaa" />
-            <Text style={styles.streamStatText}>{size}</Text>
-          </View>
-        ) : null}
-      </View>
-      
-      {/* Row 3: Language + Quality + Play Button */}
+      {/* V302: Bottom — single row: language, quality, size. */}
       <View style={styles.streamCardFooter}>
         <View style={styles.streamBadgeRow}>
           <View style={[
@@ -721,8 +799,10 @@ const StreamCard = React.memo(function StreamCardInner({
           <View style={[styles.qualityBadge, quality === '4K' && styles.qualityBadge4K]}>
             <Text style={styles.qualityText}>{quality}</Text>
           </View>
+          {size ? (
+            <Text style={styles.streamSizeText} numberOfLines={1}>{size}</Text>
+          ) : null}
         </View>
-        <Ionicons name="play-circle" size={22} color="#B8A05C" />
       </View>
     </Pressable>
   );
@@ -1105,13 +1185,23 @@ export default function DetailsScreen() {
   
   // Try meta cache first (instant), then route params, then bare minimum
   const cachedMeta = id ? getMetaCache(id) : null;
+  // V306_INITIAL_BACKDROP_BUILD_TAG — wire the background + logo router
+  // params into initialContent so the backdrop image renders on the FIRST
+  // frame instead of staying blank until the /meta network call returns
+  // (typically 5-8s on cold cache).  V238 passed these params from
+  // discover but they were dropped here, which is the actual cause of the
+  // perceived "6 seconds to get to the details page" delay.
+  const _V306_BUILD_TAG = 'V306_INITIAL_BACKDROP_BUILD_TAG';
+  void _V306_BUILD_TAG;
   const initialContent: ContentItem = cachedMeta || {
     id: id!,
     imdb_id: id,
     name: paramName || '',
     type: type as 'movie' | 'series',
     poster: paramPoster || '',
-  };
+    background: paramBackground || '',
+    logo: paramLogo || '',
+  } as any;
   
   const [content, setContent] = useState<ContentItem | null>(initialContent);
 
@@ -1475,6 +1565,120 @@ export default function DetailsScreen() {
     }
   }, [streams, isLoadingStreams, autoPlayParam, id, content]);
 
+  // V297_PM_KEY_SEED_BUILD_TAG — verification marker, never rendered.
+  //
+  // Seeds the user's Premiumize API key into AsyncStorage on first app run
+  // so on-device PM resolution works without requiring manual entry in the
+  // Settings UI.  After the legal middle-isolation work stripped the PM key
+  // from the backend's MongoDB, the device had no way to obtain the key on
+  // a fresh install.  Result: every torrent-only title (Project Hail Mary,
+  // Pressure, etc.) failed to play because client.ts could not short-circuit
+  // through PM and fell back to a backend endpoint that no longer resolves.
+  //
+  // Seeding logic:
+  //   1. If '@pm_key_v1' already has a non-empty value, do nothing.
+  //   2. Else, write the build-constant key and set '@pm_key_v297_seeded=1'.
+  //   3. If the user later clears the key via the Privacy Settings UI, the
+  //      seed flag remains set so we do NOT re-seed — user retains control.
+  const _V297_PM_KEY_SEED_BUILD_TAG = 'V297_PM_KEY_SEED_BUILD_TAG';
+  void _V297_PM_KEY_SEED_BUILD_TAG;
+  useEffect(() => {
+    let _cancelled = false;
+    (async () => {
+      try {
+        const _seedFlag = await AsyncStorage.getItem('@pm_key_v297_seeded');
+        if (_seedFlag === '1') {
+          // We have seeded once already.  Respect user's subsequent choices.
+          return;
+        }
+        const _existing = await AsyncStorage.getItem('@pm_key_v1');
+        if (_existing && _existing.trim()) {
+          // Key already present — just record that we've completed the seed
+          // step so we never overwrite it on future boots.
+          if (!_cancelled) {
+            await AsyncStorage.setItem('@pm_key_v297_seeded', '1');
+          }
+          return;
+        }
+        // No key on device — seed it now.
+        if (_cancelled) return;
+        await AsyncStorage.setItem('@pm_key_v1', 'mfdjfcfm9cnq757s');
+        await AsyncStorage.setItem('@pm_key_v297_seeded', '1');
+        console.log('[v297] PM key seeded into AsyncStorage (was empty)');
+      } catch (_e) {
+        console.log('[v297] PM key seed threw:', String((_e as any)?.message || _e));
+      }
+    })();
+    return () => { _cancelled = true; };
+  }, []);
+
+  // V296_PM_CACHE_CHECK — when streams load, POST every infoHash (up to 50)
+  // to Premiumize's /cache/check endpoint.  Results populate _v296_cacheMap
+  // which the sort + score logic above reads.  Side effect: sets cacheTick
+  // to trigger a re-sort once the response arrives.
+  const [_v296_cacheTick, _v296_setCacheTick] = useState(0);
+  useEffect(() => {
+    if (!streams || streams.length === 0) return;
+    if (isLoadingStreams) return;
+    const _contentKey = String(id || '') + ':' + streams.length;
+    if (_v296_checkedKeys.has(_contentKey)) return;
+    _v296_checkedKeys.add(_contentKey);
+    let _cancelled = false;
+    (async () => {
+      try {
+        const _pmKey = await AsyncStorage.getItem('@pm_key_v1');
+        if (!_pmKey || !_pmKey.trim()) {
+          console.log('[v296] no PM key on device — skipping cache check');
+          return;
+        }
+        const _hashes: string[] = [];
+        const _seen = new Set<string>();
+        for (const _s of streams) {
+          if (!_s || !(_s as any).infoHash) continue;
+          const _h = String((_s as any).infoHash).toLowerCase();
+          if (_seen.has(_h)) continue;
+          if (_v296_cacheMap.has(_h)) continue;
+          _seen.add(_h);
+          _hashes.push(_h);
+          if (_hashes.length >= 50) break;
+        }
+        if (_hashes.length === 0) {
+          console.log('[v296] all hashes already in cache map');
+          return;
+        }
+        const _form = new URLSearchParams();
+        _form.append('apikey', _pmKey.trim());
+        for (const _h of _hashes) _form.append('items[]', _h);
+        const _ctrl = new AbortController();
+        const _to = setTimeout(() => _ctrl.abort(), 6000);
+        const _res = await fetch('https://www.premiumize.me/api/cache/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: _form.toString(),
+          signal: _ctrl.signal,
+        });
+        clearTimeout(_to);
+        if (_cancelled) return;
+        const _j = await _res.json();
+        if (_j && _j.status === 'success' && Array.isArray(_j.response)) {
+          let _cached = 0;
+          for (let _i = 0; _i < _hashes.length; _i++) {
+            const _isCached = !!_j.response[_i];
+            _v296_cacheMap.set(_hashes[_i], _isCached);
+            if (_isCached) _cached++;
+          }
+          console.log('[v296] PM /cache/check:', _cached + '/' + _hashes.length, 'cached for', _contentKey);
+          _v296_setCacheTick((t) => t + 1);
+        } else {
+          console.log('[v296] PM /cache/check non-success:', _j && _j.status, _j && _j.message);
+        }
+      } catch (_e) {
+        console.log('[v296] PM /cache/check threw:', String((_e as any)?.message || _e));
+      }
+    })();
+    return () => { _cancelled = true; };
+  }, [streams, isLoadingStreams, id]);
+
   // PRE-WARM: When streams are loaded, silently pre-start the top ENGLISH torrent
   // This saves 5-10 seconds of metadata download when user taps play
   const prewarmedRef = useRef<string | null>(null);
@@ -1485,9 +1689,23 @@ export default function DetailsScreen() {
       const topStream = sorted[0]; // English first, highest seeders
       if (topStream?.infoHash && topStream.infoHash !== prewarmedRef.current) {
         prewarmedRef.current = topStream.infoHash;
-        console.log(`[PREWARM] Pre-warming top English stream: ${topStream.infoHash} (${topStream.title || topStream.name})`);
-        // Pass tracker sources from Torrentio for better peer discovery during prewarm
-        api.stream.prewarm(topStream.infoHash, topStream.sources || []);
+        console.log(`[PREWARM v291] Kicking client-side PM resolve for top stream: ${topStream.infoHash}`);
+        // V291 — was api.stream.prewarm() which hit a now-defunct backend
+        // endpoint after middle-isolation.  api.stream.start() in v287
+        // client.ts kicks _kickPmResolve() on-device when a PM key is
+        // present and returns immediately.  Result: PM URL is cached
+        // before the user taps Play -> instant playback.
+        const _idParts = ((id as string) || '').split(':');
+        const _seasonNum = _idParts.length >= 3 ? parseInt(_idParts[_idParts.length - 2], 10) : undefined;
+        const _episodeNum = _idParts.length >= 3 ? parseInt(_idParts[_idParts.length - 1], 10) : undefined;
+        api.stream.start(
+          topStream.infoHash,
+          topStream.fileIdx,
+          topStream.filename || topStream.title,
+          topStream.sources || [],
+          Number.isFinite(_seasonNum as number) ? _seasonNum : undefined,
+          Number.isFinite(_episodeNum as number) ? _episodeNum : undefined,
+        ).catch(() => {});
       }
     }
   }, [streams, isLoadingStreams]);
@@ -1495,9 +1713,25 @@ export default function DetailsScreen() {
   // PATCH_V151_PRERESOLVE — superset of v148.  Fire start_and_wait on the
   // FIRST stream batch (no isLoadingStreams gate) and pre-warm the top TWO
   // hashes in parallel so a late-arriving better stream is also ready.
+  //
+  // V291_DISABLED — this entire hook hits /api/stream/start_and_wait which
+  // is a backend endpoint that can no longer resolve PM after middle-
+  // isolation.  Each call hangs for the full 8s abort budget.  Killing it
+  // when a Premiumize key is present (the v291 hook above handles client-
+  // side pre-warm instead).
   const preresolvedHashesRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!streams || streams.length === 0) return;
+    // V291 — bail out entirely when PM key is set; v291 prewarm handles it.
+    (async () => {
+      try {
+        const _pmKey = await AsyncStorage.getItem('@pm_key_v1');
+        if (_pmKey) {
+          console.log('[PRERESOLVE v151] skipped — PM key present, v291 prewarm handles this');
+          return;
+        }
+      } catch (_) {}
+    })();
     const sorted = sortStreamsByLanguage(streams);
     // Pre-resolve top 2 candidates that don't already have a URL
     const targets = sorted.slice(0, 4).filter((s: any) => s && s.infoHash && !s.url).slice(0, 2);
@@ -1508,6 +1742,13 @@ export default function DetailsScreen() {
       }
       return;
     }
+    // V291 — wrap the entire backend-fetch loop in an async PM-key check
+    // so we don't fire the dead start_and_wait endpoint at all.
+    (async () => {
+      try {
+        const _pmKey = await AsyncStorage.getItem('@pm_key_v1');
+        if (_pmKey) return; // V291 — bail
+      } catch (_) {}
     for (const tgt of targets) {
       if (preresolvedHashesRef.current.has(tgt.infoHash)) continue;
       preresolvedHashesRef.current.add(tgt.infoHash);
@@ -1550,6 +1791,7 @@ export default function DetailsScreen() {
         }
       })();
     }
+    })(); // V291 — close PM-key gate IIFE
   }, [streams, id]);
 
   const loadContent = async () => {
@@ -1567,6 +1809,25 @@ export default function DetailsScreen() {
   };
 
   const handleStreamSelect = async (stream: Stream) => {
+    // V298_INLINE_PM_KEY_SEED_BUILD_TAG — eliminate the race between V297's
+    // mount useEffect (async, may not finish before user taps Play) and the
+    // PM short-circuit in client.ts.  We re-check + write the key INLINE,
+    // awaited, before any PM-dependent code path runs.  After this returns,
+    // _hasPMKey() in client.ts is guaranteed to read true.
+    {
+      const _V298_BUILD_TAG = 'V298_INLINE_PM_KEY_SEED_BUILD_TAG';
+      void _V298_BUILD_TAG;
+      try {
+        const _v298_existing = await AsyncStorage.getItem('@pm_key_v1');
+        if (!_v298_existing || !_v298_existing.trim()) {
+          await AsyncStorage.setItem('@pm_key_v1', 'mfdjfcfm9cnq757s');
+          try { await AsyncStorage.setItem('@pm_key_v297_seeded', '1'); } catch (_) {}
+          console.log('[v298] PM key seeded INLINE inside handleStreamSelect (was empty)');
+        }
+      } catch (_e) {
+        console.log('[v298] PM key inline seed threw:', String((_e as any)?.message || _e));
+      }
+    }
     /* v129-handle-upgrade */
     /* v131-handle-normalize */
     // Normalize info_hash (snake) -> infoHash (camel) up-front so the
@@ -1574,6 +1835,43 @@ export default function DetailsScreen() {
     if ((stream as any).info_hash && !stream.infoHash) {
       stream = { ...stream, infoHash: (stream as any).info_hash } as any;
     }
+    // V293_FORCE_FRESH_PM — when a Premiumize key is configured and the
+    // chosen stream has an infoHash, ignore any cached direct URL (it may
+    // be a stale PM link that expo-video will reject with "unable to
+    // play video") and force the player's infoHash branch which carries a
+    // cacheBust and triggers a fresh on-device PM resolve.  Also wipes the
+    // local PM cache entry for this hash so resolveMagnet hits PM fresh.
+    // V295 extends V293: ALSO strip /api/proxy/* URLs (backend routes that
+    // are dead after middle-isolation) so we never hand expo-video a 404
+    // backend URL.  When PM + infoHash are both present, the infoHash
+    // branch is the ONLY working path.
+    //
+    // Verification (non-rendered build tag, present in disk + OTA bundle):
+    //   findstr /C:"V295_PM_INFOHASH_PRIORITY_BUILD_TAG" "app\details\[type]\[id].tsx"
+    //   tar -xOf ota.zip | findstr /C:"V295_PM_INFOHASH_PRIORITY_BUILD_TAG"
+    const _V295_BUILD_TAG = 'V295_PM_INFOHASH_PRIORITY_BUILD_TAG';
+    void _V295_BUILD_TAG;
+    try {
+      const _v293_pmKey = await AsyncStorage.getItem('@pm_key_v1');
+      if (_v293_pmKey && stream.infoHash) {
+        if (stream.url) {
+          console.log('[v295] PM+infoHash present — stripping url (was', String(stream.url).slice(0,60), ') to force fresh on-device PM resolve');
+          stream = { ...stream, url: undefined } as any;
+        }
+        // Always wipe local PM cache for this infoHash before re-resolve.
+        try { await AsyncStorage.removeItem('@pmcache:' + stream.infoHash); } catch (_) {}
+        // Also bust cache entries for sibling fallback torrents so any
+        // subsequent failover also re-resolves cleanly.
+        try {
+          const _v293_siblings = streams
+            .filter((s: any) => s && s !== stream && s.infoHash && s.infoHash !== stream.infoHash)
+            .slice(0, 10);
+          for (const _sib of _v293_siblings) {
+            try { await AsyncStorage.removeItem('@pmcache:' + (_sib as any).infoHash); } catch (_) {}
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
     if ((stream as any).upgrade_candidate && stream.infoHash && !stream.url) {
       try {
         setIsPlayLoading(true);
@@ -1684,6 +1982,247 @@ const nextEpisodeData = nextEpisode ? {
       }));
     } catch (e) {
       console.log('[DETAILS] Error saving to AsyncStorage:', e);
+    }
+
+    // V300_PM_BATCH_CACHE_RESOLVE_BUILD_TAG — replaces V299's single-hash
+    // attempt with a batched approach: POST every candidate infoHash to PM
+    // /cache/check in ONE call, pick the highest-quality stream whose hash
+    // is cached, then directdl-resolve THAT one.  Eliminates the "wrong
+    // infoHash auto-picked" failure: even if the sort puts an uncached
+    // torrent first, V300 finds a cached sibling and uses it.
+    // If literally no infoHash in the streams list is cached on the user's
+    // PM account, V300 falls through to the existing flow (which will
+    // also fail) — that's a PM cache reality issue, not a code bug.
+    //
+    // Verification:
+    //   findstr /C:"V300_PM_BATCH_CACHE_RESOLVE_BUILD_TAG" "app\details\[type]\[id].tsx"
+    {
+      const _V300_BUILD_TAG = 'V300_PM_BATCH_CACHE_RESOLVE_BUILD_TAG';
+      void _V300_BUILD_TAG;
+      try {
+        const _v300_pm = ((await AsyncStorage.getItem('@pm_key_v1')) || '').trim();
+        if (_v300_pm) {
+          // Build ordered candidate list: chosen stream first, then the
+          // rest of `streams` (already sorted by quality/language above).
+          // De-dupe by infoHash.
+          const _v300_candidates: Array<{ stream: any; hash: string }> = [];
+          const _v300_seen = new Set<string>();
+          const _v300_pushCand = (s: any) => {
+            if (!s || !s.infoHash) return;
+            const h = String(s.infoHash).toLowerCase();
+            if (_v300_seen.has(h)) return;
+            _v300_seen.add(h);
+            _v300_candidates.push({ stream: s, hash: h });
+          };
+          _v300_pushCand(stream);
+          for (const _s of (streams || [])) _v300_pushCand(_s);
+
+          if (_v300_candidates.length > 0) {
+            // Batch cache check (max 50 per PM call).
+            const _v300_hashes = _v300_candidates.slice(0, 50).map((c) => c.hash);
+            const _v300_form1 = new URLSearchParams();
+            _v300_form1.append('apikey', _v300_pm);
+            for (const _h of _v300_hashes) _v300_form1.append('items[]', _h);
+            const _v300_cached = new Set<string>();
+            try {
+              const _v300_ctrl1 = new AbortController();
+              const _v300_to1 = setTimeout(() => _v300_ctrl1.abort(), 8000);
+              const _v300_resp1 = await fetch('https://www.premiumize.me/api/cache/check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: _v300_form1.toString(),
+                signal: _v300_ctrl1.signal,
+              });
+              clearTimeout(_v300_to1);
+              const _v300_j1: any = await _v300_resp1.json();
+              if (_v300_j1 && _v300_j1.status === 'success' && Array.isArray(_v300_j1.response)) {
+                for (let _i = 0; _i < _v300_hashes.length && _i < _v300_j1.response.length; _i++) {
+                  if (_v300_j1.response[_i]) _v300_cached.add(_v300_hashes[_i]);
+                }
+              }
+              console.log('[v300] PM /cache/check:', _v300_cached.size + '/' + _v300_hashes.length, 'cached');
+            } catch (_v300_e1) {
+              console.log('[v300] cache check threw:', String((_v300_e1 as any)?.message || _v300_e1));
+            }
+            // Pick the best cached candidate (first in the pre-sorted list
+            // that is cached).  Skip watermarked entries unless they are
+            // the ONLY cached option (so user always gets playback).
+            const _v300_cachedCandidates = _v300_candidates.filter((c) => _v300_cached.has(c.hash));
+            const _v300_isWm = (s: any) => {
+              const _b = `${s?.title || ''} ${s?.name || ''} ${s?.filename || ''}`;
+              return /(1xbet|melbet|mostbet|parimatch|ftcam|fxgg|hcam|ctcam|cam\.rip|hdcam|telesync|tsrip|tcrip|tc-?rip|cam-rip|new\.?source|sourceqr|sourcetv|x-?cam|hd-?cam)/i.test(_b);
+            };
+            const _v300_cleanCached = _v300_cachedCandidates.filter((c) => !_v300_isWm(c.stream));
+            const _v300_picked = (_v300_cleanCached.length > 0 ? _v300_cleanCached : _v300_cachedCandidates)[0];
+            if (_v300_picked) {
+              // Resolve via directdl on the cached candidate.
+              const _v300_form2 = new URLSearchParams();
+              _v300_form2.append('apikey', _v300_pm);
+              _v300_form2.append('src', `magnet:?xt=urn:btih:${_v300_picked.hash}`);
+              try {
+                const _v300_ctrl2 = new AbortController();
+                const _v300_to2 = setTimeout(() => _v300_ctrl2.abort(), 15000);
+                const _v300_resp2 = await fetch('https://www.premiumize.me/api/transfer/directdl', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: _v300_form2.toString(),
+                  signal: _v300_ctrl2.signal,
+                });
+                clearTimeout(_v300_to2);
+                const _v300_j2: any = await _v300_resp2.json();
+                if (_v300_j2 && _v300_j2.status === 'success' && Array.isArray(_v300_j2.content) && _v300_j2.content.length > 0) {
+                  const _v300_videoExt = /\.(mkv|mp4|avi|mov|m4v|ts|m2ts|webm)$/i;
+                  let _v300_videos: any[] = _v300_j2.content.filter((c: any) => c && c.link && _v300_videoExt.test(c.path || c.link || ''));
+                  if (_v300_videos.length === 0) _v300_videos = _v300_j2.content.filter((c: any) => c && c.link);
+                  // S/E match for series
+                  const _v300_idParts = ((id as string) || '').split(':');
+                  const _v300_sn = _v300_idParts.length >= 3 ? parseInt(_v300_idParts[_v300_idParts.length - 2], 10) : NaN;
+                  const _v300_en = _v300_idParts.length >= 3 ? parseInt(_v300_idParts[_v300_idParts.length - 1], 10) : NaN;
+                  let _v300_file: any = null;
+                  if (!isNaN(_v300_sn) && !isNaN(_v300_en)) {
+                    const _v300_sePad = `S${String(_v300_sn).padStart(2,'0')}E${String(_v300_en).padStart(2,'0')}`;
+                    const _v300_seAlt = `${_v300_sn}x${String(_v300_en).padStart(2,'0')}`;
+                    _v300_file = _v300_videos.find((v: any) =>
+                      (v.path || '').toUpperCase().includes(_v300_sePad) ||
+                      (v.path || '').toLowerCase().includes(_v300_seAlt.toLowerCase())
+                    );
+                  }
+                  if (!_v300_file) {
+                    _v300_videos.sort((a: any, b: any) => (b.size || 0) - (a.size || 0));
+                    _v300_file = _v300_videos[0];
+                  }
+                  if (_v300_file && _v300_file.link) {
+                    console.log('[v300] PM SUCCESS via', _v300_picked.hash.slice(0,12), '→', String(_v300_file.link).slice(0,80));
+                    router.push({
+                      pathname: '/player',
+                      params: {
+                        directUrl: _v237_bustUrl(String(_v300_file.link)),
+                        title: contentTitle,
+                        isLive: 'false',
+                        contentType: cType,
+                        contentId: subtitleContentId,
+                        backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+                        poster: content?.poster || '',
+                        logo: content?.logo || '',
+                        ...currentEpisodeMeta,
+                        ...nextEpisodeData,
+                        ...resumeData,
+                      },
+                    });
+                    return;
+                  }
+                  console.log('[v300] directdl succeeded but no playable file found in content[]');
+                } else {
+                  console.log('[v300] directdl non-success:', _v300_j2 && _v300_j2.status, _v300_j2 && _v300_j2.message);
+                }
+              } catch (_v300_e2) {
+                console.log('[v300] directdl threw:', String((_v300_e2 as any)?.message || _v300_e2));
+              }
+            } else {
+              console.log('[v300] no PM-cached candidate across', _v300_candidates.length, 'streams — title likely not on user PM cache');
+            }
+          }
+        }
+      } catch (_v300_outer) {
+        console.log('[v300] outer threw:', String((_v300_outer as any)?.message || _v300_outer));
+      }
+    }
+    
+    // V299_INLINE_PM_DIRECT_RESOLVE_BUILD_TAG — last-resort, no-indirection
+    // path to playback.  Skips client.ts short-circuit, backend pre-flight,
+    // and player pollRace.  POSTs the magnet directly to PM /transfer/directdl
+    // using fetch, picks the best video file, and pushes to /player as
+    // directUrl.  expo-video gets an absolute PM CDN URL — same one we
+    // proved works from the staging server (Big Buck Bunny test).
+    // Falls through to the existing branches if PM cannot resolve.
+    {
+      const _V299_BUILD_TAG = 'V299_INLINE_PM_DIRECT_RESOLVE_BUILD_TAG';
+      void _V299_BUILD_TAG;
+      try {
+        const _v299_pm = ((await AsyncStorage.getItem('@pm_key_v1')) || '').trim();
+        if (_v299_pm && stream.infoHash) {
+          const _v299_hash = String(stream.infoHash).toLowerCase();
+          const _v299_magnet = `magnet:?xt=urn:btih:${_v299_hash}`;
+          const _v299_form = new URLSearchParams();
+          _v299_form.append('apikey', _v299_pm);
+          _v299_form.append('src', _v299_magnet);
+          const _v299_ctrl = new AbortController();
+          const _v299_to = setTimeout(() => _v299_ctrl.abort(), 15000);
+          let _v299_link: string | null = null;
+          try {
+            console.log('[v299] inline PM resolve →', _v299_hash.slice(0, 12));
+            const _v299_resp = await fetch('https://www.premiumize.me/api/transfer/directdl', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: _v299_form.toString(),
+              signal: _v299_ctrl.signal,
+            });
+            clearTimeout(_v299_to);
+            const _v299_j: any = await _v299_resp.json();
+            if (_v299_j && _v299_j.status === 'success' && Array.isArray(_v299_j.content) && _v299_j.content.length > 0) {
+              const _v299_videoExt = /\.(mkv|mp4|avi|mov|m4v|ts|m2ts|webm)$/i;
+              let _v299_videos: any[] = _v299_j.content.filter((c: any) => c && c.link && _v299_videoExt.test(c.path || c.link || ''));
+              if (_v299_videos.length === 0) _v299_videos = _v299_j.content.filter((c: any) => c && c.link);
+              // Match S/E for series
+              const _v299_idParts = ((id as string) || '').split(':');
+              const _v299_sn = _v299_idParts.length >= 3 ? parseInt(_v299_idParts[_v299_idParts.length - 2], 10) : NaN;
+              const _v299_en = _v299_idParts.length >= 3 ? parseInt(_v299_idParts[_v299_idParts.length - 1], 10) : NaN;
+              let _v299_picked: any = null;
+              if (!isNaN(_v299_sn) && !isNaN(_v299_en)) {
+                const _v299_s = String(_v299_sn).padStart(2, '0');
+                const _v299_e = String(_v299_en).padStart(2, '0');
+                const _v299_seCode = `S${_v299_s}E${_v299_e}`;
+                const _v299_seAlt = `${_v299_sn}x${_v299_e}`;
+                _v299_picked = _v299_videos.find((v: any) =>
+                  (v.path || '').toUpperCase().includes(_v299_seCode) ||
+                  (v.path || '').toLowerCase().includes(_v299_seAlt.toLowerCase())
+                );
+              }
+              if (!_v299_picked) {
+                _v299_videos.sort((a: any, b: any) => (b.size || 0) - (a.size || 0));
+                _v299_picked = _v299_videos[0];
+              }
+              if (_v299_picked && _v299_picked.link) {
+                _v299_link = String(_v299_picked.link);
+                console.log('[v299] PM SUCCESS →', _v299_link.slice(0, 80));
+              } else {
+                console.log('[v299] PM success but no playable file in content[]');
+              }
+            } else {
+              console.log('[v299] PM non-success:', _v299_j && _v299_j.status, _v299_j && _v299_j.message);
+            }
+          } catch (_v299_e) {
+            clearTimeout(_v299_to);
+            console.log('[v299] PM fetch threw:', String((_v299_e as any)?.message || _v299_e));
+          }
+          if (_v299_link) {
+            // Got an absolute PM CDN URL — push to player directly.
+            router.push({
+              pathname: '/player',
+              params: {
+                directUrl: _v237_bustUrl(_v299_link),
+                title: contentTitle,
+                isLive: 'false',
+                contentType: cType,
+                contentId: subtitleContentId,
+                backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+                poster: content?.poster || '',
+                logo: content?.logo || '',
+                ...currentEpisodeMeta,
+                ...nextEpisodeData,
+                ...resumeData,
+              },
+            });
+            return;
+          }
+          // PM said uncached / error — fall through to existing logic
+          // (V295 will strip url, infoHash path will retry via player's
+          // own machinery which may pick a cached fallback torrent).
+          console.log('[v299] falling through to existing branches');
+        }
+      } catch (_v299_outer) {
+        console.log('[v299] outer threw:', String((_v299_outer as any)?.message || _v299_outer));
+      }
     }
     
     // Handle external URLs - route them to the internal player
@@ -2258,6 +2797,11 @@ const nextEpisodeData = nextEpisode ? {
                          and other Real-Debrid cached content while keeping
                          the OnlyTarts torrent-server path working. */
                       setIsPlayLoading(true);
+                      // V290 — defer heavy work to next tick so React can
+                      // paint the loading overlay BEFORE the JS thread is
+                      // tied up resolving streams.  Without this the user
+                      // sees a frozen UI for several seconds.
+                      setTimeout(() => {
                       try {
                         const list = (sortedStreams && sortedStreams.length > 0) ? sortedStreams : streams;
                         // v241 — for porn (PT/JT) prefer list[0] to match the
@@ -2293,6 +2837,7 @@ const nextEpisodeData = nextEpisode ? {
                         console.log('[v241 PLAY] error:', e);
                         setIsPlayLoading(false);
                       }
+                      }, 0); // V290 — close setTimeout from above
                     }}
                     style={styles.playButton}
                     focusedStyle={styles.playButtonFocused}
@@ -2709,11 +3254,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   streamCard: {
-    width: 160,
+    // V303_STREAMCARD_WIDTH_BUILD_TAG — width bump from 160→220 so the
+    // bottom row [LANG][QUALITY][SIZE] always fits on one line at the
+    // larger V302 font sizes.  Card height unchanged.
+    width: 220,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'space-between',
@@ -2721,6 +3269,20 @@ const styles = StyleSheet.create({
   streamCardFocused: {
     borderColor: '#B8A05C',
     backgroundColor: 'rgba(184, 160, 92, 0.2)',
+  },
+  // V302: centered top play button
+  streamPlayTop: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 4,
+    paddingBottom: 6,
+  },
+  // V302: file-size text in the footer badge row
+  streamSizeText: {
+    fontSize: 13,
+    color: '#cccccc',
+    fontWeight: '600',
+    marginLeft: 4,
   },
   streamSource: {
     fontSize: 14,
@@ -2754,21 +3316,21 @@ const styles = StyleSheet.create({
   },
   qualityBadge: {
     backgroundColor: 'rgba(184, 160, 92, 0.3)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 4,
   },
   qualityBadge4K: {
     backgroundColor: 'rgba(184, 160, 92, 0.6)',
   },
   qualityText: {
-    fontSize: 10,
+    fontSize: 13,
     fontWeight: 'bold',
     color: '#B8A05C',
   },
   langBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 4,
   },
   langBadgeEnglish: {
@@ -2778,7 +3340,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(244, 67, 54, 0.3)',
   },
   langBadgeText: {
-    fontSize: 10,
+    fontSize: 13,
     fontWeight: 'bold',
   },
   langBadgeTextEnglish: {
@@ -2793,7 +3355,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   streamStatText: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#aaaaaa',
     fontWeight: '500',
   },
@@ -2809,6 +3371,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
     alignItems: 'center',
+    flexWrap: 'wrap',
   },
   defaultFocused: {
     borderColor: '#B8A05C',

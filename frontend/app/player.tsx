@@ -1828,6 +1828,13 @@ export default function PlayerScreen() {
     }
   };
   
+  // V294_FRESH_PM_URL_BUILD_TAG — internal constant used ONLY for build
+  // verification via `findstr "V294_FRESH_PM_URL_BUILD_TAG" app\player.tsx`
+  // and `tar -xOf ota.zip | findstr "V294_FRESH_PM_URL_BUILD_TAG"`.
+  // This string is NEVER rendered to the user.  Do not remove.
+  const _V294_BUILD_TAG = 'V294_FRESH_PM_URL_BUILD_TAG';
+  void _V294_BUILD_TAG;
+
   // Try next fallback TORRENT (different infoHash) when primary torrent fails
   const tryNextFallbackTorrent = () => {
     /* V163_TRY_NEXT_USES_REF — read from torrentFallbacksRef.current so
@@ -1839,7 +1846,7 @@ export default function PlayerScreen() {
     if (idx < _v163_list.length) {
       const fb = _v163_list[idx];
       torrentFallbackIdxRef.current = idx + 1;
-      console.log(`[PLAYER] Trying fallback torrent ${idx + 1}/${_v163_list.length}: ${fb.infoHash?.slice(0,8)}... (${fb.name || fb.title || ''})`);
+      console.log(`[PLAYER v294] Trying fallback torrent ${idx + 1}/${_v163_list.length}: ${fb.infoHash?.slice(0,8)}... (${fb.name || fb.title || ''})`);
       
       // Reset state for new torrent
       setStreamUrl(null);
@@ -1862,7 +1869,7 @@ export default function PlayerScreen() {
       }, 500);
     } else {
       // No more fallback torrents either
-      console.log('[PLAYER] No more fallback streams or torrents available');
+      console.log('[PLAYER v294] No more fallback streams or torrents available');
       setError('Unable to play video. All streams failed. Try a different title or stream with more seeds.');
       setIsLoading(false);
     }
@@ -2263,8 +2270,14 @@ export default function PlayerScreen() {
         setDownloadProgress(100);
         if (info.videoSize) videoFileSizeRef.current = info.videoSize;
         videoRetryCountRef.current = 0;
-        const finalUrl = info.debridUrl ? `http://71.9.152.146:8001${info.debridUrl}` : winner.videoUrl;
-        console.log(`[PLAYER] WINNER: ${winner.label} (q=${bestQ}) ${((Date.now()-startTime)/1000).toFixed(1)}s peers=${info.peers}`);
+        // V294_FRESH_PM_URL — re-call getVideoUrl() at commit time so we get
+        // the freshly-resolved absolute Premiumize URL from the client-side
+        // resolver cache (it's empty when the candidate was first built).
+        // Also removes the hardcoded 71.9.152.146 ghost from the legacy
+        // debrid_url path; if a backend ever returns one it's already dead.
+        const _v294Fresh = api.stream.getVideoUrl(winner.hash, winner.fileIdx);
+        const finalUrl = _v294Fresh || winner.videoUrl;
+        console.log(`[PLAYER v294] WINNER: ${winner.label} (q=${bestQ}) ${((Date.now()-startTime)/1000).toFixed(1)}s peers=${info.peers} fresh=${(_v294Fresh || '').slice(0,60)}`);
         setLoadingStatus('');
         setStreamUrl(finalUrl);
         const winHash = winner.hash;
@@ -2463,8 +2476,11 @@ export default function PlayerScreen() {
           if (status.debrid_url && !videoUrlSet) {
             videoUrlSet = true;
             setDownloadProgress(100);
-            const debridVideoUrl = `http://71.9.152.146:8001${status.debrid_url}`;
-            console.log(`[PLAYER] Fallback DEBRID ready in ${elapsedSec.toFixed(1)}s!`);
+            // V294_FRESH_PM_URL — kill the hardcoded 71.9.152.146 ghost.
+            // Use getVideoUrl which returns the absolute PM URL when
+            // resolved on-device, or a (live) backend URL otherwise.
+            const debridVideoUrl = api.stream.getVideoUrl(hash, fIdx);
+            console.log(`[PLAYER v294] Fallback DEBRID ready in ${elapsedSec.toFixed(1)}s url=${(debridVideoUrl||'').slice(0,60)}`);
             videoRetryCountRef.current = 0;
             setStreamUrl(debridVideoUrl);
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current);
@@ -2476,9 +2492,14 @@ export default function PlayerScreen() {
             videoUrlSet = true;
             setDownloadProgress(100);
             if (status.video_size) videoFileSizeRef.current = status.video_size;
-            console.log(`[PLAYER] Fallback stream READY in ${elapsedSec.toFixed(1)}s!`);
+            // V294_FRESH_PM_URL — re-call getVideoUrl at commit time so we
+            // pick up the freshly-resolved PM URL from the client-side
+            // resolver cache (the videoUrl computed at start was the dead
+            // backend route before PM had a chance to populate).
+            const _v294Fresh = api.stream.getVideoUrl(hash, fIdx);
+            console.log(`[PLAYER v294] Fallback stream READY in ${elapsedSec.toFixed(1)}s url=${(_v294Fresh||'').slice(0,60)}`);
             videoRetryCountRef.current = 0;
-            setStreamUrl(videoUrl);
+            setStreamUrl(_v294Fresh || videoUrl);
           }
           
           if (status.status === 'not_found' || status.status === 'invalid' || status.status === 'error') {

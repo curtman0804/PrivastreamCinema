@@ -419,42 +419,54 @@ export default function DiscoverScreen() {
   // ContentCards mount and subscribe, the cache is already hot and the
   // IN CINEMA badge paints on the same frame as the poster.  Skips ids
   // that are already cached or in-flight (so back-nav is a no-op).
+  // V305_PREWARM_DEFER_BUILD_TAG — defer the bulk /release_status POST by
+  // 350ms after deps change so that on back-from-details, the discover
+  // focus animation lands first and the selector stays responsive.
+  // Without this, returning from details fires the prewarm immediately;
+  // when the response lands ~200-500ms later it triggers a re-render
+  // burst that blocks the JS thread while the user is trying to scroll.
+  // The 350ms covers the typical Android-TV slide animation duration.
+  const _V305_BUILD_TAG = 'V305_PREWARM_DEFER_BUILD_TAG';
+  void _V305_BUILD_TAG;
   useEffect(() => {
-    const ids: string[] = [];
-    const seen = new Set<string>();
-    const collect = (rawId: any) => {
-      if (!rawId) return;
-      const id = String(rawId);
-      if (!id.startsWith('tt')) return;
-      if (seen.has(id)) return;
-      seen.add(id);
-      ids.push(id);
-    };
-    const harvest = (services: any) => {
-      if (!services || typeof services !== 'object') return;
-      for (const svc of Object.values(services) as any[]) {
-        if (!svc) continue;
-        const movies = (svc as any).movies;
-        if (Array.isArray(movies)) {
-          for (const m of movies) collect(m && (m.imdb_id || m.id));
+    const _v305_timer = setTimeout(() => {
+      const ids: string[] = [];
+      const seen = new Set<string>();
+      const collect = (rawId: any) => {
+        if (!rawId) return;
+        const id = String(rawId);
+        if (!id.startsWith('tt')) return;
+        if (seen.has(id)) return;
+        seen.add(id);
+        ids.push(id);
+      };
+      const harvest = (services: any) => {
+        if (!services || typeof services !== 'object') return;
+        for (const svc of Object.values(services) as any[]) {
+          if (!svc) continue;
+          const movies = (svc as any).movies;
+          if (Array.isArray(movies)) {
+            for (const m of movies) collect(m && (m.imdb_id || m.id));
+          }
         }
-      }
-    };
-    harvest((discoverData as any)?.services);
-    harvest((cachedDiscover as any)?.services);
-    /* Continue Watching: only fetch release status for movies. */
-    const harvestCW = (list: any) => {
-      if (!Array.isArray(list)) return;
-      for (const it of list) {
-        if (!it) continue;
-        const t = (it as any).content_type || (it as any).type;
-        if (t && t !== 'movie') continue;
-        collect((it as any).content_id || (it as any).imdb_id || (it as any).id);
-      }
-    };
-    harvestCW(continueWatching);
-    harvestCW(cachedCW);
-    if (ids.length > 0) _v167PrewarmReleaseStatus(ids);
+      };
+      harvest((discoverData as any)?.services);
+      harvest((cachedDiscover as any)?.services);
+      /* Continue Watching: only fetch release status for movies. */
+      const harvestCW = (list: any) => {
+        if (!Array.isArray(list)) return;
+        for (const it of list) {
+          if (!it) continue;
+          const t = (it as any).content_type || (it as any).type;
+          if (t && t !== 'movie') continue;
+          collect((it as any).content_id || (it as any).imdb_id || (it as any).id);
+        }
+      };
+      harvestCW(continueWatching);
+      harvestCW(cachedCW);
+      if (ids.length > 0) _v167PrewarmReleaseStatus(ids);
+    }, 350);
+    return () => clearTimeout(_v305_timer);
   }, [discoverData, cachedDiscover, continueWatching, cachedCW]);
 
   // PATCH_V47_FOCUS_THROTTLE + V181_DISCOVER_THROTTLE — same throttle but

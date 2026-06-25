@@ -21,119 +21,79 @@ import { useContentStore } from '../../src/store/contentStore';
 import { Addon, api } from '../../src/api/client';
 import { Image } from 'expo-image';
 import { colors } from '../../src/styles/colors';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
 
-// V309_SHORT_SHARE_CODES — replaces the V308 PRIVA on-device share code
-// with a backend-generated 7-digit numeric code (same UX as the AFTVnews
-// Downloader codes the app already supports).  When a user taps Share on
-// an installed addon, the app calls POST /api/addons/share-code to mint
-// (or fetch the existing) 7-digit code for that manifest URL.  Recipients
-// type the 7-digit code into the Share Code field → GET /api/addons/
-// resolve-code/<code> returns the URL → addon installs.
-const _V309_TAG = 'V309_SHORT_SHARE_CODES';
+// V308_SHARE_CODE_OVERHAUL — replace the hardcoded 4-entry downloader-code
+// map with a deterministic on-device share-code format ("PRIVA:<base64url>")
+// that works for ANY addon URL.  Encode/decode happens 100% client-side, so
+// PrivaStream's servers NEVER see share codes — preserves Middle Isolation.
+// Backward compatible with the 4 legacy numeric codes (Cinemeta, Netflix,
+// Torrentio, TPB) via api.addons.resolveCode().
+const _V308_TAG = 'V308_SHARE_CODE_OVERHAUL';
 
-// V310_DIRECT_URL_SOURCES — adds support for direct M3U / M3U8 / HLS / MP4
-// URLs as a "Direct Sources" sidecar alongside Stremio addons.  Sources are
-// stored on-device in AsyncStorage (Middle Isolation: backend never sees the
-// URLs nor what plays).  M3U playlists are parsed client-side into channel
-// lists.  Single-stream URLs (HLS .m3u8 with #EXT-X-TARGETDURATION, or .mp4)
-// become one-tap direct-play tiles.
-const _V310_TAG = 'V310_DIRECT_URL_SOURCES';
-const _V310_SAVED_SOURCES_KEY = 'privastream:saved_sources';
-
-type V310SourceType = 'm3u' | 'hls' | 'mp4';
-interface V310Channel {
-  name: string;
-  url: string;
-  logo?: string;
-  group?: string;
-}
-interface V310SavedSource {
-  id: string;
-  type: V310SourceType;
-  name: string;
-  url: string;
-  channels?: V310Channel[]; // present only for type === 'm3u'
-  created_at: number;
-}
-
-// V310 / V310b — extension-first detection.  Now distinguishes .m3u8 (HLS
-// single stream — most common shape) from .m3u (M3U playlist that needs
-// channel parsing).  This avoids the V310a bug where ALL .m3u8 URLs were
-// treated as IPTV playlists and "Empty Playlist" was shown when the body
-// fetch failed (CORS, etc.).
-function _v310DetectByExtension(url: string): V310SourceType | 'unknown' {
-  const u = (url || '').toLowerCase();
-  if (/\.m3u8(\?|$)/i.test(u)) return 'hls';  // HLS single stream
-  if (/\.m3u(\?|$)/i.test(u)) return 'm3u';   // IPTV playlist (no 8)
-  if (/\.mp4(\?|$)/i.test(u)) return 'mp4';
-  return 'unknown';
-}
-
-// HLS single-stream playlists contain #EXT-X-TARGETDURATION or
-// #EXT-X-VERSION; M3U playlists do NOT (they contain #EXTINF entries
-// followed by http(s) URLs).
-function _v310IsHlsStream(text: string): boolean {
-  if (!text) return false;
-  return /#EXT-X-TARGETDURATION|#EXT-X-VERSION/i.test(text);
-}
-
-// Parse an M3U/M3U8 playlist into a list of channels.  Handles the
-// common IPTV format:
-//   #EXTM3U
-//   #EXTINF:-1 tvg-id="..." tvg-logo="https://..." group-title="News",CNN
-//   https://stream.example.com/cnn.m3u8
-function _v310ParseM3UPlaylist(text: string): V310Channel[] {
-  if (!text) return [];
-  const out: V310Channel[] = [];
-  const lines = text.split(/\r?\n/);
-  let pending: { name: string; logo?: string; group?: string } | null = null;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    if (line.startsWith('#EXTINF:')) {
-      const nameMatch = line.match(/,(.+)$/);
-      const logoMatch = line.match(/tvg-logo="([^"]+)"/i);
-      const groupMatch = line.match(/group-title="([^"]+)"/i);
-      pending = {
-        name: nameMatch ? nameMatch[1].trim() : 'Unnamed',
-        logo: logoMatch ? logoMatch[1] : undefined,
-        group: groupMatch ? groupMatch[1] : undefined,
-      };
-    } else if (!line.startsWith('#') && /^https?:\/\//i.test(line)) {
-      if (pending) {
-        out.push({ url: line, name: pending.name, logo: pending.logo, group: pending.group });
-        pending = null;
-      } else {
-        // URL without preceding EXTINF — use the filename as the name
-        const tail = line.split('/').pop() || 'Stream';
-        out.push({ name: tail, url: line });
-      }
-    }
+// -- base64url (URL-safe, no padding) ----------------------------------------
+// React Native (Hermes) provides global btoa/atob.  We add a tiny fallback
+// table so this still works on older runtimes if someone ever runs it there.
+const _B64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function _b64encode(str: string): string {
+  if (typeof (globalThis as any).btoa === 'function') {
+    try { return (globalThis as any).btoa(str); } catch (_) { /* fall through */ }
+  }
+  let out = '';
+  let i = 0;
+  while (i < str.length) {
+    const c1 = str.charCodeAt(i++);
+    const c2 = i < str.length ? str.charCodeAt(i++) : NaN;
+    const c3 = i < str.length ? str.charCodeAt(i++) : NaN;
+    const e1 = c1 >> 2;
+    const e2 = ((c1 & 3) << 4) | (isNaN(c2) ? 0 : (c2 >> 4));
+    const e3 = isNaN(c2) ? 64 : (((c2 & 15) << 2) | (isNaN(c3) ? 0 : (c3 >> 6)));
+    const e4 = isNaN(c3) ? 64 : (c3 & 63);
+    out += _B64_CHARS.charAt(e1) + _B64_CHARS.charAt(e2)
+         + (e3 === 64 ? '=' : _B64_CHARS.charAt(e3))
+         + (e4 === 64 ? '=' : _B64_CHARS.charAt(e4));
   }
   return out;
 }
-
-// AsyncStorage CRUD for saved direct sources
-async function _v310LoadSavedSources(): Promise<V310SavedSource[]> {
+function _b64decode(str: string): string {
+  if (typeof (globalThis as any).atob === 'function') {
+    try { return (globalThis as any).atob(str); } catch (_) { /* fall through */ }
+  }
+  let out = '';
+  let i = 0;
+  const cleaned = str.replace(/[^A-Za-z0-9+/=]/g, '');
+  while (i < cleaned.length) {
+    const e1 = _B64_CHARS.indexOf(cleaned.charAt(i++));
+    const e2 = _B64_CHARS.indexOf(cleaned.charAt(i++));
+    const e3 = _B64_CHARS.indexOf(cleaned.charAt(i++));
+    const e4 = _B64_CHARS.indexOf(cleaned.charAt(i++));
+    out += String.fromCharCode((e1 << 2) | (e2 >> 4));
+    if (e3 !== 64 && e3 !== -1) out += String.fromCharCode(((e2 & 15) << 4) | (e3 >> 2));
+    if (e4 !== 64 && e4 !== -1) out += String.fromCharCode(((e3 & 3) << 6) | e4);
+  }
+  return out;
+}
+function _v308EncodeShareCode(url: string): string {
+  // base64url: + → -, / → _, strip =
+  const enc = _b64encode(url).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `PRIVA:${enc}`;
+}
+function _v308DecodeShareCode(code: string): string | null {
+  if (!code) return null;
+  const trimmed = code.trim();
+  if (!trimmed.toUpperCase().startsWith('PRIVA:')) return null;
+  const body = trimmed.slice(6);
+  // restore standard base64 alphabet + padding
+  let b64 = body.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4 !== 0) b64 += '=';
   try {
-    const raw = await AsyncStorage.getItem(_V310_SAVED_SOURCES_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((s) => s && s.id && s.url && s.type);
+    const decoded = _b64decode(b64);
+    if (!decoded || !/^https?:\/\//i.test(decoded)) return null;
+    return decoded;
   } catch (_) {
-    return [];
+    return null;
   }
 }
-async function _v310PersistSavedSources(sources: V310SavedSource[]): Promise<void> {
-  try {
-    await AsyncStorage.setItem(_V310_SAVED_SOURCES_KEY, JSON.stringify(sources));
-  } catch (_) {
-    /* ignore — best effort */
-  }
-}
+// -- end base64url -----------------------------------------------------------
 
 // Reusable TV-friendly focus button
 function FocusButton({ 
@@ -168,33 +128,22 @@ function FocusButton({
 
 export default function AddonsScreen() {
   const { addons, isLoadingAddons, fetchAddons, fetchDiscover } = useContentStore();
-  const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [addonUrl, setAddonUrl] = useState('');
   const [shortCode, setShortCode] = useState('');
-  const [directUrl, setDirectUrl] = useState('');
   const [isInstalling, setIsInstalling] = useState(false);
   const [isResolvingCode, setIsResolvingCode] = useState(false);
-  const [isLoadingDirectUrl, setIsLoadingDirectUrl] = useState(false);
-  const [inputMode, setInputMode] = useState<'url' | 'code' | 'direct'>('code');
+  const [inputMode, setInputMode] = useState<'url' | 'code'>('code');
   const [deletingAddonId, setDeletingAddonId] = useState<string | null>(null);
   const [addBtnFocused, setAddBtnFocused] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const [codeFocused, setCodeFocused] = useState(false);
-  const [directFocused, setDirectFocused] = useState(false);
   const [urlTabFocused, setUrlTabFocused] = useState(false);
   const [codeTabFocused, setCodeTabFocused] = useState(false);
-  const [directTabFocused, setDirectTabFocused] = useState(false);
-  // V310 — saved direct sources (M3U / HLS / MP4) loaded from AsyncStorage
-  const [savedSources, setSavedSources] = useState<V310SavedSource[]>([]);
-  // V310 — channel picker modal for M3U sources with multiple channels
-  const [channelPickerData, setChannelPickerData] = useState<V310SavedSource | null>(null);
-  // V309 — share modal state.  `shareCode` is the 7-digit code fetched from
-  // the backend (POST /api/addons/share-code).  No more PRIVA, no more
-  // legacy hardcoded numeric map — one path to rule them all.
-  const [shareModalData, setShareModalData] = useState<{ name: string; url: string; shareCode: string } | null>(null);
-  const [isMintingShareCode, setIsMintingShareCode] = useState(false);
+  // V187_SHARE_MODAL — themed dialog state + focus tracking
+  // V308 — added shareCode (PRIVA:...) alongside legacy numeric code
+  const [shareModalData, setShareModalData] = useState<{ name: string; url: string; code: string | null; shareCode: string } | null>(null);
   const [shareCopyFocused, setShareCopyFocused] = useState(false);
   const [shareCloseFocused, setShareCloseFocused] = useState(false);
   
@@ -203,208 +152,16 @@ export default function AddonsScreen() {
 
   useEffect(() => {
     fetchAddons(true);
-    // V310 — load saved direct sources from device on mount
-    _v310LoadSavedSources().then(setSavedSources);
   }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchAddons(true);
-    setSavedSources(await _v310LoadSavedSources());
     setRefreshing(false);
   }, []);
 
-  // V310 — handle "Direct URL" install: detect by extension, fetch only
-  // when we need to parse an M3U playlist or sniff an unknown URL.
-  const _v310HandleAddDirectUrl = async () => {
-    const u = directUrl.trim();
-    if (!u) {
-      Alert.alert('Error', 'Please enter a URL');
-      return;
-    }
-    if (!/^https?:\/\//i.test(u)) {
-      Alert.alert('Invalid URL', 'URL must start with http:// or https://');
-      return;
-    }
-
-    setIsLoadingDirectUrl(true);
-    try {
-      // Step 1: detect by extension
-      let detected: V310SourceType | 'unknown' = _v310DetectByExtension(u);
-      let bodyText = '';
-
-      // Step 2: only fetch when we MUST parse the body (.m3u IPTV
-      // playlist) or sniff an unknown extension.  Skip fetch for .m3u8
-      // (HLS single stream) and .mp4 (direct file) — extension alone is
-      // enough and the fetch would often fail on RN/Firestick due to CORS
-      // or unsupported headers.
-      if (detected === 'm3u' || detected === 'unknown') {
-        try {
-          const resp = await fetch(u, { method: 'GET' });
-          if (!resp.ok) {
-            throw new Error(`Server returned HTTP ${resp.status}`);
-          }
-          const ctype = (resp.headers.get('content-type') || '').toLowerCase();
-          if (ctype.includes('video/mp4') || ctype.includes('application/octet-stream')) {
-            detected = 'mp4';
-          } else {
-            bodyText = await resp.text();
-            if (detected === 'unknown') {
-              // Sniff body to disambiguate
-              if (/^#EXTM3U/m.test(bodyText)) {
-                detected = _v310IsHlsStream(bodyText) ? 'hls' : 'm3u';
-              } else if (/^https?:\/\//m.test(bodyText)) {
-                // Treat as M3U-style line list (just URLs)
-                detected = 'm3u';
-              }
-            }
-            // For detected === 'm3u' (from extension), keep bodyText for parsing.
-          }
-        } catch (e: any) {
-          if (detected === 'm3u') {
-            Alert.alert(
-              'Could Not Fetch Playlist',
-              `Failed to download the M3U playlist:\n${e?.message || e}`,
-            );
-            setIsLoadingDirectUrl(false);
-            return;
-          }
-          // unknown extension AND fetch failed — give up
-          throw e;
-        }
-      }
-
-      if (detected === 'unknown') {
-        Alert.alert(
-          'Unsupported URL',
-          'Could not detect the source type.  This tab accepts .m3u/.m3u8 playlists, HLS streams, and .mp4 files.',
-        );
-        setIsLoadingDirectUrl(false);
-        return;
-      }
-
-      // Build the saved source
-      const id = `src_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const fallbackName = (() => {
-        try {
-          const p = new URL(u);
-          const last = p.pathname.split('/').filter(Boolean).pop() || '';
-          return p.hostname.replace(/^www\./i, '') + (last ? '/' + last : '');
-        } catch (_) {
-          return u.split('/').pop() || 'Direct Source';
-        }
-      })();
-
-      let saved: V310SavedSource;
-      if (detected === 'm3u') {
-        const channels = _v310ParseM3UPlaylist(bodyText);
-        if (channels.length === 0) {
-          Alert.alert('Empty Playlist', 'Could not find any channels in that M3U playlist.');
-          setIsLoadingDirectUrl(false);
-          return;
-        }
-        saved = {
-          id,
-          type: 'm3u',
-          name: `M3U • ${fallbackName} • ${channels.length} channels`,
-          url: u,
-          channels,
-          created_at: Date.now(),
-        };
-      } else {
-        saved = {
-          id,
-          type: detected,
-          name: `${detected.toUpperCase()} • ${fallbackName}`,
-          url: u,
-          created_at: Date.now(),
-        };
-      }
-
-      const next = [saved, ...savedSources];
-      setSavedSources(next);
-      await _v310PersistSavedSources(next);
-
-      setShowModal(false);
-      setDirectUrl('');
-      Alert.alert(
-        'Source Saved',
-        detected === 'm3u'
-          ? `Saved M3U playlist with ${saved.channels?.length || 0} channels`
-          : `Saved ${detected.toUpperCase()} stream — tap to play`,
-      );
-    } catch (error: any) {
-      const msg = error?.message || 'Failed to load URL';
-      Alert.alert('Could Not Add Source', msg);
-    } finally {
-      setIsLoadingDirectUrl(false);
-    }
-  };
-
-  // V310 / V310b — launch player for a single direct stream.  Pass ONLY
-  // directUrl + title.  Omitting isLive avoids the player's live-TV path
-  // (which keeps the loader visible until the first frame paints — caused
-  // flashing/error on VOD MP4s/HLS).  The player auto-detects HLS vs MP4
-  // from the URL extension internally.
-  const _v310PlayDirectStream = (
-    streamUrl: string,
-    title: string,
-    _isLive: boolean,
-  ) => {
-    try {
-      router.push({
-        pathname: '/player',
-        params: {
-          directUrl: streamUrl,
-          title: title || 'Direct Stream',
-        },
-      } as any);
-    } catch (e: any) {
-      Alert.alert('Playback Error', e?.message || 'Failed to launch player');
-    }
-  };
-
-  // V310 — handle tap on a saved Direct Source card
-  const _v310HandleSourceTap = (src: V310SavedSource) => {
-    if (src.type === 'm3u' && src.channels && src.channels.length > 1) {
-      setChannelPickerData(src);
-      return;
-    }
-    if (src.type === 'm3u' && src.channels && src.channels.length === 1) {
-      // single-channel M3U — go straight to player
-      const ch = src.channels[0];
-      _v310PlayDirectStream(ch.url, ch.name || src.name, /\.m3u8?(\?|$)/i.test(ch.url));
-      return;
-    }
-    if (src.type === 'hls' || src.type === 'mp4') {
-      _v310PlayDirectStream(src.url, src.name, src.type === 'hls');
-      return;
-    }
-    Alert.alert('Empty Source', 'This source has no playable streams.');
-  };
-
-  // V310 — delete a saved direct source
-  const _v310HandleDeleteSource = (src: V310SavedSource) => {
-    Alert.alert(
-      'Remove Source',
-      `Remove "${src.name}" from saved sources?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            const next = savedSources.filter((s) => s.id !== src.id);
-            setSavedSources(next);
-            await _v310PersistSavedSources(next);
-          },
-        },
-      ],
-    );
-  };
-
-  // V309 — share-code resolver.  Accepts 6-8 digit numeric codes.  Backend
-  // checks MongoDB share-codes table first, then falls back to AFTVnews.
+  // V308 — share-code resolver.  Tries on-device PRIVA:<b64> decode first;
+  // falls back to backend numeric code lookup for the 4 legacy entries.
   const handleResolveAndInstall = async () => {
     const code = shortCode.trim();
     if (!code) {
@@ -412,10 +169,32 @@ export default function AddonsScreen() {
       return;
     }
 
-    if (!/^[0-9]{6,8}$/.test(code)) {
+    // 1. On-device PRIVA share code path — no backend round-trip.
+    const localUrl = _v308DecodeShareCode(code);
+    if (localUrl) {
+      setIsInstalling(true);
+      try {
+        await api.addons.install(localUrl);
+        setShowModal(false);
+        setShortCode('');
+        try { await (useContentStore.getState() as any).nukeDiscoverCache?.(true); } catch (_) {}
+        await fetchAddons(true);
+        InteractionManager.runAfterInteractions(() => { fetchDiscover(true); });
+        Alert.alert('Success', 'Addon installed!');
+      } catch (error: any) {
+        const msg = error?.response?.data?.detail || error.message || 'Failed to install addon';
+        Alert.alert('Install Failed', msg);
+      } finally {
+        setIsInstalling(false);
+      }
+      return;
+    }
+
+    // 2. Legacy numeric code path (Cinemeta 8762337, Netflix 201839, etc.)
+    if (!/^[0-9]{4,10}$/.test(code)) {
       Alert.alert(
         'Invalid Code',
-        'Share codes are 6-8 digits long (e.g. 8762337). Make sure you have entered the code correctly.',
+        'Share codes look like "PRIVA:..." (long letters/digits) or a numeric code such as 8762337.',
       );
       return;
     }
@@ -531,32 +310,42 @@ export default function AddonsScreen() {
   };
 
   // V187_SHARE_MODAL — themed dialog (no more native Alert).
-  // V309 — share code is generated by the backend (POST /api/addons/share-code).
-  // Same URL always yields the same 7-digit code, so spam-tapping Share
-  // doesn't proliferate codes.
-  const handleShareAddon = async (addon: Addon) => {
+  // V308 — `_v186DownloaderCodeFor` retained ONLY for backward-compat
+  // display of the 4 legacy numeric codes; the primary share code is now the
+  // deterministic PRIVA:<base64url> generated for every addon URL.
+  const _v186DownloaderCodeFor = (name: string, url: string): string | null => {
+    const n = (name || '').toLowerCase();
+    const u = (url || '').toLowerCase();
+    if (n.includes('cinemeta') || u.includes('cinemeta.strem.io')) return '8762337';
+    if (n.includes('netflix') || u.includes('netflix')) return '201839';
+    if (n.includes('torrentio') || u.includes('torrentio.strem')) return '2519255';
+    if (n.includes('pirate') || n === 'tpb' || u.includes('piratebay') || u.includes('tpb.strem') || u.includes('thepiratebay')) return '970280';
+    return null;
+  };
+  // V308 — share dialog now ALWAYS generates a PRIVA share code (works for
+  // any URL).  Legacy numeric code still surfaced when known, but PRIVA is
+  // the canonical, on-device-only identifier.
+  const handleShareAddon = (addon: Addon) => {
     const addonUrl = (addon as any).manifestUrl || addon.url || '';
     const addonName = addon.manifest?.name || 'Addon';
     if (!addonUrl) {
       Alert.alert('No URL', 'This addon does not have a shareable URL.');
       return;
     }
-    setIsMintingShareCode(true);
-    try {
-      const { code } = await api.addons.createShareCode(addonUrl);
-      setShareModalData({ name: addonName, url: addonUrl, shareCode: code });
-    } catch (error: any) {
-      const msg = error?.response?.data?.detail || error.message || 'Could not generate share code';
-      Alert.alert('Share Code Error', msg);
-    } finally {
-      setIsMintingShareCode(false);
-    }
+    const legacyCode = _v186DownloaderCodeFor(addonName, addonUrl);
+    const shareCode = _v308EncodeShareCode(addonUrl);
+    setShareModalData({ name: addonName, url: addonUrl, code: legacyCode, shareCode });
   };
   const handleShareConfirm = async () => {
     if (!shareModalData) return;
-    const { name, url, shareCode } = shareModalData;
-    // V309 — clean share message: code first, URL second.
-    const shareMessage = `${name}\n\nShare code: ${shareCode}\nManifest URL: ${url}`;
+    const { name, url, code, shareCode } = shareModalData;
+    // V308 — share message now leads with the PRIVA share code (works for
+    // any addon) and lists the legacy numeric code only when applicable.
+    const parts: string[] = [name, ''];
+    parts.push(`Share code: ${shareCode}`);
+    if (code) parts.push(`Legacy code: ${code}`);
+    parts.push(`Manifest URL: ${url}`);
+    const shareMessage = parts.join('\n');
     try {
       await Share.share({ message: shareMessage, title: `Share ${name} Addon` });
     } catch (error) {
@@ -647,7 +436,7 @@ export default function AddonsScreen() {
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading addons...</Text>
         </View>
-      ) : addons.length === 0 && savedSources.length === 0 ? (
+      ) : addons.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="extension-puzzle-outline" size={64} color={colors.primary} />
           <Text style={styles.emptyTitle}>No Addons Installed</Text>
@@ -667,21 +456,6 @@ export default function AddonsScreen() {
           renderItem={renderAddon}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          ListHeaderComponent={
-            savedSources.length > 0 ? (
-              <View style={styles.directSourcesSection}>
-                <Text style={styles.directSourcesHeading}>Direct Sources</Text>
-                {savedSources.map((src) => (
-                  <V310DirectSourceCard
-                    key={src.id}
-                    src={src}
-                    onPress={() => _v310HandleSourceTap(src)}
-                    onDelete={() => _v310HandleDeleteSource(src)}
-                  />
-                ))}
-              </View>
-            ) : null
-          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -709,11 +483,11 @@ export default function AddonsScreen() {
               </FocusButton>
             </View>
 
-            {/* V309 — share code helper strip in the install modal */}
+            {/* V308 — Middle Isolation legal-posture strip */}
             <View style={styles.privacyStrip}>
-              <Ionicons name="keypad-outline" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+              <Ionicons name="shield-checkmark-outline" size={16} color={colors.primary} style={{ marginRight: 6 }} />
               <Text style={styles.privacyStripText}>
-                Got a 7-digit code from another user? Paste it below to install.
+                Share codes are processed on your device. Our servers never see them.
               </Text>
             </View>
 
@@ -745,66 +519,16 @@ export default function AddonsScreen() {
                 <Ionicons name="link-outline" size={18} color={inputMode === 'url' ? colors.primary : '#888888'} />
                 <Text style={[styles.tabText, inputMode === 'url' && styles.tabTextActive]}>Manifest URL</Text>
               </Pressable>
-              {/* V310 — Direct URL tab for M3U / HLS / MP4 */}
-              <Pressable
-                style={[
-                  styles.tab,
-                  inputMode === 'direct' && styles.tabActive,
-                  directTabFocused && styles.tabFocused,
-                ]}
-                onFocus={() => setDirectTabFocused(true)}
-                onBlur={() => setDirectTabFocused(false)}
-                onPress={() => setInputMode('direct')}
-              >
-                <Ionicons name="play-circle-outline" size={18} color={inputMode === 'direct' ? colors.primary : '#888888'} />
-                <Text style={[styles.tabText, inputMode === 'direct' && styles.tabTextActive]}>Direct URL</Text>
-              </Pressable>
             </View>
 
-            {inputMode === 'direct' ? (
-              <>
-                {/* V310 — Direct URL tab: accept M3U/M3U8/HLS/MP4 */}
-                <Text style={styles.modalLabel}>Direct URL</Text>
-                <TextInput
-                  style={[styles.modalInput, directFocused && styles.modalInputFocused]}
-                  placeholder="https://example.com/playlist.m3u or stream.m3u8 or video.mp4"
-                  placeholderTextColor="#666666"
-                  value={directUrl}
-                  onChangeText={setDirectUrl}
-                  onFocus={() => setDirectFocused(true)}
-                  onBlur={() => setDirectFocused(false)}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  multiline={true}
-                  numberOfLines={3}
-                />
-                <Text style={styles.modalHint}>
-                  M3U playlists are parsed into channel lists. HLS (.m3u8) and MP4 URLs play directly. Sources are stored on this device only.
-                </Text>
-                <FocusButton
-                  onPress={_v310HandleAddDirectUrl}
-                  disabled={isLoadingDirectUrl}
-                  style={[styles.modalButton, isLoadingDirectUrl && styles.modalButtonDisabled]}
-                  focusedStyle={styles.modalButtonFocused}
-                >
-                  {isLoadingDirectUrl ? (
-                    <View style={styles.buttonRow}>
-                      <ActivityIndicator size="small" color={colors.primary} />
-                      <Text style={styles.modalButtonText}>  Loading...</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.modalButtonText}>Add Source</Text>
-                  )}
-                </FocusButton>
-              </>
-            ) : inputMode === 'code' ? (
+            {inputMode === 'code' ? (
               <>
                 <Text style={styles.modalLabel}>Share Code</Text>
                 <TextInput
                   style={[styles.modalInput, codeFocused && styles.modalInputFocused]}
-                  /* V309 — 7-digit codes generated by POST /api/addons/share-code
-                     Legacy AFTVnews codes (e.g. 8762337 Cinemeta) still resolve. */
-                  placeholder="e.g. 1234567"
+                  /* V308 — PRIVA: codes work for any addon URL; legacy
+                     numeric codes (e.g. 8762337 Cinemeta) still resolve. */
+                  placeholder="PRIVA:... or 8762337"
                   placeholderTextColor="#666666"
                   value={shortCode}
                   onChangeText={setShortCode}
@@ -812,11 +536,10 @@ export default function AddonsScreen() {
                   onBlur={() => setCodeFocused(false)}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  keyboardType="number-pad"
-                  maxLength={8}
+                  keyboardType="default"
                 />
                 <Text style={styles.modalHint}>
-                  Enter a 6-8 digit share code from another PrivaStream user (or a legacy AFTVnews Downloader code).
+                  Paste a PRIVA share code from another user, or a legacy numeric Downloader code.
                 </Text>
                 <FocusButton 
                   onPress={handleResolveAndInstall} 
@@ -878,7 +601,7 @@ export default function AddonsScreen() {
       </Modal>
 
       {/* V187_SHARE_MODAL — themed Share dialog (dark/gold like the rest of the app) */}
-      {/* V309 — single 7-digit share code (backend-minted), no PRIVA, no dual legacy code surface */}
+      {/* V308 — primary surface is the PRIVA share code; legacy numeric code shown when applicable */}
       <Modal
         visible={shareModalData != null}
         animationType="fade"
@@ -892,16 +615,29 @@ export default function AddonsScreen() {
               <Text style={styles.modalTitle}>Share {shareModalData?.name || 'Addon'}</Text>
             </View>
 
-            {/* V309 — primary 7-digit share code (big, centered, gold) */}
+            {/* PRIVA share code — always present, generated on-device */}
             {shareModalData?.shareCode ? (
               <>
-                <Text style={styles.modalLabel}>Share Code</Text>
-                <View style={[styles.modalInput, { minHeight: 0, paddingVertical: 18 }]}>
+                <Text style={styles.modalLabel}>Share Code (works for anyone)</Text>
+                <View style={[styles.modalInput, { minHeight: 0, paddingVertical: 14 }]}>
                   <Text
                     selectable={true}
-                    style={{ color: colors.primary, fontSize: 32, fontWeight: '800', letterSpacing: 6, textAlign: 'center' }}
+                    style={{ color: colors.primary, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 }}
                   >
                     {shareModalData.shareCode}
+                  </Text>
+                </View>
+                <View style={{ height: 12 }} />
+              </>
+            ) : null}
+
+            {/* Legacy numeric Downloader code (only if known) */}
+            {shareModalData?.code ? (
+              <>
+                <Text style={styles.modalLabel}>Legacy Downloader Code</Text>
+                <View style={[styles.modalInput, { minHeight: 0, paddingVertical: 16 }]}>
+                  <Text style={{ color: colors.primary, fontSize: 24, fontWeight: '700', letterSpacing: 2, textAlign: 'center' }}>
+                    {shareModalData.code}
                   </Text>
                 </View>
                 <View style={{ height: 12 }} />
@@ -915,7 +651,8 @@ export default function AddonsScreen() {
               </Text>
             </View>
             <Text style={styles.modalHint}>
-              {/* V309 — recipients paste the 7-digit code (or the URL) into the Addons section to install */}
+              {/* V189_NOT_STREMIO — this app isn't Stremio; instruct user where to actually paste */}
+              {/* V308 — Mention PRIVA code as the universal path */}
               Recipient can paste the share code or manifest URL into the Addons section of PrivaStream to install this addon.
             </Text>
 
@@ -940,46 +677,6 @@ export default function AddonsScreen() {
                 <Text style={[styles.modalButtonText, { color: '#AAAAAA' }]}>Close</Text>
               </Pressable>
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* V310 — Channel Picker Modal (M3U with multiple channels) */}
-      <Modal
-        visible={channelPickerData != null}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setChannelPickerData(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, isTV && styles.modalContentTV, { maxHeight: '85%' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle} numberOfLines={1}>
-                {channelPickerData?.name || 'Channels'}
-              </Text>
-              <FocusButton onPress={() => setChannelPickerData(null)}>
-                <Ionicons name="close" size={24} color="#FFFFFF" />
-              </FocusButton>
-            </View>
-            <FlatList
-              data={channelPickerData?.channels || []}
-              keyExtractor={(item, idx) => `${item.url}_${idx}`}
-              renderItem={({ item }) => (
-                <V310ChannelRow
-                  channel={item}
-                  onPress={() => {
-                    const isLive = /\.m3u8?(\?|$)/i.test(item.url);
-                    setChannelPickerData(null);
-                    setTimeout(() => _v310PlayDirectStream(item.url, item.name, isLive), 80);
-                  }}
-                />
-              )}
-              ListEmptyComponent={
-                <Text style={[styles.modalHint, { textAlign: 'center', marginTop: 40 }]}>
-                  No channels in this playlist.
-                </Text>
-              }
-            />
           </View>
         </View>
       </Modal>
@@ -1061,98 +758,6 @@ function AddonCard({
         </Pressable>
       </View>
     </View>
-  );
-}
-
-// V310 — Direct Source Card (M3U / HLS / MP4 saved on device)
-function V310DirectSourceCard({
-  src,
-  onPress,
-  onDelete,
-}: {
-  src: V310SavedSource;
-  onPress: () => void;
-  onDelete: () => void;
-}) {
-  const [pressFocused, setPressFocused] = useState(false);
-  const [delFocused, setDelFocused] = useState(false);
-  const typeColor = src.type === 'm3u' ? '#7BB0FF' : src.type === 'hls' ? '#FFB870' : '#9FE7B0';
-  const iconName: any =
-    src.type === 'm3u' ? 'list-outline' : src.type === 'hls' ? 'radio-outline' : 'film-outline';
-  return (
-    <View style={styles.addonCard}>
-      <Pressable
-        style={[styles.addonCardBody, pressFocused && styles.addonCardBodyFocused]}
-        onFocus={() => setPressFocused(true)}
-        onBlur={() => setPressFocused(false)}
-        onPress={onPress}
-      >
-        <View style={[styles.addonIconContainer, { backgroundColor: 'rgba(184,160,92,0.10)' }]}>
-          <Ionicons name={iconName} size={28} color={typeColor} />
-        </View>
-        <View style={styles.addonInfo}>
-          <Text style={styles.addonName} numberOfLines={2}>{src.name}</Text>
-          <View style={[styles.addonTypes, { marginTop: 6 }]}>
-            <View style={[styles.typeBadge, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
-              <Text style={[styles.typeBadgeText, { color: typeColor }]}>{src.type.toUpperCase()}</Text>
-            </View>
-            {src.type === 'm3u' && src.channels ? (
-              <View style={[styles.typeBadge, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
-                <Text style={[styles.typeBadgeText, { color: colors.primary }]}>
-                  {src.channels.length} channels
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
-      </Pressable>
-      <View style={styles.addonActions}>
-        <Pressable
-          style={[styles.actionButton, delFocused && styles.actionButtonFocused]}
-          onFocus={() => setDelFocused(true)}
-          onBlur={() => setDelFocused(false)}
-          onPress={onDelete}
-        >
-          <Ionicons name="trash-outline" size={22} color="#FF4444" />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-// V310 — single Channel row inside the channel picker modal
-function V310ChannelRow({
-  channel,
-  onPress,
-}: {
-  channel: V310Channel;
-  onPress: () => void;
-}) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <Pressable
-      style={[styles.channelRow, focused && styles.channelRowFocused]}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      onPress={onPress}
-    >
-      {channel.logo ? (
-        <Image source={{ uri: channel.logo }} style={styles.channelLogo} contentFit="contain" />
-      ) : (
-        <View style={styles.channelLogoFallback}>
-          <Ionicons name="play" size={18} color={colors.primary} />
-        </View>
-      )}
-      <View style={{ flex: 1, marginLeft: 12 }}>
-        <Text style={styles.channelName} numberOfLines={1}>
-          {channel.name || channel.url}
-        </Text>
-        {channel.group ? (
-          <Text style={styles.channelGroup} numberOfLines={1}>{channel.group}</Text>
-        ) : null}
-      </View>
-      <Ionicons name="play-circle" size={28} color={focused ? colors.primary : '#666'} />
-    </Pressable>
   );
 }
 
@@ -1458,68 +1063,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.primary,
     fontWeight: '600',
-  },
-  // V310 — Direct Sources section + cards + channel picker
-  directSourcesSection: {
-    marginBottom: 16,
-  },
-  directSourcesHeading: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.primary,
-    marginBottom: 10,
-    marginLeft: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  addonCardBody: {
-    flex: 1,
-    flexDirection: 'row',
-    borderWidth: 3,
-    borderColor: 'transparent',
-    borderRadius: 8,
-  },
-  addonCardBodyFocused: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(184, 160, 92, 0.10)',
-  },
-  channelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 6,
-    backgroundColor: '#2A2A2E',
-    borderRadius: 8,
-    borderWidth: 3,
-    borderColor: 'transparent',
-  },
-  channelRowFocused: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(184, 160, 92, 0.15)',
-  },
-  channelLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 6,
-    backgroundColor: '#1A1A1E',
-  },
-  channelLogoFallback: {
-    width: 40,
-    height: 40,
-    borderRadius: 6,
-    backgroundColor: '#1A1A1E',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  channelName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  channelGroup: {
-    fontSize: 11,
-    color: '#888888',
-    marginTop: 2,
   },
 });
