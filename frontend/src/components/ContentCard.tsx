@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
+﻿import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,7 +9,7 @@ import {
   findNodeHandle,
   Image as RNImage,
   DeviceEventEmitter,
-  /* V176K_POPOVER — Stremio-style anchored popover. */
+  /* V176K_POPOVER â€” Stremio-style anchored popover. */
   /* V176L_PERF_CLEANUP marker */
   /* V176M_DIAG marker */
   /* V176N_HOST_SINGLETON marker */
@@ -24,7 +24,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentItem, SearchResult, api } from '../api/client';
 import { useContentStore as _v169UseContentStore /* V169_FOCUS_STREAM_PREWARM */, getMetaCache, setMetaCache } from '../store/contentStore'; // PATCH_V248_HOVER_META
-/* V170_FOCUS_DWELL_TUNE — cap concurrent focus-prefetches so D-pad
+/* V170_FOCUS_DWELL_TUNE â€” cap concurrent focus-prefetches so D-pad
    fly-throughs cannot saturate the JS bridge / backend.  Beyond the
    cap, prefetches are silently dropped (the on-click fetch still
    works, just without the warm-cache acceleration). */
@@ -32,19 +32,19 @@ let _v170PrefetchInflight = 0;
 const _V170_PREFETCH_CAP = 2;
 import { colors, posterShapes } from '../styles/colors';
 import Constants from 'expo-constants';
-/* V176_LONGPRESS_MENU — v172 referenced AsyncStorage but forgot to import it,
+/* V176_LONGPRESS_MENU â€” v172 referenced AsyncStorage but forgot to import it,
    so hydration silently failed and gold check never appeared.  Restored here. */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
-// V160_POSTER_REGISTRY — single source of truth for posters across the app.
+// V160_POSTER_REGISTRY â€” single source of truth for posters across the app.
 // First valid render per IMDb-id "wins" and all later renders (any surface:
 // addon rows, search, library, continue-watching) use the same URL.  Fixes
 // the case where the same content shows different posters depending on
 // which screen rendered it first.
 const _v160PosterRegistry: Record<string, string> = {};
-// v215 poster key uniqueness — only collapse IMDB-style ids ("tt1234:1:5")
+// v215 poster key uniqueness â€” only collapse IMDB-style ids ("tt1234:1:5")
 // to the series prefix ("tt1234").  Custom addon ids like "jerktank:1" or
 // "porndb:abc" are kept UNIQUE so each card in the row paints its own
 // addon-supplied poster instead of all sharing the first-rendered poster.
@@ -54,7 +54,7 @@ function _v215PosterKey(id: string | undefined | null): string {
   if (/^tt\d+/.test(s)) return s.split(':')[0];
   return s;
 }
-// V166_POSTER_SUB — subscriber map keyed by canonical (series-level) id.
+// V166_POSTER_SUB â€” subscriber map keyed by canonical (series-level) id.
 const _v166PosterSubs: Record<string, Set<(url: string) => void>> = {};
 export function v160RegisterPoster(imdbId: string | undefined | null, url: string | undefined | null): void {
   if (!imdbId || !url) return;
@@ -63,14 +63,14 @@ export function v160RegisterPoster(imdbId: string | undefined | null, url: strin
   if (!key) return;
   if (!_v160PosterRegistry[key]) {
     _v160PosterRegistry[key] = String(url);
-    /* V166_POSTER_SUB — notify any subscribers (e.g. Continue Watching) */
+    /* V166_POSTER_SUB â€” notify any subscribers (e.g. Continue Watching) */
     const subs = _v166PosterSubs[key];
     if (subs && subs.size) {
       subs.forEach(cb => { try { cb(String(url)); } catch (_) {} });
     }
   }
 }
-/* V166_POSTER_SUB — subscribe to canonical poster URL updates for a given id.
+/* V166_POSTER_SUB â€” subscribe to canonical poster URL updates for a given id.
    Fires immediately with the current value if one exists.  Returns an
    unsubscribe function. */
 export function v160SubscribePoster(imdbId: string | undefined | null, cb: (url: string) => void): () => void {
@@ -87,8 +87,8 @@ export function v160SubscribePoster(imdbId: string | undefined | null, cb: (url:
   };
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   V172_WATCHED_REGISTRY — movie / episode watched flag, shared across every
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   V172_WATCHED_REGISTRY â€” movie / episode watched flag, shared across every
    poster surface (Discover, Search, Library, Continue Watching).  Single
    source of truth: AsyncStorage["privastream_watched"].  Pub/sub so a long-
    press unmark on one card updates every other visible card that shows the
@@ -138,8 +138,8 @@ export async function v172UnmarkWatched(contentId: string | undefined | null): P
   _v172Subs.forEach((cb) => { try { cb(); } catch (_) {} });
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   V176_LONGPRESS_MENU — companion helpers to the V172 watched registry.
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   V176_LONGPRESS_MENU â€” companion helpers to the V172 watched registry.
    Adds Mark-as-Watched (sister to UnmarkWatched), an in-memory progress
    registry (hydrated by discover.tsx from the CW fetch) so the menu can
    conditionally show "Clear Progress", and a unified Alert opener that
@@ -158,7 +158,7 @@ export async function v176MarkWatched(contentId: string | undefined | null): Pro
   _v172Subs.forEach((cb) => { try { cb(); } catch (_) {} });
 }
 
-/* Progress registry — populated by discover.tsx every time CW data lands. */
+/* Progress registry â€” populated by discover.tsx every time CW data lands. */
 const _v176ProgressSet = new Set<string>();
 const _v176ProgressSubs = new Set<() => void>();
 export function v176RegisterProgress(ids: Array<string | undefined | null>): void {
@@ -196,7 +196,7 @@ export function v176ShowLongPressMenu(opts: {
   anchor?: { x: number; y: number; width: number; height: number } | null;
   onAfterChange?: (action: 'watched' | 'unwatched' | 'cleared' | 'added' | 'removed') => void;
 }): void {
-  /* V176K_POPOVER — emit the open event instead of calling Alert.alert.
+  /* V176K_POPOVER â€” emit the open event instead of calling Alert.alert.
      Every screen that hosts a <V176kPopover /> will render the menu. */
   const { item, inLibraryOverride, hasProgressOverride, anchor, onAfterChange } = opts || ({} as any);
   if (!item) return;
@@ -209,13 +209,13 @@ export function v176ShowLongPressMenu(opts: {
   if (!actions.length) return;
   v176kEmitOpen({ anchor: anchor || null, title, actions });
 }
-/* ─── V176K_POPOVER ──────────────────────────────────────────────────────
+/* â”€â”€â”€ V176K_POPOVER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Custom Stremio-style popover anchored to the focused poster.  Used by
    ContentCard, LibraryCard, ContinueWatchingItem, and EpisodeCard via the
    v176kEmitOpen helper below.  A single <V176kPopover /> host mounted at
    each screen root listens for the 'v176k:open' DeviceEventEmitter event
    and renders the Modal with the supplied actions + anchor rect.
-──────────────────────────────────────────────────────────────────────── */
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export type V176kAction = {
   id: string;
@@ -262,7 +262,7 @@ export function v176kBuildActions(opts: {
       label: 'Clear Progress',
       icon: 'refresh-circle-outline',
       onPress: () => {
-        // v238 — optimistic UI: fire the parent callback FIRST so the poster
+        // v238 â€” optimistic UI: fire the parent callback FIRST so the poster
         // disappears from CW instantly.  Backend sync runs in background;
         // the user-perceived "5s lag" was the awaited HTTP roundtrip.
         try { onAfterChange && onAfterChange('cleared'); } catch (_) {}
@@ -277,7 +277,7 @@ export function v176kBuildActions(opts: {
         label: 'Mark as Unwatched',
         icon: 'eye-off-outline',
         onPress: () => {
-          // v238 — optimistic.
+          // v238 â€” optimistic.
           try { onAfterChange && onAfterChange('unwatched'); } catch (_) {}
           v172UnmarkWatched(contentId).catch((e) => console.log('[V176K] unwatch failed:', e));
         },
@@ -288,7 +288,7 @@ export function v176kBuildActions(opts: {
         label: 'Mark as Watched',
         icon: 'checkmark-circle-outline',
         onPress: () => {
-          // v238 — optimistic.
+          // v238 â€” optimistic.
           try { onAfterChange && onAfterChange('watched'); } catch (_) {}
           v176MarkWatched(contentId).catch((e) => console.log('[V176K] watch failed:', e));
         },
@@ -337,7 +337,7 @@ export function v176kBuildActions(opts: {
 /* The popover host.  Mount ONE per screen.  When multiple are mounted,
    each receives the open event independently, but Modal renders at the
    platform root so only the top-most is visible.  This keeps things
-   simple — no global coordination needed. */
+   simple â€” no global coordination needed. */
 export const V176kPopover: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [payload, setPayload] = useState<V176kOpenPayload | null>(null);
@@ -351,7 +351,7 @@ export const V176kPopover: React.FC = () => {
     return () => { try { sub.remove(); } catch (_) {} try { closeSub.remove(); } catch (_) {} };
   }, []);
 
-  /* V176O_CLOSE_BROADCAST — emit instead of local-only setOpen.
+  /* V176O_CLOSE_BROADCAST â€” emit instead of local-only setOpen.
      Every mounted V176kPopover listens for v176k:close, so this dismisses
      ALL instances (handles the case where Discover ContentCard's singleton
      host AND a details-screen-mounted V176kPopover are both open). */
@@ -360,7 +360,7 @@ export const V176kPopover: React.FC = () => {
     setOpen(false);
   }, []);
   const runAction = useCallback((a: V176kAction) => {
-    /* V176O_CLOSE_BROADCAST — broadcast so every mounted popover instance
+    /* V176O_CLOSE_BROADCAST â€” broadcast so every mounted popover instance
        (not just the topmost) closes on action select.  Without this, the
        user had to press back once per stacked Modal. */
     try { DeviceEventEmitter.emit('v176k:close'); } catch (_) {}
@@ -550,7 +550,7 @@ export function v176kMeasureAnchor(ref: any): Promise<{ x: number; y: number; wi
     }
   });
 }
-/* V176N_HOST_SINGLETON — v176k defined V176kPopover but never mounted it
+/* V176N_HOST_SINGLETON â€” v176k defined V176kPopover but never mounted it
    on any screen, so long-press emitted into the void.  This singleton
    wrapper auto-mounts ONE popover host per app instance: every
    ContentCard renders a <V176kPopoverHost/> sibling, but only the first
@@ -586,7 +586,7 @@ export const V176kPopoverHost: React.FC = () => {
   return <V176kPopover />;
 };
 
-/* ─── /V176K_POPOVER ───────────────────────────────────────────────────── */
+/* â”€â”€â”€ /V176K_POPOVER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function v160GetPoster(imdbId: string | undefined | null, fallback: string | undefined | null): string {
   if (imdbId) {
@@ -604,7 +604,7 @@ const _v77PendingIds = new Set();
 const _v77Subscribers = new Map();
 let _v77FlushTimer = null;
 
-// V304_RELEASE_CACHE_PERSISTENT_BUILD_TAG — make releaseStatus persist
+// V304_RELEASE_CACHE_PERSISTENT_BUILD_TAG â€” make releaseStatus persist
 // across cold boots AND seed the per-card useState synchronously from
 // this cache.  Before V304: every ContentCard mounted with releaseStatus
 // = null, then 250ms later subscribed, then re-rendered when the batch
@@ -628,7 +628,7 @@ function _v304SchedulePersist(): void {
     } catch (_) {}
   }, 2000);
 }
-// One-shot hydrate on module load.  Failures are non-fatal — cache just
+// One-shot hydrate on module load.  Failures are non-fatal â€” cache just
 // stays empty and the existing batched-fetch logic populates it as usual.
 (async () => {
   try {
@@ -697,7 +697,7 @@ async function _v77FlushBatch() {
   }
 }
 
-/* V167_RELEASE_PREWARM — ids currently in-flight via prewarm. */
+/* V167_RELEASE_PREWARM â€” ids currently in-flight via prewarm. */
 const _v167InFlight = new Set();
 function _v77RequestReleaseStatus(imdbId, cb) {
   if (_v77ReleaseCache.has(imdbId)) {
@@ -707,7 +707,7 @@ function _v77RequestReleaseStatus(imdbId, cb) {
   if (!_v77Subscribers.has(imdbId)) _v77Subscribers.set(imdbId, new Set());
   const subs = _v77Subscribers.get(imdbId);
   subs.add(cb);
-  /* V167_RELEASE_PREWARM — if a prewarm POST already covers this id,
+  /* V167_RELEASE_PREWARM â€” if a prewarm POST already covers this id,
      just subscribe; do NOT queue a duplicate batched request. */
   if (!_v167InFlight.has(imdbId)) {
     _v77PendingIds.add(imdbId);
@@ -719,11 +719,11 @@ function _v77RequestReleaseStatus(imdbId, cb) {
   };
 }
 
-/* V167_RELEASE_PREWARM — bulk-prefetch release statuses BEFORE cards
+/* V167_RELEASE_PREWARM â€” bulk-prefetch release statuses BEFORE cards
    mount.  Discover screen calls this the moment its data arrives, so
    by the time individual ContentCards subscribe the cache is already
    hot and the IN CINEMA badge paints on the same frame as the poster. */
-// V188_NAV_COOLDOWN — module-scoped timestamp.  Bumped whenever any
+// V188_NAV_COOLDOWN â€” module-scoped timestamp.  Bumped whenever any
 // ContentCard's onPress fires (user is heading INTO Details).  After
 // they back out (~1-3 s later) we still have ~1 s of cooldown left,
 // which suppresses focus prefetches while D-pad navigation recovers.
@@ -773,7 +773,7 @@ export function v167PrewarmReleaseStatus(imdbIds: string[] | undefined | null): 
           _v77Subscribers.delete(id);
         }
       });
-      // V304: persist after every prewarm batch — so subsequent cold
+      // V304: persist after every prewarm batch â€” so subsequent cold
       // boots paint the IN CINEMA badge on the first frame.
       _v304SchedulePersist();
     };
@@ -819,6 +819,10 @@ interface ContentCardProps {
   isFirstInRow?: boolean;
   isLastInRow?: boolean;
   onCardBlur?: () => void;
+  /* V316c_FOCUS_UP - native view tag of the Continue-Watching poster
+     to jump to on UP press.  Only the first non-CW row (Popular
+     Movies) supplies this. */
+  nextFocusUpTag?: number | null;
 }
 
 export const getCardWidth = (
@@ -849,12 +853,12 @@ export const getCardWidth = (
   }
 };
 
-/* ─────────────────────────────────────────────────────────────────────────
-   V173_TV_LONGPRESS_REGISTRY — Pressable.onLongPress is unreliable on
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   V173_TV_LONGPRESS_REGISTRY â€” Pressable.onLongPress is unreliable on
    Google TV / Firestick OK buttons.  Maintain a single global slot for
    the currently-focused card's long-press handler and dispatch the
    native 'longSelect' TV event into it. */
-/* V176I_REF_DISPATCH — the previous v173 implementation cached a
+/* V176I_REF_DISPATCH â€” the previous v173 implementation cached a
    frozen closure here.  When the focused card setState-updated
    (e.g. isInLibrary flips after Add), the cached closure became
    stale and the next longSelect fired the old behavior.  Using a
@@ -867,26 +871,26 @@ let _v173FocusedLP: (() => void) | null = null;
 let _v176iLatestGetter: (() => (() => void) | null) | null = null;
 try {
   /* DeviceEventEmitter is already imported at top of file. */
-  /* V176F_TV_DIAG — diagnostic logs so we can SEE in logcat which TV
+  /* V176F_TV_DIAG â€” diagnostic logs so we can SEE in logcat which TV
      key events arrive on the JS side.  Filter with:
          adb logcat -d -t 500 ReactNativeJS:V *:S | findstr V176F */
   DeviceEventEmitter.addListener('onTVKeyEvent', (evt: any) => {
-    /* V176L_PERF_CLEANUP — diagnostic log removed (fired per keypress). */
+    /* V176L_PERF_CLEANUP â€” diagnostic log removed (fired per keypress). */
     if (evt && evt.eventType === 'longSelect') {
-      /* V176M_DIAG — single log per long-press (NOT per keypress) so
+      /* V176M_DIAG â€” single log per long-press (NOT per keypress) so
          we can confirm in logcat that the JS bridge received the event
          and see whether registration was active at fire-time. */
       try { console.log('[V176M] longSelect rx getter=' + !!_v176iLatestGetter + ' legacy=' + !!_v173FocusedLP); } catch (_) {}
-      /* V176I_REF_DISPATCH — prefer the getter; falls back to the
+      /* V176I_REF_DISPATCH â€” prefer the getter; falls back to the
          legacy slot for any callers that still set it directly. */
       let target: (() => void) | null = null;
       try { if (_v176iLatestGetter) target = _v176iLatestGetter(); } catch (_) {}
       if (!target) target = _v173FocusedLP;
       if (target) {
-        /* V176L_PERF_CLEANUP — silent fast-path. */
+        /* V176L_PERF_CLEANUP â€” silent fast-path. */
         try { target(); } catch (e) { console.log('[V176L] dispatch error:', e); }
       } else {
-        /* V176L_PERF_CLEANUP — silent. */
+        /* V176L_PERF_CLEANUP â€” silent. */
       }
     }
   });
@@ -896,7 +900,7 @@ export function v173RegisterLongPress(fn: (() => void) | null): void {
   _v173FocusedLP = fn;
 }
 
-/* V176I_REF_DISPATCH — register a *getter* (closure-stable) that the
+/* V176I_REF_DISPATCH â€” register a *getter* (closure-stable) that the
    dispatcher invokes at fire-time.  Callers should pass a fn that
    reads from a useRef whose .current is updated by every render. */
 export function v176iRegisterGetter(get: (() => (() => void) | null) | null): void {
@@ -918,6 +922,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   isFirstInRow = false,
   isLastInRow = false,
   onCardBlur,
+  nextFocusUpTag,
 }) => {
   const { width, height } = useWindowDimensions();
 
@@ -932,7 +937,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
 
-  /* V176L_PERF_CLEANUP — O(1) lookup via librarySet (built once per
+  /* V176L_PERF_CLEANUP â€” O(1) lookup via librarySet (built once per
      library change in contentStore).  The previous v176g version
      flattened movies+series+channels+tv into a fresh array and ran
      .some() on every library change for every card.  With ~50 cards
@@ -969,12 +974,12 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     const imdbId = item.imdb_id || item.id;
     if (!imdbId || !String(imdbId).startsWith('tt')) return;
     // V304: if cache already has a value (seeded synchronously above),
-    // skip the subscription entirely — no work, no re-render storm.
+    // skip the subscription entirely â€” no work, no re-render storm.
     if (_v77ReleaseCache.has(String(imdbId))) return;
-    // v238 — defer release-status fetch by 250ms so cold-boot rendering
+    // v238 â€” defer release-status fetch by 250ms so cold-boot rendering
     // of 200+ ContentCards completes BEFORE batched backend roundtrips kick
     // in.  The _v77 fetcher debounces to 250ms anyway, so this just moves
-    // when the first batch fires — the # of network calls is unchanged.
+    // when the first batch fires â€” the # of network calls is unchanged.
     let cleanup: (() => void) | undefined;
     const t = setTimeout(() => {
       cleanup = _v77RequestReleaseStatus(String(imdbId), setReleaseStatus);
@@ -987,10 +992,10 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
 
   const pressableRef = useRef<any>(null);
 
-  /* V169_FOCUS_STREAM_PREWARM — dwell-timer ref so we only prefetch
+  /* V169_FOCUS_STREAM_PREWARM â€” dwell-timer ref so we only prefetch
      streams when the user actually lingers (>= 500ms) on a poster. */
   const _v169PrewarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // PATCH_V248_HOVER_META — 200ms META prefetch timer (separate from
+  // PATCH_V248_HOVER_META â€” 200ms META prefetch timer (separate from
   // the v169 STREAM dwell).  Fires fast so a brief D-pad pause warms
   // the addon's /meta endpoint and seeds _metaCache + disk.  When the
   // user actually clicks, Details paints instantly from memory.
@@ -999,14 +1004,14 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const handleFocus = useCallback(() => {
     setIsFocused(true);
     onCardFocus?.();
-    /* V169_FOCUS_STREAM_PREWARM — kick a 500ms dwell timer.  Only
+    /* V169_FOCUS_STREAM_PREWARM â€” kick a 500ms dwell timer.  Only
        movies get streams prefetched (series root IDs have no usable
        streams; the v138 patch already prefetches the next episode). */
     if (_v169PrewarmTimerRef.current) {
       clearTimeout(_v169PrewarmTimerRef.current);
       _v169PrewarmTimerRef.current = null;
     }
-    // PATCH_V248_HOVER_META — clear + re-arm 200ms META prefetch timer.
+    // PATCH_V248_HOVER_META â€” clear + re-arm 200ms META prefetch timer.
     if (_v248MetaTimerRef.current) {
       clearTimeout(_v248MetaTimerRef.current);
       _v248MetaTimerRef.current = null;
@@ -1019,17 +1024,17 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           (api as any)?.content?.getMeta?.(_v248_t, _v248_c)
             .then((data: any) => { if (data) setMetaCache(_v248_c, data); })
             .catch(() => { /* best-effort */ });
-        }, 100); // V249 — dropped 200ms → 100ms; faster hover-to-instant
+        }, 100); // V249 â€” dropped 200ms â†’ 100ms; faster hover-to-instant
       }
     }
-    /* V188_NAV_COOLDOWN — if the user just backed out of a Details page,
+    /* V188_NAV_COOLDOWN â€” if the user just backed out of a Details page,
        suppress focus prefetch for 1.2 s.  Lets the JS thread serve D-pad
        focus changes without competing with network kick-offs. */
     if (Date.now() < (_v188NavCooldownUntil as any)) return;
     const _v169_type = (item as any)?.type;
     const _v169_cid = (item as any)?.imdb_id || (item as any)?.id;
     if (_v169_cid && _v169_type === 'movie' && String(_v169_cid).startsWith('tt')) {
-      /* V170_FOCUS_DWELL_TUNE — 900ms dwell + concurrency cap so D-pad
+      /* V170_FOCUS_DWELL_TUNE â€” 900ms dwell + concurrency cap so D-pad
          scrolling doesn't flood the backend and the JS bridge. */
       _v169PrewarmTimerRef.current = setTimeout(() => {
         if (_v170PrefetchInflight >= _V170_PREFETCH_CAP) return;
@@ -1051,36 +1056,36 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         }
       }, 900);
     }
-    /* V173_TV_LONGPRESS_REGISTRY — register this card's long-press
+    /* V173_TV_LONGPRESS_REGISTRY â€” register this card's long-press
        handler so the global 'longSelect' listener can fire it. */
-    /* V176I_REF_DISPATCH — register a getter, not the closure itself. */
+    /* V176I_REF_DISPATCH â€” register a getter, not the closure itself. */
     try { v176iRegisterGetter(() => _v176iLpRef.current); } catch (_) {}
     try { v173RegisterLongPress(handleLongPress); } catch (_) {}
-    /* V176M_DIAG — confirm registration happened on this focus. */
+    /* V176M_DIAG â€” confirm registration happened on this focus. */
     try { console.log('[V176M] focus reg id=' + String((item as any)?.imdb_id || (item as any)?.id || '?')); } catch (_) {}
   }, [onCardFocus, item, handleLongPress]);
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
     onCardBlur?.();
-    /* V169_FOCUS_STREAM_PREWARM — abort the dwell timer if the user
+    /* V169_FOCUS_STREAM_PREWARM â€” abort the dwell timer if the user
        moved off before 500ms; nothing to do if the prefetch already fired. */
     if (_v169PrewarmTimerRef.current) {
       clearTimeout(_v169PrewarmTimerRef.current);
       _v169PrewarmTimerRef.current = null;
     }
-    // PATCH_V248_HOVER_META — also abort the 200ms META timer on blur.
+    // PATCH_V248_HOVER_META â€” also abort the 200ms META timer on blur.
     if (_v248MetaTimerRef.current) {
       clearTimeout(_v248MetaTimerRef.current);
       _v248MetaTimerRef.current = null;
     }
-    /* V173_TV_LONGPRESS_REGISTRY — clear long-press registration on blur. */
+    /* V173_TV_LONGPRESS_REGISTRY â€” clear long-press registration on blur. */
     try { v176iRegisterGetter(null); } catch (_) {}
     try { v173RegisterLongPress(null); } catch (_) {}
   }, [onCardBlur]);
 
   const handleLongPress = useCallback(async () => {
-    /* V176K_POPOVER — measure poster so the popover anchors from its
+    /* V176K_POPOVER â€” measure poster so the popover anchors from its
        corner instead of the centered fallback. */
     let anchor: any = null;
     try { anchor = await v176kMeasureAnchor(pressableRef.current); } catch (_) {}
@@ -1098,13 +1103,13 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     });
   }, [item, isInLibrary, onLibraryChange, _v172IsWatched, _v172ContentId]);
 
-  /* V176I_REF_DISPATCH — keep a ref pointing at the freshest
+  /* V176I_REF_DISPATCH â€” keep a ref pointing at the freshest
      handleLongPress so the global dispatcher reads the current one
      (not a stale closure frozen at the last onFocus). */
   const _v176iLpRef = useRef<(() => void) | null>(null);
   _v176iLpRef.current = handleLongPress;
 
-  /* V176B_PRESS_TIMING — Pressable.onLongPress is unreliable on
+  /* V176B_PRESS_TIMING â€” Pressable.onLongPress is unreliable on
      Firestick / Android TV OK buttons.  Do our own timing via
      onPressIn / onPressOut so it works on touch AND TV remotes. */
   const _v176bLpTimer = useRef<any>(null);
@@ -1116,7 +1121,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       _v176bLpFired.current = true;
       try { handleLongPress(); } catch (_) {}
     }, 500);
-    // PATCH_V249_PRESSIN_PREFETCH — fire meta prefetch IMMEDIATELY on press
+    // PATCH_V249_PRESSIN_PREFETCH â€” fire meta prefetch IMMEDIATELY on press
     // (before the click resolves into a navigation).  This guarantees the
     // network round-trip starts ASAP even when the user clicks faster than
     // the 100ms hover dwell.  Skips if already cached.
@@ -1146,18 +1151,18 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   // HARD TV FOCUS LOCK
   const selfNode = findNodeHandle(pressableRef.current);
 
-  // V160_USE_REGISTRY — register on first valid render, look up on every
+  // V160_USE_REGISTRY â€” register on first valid render, look up on every
   // render so the SAME poster URL renders no matter which surface mounted
   // this content first.
   const _v160_id = ((item as any).imdb_id || (item as any).id) as string | undefined;
   if (_v160_id && (item as any).poster) v160RegisterPoster(_v160_id, (item as any).poster as string);
   const _v160_poster = v160GetPoster(_v160_id, (item as any).poster);
 
-  /* V172_WATCHED_REGISTRY — per-card derived flag + re-render hook.
+  /* V172_WATCHED_REGISTRY â€” per-card derived flag + re-render hook.
      Subscribes to the module-level set so any long-press unmark (this
      card or another instance of the same content) instantly refreshes
      the badge across every surface.
-     v238 — subscriptions deferred 250ms after mount.  Cold boot
+     v238 â€” subscriptions deferred 250ms after mount.  Cold boot
      mounts ~225 cards; firing 450 subscription effects synchronously
      was the cause of the 10s post-paint freeze. */
   const _v172ContentId = ((item as any).content_id || _v160_id) as string | undefined;
@@ -1171,9 +1176,9 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   }, []);
   const _v172IsWatched = v172IsWatched(_v172ContentId);
 
-  /* V176_LONGPRESS_MENU — re-render when the CW progress registry changes
+  /* V176_LONGPRESS_MENU â€” re-render when the CW progress registry changes
      so the unified long-press menu shows the right buttons.
-     v238 — also deferred 250ms (same reason as v172 above). */
+     v238 â€” also deferred 250ms (same reason as v172 above). */
   useEffect(() => {
     let unsub: (() => void) | undefined;
     const t = setTimeout(() => {
@@ -1183,7 +1188,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   }, []);
 
   return (
-    /* V176N_HOST_SINGLETON — render the popover host alongside every
+    /* V176N_HOST_SINGLETON â€” render the popover host alongside every
        card.  Only one will actually display (singleton claim above). */
     <React.Fragment>
     <V176kPopoverHost />
@@ -1212,6 +1217,15 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           : undefined
       }
 
+      /* V316c_FOCUS_UP - single UP-press jump into Continue Watching.
+         Only the first non-CW row supplies a tag; deeper rows still
+         use default spatial navigation. */
+      nextFocusUp={
+        nextFocusUpTag != null && nextFocusUpTag > 0
+          ? nextFocusUpTag
+          : undefined
+      }
+
       style={[
         styles.container,
         { width: cardWidth },
@@ -1232,7 +1246,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         ]}
       >
         <View style={styles.imageWrapper}>
-          {/* V160_IMAGE_SWAPPED — use registry-resolved poster URL */}
+          {/* V160_IMAGE_SWAPPED â€” use registry-resolved poster URL */}
           {_v160_poster && !posterError ? (
             <Image
               source={{
@@ -1255,7 +1269,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
               }}
             />
           ) : (
-            // V274_LOGO_PLACEHOLDER — was the "Coming Soon" wordmark PNG;
+            // V274_LOGO_PLACEHOLDER â€” was the "Coming Soon" wordmark PNG;
             // replaced with a dark card showing just the Privastream logo.
             <View
               style={[
@@ -1282,14 +1296,14 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           </View>
         )}
 
-        {/* V172_WATCHED_REGISTRY — also show the badge when our cross-surface
+        {/* V172_WATCHED_REGISTRY â€” also show the badge when our cross-surface
             registry says this content_id is watched, even if no `watched`
             prop was passed from the parent (Discover rows, Search, Library). */}
         {(watched || _v172IsWatched ||
           (showProgress !== undefined &&
             showProgress >= 90)) && (
           <View style={styles.watchedBadge}>
-            {/* V172B_GOLD_CHECKMARK — match EpisodeCard's gold checkmark exactly */}
+            {/* V172B_GOLD_CHECKMARK â€” match EpisodeCard's gold checkmark exactly */}
             <Ionicons
               name="checkmark"
               size={14}
@@ -1379,7 +1393,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundLight,
   },
 
-  /* V176H_BOOKMARK_POSITION — moved from top-right to bottom-right so it
+  /* V176H_BOOKMARK_POSITION â€” moved from top-right to bottom-right so it
      doesn't collide with the IN CINEMA badge that sits top-left/center. */
   libraryBadge: {
     position: 'absolute',
@@ -1392,7 +1406,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
 
-  /* V172B_GOLD_CHECKMARK — mirror EpisodeCard's 24x24 round badge */
+  /* V172B_GOLD_CHECKMARK â€” mirror EpisodeCard's 24x24 round badge */
   watchedBadge: {
     position: 'absolute',
     top: 4,

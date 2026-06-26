@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   memo,
   useState,
   useCallback,
@@ -30,19 +30,19 @@ const MOBILE_PADDING = 16;
 
 const TV_SCROLL_ANCHOR = 4;
 
-// PATCH_V250_BACK_NAV_FOCUS — module-level map of rowKey -> last-focused content_id.
+// PATCH_V250_BACK_NAV_FOCUS â€” module-level map of rowKey -> last-focused content_id.
 // When user backs out of Details, ServiceRow re-mounts and gives the previously
 // focused poster hasTVPreferredFocus=true, so the highlight appears in the same
 // frame as the row renders (no D-pad-poll latency, no scroll glitch).
 const _v250_lastFocusedByRow = new Map<string, string>();
 
-// PATCH_V250_VIEWPORT_PREFETCH — track which ids we've already kicked
+// PATCH_V250_VIEWPORT_PREFETCH â€” track which ids we've already kicked
 // off a /meta prefetch for (per app session). Avoids duplicate hits.
 const _v250_prefetched = new Set<string>();
 
-// v238 — eager-mount top 3 rows so user sees a "full" Discover screen
+// v238 â€” eager-mount top 3 rows so user sees a "full" Discover screen
 // in the first frame instead of 1 row + empty space.  Rows 3+ paint at
-// 20ms steps (cap 400ms total) — fast enough to feel simultaneous.
+// 20ms steps (cap 400ms total) â€” fast enough to feel simultaneous.
 const LazyMount: React.FC<{
   height: number;
   rowIndex: number;
@@ -79,6 +79,9 @@ interface ServiceRowProps {
   onSectionFocus?: () => void;
   isFirstRow?: boolean;
   rowIndex?: number;
+  /* V316c_FOCUS_UP - forwarded to every ContentCard in this row.
+     Only the Discover row 0 (Popular Movies) supplies a non-null value. */
+  nextFocusUpTag?: number | null;
 }
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(
@@ -92,6 +95,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
     onSectionFocus,
     isFirstRow = false,
     rowIndex = 0,
+    nextFocusUpTag = null,
   }) => {
     const { width: screenWidth, height } = useWindowDimensions();
 
@@ -128,7 +132,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
     itemCountRef.current = validItems.length;
 
-    // v238 — DO NOT early-return here.  Hooks below this point MUST run
+    // v238 â€” DO NOT early-return here.  Hooks below this point MUST run
     // every render or React throws "Rendered more/fewer hooks than during
     // the previous render".  The empty-state guard is moved AFTER all
     // hooks (see further down).
@@ -194,7 +198,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
         const focusedItem = validItems[index];
 
-        // PATCH_V250_BACK_NAV_FOCUS — remember which poster was focused
+        // PATCH_V250_BACK_NAV_FOCUS â€” remember which poster was focused
         // in this row, so the highlight returns to it on Back nav.
         if (focusedItem) {
           const cid = focusedItem.imdb_id || focusedItem.id;
@@ -278,7 +282,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
             showTitle={true}
             hasTVPreferredFocus={
               (isFirstRow && index === 0) ||
-              // PATCH_V250_BACK_NAV_FOCUS — restore last-focused poster
+              // PATCH_V250_BACK_NAV_FOCUS â€” restore last-focused poster
               // in this row when user returns from Details.
               (_v250_lastFocusedByRow.get(
                 `${rowIndex}:${serviceName || title || ''}`
@@ -286,6 +290,9 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
             }
             isFirstInRow={isFirst}
             isLastInRow={isLast}
+            /* V316c_FOCUS_UP - only row 0 supplies a real tag; deeper
+               rows pass null and fall back to default spatial nav. */
+            nextFocusUpTag={nextFocusUpTag}
           />
         );
       },
@@ -297,6 +304,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         rowIndex,
         serviceName,
         title,
+        nextFocusUpTag,
       ]
     );
 
@@ -306,7 +314,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
       []
     );
 
-    // PATCH_V250_VIEWPORT_PREFETCH — when posters scroll into view, fire
+    // PATCH_V250_VIEWPORT_PREFETCH â€” when posters scroll into view, fire
     // their meta prefetch immediately (no dwell needed).  This is the real
     // fix for "spotty" hover-to-instant: by the time the user's D-pad
     // lands on ANY visible poster, /meta has already been warmed.
@@ -333,7 +341,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
       minimumViewTime: 150,             // 150ms in-viewport before counting (debounces fast scrolls)
     }).current;
 
-    // v238 — SAFE empty-state guard: every hook above has already been
+    // v238 â€” SAFE empty-state guard: every hook above has already been
     // called this render, so React's hook order is stable across renders
     // regardless of whether validItems is empty.
     if (validItems.length === 0) {
@@ -373,7 +381,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
                 : styles.scrollContent
             }
             estimatedItemSize={itemTotalWidth}
-            drawDistance={itemTotalWidth * 3} // V250 — was 1.5x; gives more pre-rendered cards = smoother D-pad
+            drawDistance={itemTotalWidth * 3} // V250 â€” was 1.5x; gives more pre-rendered cards = smoother D-pad
             onEndReached={handleEndReached}
             onEndReachedThreshold={3}
             onViewableItemsChanged={onViewableItemsChanged} // PATCH_V250_VIEWPORT_PREFETCH
