@@ -1,3 +1,4 @@
+﻿import { ToSGate, hasAcceptedToS } from '../../src/components/ToSGate';
 import React, { useEffect, useCallback, useState } from 'react';
 import {
   View,
@@ -24,16 +25,16 @@ import { colors } from '../../src/styles/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 
-// V309_SHORT_SHARE_CODES — replaces the V308 PRIVA on-device share code
+// V309_SHORT_SHARE_CODES â€” replaces the V308 PRIVA on-device share code
 // with a backend-generated 7-digit numeric code (same UX as the AFTVnews
 // Downloader codes the app already supports).  When a user taps Share on
 // an installed addon, the app calls POST /api/addons/share-code to mint
 // (or fetch the existing) 7-digit code for that manifest URL.  Recipients
-// type the 7-digit code into the Share Code field → GET /api/addons/
-// resolve-code/<code> returns the URL → addon installs.
+// type the 7-digit code into the Share Code field â†’ GET /api/addons/
+// resolve-code/<code> returns the URL â†’ addon installs.
 const _V309_TAG = 'V309_SHORT_SHARE_CODES';
 
-// V310_DIRECT_URL_SOURCES — adds support for direct M3U / M3U8 / HLS / MP4
+// V310_DIRECT_URL_SOURCES â€” adds support for direct M3U / M3U8 / HLS / MP4
 // URLs as a "Direct Sources" sidecar alongside Stremio addons.  Sources are
 // stored on-device in AsyncStorage (Middle Isolation: backend never sees the
 // URLs nor what plays).  M3U playlists are parsed client-side into channel
@@ -58,8 +59,8 @@ interface V310SavedSource {
   created_at: number;
 }
 
-// V310 / V310b — extension-first detection.  Now distinguishes .m3u8 (HLS
-// single stream — most common shape) from .m3u (M3U playlist that needs
+// V310 / V310b â€” extension-first detection.  Now distinguishes .m3u8 (HLS
+// single stream â€” most common shape) from .m3u (M3U playlist that needs
 // channel parsing).  This avoids the V310a bug where ALL .m3u8 URLs were
 // treated as IPTV playlists and "Empty Playlist" was shown when the body
 // fetch failed (CORS, etc.).
@@ -106,7 +107,7 @@ function _v310ParseM3UPlaylist(text: string): V310Channel[] {
         out.push({ url: line, name: pending.name, logo: pending.logo, group: pending.group });
         pending = null;
       } else {
-        // URL without preceding EXTINF — use the filename as the name
+        // URL without preceding EXTINF â€” use the filename as the name
         const tail = line.split('/').pop() || 'Stream';
         out.push({ name: tail, url: line });
       }
@@ -131,7 +132,7 @@ async function _v310PersistSavedSources(sources: V310SavedSource[]): Promise<voi
   try {
     await AsyncStorage.setItem(_V310_SAVED_SOURCES_KEY, JSON.stringify(sources));
   } catch (_) {
-    /* ignore — best effort */
+    /* ignore â€” best effort */
   }
 }
 
@@ -167,6 +168,11 @@ function FocusButton({
 }
 
 export default function AddonsScreen() {
+  // V326_TOS_GATE - one-time Terms of Service on first Addons entry
+  const [_v326TosVisible, _setV326TosVisible] = React.useState(false);
+  React.useEffect(() => {
+    hasAcceptedToS().then((acked) => { if (!acked) _setV326TosVisible(true); });
+  }, []);
   const { addons, isLoadingAddons, fetchAddons, fetchDiscover } = useContentStore();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
@@ -186,13 +192,13 @@ export default function AddonsScreen() {
   const [urlTabFocused, setUrlTabFocused] = useState(false);
   const [codeTabFocused, setCodeTabFocused] = useState(false);
   const [directTabFocused, setDirectTabFocused] = useState(false);
-  // V310 — saved direct sources (M3U / HLS / MP4) loaded from AsyncStorage
+  // V310 â€” saved direct sources (M3U / HLS / MP4) loaded from AsyncStorage
   const [savedSources, setSavedSources] = useState<V310SavedSource[]>([]);
-  // V310 — channel picker modal for M3U sources with multiple channels
+  // V310 â€” channel picker modal for M3U sources with multiple channels
   const [channelPickerData, setChannelPickerData] = useState<V310SavedSource | null>(null);
-  // V309 — share modal state.  `shareCode` is the 7-digit code fetched from
+  // V309 â€” share modal state.  `shareCode` is the 7-digit code fetched from
   // the backend (POST /api/addons/share-code).  No more PRIVA, no more
-  // legacy hardcoded numeric map — one path to rule them all.
+  // legacy hardcoded numeric map â€” one path to rule them all.
   const [shareModalData, setShareModalData] = useState<{ name: string; url: string; shareCode: string } | null>(null);
   const [isMintingShareCode, setIsMintingShareCode] = useState(false);
   const [shareCopyFocused, setShareCopyFocused] = useState(false);
@@ -203,7 +209,7 @@ export default function AddonsScreen() {
 
   useEffect(() => {
     fetchAddons(true);
-    // V310 — load saved direct sources from device on mount
+    // V310 â€” load saved direct sources from device on mount
     _v310LoadSavedSources().then(setSavedSources);
   }, []);
 
@@ -214,7 +220,7 @@ export default function AddonsScreen() {
     setRefreshing(false);
   }, []);
 
-  // V310 — handle "Direct URL" install: detect by extension, fetch only
+  // V310 â€” handle "Direct URL" install: detect by extension, fetch only
   // when we need to parse an M3U playlist or sniff an unknown URL.
   const _v310HandleAddDirectUrl = async () => {
     const u = directUrl.trim();
@@ -235,7 +241,7 @@ export default function AddonsScreen() {
 
       // Step 2: only fetch when we MUST parse the body (.m3u IPTV
       // playlist) or sniff an unknown extension.  Skip fetch for .m3u8
-      // (HLS single stream) and .mp4 (direct file) — extension alone is
+      // (HLS single stream) and .mp4 (direct file) â€” extension alone is
       // enough and the fetch would often fail on RN/Firestick due to CORS
       // or unsupported headers.
       if (detected === 'm3u' || detected === 'unknown') {
@@ -269,7 +275,7 @@ export default function AddonsScreen() {
             setIsLoadingDirectUrl(false);
             return;
           }
-          // unknown extension AND fetch failed — give up
+          // unknown extension AND fetch failed â€” give up
           throw e;
         }
       }
@@ -306,7 +312,7 @@ export default function AddonsScreen() {
         saved = {
           id,
           type: 'm3u',
-          name: `M3U • ${fallbackName} • ${channels.length} channels`,
+          name: `M3U â€¢ ${fallbackName} â€¢ ${channels.length} channels`,
           url: u,
           channels,
           created_at: Date.now(),
@@ -315,7 +321,7 @@ export default function AddonsScreen() {
         saved = {
           id,
           type: detected,
-          name: `${detected.toUpperCase()} • ${fallbackName}`,
+          name: `${detected.toUpperCase()} â€¢ ${fallbackName}`,
           url: u,
           created_at: Date.now(),
         };
@@ -331,7 +337,7 @@ export default function AddonsScreen() {
         'Source Saved',
         detected === 'm3u'
           ? `Saved M3U playlist with ${saved.channels?.length || 0} channels`
-          : `Saved ${detected.toUpperCase()} stream — tap to play`,
+          : `Saved ${detected.toUpperCase()} stream â€” tap to play`,
       );
     } catch (error: any) {
       const msg = error?.message || 'Failed to load URL';
@@ -341,9 +347,9 @@ export default function AddonsScreen() {
     }
   };
 
-  // V310 / V310b — launch player for a single direct stream.  Pass ONLY
+  // V310 / V310b â€” launch player for a single direct stream.  Pass ONLY
   // directUrl + title.  Omitting isLive avoids the player's live-TV path
-  // (which keeps the loader visible until the first frame paints — caused
+  // (which keeps the loader visible until the first frame paints â€” caused
   // flashing/error on VOD MP4s/HLS).  The player auto-detects HLS vs MP4
   // from the URL extension internally.
   const _v310PlayDirectStream = (
@@ -364,14 +370,14 @@ export default function AddonsScreen() {
     }
   };
 
-  // V310 — handle tap on a saved Direct Source card
+  // V310 â€” handle tap on a saved Direct Source card
   const _v310HandleSourceTap = (src: V310SavedSource) => {
     if (src.type === 'm3u' && src.channels && src.channels.length > 1) {
       setChannelPickerData(src);
       return;
     }
     if (src.type === 'm3u' && src.channels && src.channels.length === 1) {
-      // single-channel M3U — go straight to player
+      // single-channel M3U â€” go straight to player
       const ch = src.channels[0];
       _v310PlayDirectStream(ch.url, ch.name || src.name, /\.m3u8?(\?|$)/i.test(ch.url));
       return;
@@ -383,7 +389,7 @@ export default function AddonsScreen() {
     Alert.alert('Empty Source', 'This source has no playable streams.');
   };
 
-  // V310 — delete a saved direct source
+  // V310 â€” delete a saved direct source
   const _v310HandleDeleteSource = (src: V310SavedSource) => {
     Alert.alert(
       'Remove Source',
@@ -403,7 +409,7 @@ export default function AddonsScreen() {
     );
   };
 
-  // V309 — share-code resolver.  Accepts 6-8 digit numeric codes.  Backend
+  // V309 â€” share-code resolver.  Accepts 6-8 digit numeric codes.  Backend
   // checks MongoDB share-codes table first, then falls back to AFTVnews.
   const handleResolveAndInstall = async () => {
     const code = shortCode.trim();
@@ -432,7 +438,7 @@ export default function AddonsScreen() {
         await api.addons.install(resolvedUrl);
         setShowModal(false);
         setShortCode('');
-        // V204_SOFT_REFRESH — install: keep posters on screen (soft nuke) and
+        // V204_SOFT_REFRESH â€” install: keep posters on screen (soft nuke) and
       // defer the heavy refetch until D-pad interactions settle.
       try { await (useContentStore.getState() as any).nukeDiscoverCache?.(true); } catch (_) {}
       await fetchAddons(true);
@@ -451,7 +457,7 @@ export default function AddonsScreen() {
     }
   };
 
-  // V308_URL_HARDENING — validate manifest URLs before attempting install.
+  // V308_URL_HARDENING â€” validate manifest URLs before attempting install.
   // Accept *.json or */manifest URLs (standard Stremio addon spec).
   // Reject M3U with a clear "coming soon" message (V309 will add M3U support).
   const _v308ValidateManifestUrl = (raw: string): { ok: boolean; reason?: string } => {
@@ -460,7 +466,7 @@ export default function AddonsScreen() {
       return { ok: false, reason: 'URL must start with http:// or https://' };
     }
     if (/\.m3u8?(\?|$)/i.test(u)) {
-      return { ok: false, reason: 'M3U playlists are not yet supported — coming in V309.' };
+      return { ok: false, reason: 'M3U playlists are not yet supported â€” coming in V309.' };
     }
     // Accept .json endpoints or URLs containing /manifest
     const looksLikeManifest = /\.json($|\?)/i.test(u) || /\/manifest($|[/?])/i.test(u);
@@ -480,7 +486,7 @@ export default function AddonsScreen() {
       return;
     }
 
-    // V308 — validate every URL up-front so we don't surface a backend 4xx
+    // V308 â€” validate every URL up-front so we don't surface a backend 4xx
     // for something we can catch locally.
     const invalid: { url: string; reason: string }[] = [];
     const valid: string[] = [];
@@ -490,7 +496,7 @@ export default function AddonsScreen() {
       else invalid.push({ url: u, reason: r.reason || 'invalid' });
     }
     if (invalid.length > 0 && valid.length === 0) {
-      Alert.alert('Invalid URL', invalid.map(i => `• ${i.reason}`).join('\n'));
+      Alert.alert('Invalid URL', invalid.map(i => `â€¢ ${i.reason}`).join('\n'));
       return;
     }
 
@@ -513,7 +519,7 @@ export default function AddonsScreen() {
     if (successCount > 0) {
       setShowModal(false);
       setAddonUrl('');
-      // V204_SOFT_REFRESH — install: keep posters on screen (soft nuke) and
+      // V204_SOFT_REFRESH â€” install: keep posters on screen (soft nuke) and
       // defer the heavy refetch until D-pad interactions settle.
       try { await (useContentStore.getState() as any).nukeDiscoverCache?.(true); } catch (_) {}
       await fetchAddons(true);
@@ -530,8 +536,8 @@ export default function AddonsScreen() {
     }
   };
 
-  // V187_SHARE_MODAL — themed dialog (no more native Alert).
-  // V309 — share code is generated by the backend (POST /api/addons/share-code).
+  // V187_SHARE_MODAL â€” themed dialog (no more native Alert).
+  // V309 â€” share code is generated by the backend (POST /api/addons/share-code).
   // Same URL always yields the same 7-digit code, so spam-tapping Share
   // doesn't proliferate codes.
   const handleShareAddon = async (addon: Addon) => {
@@ -555,7 +561,7 @@ export default function AddonsScreen() {
   const handleShareConfirm = async () => {
     if (!shareModalData) return;
     const { name, url, shareCode } = shareModalData;
-    // V309 — clean share message: code first, URL second.
+    // V309 â€” clean share message: code first, URL second.
     const shareMessage = `${name}\n\nShare code: ${shareCode}\nManifest URL: ${url}`;
     try {
       await Share.share({ message: shareMessage, title: `Share ${name} Addon` });
@@ -579,7 +585,7 @@ export default function AddonsScreen() {
             setDeletingAddonId(addon.id);
             try {
               await api.addons.uninstall(addon.id);
-              // V204_HARD_REFRESH — uninstall: posters vanish instantly, heavy
+              // V204_HARD_REFRESH â€” uninstall: posters vanish instantly, heavy
               // refetch deferred so the Addons screen stays responsive.
               try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
               await fetchAddons(true);
@@ -607,6 +613,9 @@ export default function AddonsScreen() {
     if (!item || !item.manifest) return null;
     
     return (
+    <>
+      <ToSGate visible={_v326TosVisible} onAccepted={() => _setV326TosVisible(false)} />
+
       <AddonCard 
         addon={item}
         isTV={isTV}
@@ -615,7 +624,9 @@ export default function AddonsScreen() {
         isDeleting={deletingAddonId === item.id}
         getAddonIcon={getAddonIcon}
       />
-    );
+    
+    </>
+  );
   };
 
   return (
@@ -709,7 +720,7 @@ export default function AddonsScreen() {
               </FocusButton>
             </View>
 
-            {/* V309 — share code helper strip in the install modal */}
+            {/* V309 â€” share code helper strip in the install modal */}
             <View style={styles.privacyStrip}>
               <Ionicons name="keypad-outline" size={16} color={colors.primary} style={{ marginRight: 6 }} />
               <Text style={styles.privacyStripText}>
@@ -745,7 +756,7 @@ export default function AddonsScreen() {
                 <Ionicons name="link-outline" size={18} color={inputMode === 'url' ? colors.primary : '#888888'} />
                 <Text style={[styles.tabText, inputMode === 'url' && styles.tabTextActive]}>Manifest URL</Text>
               </Pressable>
-              {/* V310 — Direct URL tab for M3U / HLS / MP4 */}
+              {/* V310 â€” Direct URL tab for M3U / HLS / MP4 */}
               <Pressable
                 style={[
                   styles.tab,
@@ -763,7 +774,7 @@ export default function AddonsScreen() {
 
             {inputMode === 'direct' ? (
               <>
-                {/* V310 — Direct URL tab: accept M3U/M3U8/HLS/MP4 */}
+                {/* V310 â€” Direct URL tab: accept M3U/M3U8/HLS/MP4 */}
                 <Text style={styles.modalLabel}>Direct URL</Text>
                 <TextInput
                   style={[styles.modalInput, directFocused && styles.modalInputFocused]}
@@ -802,7 +813,7 @@ export default function AddonsScreen() {
                 <Text style={styles.modalLabel}>Share Code</Text>
                 <TextInput
                   style={[styles.modalInput, codeFocused && styles.modalInputFocused]}
-                  /* V309 — 7-digit codes generated by POST /api/addons/share-code
+                  /* V309 â€” 7-digit codes generated by POST /api/addons/share-code
                      Legacy AFTVnews codes (e.g. 8762337 Cinemeta) still resolve. */
                   placeholder="e.g. 1234567"
                   placeholderTextColor="#666666"
@@ -844,7 +855,7 @@ export default function AddonsScreen() {
                 <Text style={styles.modalLabel}>Manifest URL</Text>
                 <TextInput
                   style={[styles.modalInput, inputFocused && styles.modalInputFocused]}
-                  /* V182_LEGAL_EXAMPLE — Cinemeta (Stremio first-party metadata addon, 100% legal). */
+                  /* V182_LEGAL_EXAMPLE â€” Cinemeta (Stremio first-party metadata addon, 100% legal). */
                   placeholder="https://v3-cinemeta.strem.io/manifest.json"
                   placeholderTextColor="#666666"
                   value={addonUrl}
@@ -877,8 +888,8 @@ export default function AddonsScreen() {
         </View>
       </Modal>
 
-      {/* V187_SHARE_MODAL — themed Share dialog (dark/gold like the rest of the app) */}
-      {/* V309 — single 7-digit share code (backend-minted), no PRIVA, no dual legacy code surface */}
+      {/* V187_SHARE_MODAL â€” themed Share dialog (dark/gold like the rest of the app) */}
+      {/* V309 â€” single 7-digit share code (backend-minted), no PRIVA, no dual legacy code surface */}
       <Modal
         visible={shareModalData != null}
         animationType="fade"
@@ -888,11 +899,11 @@ export default function AddonsScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, isTV && styles.modalContentTV, { borderWidth: 2, borderColor: colors.primary }]}>
             <View style={styles.modalHeader}>
-              {/* V188_SHARE_NOX — bottom Close button is enough; remove redundant X */}
+              {/* V188_SHARE_NOX â€” bottom Close button is enough; remove redundant X */}
               <Text style={styles.modalTitle}>Share {shareModalData?.name || 'Addon'}</Text>
             </View>
 
-            {/* V309 — primary 7-digit share code (big, centered, gold) */}
+            {/* V309 â€” primary 7-digit share code (big, centered, gold) */}
             {shareModalData?.shareCode ? (
               <>
                 <Text style={styles.modalLabel}>Share Code</Text>
@@ -915,7 +926,7 @@ export default function AddonsScreen() {
               </Text>
             </View>
             <Text style={styles.modalHint}>
-              {/* V309 — recipients paste the 7-digit code (or the URL) into the Addons section to install */}
+              {/* V309 â€” recipients paste the 7-digit code (or the URL) into the Addons section to install */}
               Recipient can paste the share code or manifest URL into the Addons section of PrivaStream to install this addon.
             </Text>
 
@@ -944,7 +955,7 @@ export default function AddonsScreen() {
         </View>
       </Modal>
 
-      {/* V310 — Channel Picker Modal (M3U with multiple channels) */}
+      {/* V310 â€” Channel Picker Modal (M3U with multiple channels) */}
       <Modal
         visible={channelPickerData != null}
         animationType="slide"
@@ -1064,7 +1075,7 @@ function AddonCard({
   );
 }
 
-// V310 — Direct Source Card (M3U / HLS / MP4 saved on device)
+// V310 â€” Direct Source Card (M3U / HLS / MP4 saved on device)
 function V310DirectSourceCard({
   src,
   onPress,
@@ -1120,7 +1131,7 @@ function V310DirectSourceCard({
   );
 }
 
-// V310 — single Channel row inside the channel picker modal
+// V310 â€” single Channel row inside the channel picker modal
 function V310ChannelRow({
   channel,
   onPress,
@@ -1441,7 +1452,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // V308 — Middle Isolation privacy posture strip in the install modal
+  // V308 â€” Middle Isolation privacy posture strip in the install modal
   privacyStrip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1459,7 +1470,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-  // V310 — Direct Sources section + cards + channel picker
+  // V310 â€” Direct Sources section + cards + channel picker
   directSourcesSection: {
     marginBottom: 16,
   },

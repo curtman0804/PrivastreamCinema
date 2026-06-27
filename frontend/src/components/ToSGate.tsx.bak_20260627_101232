@@ -1,0 +1,175 @@
+/* ToSGate.tsx — V327 gold-themed, auto-username from PM key. */
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import {
+  Modal, View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, Alert,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+
+export const TOS_ACK_KEY = 'v326:tos_acked_v1';
+export const TOS_VERSION = 'v1';
+
+const BACKEND_URL =
+  process.env.EXPO_PUBLIC_BACKEND_URL ||
+  process.env.EXPO_BACKEND_URL ||
+  'https://api.privastreamsolutions.com';
+
+const GOLD = '#d4af37';
+const GOLD_DIM = '#7a6420';
+const BG = '#0a0a0a';
+const BG_CARD = '#141414';
+
+const TOS_BODY = `PRIVASTREAM CINEMA – End-User Terms of Service
+
+By clicking "I Agree" and utilizing Privastream Cinema, you acknowledge and agree to the following legally binding terms:
+
+1. Neutral Pipeline: You understand that this application is a media playback utility and does not contain, provide, or host any content.
+
+2. User Liability: You assume absolute liability for all digital streams, JSON links, or data feeds you input into this application. You agree not to use this software to access unauthorized or pirated copyrighted material.
+
+3. No Indemnification: Privastream Solutions, LLC explicitly disclaims all liability for user-generated activities. You agree to hold harmless and indemnify the developers from any claims arising from your breach of third-party copyright laws.
+
+4. Termination of Service: We reserve the right to terminate access to application updates or support services for any user found utilizing the software in a manner that violates our neutral integrity.
+
+By proceeding past this notice, you confirm that you are at least 18 years of age and that you have read, understood, and agree to be bound by the terms above.`;
+
+interface ToSGateProps {
+  visible: boolean;
+  onAccepted: () => void;
+}
+
+export function ToSGate({ visible, onAccepted }: ToSGateProps) {
+  const [reachedBottom, setReachedBottom] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [pmKey, setPmKey] = useState<string>('');
+  const [focused, setFocused] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    (async () => {
+      try {
+        const k = (await AsyncStorage.getItem('@pm_key_v1')) || '';
+        setPmKey(k);
+      } catch { setPmKey(''); }
+    })();
+  }, [visible]);
+
+  const handleScroll = useCallback((e: any) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    if (contentOffset.y + layoutMeasurement.height >= contentSize.height - 12 && !reachedBottom) {
+      setReachedBottom(true);
+    }
+  }, [reachedBottom]);
+
+  const canAgree = reachedBottom && !submitting && pmKey.length > 0;
+
+  const handleAgree = async () => {
+    if (!canAgree) return;
+    setSubmitting(true);
+    const appVersion =
+      Constants.expoConfig?.version || (Constants as any).manifest?.version || 'unknown';
+    const deviceInfo = `${Platform.OS} ${Platform.Version}`;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/legal/tos-accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: pmKey,
+          app_version: appVersion,
+          tos_version: TOS_VERSION,
+          device_info: deviceInfo,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok) {
+        await AsyncStorage.setItem(
+          TOS_ACK_KEY,
+          JSON.stringify({
+            accepted_at: data.recorded_at,
+            username: pmKey,
+            tos_version: TOS_VERSION,
+          })
+        );
+        onAccepted();
+      } else {
+        Alert.alert('Could not record acceptance', `${data?.error || 'Server error'}. Please try again.`);
+      }
+    } catch (err: any) {
+      Alert.alert('Network error', err?.message || 'Could not reach server');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const maskedKey = pmKey
+    ? `${pmKey.slice(0, 4)}…${pmKey.slice(-4)}  (${pmKey.length} chars)`
+    : '(not detected – open Settings and confirm your Premiumize API key is saved)';
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={() => {}}>
+      <View style={styles.root}>
+        <Text style={styles.heading}>Terms of Service</Text>
+        <Text style={styles.subheading}>Scroll to the end to enable "I Agree".</Text>
+
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          onScroll={handleScroll}
+          scrollEventThrottle={64}
+          showsVerticalScrollIndicator
+        >
+          <Text style={styles.body}>{TOS_BODY}</Text>
+        </ScrollView>
+
+        <View style={styles.idRow}>
+          <Text style={styles.idLabel}>Registered as</Text>
+          <Text style={styles.idValue}>{maskedKey}</Text>
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.85}
+          disabled={!canAgree}
+          onPress={handleAgree}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={[
+            styles.agreeBtn,
+            !canAgree && styles.agreeBtnDisabled,
+            focused && canAgree && styles.agreeBtnFocused,
+          ]}
+          // @ts-ignore TV-only
+          hasTVPreferredFocus={canAgree}
+        >
+          <Text style={[styles.agreeBtnText, !canAgree && styles.agreeBtnTextDisabled]}>
+            {submitting ? 'Recording…' : reachedBottom
+              ? (pmKey ? 'I Agree' : 'Save a Premiumize key first')
+              : 'Scroll to bottom to enable'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+}
+
+export async function hasAcceptedToS(): Promise<boolean> {
+  try { return !!(await AsyncStorage.getItem(TOS_ACK_KEY)); } catch { return false; }
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: BG, paddingTop: 56, paddingHorizontal: 32, paddingBottom: 24 },
+  heading: { color: GOLD, fontSize: 32, fontWeight: '700', marginBottom: 6, letterSpacing: 1 },
+  subheading: { color: '#bbb', fontSize: 14, marginBottom: 16 },
+  scroll: { flex: 1, borderColor: GOLD_DIM, borderWidth: 1, borderRadius: 10, backgroundColor: BG_CARD },
+  scrollContent: { padding: 20 },
+  body: { color: GOLD, fontSize: 16, lineHeight: 24, fontWeight: '500' },
+  idRow: { marginTop: 14, paddingHorizontal: 14, paddingVertical: 10, borderColor: GOLD_DIM, borderWidth: 1, borderRadius: 8, backgroundColor: '#1a1a1a' },
+  idLabel: { color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
+  idValue: { color: GOLD, fontSize: 16, fontWeight: '600', marginTop: 2, fontFamily: Platform.OS === 'android' ? 'monospace' : 'Menlo' },
+  agreeBtn: { marginTop: 16, backgroundColor: GOLD, borderRadius: 10, paddingVertical: 18, alignItems: 'center', borderWidth: 3, borderColor: 'transparent' },
+  agreeBtnDisabled: { backgroundColor: '#2a2a2a', borderColor: GOLD_DIM },
+  agreeBtnFocused: { borderColor: '#fff', shadowColor: GOLD, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 18, elevation: 12 },
+  agreeBtnText: { color: BG, fontSize: 20, fontWeight: '800', letterSpacing: 1 },
+  agreeBtnTextDisabled: { color: GOLD_DIM },
+});
