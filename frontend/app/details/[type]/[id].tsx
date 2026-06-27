@@ -466,6 +466,26 @@ function _v157_isWrongTitleStream(stream: any, meta: { title: string; year: stri
 let _v312_sortCacheInput: Stream[] | null = null;
 let _v312_sortCacheOutput: Stream[] | null = null;
 function sortStreamsByLanguage(streams: Stream[]): Stream[] {
+  /* V324_FORCE_4K - quality histogram of input streams so we can see
+     whether 4K options are even reaching the scorer. */
+  try {
+    const _v324hist: { [k: string]: number } = {};
+    let _v324bigCount = 0;
+    let _v324big4kCount = 0;
+    for (const _s of (streams || [])) {
+      const _t = (((_s as any)?.title || '') + ' ' + ((_s as any)?.name || '')).toUpperCase();
+      let _q = 'SD';
+      if (_t.includes('4K') || _t.includes('2160')) _q = '4K';
+      else if (_t.includes('1080')) _q = '1080p';
+      else if (_t.includes('720')) _q = '720p';
+      _v324hist[_q] = (_v324hist[_q] || 0) + 1;
+      const _szm = _t.match(/([\d.]+)\s*GB/);
+      const _sz = _szm ? parseFloat(_szm[1]) : 0;
+      if (_sz >= 15) _v324bigCount++;
+      if (_sz >= 15 && _q === '4K') _v324big4kCount++;
+    }
+    console.log('[V324 INPUT]', 'total=' + (streams || []).length, 'hist=' + JSON.stringify(_v324hist), 'bigStreams(>=15GB)=' + _v324bigCount, 'big4K=' + _v324big4kCount);
+  } catch (_) {}
   // V312_SORT_MEMO fast-path
   if (_v312_sortCacheInput === streams && _v312_sortCacheOutput) {
     return _v312_sortCacheOutput;
@@ -482,22 +502,25 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
   // (only if a clean+cached PM alternative exists) or keep them as
   // last-resort fallback (avoids "unable to play video" on titles
   // whose only cached stream is watermarked, e.g. Project Hail Mary).
-  const _V292_WATERMARK_RE = /(1xbet|melbet|mostbet|parimatch|ftcam|fxgg|hcam|ctcam|cam\.rip|hdcam|telesync|tsrip|tcrip|tc-?rip|cam-rip|new\.?source|sourceqr|sourcetv|x-?cam|hd-?cam)/i;
+  // V317_STRICT_SPAM_DROP - expanded affiliate list seen on Torrentio.
+  const _V292_WATERMARK_RE = /(1xbet|1xstavka|melbet|mostbet|parimatch|4rabet|dafabet|betway|bet365|22bet|stake\.com|ftcam|fxgg|hcam|ctcam|cam\.rip|hdcam|telesync|tsrip|tcrip|tc-?rip|cam-rip|new\.?source|sourceqr|sourcetv|x-?cam|hd-?cam)/i;
   // Be slightly less strict for the literal token "cam" (could be in a
   // legit URL) â€” require word boundaries for that one.
   const _V292_CAM_RE = /\b(cam|ts|tc)\b.*\b(rip|new|source)\b|\b(rip|new|source)\b.*\b(cam|ts|tc)\b/i;
   const _v296_isWatermark = (s: any): boolean => {
-    const blob = `${s?.title || ''} ${s?.name || ''} ${s?.filename || ''}`;
+    // V317_STRICT_SPAM_DROP - also scan stream.url to catch spam URLs.
+    const blob = `${s?.title || ''} ${s?.name || ''} ${s?.filename || ''} ${s?.url || ''}`;
     return _V292_WATERMARK_RE.test(blob) || _V292_CAM_RE.test(blob);
   };
   // V296 â€” check whether any CLEAN (non-watermarked) stream is known
   // PM-cached.  Only then is it safe to hard-drop the watermarked ones.
   // _v296_cacheMap is populated by the component's PM /cache/check effect.
   const _v296_cleanStreams = streams.filter((s: any) => !_v296_isWatermark(s));
-  const _v296_hasCleanCached = _v296_cleanStreams.some((s: any) => {
-    if (!s || !s.infoHash) return false;
-    return _v296_cacheMap.get(String(s.infoHash).toLowerCase()) === true;
-  });
+  // V317_STRICT_SPAM_DROP - was a per-stream cached-check via some().
+  // Now: any clean stream qualifies for the hard-drop (cached or not).
+  // Renamed semantically (still uses _v296_hasCleanCached var so the
+  // existing if/else block keeps compiling) - now means "hasCleanAny".
+  const _v296_hasCleanCached = _v296_cleanStreams.length > 0;
   if (_v296_hasCleanCached) {
     const _before = streams.length;
     streams = _v296_cleanStreams;
@@ -601,10 +624,13 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     // but ranks them last.  Combined with the conditional hard-drop above,
     // they only ever get picked when no cleaner alternative exists.
     {
-      const _v296wmBlob = `${(stream as any)?.title || ''} ${(stream as any)?.name || ''} ${(stream as any)?.filename || ''}`;
-      const _V296_WM_RE = /(1xbet|melbet|mostbet|parimatch|ftcam|fxgg|hcam|ctcam|cam\.rip|hdcam|telesync|tsrip|tcrip|tc-?rip|cam-rip|new\.?source|sourceqr|sourcetv|x-?cam|hd-?cam)/i;
+      // V317_STRICT_SPAM_DROP - blob now includes stream.url; penalty
+      // bumped from -1500 to -12000 so a watermarked stream can never
+      // outrank a clean one even when it has every other bonus stacked.
+      const _v296wmBlob = `${(stream as any)?.title || ''} ${(stream as any)?.name || ''} ${(stream as any)?.filename || ''} ${(stream as any)?.url || ''}`;
+      const _V296_WM_RE = /(1xbet|1xstavka|melbet|mostbet|parimatch|4rabet|dafabet|betway|bet365|22bet|stake\.com|ftcam|fxgg|hcam|ctcam|cam\.rip|hdcam|telesync|tsrip|tcrip|tc-?rip|cam-rip|new\.?source|sourceqr|sourcetv|x-?cam|hd-?cam)/i;
       const _V296_CAM_RE = /\b(cam|ts|tc)\b.*\b(rip|new|source)\b|\b(rip|new|source)\b.*\b(cam|ts|tc)\b/i;
-      if (_V296_WM_RE.test(_v296wmBlob) || _V296_CAM_RE.test(_v296wmBlob)) s -= 1500;
+      if (_V296_WM_RE.test(_v296wmBlob) || _V296_CAM_RE.test(_v296wmBlob)) s -= 12000;
     }
     // PATCH_V12_COMMENTARY_PENALTY â€” guarantee commentary tracks rank LAST
     if (info.isCommentary) s -= 2000;
@@ -622,13 +648,131 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     else if (info.language === 'MULTI') s += 900;
     else s += 100;
     s += QUALITY_PTS[info.quality] || 0;
-    /* v121e-codec-penalty */ /* v127-codec-rebalance */ /* V272_FIRESTICK_HEVC â€” Firestick's HEVC decoder is unreliable; bump non-HEVC bonus from +100 to +300 and add explicit HEVC penalty. */ if (!info.isHEVC) s += 300; else s -= 300;
+    /* V320_SIZE_BONUS - bigger files = better visual quality
+       (higher bitrate REMUX/BluRay vs low-bitrate WEB-DL). */
+    {
+      const _v320size = (info.size || '').toString().toUpperCase();
+      const _v320m = _v320size.match(/([\d.]+)\s*(GB|MB)/);
+      if (_v320m) {
+        const _v320n = parseFloat(_v320m[1]);
+        const _v320GB = _v320m[2] === 'GB' ? _v320n : (_v320n / 1024);
+        if (_v320GB > 20)      s += 1500;
+        else if (_v320GB > 10) s += 800;
+        else if (_v320GB > 5)  s += 300;
+        // V321_SANITY_MIN_SIZE - minimum-size floors per quality tier.
+        // Anything claiming 4K under 10GB is almost guaranteed a fake/
+        // transcoded torrent.  Heavily penalize so they lose to real
+        // uncached high-bitrate rips even with the PM cache bonus.
+        if (info.quality === '4K') {
+          if (_v320GB > 0 && _v320GB < 6)        s -= 8000;
+          else if (_v320GB > 0 && _v320GB < 10)  s -= 4000;
+        } else if (info.quality === '1080p') {
+          if (_v320GB > 0 && _v320GB < 1.5)      s -= 3000;
+          else if (_v320GB > 0 && _v320GB < 2.5) s -= 1000;
+        } else if (info.quality === '720p') {
+          if (_v320GB > 0 && _v320GB < 0.5)      s -= 1500;
+        }
+        // V322_DEBUG_SCORER - log size/quality/score every stream parsed.
+        try {
+          const _v322name = ((stream as any)?.title || (stream as any)?.name || '').slice(0, 60).replace(/\n/g, ' ');
+          console.log('[V322] q=' + info.quality + ' size="' + (info.size || '') + '" GB=' + (_v320m ? _v320GB.toFixed(2) : 'NONE') + ' cached=' + (!!stream.url) + ' score=' + s + ' | ' + _v322name);
+        } catch (_) {}
+      } else {
+        try {
+          const _v322name = ((stream as any)?.title || (stream as any)?.name || '').slice(0, 60).replace(/\n/g, ' ');
+          console.log('[V322 NO-SIZE] q=' + info.quality + ' cached=' + (!!stream.url) + ' score=' + s + ' | ' + _v322name);
+        } catch (_) {}
+      }
+    }
+    /* V323_STRICT_ENGLISH - aggressive foreign-language detection.
+       parseStreamInfo missed VOSTFR / Cyrillic / MULTi, so apply a
+       heavy penalty here in computeScore where we have the raw text. */
+    {
+      const _v323blob = ((stream as any)?.title || '') + ' ' + ((stream as any)?.name || '') + ' ' + ((stream as any)?.filename || '');
+      const _v323upper = _v323blob.toUpperCase();
+      // Cyrillic char range U+0400..U+04FF
+      const _v323HasCyrillic = /[\u0400-\u04FF]/.test(_v323blob);
+      // CJK ranges (Korean Hangul, Japanese Hiragana/Katakana, Chinese)
+      const _v323HasCJK = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(_v323blob);
+      const _v323foreignTags = (
+        /\bVOSTFR\b|\bVOSTA\b|\bVFF\b|\bVFQ\b|\bVO\b|\bVF\b/.test(_v323upper) ||
+        /\bFRENCH\b|\bFRA\b|\bFR-?[\d]+\b/.test(_v323upper) ||
+        /\bITALIAN\b|\bITA\b|\bIT\b\.|\.IT\.|\bITA-/.test(_v323upper) ||
+        /\bGERMAN\b|\bGER\b|\bDEU\b|\bDEUTSCH\b/.test(_v323upper) ||
+        /\bSPANISH\b|\bESP\b|\bESPANOL\b|\bLATIN\b|\bLATINO\b|\bCASTELLANO\b/.test(_v323upper) ||
+        /\bRUSSIAN\b|\bRUS\b|\bUKR\b|\bUKRAINIAN\b/.test(_v323upper) ||
+        /\bKOREAN\b|\bKOR\b|\bJAPANESE\b|\bJPN\b|\bJAP\b/.test(_v323upper) ||
+        /\bPOLISH\b|\bPL\b\.|\.PL\.|\bPL-/.test(_v323upper) ||
+        /\bTURKISH\b|\bTUR\b|\bTRK\b/.test(_v323upper) ||
+        /\bHINDI\b|\bHIN\b|\bTAMIL\b|\bTAM\b|\bTELUGU\b|\bTEL\b/.test(_v323upper) ||
+        /\bPORTUGUESE\b|\bPOR\b|\bPT-BR\b|\bBRAZILIAN\b/.test(_v323upper) ||
+        /\bDUTCH\b|\bNLD\b|\bNED\b/.test(_v323upper) ||
+        /\bMULTI\b|\bMULTI-AUDIO\b|\bDUAL\b|\bDUAL-AUDIO\b|\bMULTI-LANG\b/.test(_v323upper)
+      );
+      const _v323isForeign = _v323HasCyrillic || _v323HasCJK || _v323foreignTags;
+      if (_v323isForeign) {
+        s -= 5000;
+        try {
+          console.log('[V323] FOREIGN penalty -5000 (cyrillic=' + _v323HasCyrillic + ' cjk=' + _v323HasCJK + ' tags=' + _v323foreignTags + ') | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+        } catch (_) {}
+      }
+      /* V324_FORCE_4K - lock auto-pick to large 4K English streams.
+         A legit big 4K rip in English now beats every other option by
+         margin >2000.  Foreign 4K streams still lose because V323
+         already subtracted 5000 above. */
+      if (info.quality === '4K' && !_v323isForeign) {
+        // Parse size from the same blob we already built.
+        const _v324szM = (_v323blob + ' ' + (info.size || '')).toUpperCase().match(/([\d.]+)\s*GB/);
+        const _v324GB = _v324szM ? parseFloat(_v324szM[1]) : 0;
+        if (_v324GB >= 15) {
+          s += 6000;
+          try {
+            console.log('[V324] BIG-4K bonus +6000 size=' + _v324GB + 'GB | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+          } catch (_) {}
+        } else if (_v324GB >= 8) {
+          s += 2000;
+          try {
+            console.log('[V324] MID-4K bonus +2000 size=' + _v324GB + 'GB | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+          } catch (_) {}
+        }
+      }
+      /* V325_WEBDL_OVER_WEBRIP - prefer clean WEB-DL rips over
+         screen-captured WEBRip torrents (which often carry burned-in
+         1xbet/affiliate overlays even when filename looks clean). */
+      {
+        const _v325upper = _v323blob.toUpperCase();
+        const _v325isWebDl = /\bWEB-?DL\b/.test(_v325upper);
+        const _v325isWebRip = /\bWEBRIP\b|\bWEB-?RIP\b/.test(_v325upper) && !_v325isWebDl;
+        const _v325hasAtmos = /\bATMOS\b/.test(_v325upper);
+        const _v325hasHevc = /\bH\.?265\b|\bHEVC\b|\bX265\b/.test(_v325upper);
+        if (_v325isWebDl && !_v323isForeign) {
+          s += 4000;
+          if (_v325hasAtmos && _v325hasHevc) {
+            s += 1500;
+            try {
+              console.log('[V325] WEB-DL+Atmos+HEVC combo +5500 | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+            } catch (_) {}
+          } else {
+            try {
+              console.log('[V325] WEB-DL bonus +4000 | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+            } catch (_) {}
+          }
+        }
+        if (_v325isWebRip) {
+          s -= 3000;
+          try {
+            console.log('[V325] WEBRip penalty -3000 (often burned ad overlay) | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+          } catch (_) {}
+        }
+      }
+    }
+    /* v121e-codec-penalty */ /* v127-codec-rebalance */ /* V272_FIRESTICK_HEVC â€” Firestick's HEVC decoder is unreliable; bump non-HEVC bonus from +100 to +300 and add explicit HEVC penalty. */ /* V319_QUALITY_FIRST */ if (!info.isHEVC) s += 0; else s += 200;
     /* PATCH_V150_HDR â€” keep SDR bonus, add real HDR penalty so SDR at any
        resolution always wins over HDR (display can't tone-map â†’ dark image).
        V272_SDR_FIRESTICK â€” Firestick output washes HDR colors on SDR TVs.
        Bumped HDR penalty -800 â†’ -3000 so SDR ALWAYS wins when both exist,
        while still allowing HDR-only titles to play (cascading fallback). */
-    if (!info.isHDR) s += 75; else s -= 3000;
+    /* V319_QUALITY_FIRST */ if (!info.isHDR) s += 0; else s += 500;
     /* V272_DOLBY_VISION â€” DV is worst on non-DV displays (green/purple tint).
        Extra penalty so HDR10 beats DV when both are available. */
     {
@@ -637,7 +781,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
         _v272t.includes('DOLBY VISION') || _v272t.includes('DOLBYVISION')
         || /\bDV\b/.test(_v272t) || /[\.\- ]DV[\.\- ]/.test(_v272t)
       );
-      if (_v272IsDV) s -= 1500;
+      /* V319_QUALITY_FIRST */ if (_v272IsDV) s += 200;
     }
     /* V158_AUDIO_PENALTY â€” reject lossless / ExoPlayer-incompatible audio.
        Triggered by the real bug: GOTG 2 picked a BluRay REMUX with
@@ -657,7 +801,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
         || _t158.includes('LPCM') || _t158.includes(' PCM ') || _t158.includes('.PCM.')
         || _t158.includes('REMUX')
       );
-      if (_v158_badAudio) s -= 1500;
+      /* V319_QUALITY_FIRST */ if (_v158_badAudio) s -= 0;
     }
     /* PATCH_V146_AUDIO_PENALTY â€” penalize audio codecs that the Google TV
        Streamer / Firestick can't initialize at runtime even when ExoPlayer
