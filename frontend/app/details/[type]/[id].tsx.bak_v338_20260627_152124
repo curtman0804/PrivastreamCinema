@@ -788,7 +788,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
        V272_SDR_FIRESTICK — Firestick output washes HDR colors on SDR TVs.
        Bumped HDR penalty -800 → -3000 so SDR ALWAYS wins when both exist,
        while still allowing HDR-only titles to play (cascading fallback). */
-    /* V338_RESTORE_HDR_PENALTY */ if (!info.isHDR) s += 0; else s -= 3000;
+    /* V319_QUALITY_FIRST */ if (!info.isHDR) s += 0; else s += 500;
     /* V272_DOLBY_VISION — DV is worst on non-DV displays (green/purple tint).
        Extra penalty so HDR10 beats DV when both are available. */
     {

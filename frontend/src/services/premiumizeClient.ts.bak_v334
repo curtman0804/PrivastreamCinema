@@ -34,7 +34,7 @@ const TTL_MS = 6 * 60 * 60 * 1000;
 // We try multiple AsyncStorage keys the auth store has used over time.
 const AUTH_TOKEN_KEYS = ['auth_token', '@auth_token', 'authToken', 'jwt', '@jwt'];
 // Hetzner backend.  Must match v287_client BACKEND_URL.
-const BACKEND_URL = 'https://api.privastreamsolutions.com';
+const BACKEND_URL = 'http://5.161.49.99:8001';
 
 type CacheEntry = { finalUrl: string; expiresAt: number };
 

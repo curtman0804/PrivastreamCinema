@@ -75,7 +75,7 @@ function _kickPmResolve(opts: {
 // Hetzner public IPv4 is 5.161.49.99.  Inbound traffic
 // must hit that address.
 // ============================================
-const BACKEND_URL = 'https://api.privastreamsolutions.com';
+const BACKEND_URL = 'http://5.161.49.99:8001';
 
 // Get the backend URL based on environment
 const getBaseUrl = () => {
