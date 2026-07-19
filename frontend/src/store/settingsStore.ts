@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../utils/mmkvStorage';
 
 interface SettingsState {
   // TorrServer URL (e.g., "http://192.168.1.100:8090")

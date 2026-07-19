@@ -19,6 +19,7 @@ import {
   BackHandler,
   Platform,
   findNodeHandle,
+  InteractionManager,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useNavigation, CommonActions } from '@react-navigation/native';
@@ -42,7 +43,7 @@ function _v237_bustUrl(u: any) {
 const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
 
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../../../src/utils/mmkvStorage';
 /* V176C_EPISODE_MENU_IMPORT — Stremio-style menu helpers for episode posters. */
 import {
   v172IsWatched as _v176cV172IsWatched,
@@ -484,7 +485,7 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
       if (_sz >= 15) _v324bigCount++;
       if (_sz >= 15 && _q === '4K') _v324big4kCount++;
     }
-    console.log('[V324 INPUT]', 'total=' + (streams || []).length, 'hist=' + JSON.stringify(_v324hist), 'bigStreams(>=15GB)=' + _v324bigCount, 'big4K=' + _v324big4kCount);
+    false && console.log('[V324 INPUT]', 'total=' + (streams || []).length, 'hist=' + JSON.stringify(_v324hist), 'bigStreams(>=15GB)=' + _v324bigCount, 'big4K=' + _v324big4kCount);
   } catch (_) {}
   // V312_SORT_MEMO fast-path
   if (_v312_sortCacheInput === streams && _v312_sortCacheOutput) {
@@ -536,6 +537,56 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     if (_wm > 0) {
       console.log('[v296] no clean+cached — keeping', _wm, 'watermarked stream(s) as fallback');
     }
+  }
+  // V337_ROBUST_BAIT_FILTER — fixes V334 misses by checking multiple fields and
+  // normalizing the input. V334 only checked stream.name and assumed real
+  // newlines; real Torrentio streams sometimes carry literal '\n' sequences
+  // (escaped) instead of '\n' (newline char), which slipped past V334.
+  //
+  // V337 also drops bait DOMAINS in the URL itself (1xbet/melbet/etc.) in case
+  // a bait stream's metadata is laundered clean but the URL still points at
+  // an affiliate redirector.
+  const _v337_normalize = (s: any): string => {
+    return String(s || '')
+      .replace(/\\n/g, ' ')
+      .replace(/\\r/g, ' ')
+      .replace(/\r|\n|\t/g, ' ')
+      .replace(/[\[\]\(\)\|\.\-_]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .toLowerCase()
+      .trim();
+  };
+  const _V337_CAM_TOKENS = ['cam', 'hdcam', 'camrip', 'cam rip', 'hdts', 'hd ts', 'hdtc', 'hd tc', 'telesync', 'tsrip', 'ts rip', 'tcrip', 'tc rip', 'workprint', 'preair', 'screener', 'dvdscr', 'r5'];
+  const _V337_BAIT_DOMAINS = /(1xbet|1xstavka|melbet|mostbet|parimatch|4rabet|dafabet|22bet|betway|bet365|stake\.com|olymptrade)/i;
+  const _v337_isBait = (s: any): { bad: boolean; reason: string } => {
+    const nameN  = _v337_normalize(s?.name);
+    const titleN = _v337_normalize(s?.title);
+    const fileN  = _v337_normalize(s?.filename);
+    const url    = String(s?.url || '');
+    // Look for CAM-class tokens as whole-word tokens in any normalized field.
+    const blob = ' ' + nameN + ' | ' + titleN + ' | ' + fileN + ' ';
+    for (const tok of _V337_CAM_TOKENS) {
+      if (blob.indexOf(' ' + tok + ' ') !== -1) return { bad: true, reason: 'CAM:' + tok };
+    }
+    if (_V337_BAIT_DOMAINS.test(url))   return { bad: true, reason: 'bait-url-domain' };
+    if (_V337_BAIT_DOMAINS.test(blob))  return { bad: true, reason: 'bait-name-mention' };
+    return { bad: false, reason: '' };
+  };
+  {
+    const _v337_before = streams.length;
+    const _v337_kept: any[] = [];
+    for (const s of streams) {
+      const v = _v337_isBait(s);
+      if (v.bad) {
+        console.log('[v337 DROP]', v.reason, '|', String(s?.name || '').slice(0, 80).replace(/\s+/g, ' '));
+      } else {
+        _v337_kept.push(s);
+      }
+    }
+    if (_v337_kept.length !== _v337_before) {
+      console.log('[v337] kept', _v337_kept.length, 'of', _v337_before, 'streams');
+    }
+    streams = _v337_kept;
   }
   // V334_HARD_DROP_CAM — unconditionally drop CAM/HDCAM/TS/TC/TELESYNC/WORKPRINT/
   // SCR/DVDSCR quality streams. Unlike V296 (which keeps watermarked streams as
@@ -691,12 +742,12 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
         // V322_DEBUG_SCORER - log size/quality/score every stream parsed.
         try {
           const _v322name = ((stream as any)?.title || (stream as any)?.name || '').slice(0, 60).replace(/\n/g, ' ');
-          console.log('[V322] q=' + info.quality + ' size="' + (info.size || '') + '" GB=' + (_v320m ? _v320GB.toFixed(2) : 'NONE') + ' cached=' + (!!stream.url) + ' score=' + s + ' | ' + _v322name);
+          false && console.log('[V322] q=' + info.quality + ' size="' + (info.size || '') + '" GB=' + (_v320m ? _v320GB.toFixed(2) : 'NONE') + ' cached=' + (!!stream.url) + ' score=' + s + ' | ' + _v322name);
         } catch (_) {}
       } else {
         try {
           const _v322name = ((stream as any)?.title || (stream as any)?.name || '').slice(0, 60).replace(/\n/g, ' ');
-          console.log('[V322 NO-SIZE] q=' + info.quality + ' cached=' + (!!stream.url) + ' score=' + s + ' | ' + _v322name);
+          false && console.log('[V322 NO-SIZE] q=' + info.quality + ' cached=' + (!!stream.url) + ' score=' + s + ' | ' + _v322name);
         } catch (_) {}
       }
     }
@@ -729,7 +780,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
       if (_v323isForeign) {
         s -= 5000;
         try {
-          console.log('[V323] FOREIGN penalty -5000 (cyrillic=' + _v323HasCyrillic + ' cjk=' + _v323HasCJK + ' tags=' + _v323foreignTags + ') | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+          false && console.log('[V323] FOREIGN penalty -5000 (cyrillic=' + _v323HasCyrillic + ' cjk=' + _v323HasCJK + ' tags=' + _v323foreignTags + ') | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
         } catch (_) {}
       }
       /* V324_FORCE_4K - lock auto-pick to large 4K English streams.
@@ -743,12 +794,12 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
         if (_v324GB >= 15) {
           s += 6000;
           try {
-            console.log('[V324] BIG-4K bonus +6000 size=' + _v324GB + 'GB | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+            false && console.log('[V324] BIG-4K bonus +6000 size=' + _v324GB + 'GB | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
           } catch (_) {}
         } else if (_v324GB >= 8) {
           s += 2000;
           try {
-            console.log('[V324] MID-4K bonus +2000 size=' + _v324GB + 'GB | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+            false && console.log('[V324] MID-4K bonus +2000 size=' + _v324GB + 'GB | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
           } catch (_) {}
         }
       }
@@ -788,7 +839,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
        V272_SDR_FIRESTICK — Firestick output washes HDR colors on SDR TVs.
        Bumped HDR penalty -800 → -3000 so SDR ALWAYS wins when both exist,
        while still allowing HDR-only titles to play (cascading fallback). */
-    /* V338_RESTORE_HDR_PENALTY */ if (!info.isHDR) s += 0; else s -= 3000;
+    /* V351b_HDR_NUKE */ if (!info.isHDR) s += 0; else s -= 8000;
     /* V272_DOLBY_VISION — DV is worst on non-DV displays (green/purple tint).
        Extra penalty so HDR10 beats DV when both are available. */
     {
@@ -797,7 +848,22 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
         _v272t.includes('DOLBY VISION') || _v272t.includes('DOLBYVISION')
         || /\bDV\b/.test(_v272t) || /[\.\- ]DV[\.\- ]/.test(_v272t)
       );
-      /* V319_QUALITY_FIRST */ if (_v272IsDV) s += 200;
+      /* V339_STRONGER_DV */ if (_v272IsDV) s -= 5000;
+    }
+    /* V339_QXR_PENALTY - QxR/r00t MKVs use ContentCompAlgo compression that
+       ExoPlayer 2.18.1 cannot parse. Playback fails immediately with a source
+       error even when the file is otherwise fine. Bump these down so they
+       only get picked when nothing else exists. */
+    {
+      const _v339t = (String(stream.title || '') + ' ' + String(stream.name || '')).toUpperCase();
+      const _v339IsProblematic = (
+        _v339t.indexOf('[QXR]') !== -1 || _v339t.indexOf(' QXR ') !== -1 || _v339t.indexOf('.QXR.') !== -1
+        || _v339t.indexOf('[R00T]') !== -1 || _v339t.indexOf(' R00T') !== -1 || _v339t.indexOf('R00T)') !== -1
+      );
+      if (_v339IsProblematic) {
+        s -= 2500;
+        console.log('[V339] QxR/r00t penalty -2500 |', String(stream.name || '').slice(0, 80));
+      }
     }
     /* V158_AUDIO_PENALTY — reject lossless / ExoPlayer-incompatible audio.
        Triggered by the real bug: GOTG 2 picked a BluRay REMUX with
@@ -817,24 +883,25 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
         || _t158.includes('LPCM') || _t158.includes(' PCM ') || _t158.includes('.PCM.')
         || _t158.includes('REMUX')
       );
-      /* V319_QUALITY_FIRST */ if (_v158_badAudio) s -= 0;
+      /* V358_KILL_LOSSLESS */ if (_v158_badAudio) s -= 20000;
     }
     /* PATCH_V146_AUDIO_PENALTY — penalize audio codecs that the Google TV
        Streamer / Firestick can't initialize at runtime even when ExoPlayer
        reports format_supported=YES.  Order matters: most specific first. */
     {
       const _v146t = ((stream.title || '') + ' ' + (stream.name || '')).toUpperCase();
-      if (/\bDTS[\s\-:]?X\b|\bDTSX\b/.test(_v146t)) {
-        s -= 900;
-      } else if (/\bTRUEHD\b|\bTRUE[\s\-]?HD\b/.test(_v146t)) {
-        s -= 800;
-      } else if (/\bATMOS\b/.test(_v146t)) {
-        s -= 700;
-      } else if (/\bDTS[\s\-]?HD(\s*MA)?\b/.test(_v146t)) {
-        s -= 400;
-      } else if (/\bDTS\b/.test(_v146t)) {
-        s -= 100;
-      }
+      /* V358_STRONG_AUDIO */
+        if (/\bDTS[\s\-:]?X\b|\bDTSX\b/.test(_v146t)) {
+          s -= 8000;
+        } else if (/\bTRUEHD\b|\bTRUE[\s\-]?HD\b/.test(_v146t)) {
+          s -= 8000;
+        } else if (/\bATMOS\b/.test(_v146t)) {
+          s -= 6000;
+        } else if (/\bDTS[\s\-]?HD(\s*MA)?\b/.test(_v146t)) {
+          s -= 10000;
+        } else if (/\bDTS\b/.test(_v146t)) {
+          s -= 2000;
+        }
     }
     /* v141-cached-first-seeds-matter */
     // Cached / direct URL boost is now a partition gate — see below.  Keep
@@ -842,9 +909,23 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     // a working URL set.
     if (stream.url) s += 50;
     const sd = info.seeders || 0;
-    // v141: was Math.min(log10(sd)*5, 20) — capped at +20, basically noise.
-    // Now scales up to +240 so seeders meaningfully break quality ties.
-    if (sd > 0) s += Math.min(Math.log10(sd + 1) * 80, 240);
+    // V351: boosted seeder cap from +240 to +500 — high-seed streams reliable
+    /* V354_SEEDER_HEAVY — seeders scale up to +1200; a 1000-seed stream
+       beats a 5-seed one by ~1000pts. Reliability > quality tags. */
+    if (sd > 0) s += Math.min(Math.log10(sd + 1) * 320, 1200);
+    /* V354_LOW_SEED_PENALTY — <3 seeders is essentially dead. Nuke them
+       from contention so they never win auto-play. */
+    if (sd < 3) s -= 10000;
+    /* V351_TPB_BOOST — ThePirateBay + torrentio-with-tpb-in-title streams
+       are the most reliable historically. Boost source explicitly. */
+    {
+      const _v351t = (info.title || stream.title || stream.name || '').toLowerCase();
+      const _v351src = (info.source || '').toLowerCase();
+      if (_v351src.includes('thepiratebay') || _v351src === 'tpb' ||
+          /\btpb\b|thepiratebay|pirate\s*bay/.test(_v351t)) {
+        s += 2000;
+      }
+    }
     /* V171_STABLE_TIEBREAKER — add a tiny deterministic value from a
        stable hash of infoHash/URL/title.  Magnitude < 0.1 so it CANNOT
        override any real score difference (quality / codec / language /
@@ -867,13 +948,21 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
   // v141: HARD partition — every CACHED stream (stream.url present) sorts
   // above every UNCACHED stream, regardless of quality/score.  Inside each
   // bucket the score sort (cached-first, then quality, then seeders) wins.
-  const _v141_cached = parsed.filter((p) => !!p.stream.url);
-  const _v141_uncached = parsed.filter((p) => !p.stream.url);
-  _v141_cached.sort((a, b) => computeScore(b.info, b.stream) - computeScore(a.info, a.stream));
-  _v141_uncached.sort((a, b) => computeScore(b.info, b.stream) - computeScore(a.info, a.stream));
-  parsed.length = 0;
-  for (const p of _v141_cached) parsed.push(p);
-  for (const p of _v141_uncached) parsed.push(p);
+  // V357_SDR_HARD_PARTITION - SDR always beats HDR
+    const _v357_isHdr = (p) => !!(p && p.info && p.info.isHDR);
+    const _v357_cSdr = parsed.filter((p) => !!p.stream.url && !_v357_isHdr(p));
+    const _v357_cHdr = parsed.filter((p) => !!p.stream.url && _v357_isHdr(p));
+    const _v357_uSdr = parsed.filter((p) => !p.stream.url && !_v357_isHdr(p));
+    const _v357_uHdr = parsed.filter((p) => !p.stream.url && _v357_isHdr(p));
+    const _v357_sortScore = (a, b) => computeScore(b.info, b.stream) - computeScore(a.info, a.stream);
+    _v357_cSdr.sort(_v357_sortScore); _v357_cHdr.sort(_v357_sortScore);
+    _v357_uSdr.sort(_v357_sortScore); _v357_uHdr.sort(_v357_sortScore);
+    parsed.length = 0;
+    for (const p of _v357_cSdr) parsed.push(p);
+    for (const p of _v357_cHdr) parsed.push(p);
+    for (const p of _v357_uSdr) parsed.push(p);
+    for (const p of _v357_uHdr) parsed.push(p);
+    console.log('[V357 PARTITION]', 'cached_sdr=' + _v357_cSdr.length, 'cached_hdr=' + _v357_cHdr.length, 'uncached_sdr=' + _v357_uSdr.length, 'uncached_hdr=' + _v357_uHdr.length);
   if (parsed.length > 0) {
     const _top = parsed[0];
     const _topInfo = _top.info;
@@ -884,7 +973,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
       const _v154Hits = _v154TitleOverlap(_v154Req, _v154Pick);
       console.log('[MATCH v154]', _v154Hits === 0 ? 'WARNING-NO-OVERLAP' : 'ok-overlap=' + _v154Hits, '| requested=', _v154Req.slice(0,60), '| pick=', _v154Pick.slice(0,80), '| hash=', (_top.stream?.infoHash || '').slice(0,8), 'fileIdx=', (_top.stream as any)?.fileIdx ?? null);
     } catch (_) {}
-    console.log('[SORT v141] picked top:', _topInfo.quality || '?', 'cached=' + (!!_top.stream.url), 'seeders=' + (_topInfo.seeders || 0), 'lang=' + (_topInfo.language || '?'), '| cached_n=' + _v141_cached.length, 'uncached_n=' + _v141_uncached.length);
+    console.log('[SORT v141_V357] picked top:', _topInfo.quality || '?', 'cached=' + (!!_top.stream.url), 'seeders=' + (_topInfo.seeders || 0), 'lang=' + (_topInfo.language || '?'), '| cached_n=' + _v141_cached.length, 'uncached_n=' + _v141_uncached.length);
   }
 
   // PATCH_V16A_COMMENTARY_SINK — partition commentary tracks to the end of the result.
@@ -1339,10 +1428,13 @@ export default function DetailsScreen() {
     //   4. ALWAYS return true so Android can't force-exit
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       /* v134-back-diag + V186_BACK_INSTANT */
-      console.log('[BACK v134/v186] main hwBack fired; id=', id, ' type=', type, ' autoPlay=', autoPlayParam);
+      const _v360_backT0 = Date.now();
+        console.log('[V360_BACK] t0=hwBack fired');
+        console.log('[BACK v134/v186] main hwBack fired');
       // Hide heavy tree on this frame.
       _setV186Closing(true);
-      // Navigate on the next frame so React can drop the subtree first.
+        console.log('[V360_BACK] t=' + (Date.now() - _v360_backT0) + 'ms _setV186Closing done');
+        // Navigate on the next frame so React can drop the subtree first.
       requestAnimationFrame(() => {
         try { if (goToSeriesRootWithFocus()) { console.log('[BACK v134] -> series-root-with-focus'); return; } } catch (_) {}
         try { router.back(); console.log('[BACK v134] -> router.back()'); return; } catch (_) {}
@@ -1428,10 +1520,25 @@ export default function DetailsScreen() {
       seriesWords: _v161_isSeries ? _v161_seriesTitleWords(_v161_title) : [],
     };
   } catch (_v157_e) { _v157_currentMeta = { title: '', year: '', isMovie: false, isSeries: false, seriesWords: [] }; }
-  const sortedStreams = useMemo(
-    () => sortStreamsByLanguage(streams),
-    [streams, _v157_currentMeta.title, _v157_currentMeta.year, _v157_currentMeta.isMovie]
-  );
+  // V349 STREMIO-TRICK: defer sort to after nav animation.
+  // Details page paints INSTANTLY with meta + unsorted streams;
+  // sort runs in background, list re-orders when done. No JS-thread block on click.
+  const [sortedStreams, _setSortedStreams] = useState<Stream[]>(streams || []);
+  useEffect(() => {
+    if (!streams || streams.length === 0) { _setSortedStreams([]); return; }
+    // 1) Show unsorted immediately for progressive paint
+    _setSortedStreams(streams);
+    // 2) Sort after navigation transition + focus animations finish
+    const handle = InteractionManager.runAfterInteractions(() => {
+      try {
+        const sorted = sortStreamsByLanguage(streams);
+        _setSortedStreams(sorted);
+      } catch (_) {
+        _setSortedStreams(streams);
+      }
+    });
+    return () => { try { handle.cancel(); } catch (_) {} };
+  }, [streams, _v157_currentMeta.title, _v157_currentMeta.year, _v157_currentMeta.isMovie]);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   // V186_BACK_INSTANT — when true, the Details tree renders a flat placeholder
@@ -1914,7 +2021,7 @@ export default function DetailsScreen() {
       try {
         const _pmKey = await AsyncStorage.getItem('@pm_key_v1');
         if (_pmKey) {
-          console.log('[PRERESOLVE v151] skipped — PM key present, v291 prewarm handles this');
+          false && console.log('[PRERESOLVE v151] skipped — PM key present, v291 prewarm handles this');
           return;
         }
       } catch (_) {}
@@ -1949,7 +2056,7 @@ export default function DetailsScreen() {
           const _sn = _idP.length >= 3 ? parseInt(_idP[_idP.length - 2], 10) : NaN;
           const _en = _idP.length >= 3 ? parseInt(_idP[_idP.length - 1], 10) : NaN;
           const _t0 = Date.now();
-          console.log('[PRERESOLVE v151] start_and_wait hash=', tgt.infoHash.slice(0, 8), 'fileIdx=', tgt.fileIdx ?? null);
+          false && console.log('[PRERESOLVE v151] start_and_wait hash=', tgt.infoHash.slice(0, 8), 'fileIdx=', tgt.fileIdx ?? null);
           const _ctrl = new AbortController();
           const _to = setTimeout(() => _ctrl.abort(), 8000);
           const _resp = await fetch(`${_bUrl}/api/stream/start_and_wait`, {
@@ -1968,12 +2075,12 @@ export default function DetailsScreen() {
           clearTimeout(_to);
           const _data = await _resp.json().catch(() => ({}));
           const _dt = Date.now() - _t0;
-          console.log('[PRERESOLVE v151] hash=', tgt.infoHash.slice(0, 8), 'status=', _data?.status, 'in', _dt, 'ms');
+          false && console.log('[PRERESOLVE v151] hash=', tgt.infoHash.slice(0, 8), 'status=', _data?.status, 'in', _dt, 'ms');
         } catch (_e: any) {
           if (_e?.name === 'AbortError') {
-            console.log('[PRERESOLVE v151] aborted (8s budget) hash=', tgt.infoHash.slice(0, 8));
+            false && console.log('[PRERESOLVE v151] aborted (8s budget) hash=', tgt.infoHash.slice(0, 8));
           } else {
-            console.log('[PRERESOLVE v151] failed:', _e?.message || _e);
+            false && console.log('[PRERESOLVE v151] failed:', _e?.message || _e);
           }
         }
       })();
@@ -2147,18 +2254,35 @@ const nextEpisodeData = nextEpisode ? {
     const resumeData = shouldResume ? { resumePosition } : {};
     
     const buildFallbackUrls = async (): Promise<string[]> => {
+      /* V354_HEALTHY_STREAMS_ONLY — Only include streams with enough seeders
+         to actually stream reliably via /api/stream/torrent-video. Sort the
+         fallback pool by seeder count DESC so cascade tries the most
+         reliable torrents first. If the healthy pool is empty (unlikely
+         but possible with obscure titles), fall back to all streams. */
       const authToken = await AsyncStorage.getItem('auth_token');
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
-      
-      return streams
-        .filter(s => s !== stream)
-        .filter(s => s.url && s.url.startsWith('/api/proxy/'))
-        .slice(0, 20) /* V174_WIDEN_FALLBACK */
-        .map(s => {
-          const separator = s.url!.includes('?') ? '&' : '?';
-          const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
-          return `${backendUrl}${s.url}${tokenParam}`;
-        });
+      const _v354_seed = (s: any): number => {
+        try {
+          const raw = s?.seeders ?? s?.seed ?? s?.seeds ?? 0;
+          const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+          return isFinite(n) ? n : 0;
+        } catch { return 0; }
+      };
+      const others = streams.filter(s => s !== stream).filter(s => s.url || s.directUrl);
+      // Sort by seeders DESC so cascade tries healthy torrents first.
+      const bySeeds = [...others].sort((a, b) => _v354_seed(b) - _v354_seed(a));
+      // Prefer streams with >=5 seeders; if pool exhausted, include the rest.
+      const healthy = bySeeds.filter(s => _v354_seed(s) >= 5);
+      const unhealthy = bySeeds.filter(s => _v354_seed(s) < 5);
+      const combined = [...healthy, ...unhealthy].slice(0, 80);
+      return combined.map(s => {
+        if (s.directUrl) return s.directUrl;
+        const u = s.url!;
+        if (u.startsWith('http://') || u.startsWith('https://')) return u;
+        const separator = u.includes('?') ? '&' : '?';
+        const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : '';
+        return `${backendUrl}${u}${tokenParam}`;
+      });
     };
     
     try {
@@ -2280,6 +2404,10 @@ const nextEpisodeData = nextEpisode ? {
                   }
                   if (_v300_file && _v300_file.link) {
                     console.log('[v300] PM SUCCESS via', _v300_picked.hash.slice(0,12), '→', String(_v300_file.link).slice(0,80));
+                    /* V353_ADD_FALLBACKS — compute the full 60-URL fallback
+                       list even for PM-directdl path so that if this direct
+                       link fails to play, the cascade kicks in. */
+                    const _v353_fb_v300 = await buildFallbackUrls();
                     router.push({
                       pathname: '/player',
                       params: {
@@ -2288,6 +2416,7 @@ const nextEpisodeData = nextEpisode ? {
                         isLive: 'false',
                         contentType: cType,
                         contentId: subtitleContentId,
+                        fallbackStreams: JSON.stringify(_v353_fb_v300),
                         backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
                         poster: content?.poster || '',
                         logo: content?.logo || '',
@@ -2384,6 +2513,8 @@ const nextEpisodeData = nextEpisode ? {
           }
           if (_v299_link) {
             // Got an absolute PM CDN URL — push to player directly.
+            /* V353_ADD_FALLBACKS — see V300 comment above */
+            const _v353_fb_v299 = await buildFallbackUrls();
             router.push({
               pathname: '/player',
               params: {
@@ -2392,6 +2523,7 @@ const nextEpisodeData = nextEpisode ? {
                 isLive: 'false',
                 contentType: cType,
                 contentId: subtitleContentId,
+                fallbackStreams: JSON.stringify(_v353_fb_v299),
                 backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
                 poster: content?.poster || '',
                 logo: content?.logo || '',
@@ -2483,10 +2615,26 @@ const nextEpisodeData = nextEpisode ? {
       // V162_WIDER_FALLBACKS — bumped from 5 to 15 so we always have a working
       // option even when the top picks share the same codec / lossless-audio
       // incompatibility that the device can't decode.
-      const sortedStreams = sortStreamsByLanguage(streams);
-      const fallbackTorrents = sortedStreams
-        .filter(s => s.infoHash && s.infoHash !== stream.infoHash)
-        .slice(0, 20) /* V174_WIDEN_FALLBACK */
+      /* V355_HEALTHY_TORRENT_FALLBACKS — This is the REAL playback fallback
+         path for Torrentio streams (with infoHash). Auto-play tries top
+         stream first; if that fails, player cascades through this list.
+         The old list was capped at 20 AND not sorted by seeders, so if the
+         top torrent had bad peers, the "next" was also usually a bad-peer
+         torrent. Fix: filter to healthy seeders (>=10 first, then any),
+         sort by seeders DESC, widen to 60. */
+      const _v355_seed = (s: any): number => {
+        try {
+          const raw = s?.seeders ?? s?.seed ?? s?.seeds ?? 0;
+          const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+          return isFinite(n) ? n : 0;
+        } catch { return 0; }
+      };
+      const _v355_others = streams.filter(s => s.infoHash && s.infoHash !== stream.infoHash);
+      const _v355_sorted = [..._v355_others].sort((a, b) => _v355_seed(b) - _v355_seed(a));
+      const _v355_healthy = _v355_sorted.filter(s => _v355_seed(s) >= 10);
+      const _v355_unhealthy = _v355_sorted.filter(s => _v355_seed(s) < 10);
+      const fallbackTorrents = [..._v355_healthy, ..._v355_unhealthy]
+        .slice(0, 60)
         .map(s => ({
           infoHash: s.infoHash,
           fileIdx: s.fileIdx,
@@ -2495,6 +2643,7 @@ const nextEpisodeData = nextEpisode ? {
           name: s.name || '',
           title: s.title || '',
         }));
+      console.log('[V355] torrent fallbacks: healthy=' + _v355_healthy.length + ' unhealthy=' + _v355_unhealthy.length + ' total=' + fallbackTorrents.length);
       
       // Extract season/episode from content ID (e.g. tt123:1:2 → season=1, episode=2)
       const idParts = (id || '').split(':');
@@ -2693,9 +2842,9 @@ const nextEpisodeData = nextEpisode ? {
   if (_v186Closing) {
     return <View style={styles.container} />;
   }
-  return (
-    <View style={styles.container}>
-      {/* V176K_POPOVER_MOUNTED — Stremio-style menu host for this screen. */}
+  // V360_CLOSING_EARLY_RETURN
+    if (_v186Closing) { return (<View style={{flex:1,backgroundColor:'#0c0c0c'}} />); }
+    $1 — Stremio-style menu host for this screen. */}
       <V176kPopover />
       {/* Background Image — lightweight RN Image, no expo-image overhead */}
       {displayPoster ? (
@@ -3005,9 +3154,14 @@ const nextEpisodeData = nextEpisode ? {
                           picked = list[0] && _v241Playable(list[0]) ? list[0] : null;
                         }
                         if (!picked) {
-                          const resolved = list.find((s: any) => s && (s.url || s.externalUrl || s.direct_url));
-                          const infoHashOnly = list.find((s: any) => s && (s.infoHash || (s as any).info_hash));
-                          picked = resolved || infoHashOnly || list[0] || null;
+                          /* V356_PLAY_USES_RANKER_TOP — do NOT prefer URL-resolved
+                             streams over the ranker's top pick. The ranker (V354)
+                             already prefers healthy high-seed torrents which are
+                             what actually stream successfully. URL-resolved streams
+                             from Torrentio can be dead RD links. Trust the ranker. */
+                          const _v356Playable = (s: any) =>
+                            !!(s && (s.url || s.externalUrl || s.direct_url || s.infoHash || (s as any).info_hash));
+                          picked = (list[0] && _v356Playable(list[0])) ? list[0] : (list.find((s: any) => _v356Playable(s)) || null);
                         }
                         // Normalize info_hash -> infoHash so handleStreamSelect's downstream
                         // checks find what they expect.
@@ -3015,7 +3169,10 @@ const nextEpisodeData = nextEpisode ? {
                           picked = { ...picked, infoHash: (picked as any).info_hash } as any;
                         }
                         if (picked) {
-                          console.log('[v241 PLAY] picked:', picked.name || picked.title, 'isPorn=', _v241IsPorn);
+                          console.log('[V358 PLAY] picked:', String(picked.name || picked.title || '').slice(0,80),
+                                   '| hasUrl=', !!picked.url,
+                                   '| infoHash=', String(picked.infoHash || '').slice(0,8),
+                                   '| audio-tag=', String(picked.title || picked.name || '').match(/DTS[\-\s]?HD\s?MA|DTS[\-\s]?X|DTSX|TRUEHD|TRUE[\-\s]?HD|ATMOS|DTS/i)?.[0] || 'aac/ac3-ok');
                           handleStreamSelect(picked);
                         } else {
                           setIsPlayLoading(false);

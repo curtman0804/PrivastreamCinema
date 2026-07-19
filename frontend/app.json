@@ -2,8 +2,8 @@
   "expo": {
     "name": "Privastream Cinema",
     "slug": "privastreamcinema",
-    "version": "1.7.1",
-    "runtimeVersion": "1.0.0",
+    "version": "1.7.2",
+    "runtimeVersion": "1.1.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "privastreamcinema",
@@ -35,7 +35,7 @@
       },
       "package": "com.privastream.cinema",
       "allowBackup": false,
-      "versionCode": 22
+      "versionCode": 25
     },
     "web": {
       "bundler": "metro",

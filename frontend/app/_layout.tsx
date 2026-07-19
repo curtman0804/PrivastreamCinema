@@ -1,3 +1,4 @@
+import { ensureMMKVMigrated } from '../src/utils/mmkvMigrate';
 import React from 'react';
 // PATCH_V48_NO_FREEZE — enableFreeze removed. Was causing 3s back-nav lag.
 // import { enableFreeze } from 'react-native-screens';
@@ -23,3 +24,6 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+// V344 - migrate AsyncStorage -> MMKV on first boot (idempotent)
+ensureMMKVMigrated().catch(function () {});

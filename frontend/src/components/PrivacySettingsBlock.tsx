@@ -22,7 +22,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../utils/mmkvStorage';
 import { Ionicons } from '@expo/vector-icons';
 import {
   validateKey,

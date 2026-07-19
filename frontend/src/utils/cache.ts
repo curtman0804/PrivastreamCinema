@@ -1,4 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// V348: route through filesystem-backed blob cache to bypass SQLite 6MB cap.
+import * as AsyncStorage from './blobCache';
 
 interface CacheEntry<T> {
   data: T;

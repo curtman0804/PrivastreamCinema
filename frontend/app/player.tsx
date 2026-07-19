@@ -37,7 +37,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import Constants from 'expo-constants';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Modal, FlatList } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../src/utils/mmkvStorage';
 /* V176C_PLAYER_MARK_WATCHED — keep the in-memory _v172WatchedSet in sync
    so visible posters show the gold check immediately, no app restart. */
 import { v176MarkWatched as _v176cMark } from '../src/components/ContentCard';
@@ -2072,7 +2072,8 @@ export default function PlayerScreen() {
     continuePollingRef.current = true;
     
     // Parse fallback streams (URL-based)
-    if (fallbackStreams) {
+      console.log('[V358 PLAYER] mount: fbStreams=' + (fallbackStreams ? String(fallbackStreams).length + 'ch' : 'null') + ' fbTorrents=' + (fallbackTorrents ? String(fallbackTorrents).length + 'ch' : 'null') + ' directUrl=' + (directUrl ? 'yes' : 'no') + ' infoHash=' + (infoHash ? String(infoHash).slice(0,8) : 'no'));
+      if (fallbackStreams) {
       try {
         const parsed = JSON.parse(fallbackStreams);
         if (Array.isArray(parsed)) {
@@ -2878,8 +2879,19 @@ export default function PlayerScreen() {
                     }
                   } catch (_v162_e) { /* ignore — fall through to normal retry */ }
 
-                  // Retry aggressively - torrent data arrives progressively, each retry may succeed
-                  if (videoRetryCountRef.current < maxVideoRetries) {
+                  // V357_FAST_CASCADE - directUrl errors skip retry loop
+                    if (directUrl && !infoHash) {
+                      const _v357_fbLeft = Math.max(0, (fallbackUrls?.length || 0) - (currentStreamIndex + 1));
+                      const _v357_torLeft = (torrentFallbacksRef.current?.length || 0) + (torrentFallbacks?.length || 0);
+                      console.log('[V357 CASCADE] directUrl failed - fbUrlsLeft=' + _v357_fbLeft + ' torrentsLeft=' + _v357_torLeft);
+                      videoRetryCountRef.current = 0;
+                      if (_v357_fbLeft > 0) tryNextStream();
+                      else if (_v357_torLeft > 0) tryNextFallbackTorrent();
+                      else { setError('Stream unavailable. Try a different source.'); setIsLoading(false); }
+                      return;
+                    }
+                    // Retry aggressively
+                    if (videoRetryCountRef.current < maxVideoRetries) {
                     videoRetryCountRef.current += 1;
                     // Fast retries: 1s, 1s, 2s, 2s, 3s, 3s, 4s, 4s, 5s, 5s, 5s, 5s, 5s, 5s, 5s
                     const delay = Math.min(5000, Math.ceil(videoRetryCountRef.current / 2) * 1000);

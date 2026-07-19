@@ -19,7 +19,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, Alert,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../utils/mmkvStorage';
 import * as FileSystem from 'expo-file-system';
 import Constants from 'expo-constants';
 import { useAuthStore } from '../store/authStore';
@@ -171,11 +171,15 @@ export function ToSGate({ visible, onAccepted }: ToSGateProps) {
 
   useEffect(() => {
     if (!reachedBottom) return;
-    const t = setTimeout(() => {
-      // @ts-ignore RN TV
-      agreeBtnRef.current?.focus?.();
-    }, 120);
-    return () => clearTimeout(t);
+    // V347: multiple focus attempts — Firestick sometimes drops the first call
+    const tries: ReturnType<typeof setTimeout>[] = [];
+    [120, 350, 700, 1200].forEach((delay) => {
+      tries.push(setTimeout(() => {
+        // @ts-ignore RN TV
+        agreeBtnRef.current?.focus?.();
+      }, delay));
+    });
+    return () => { tries.forEach(clearTimeout); };
   }, [reachedBottom]);
 
   const handleAgree = async () => {
@@ -270,7 +274,7 @@ export function ToSGate({ visible, onAccepted }: ToSGateProps) {
               style={[styles.agreeBtn, btnFocused && styles.agreeBtnFocused]}
             >
               <Text style={styles.agreeBtnText}>
-                {submitting ? 'Recording…' : 'I Agree'}
+                {submitting ? 'Recording…' : '► I AGREE ◄'}
               </Text>
             </TouchableOpacity>
           ) : (
@@ -348,9 +352,9 @@ const styles = StyleSheet.create({
   paragraphFocused: { backgroundColor: '#1f1a08', borderColor: GOLD },
   body: { color: GOLD, fontSize: 16, lineHeight: 24, fontWeight: '500' },
   bodyFocused: { color: GOLD_BRIGHT },
-  agreeBtn: { marginTop: 16, backgroundColor: GOLD, borderRadius: 10, paddingVertical: 18, alignItems: 'center', borderWidth: 4, borderColor: 'transparent' },
+  agreeBtn: { marginTop: 16, backgroundColor: GOLD, borderRadius: 10, paddingVertical: 22, alignItems: 'center', borderWidth: 5, borderColor: '#ffffff', shadowColor: GOLD, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.85, shadowRadius: 20, elevation: 16, transform: [{ scale: 1.04 }] },
   agreeBtnLocked: { backgroundColor: '#2a2a2a', borderColor: GOLD_DIM },
-  agreeBtnFocused: { borderColor: '#ffffff', backgroundColor: GOLD_BRIGHT, shadowColor: GOLD, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 24, elevation: 18, transform: [{ scale: 1.04 }] },
-  agreeBtnText: { color: BG, fontSize: 22, fontWeight: '800', letterSpacing: 1 },
+  agreeBtnFocused: { borderColor: '#ffffff', backgroundColor: GOLD_BRIGHT, shadowColor: '#ffffff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 44, elevation: 28, transform: [{ scale: 1.12 }] },
+  agreeBtnText: { color: BG, fontSize: 28, fontWeight: '900', letterSpacing: 2 },
   agreeBtnTextLocked: { color: GOLD_DIM, fontSize: 16, fontWeight: '700' },
 });

@@ -1,6 +1,7 @@
 import { create } from 'zustand'; // PATCH_V19B_ALL_DONE
 import { useState, useEffect } from 'react'; // PATCH_V245_OWNERSHIP — hook deps
-import AsyncStorage from '@react-native-async-storage/async-storage'; // PATCH_V19B_DISK_HELPERS
+import AsyncStorage from '../utils/mmkvStorage'; // PATCH_V19B_DISK_HELPERS
+import * as _blobCache from '../utils/blobCache'; // V348_BLOB_CACHE
 
 // V265_SQLITE_SWALLOW — monkey-patch AsyncStorage globally so that any
 // SQLITE_FULL exception during writes is SWALLOWED instead of propagating.
@@ -148,7 +149,8 @@ const META_DISK_KEY = (key: string) => '@metaCache:' + _v244Scoped(key);
 
 export async function loadMetaFromDisk(key: string): Promise<ContentItem | null> {
   try {
-    const raw = await AsyncStorage.getItem(META_DISK_KEY(key));
+    // V348: read from filesystem blob cache instead of SQLite AsyncStorage
+    const raw = await _blobCache.getBlob(META_DISK_KEY(key));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed?.time || !parsed?.data) return null;
@@ -160,7 +162,8 @@ export async function loadMetaFromDisk(key: string): Promise<ContentItem | null>
 async function saveMetaToDisk(key: string, data: ContentItem): Promise<void> {
   try {
     if (!data) return;
-    await AsyncStorage.setItem(
+    // V348: write to filesystem blob cache (no SQLite 6MB limit)
+    await _blobCache.setBlob(
       META_DISK_KEY(key),
       JSON.stringify({ time: Date.now(), data })
     );
@@ -223,7 +226,8 @@ let _v190AbortToken = 0;
 
 async function loadStreamsFromDisk(key: string): Promise<Stream[] | null> {
   try {
-    const raw = await AsyncStorage.getItem(STREAMS_DISK_KEY(key));
+    // V348: read from filesystem blob cache
+    const raw = await _blobCache.getBlob(STREAMS_DISK_KEY(key));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.time || !Array.isArray(parsed.streams)) return null;
@@ -235,7 +239,8 @@ async function loadStreamsFromDisk(key: string): Promise<Stream[] | null> {
 async function saveStreamsToDisk(key: string, streams: Stream[]): Promise<void> {
   try {
     if (!streams || streams.length === 0) return;
-    await AsyncStorage.setItem(STREAMS_DISK_KEY(key), JSON.stringify({ time: Date.now(), streams }));
+    // V348: write to filesystem blob cache (unlimited size)
+    await _blobCache.setBlob(STREAMS_DISK_KEY(key), JSON.stringify({ time: Date.now(), streams }));
   } catch (e: any) {
     // V259_SQLITE_FULL_RECOVERY — AsyncStorage uses SQLite on Android; once
     // it fills, EVERY future write (auth tokens, library, image cache,

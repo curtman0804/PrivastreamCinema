@@ -23,7 +23,7 @@
 //   src/services/premiumizeClient.ts
 // ============================================================
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../utils/mmkvStorage';
 
 const PM_BASE = 'https://www.premiumize.me/api';
 const CACHE_KEY_PREFIX = '@pmcache:';

@@ -75,7 +75,7 @@ function _kickPmResolve(opts: {
 // Hetzner public IPv4 is 5.161.49.99.  Inbound traffic
 // must hit that address.
 // ============================================
-const BACKEND_URL = 'https://api.privastreamsolutions.com';
+const BACKEND_URL = 'http://5.161.49.99:8001';
 
 // Get the backend URL based on environment
 const getBaseUrl = () => {
@@ -135,7 +135,15 @@ apiClient.interceptors.response.use(
     
     const status = error.response?.status || 0;
     const isServerError = status >= 500 || status === 0;
-    
+
+    // V351: skip retry entirely for /api/addon-proxy/tpb/* — that proxy is
+    // notoriously flaky, and retries stall navigation 4.5s per click.
+    // Let the caller handle the failure (they can fall through to other addons).
+    const _v351url = (config.url || '') + '';
+    if (/\/api\/addon-proxy\/(tpb|thepiratebay)/i.test(_v351url)) {
+      return Promise.reject(error);
+    }
+
     if (isServerError && !config.__retryCount) {
       config.__retryCount = 0;
     }
@@ -667,13 +675,6 @@ export const api = {
     },
     resolveCode: async (code: string): Promise<{ url: string; code: string }> => {
       const response = await apiClient.get(`/api/addons/resolve-code/${code}`);
-      return response.data;
-    },
-    // V309_CREATE_SHARE_CODE — generate a 7-digit share code for any
-    // manifest URL.  Backend stores {code, url} in MongoDB; same URL
-    // always returns the same code (idempotent).
-    createShareCode: async (manifestUrl: string): Promise<{ url: string; code: string }> => {
-      const response = await apiClient.post('/api/addons/share-code', { url: manifestUrl });
       return response.data;
     },
   },
