@@ -816,19 +816,21 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
           s += 4000;
           if (_v325hasAtmos && _v325hasHevc) {
             s += 1500;
+            /* V366_KILL_SCORER_LOGS_BUILD_TAG - silenced: fired per-stream
+               inside the sort; 24+ bridge logs per details open. */
             try {
-              console.log('[V325] WEB-DL+Atmos+HEVC combo +5500 | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+              false && console.log('[V325] WEB-DL+Atmos+HEVC combo +5500 | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
             } catch (_) {}
           } else {
             try {
-              console.log('[V325] WEB-DL bonus +4000 | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+              false && console.log('[V325] WEB-DL bonus +4000 | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
             } catch (_) {}
           }
         }
         if (_v325isWebRip) {
           s -= 3000;
           try {
-            console.log('[V325] WEBRip penalty -3000 (often burned ad overlay) | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
+            false && console.log('[V325] WEBRip penalty -3000 (often burned ad overlay) | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
           } catch (_) {}
         }
       }
@@ -862,7 +864,8 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
       );
       if (_v339IsProblematic) {
         s -= 2500;
-        console.log('[V339] QxR/r00t penalty -2500 |', String(stream.name || '').slice(0, 80));
+        /* V370_KILL_HOT_LOG - fired inside computeScore (hot path). */
+        false && console.log('[V339] QxR/r00t penalty -2500 |', String(stream.name || '').slice(0, 80));
       }
     }
     /* V158_AUDIO_PENALTY — reject lossless / ExoPlayer-incompatible audio.
@@ -954,7 +957,20 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     const _v357_cHdr = parsed.filter((p) => !!p.stream.url && _v357_isHdr(p));
     const _v357_uSdr = parsed.filter((p) => !p.stream.url && !_v357_isHdr(p));
     const _v357_uHdr = parsed.filter((p) => !p.stream.url && _v357_isHdr(p));
-    const _v357_sortScore = (a, b) => computeScore(b.info, b.stream) - computeScore(a.info, a.stream);
+    /* V370_PRECOMPUTED_SCORES - computeScore (~50 regex tests + ~8 string
+       allocations per call) ran INSIDE the sort comparator: ~700 calls for
+       59 streams instead of 59.  That was the 850ms JS stall between
+       [v337] and [V357 PARTITION] plus the 505ms GC pause in
+       lag_capture.log.  Score each stream ONCE, then sort by the number. */
+    const _v370Score = (p: any) => {
+      if (p.__v370Score === undefined) p.__v370Score = computeScore(p.info, p.stream);
+      return p.__v370Score;
+    };
+    for (const _p of _v357_cSdr) _v370Score(_p);
+    for (const _p of _v357_cHdr) _v370Score(_p);
+    for (const _p of _v357_uSdr) _v370Score(_p);
+    for (const _p of _v357_uHdr) _v370Score(_p);
+    const _v357_sortScore = (a: any, b: any) => _v370Score(b) - _v370Score(a);
     _v357_cSdr.sort(_v357_sortScore); _v357_cHdr.sort(_v357_sortScore);
     _v357_uSdr.sort(_v357_sortScore); _v357_uHdr.sort(_v357_sortScore);
     parsed.length = 0;
@@ -973,7 +989,11 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
       const _v154Hits = _v154TitleOverlap(_v154Req, _v154Pick);
       console.log('[MATCH v154]', _v154Hits === 0 ? 'WARNING-NO-OVERLAP' : 'ok-overlap=' + _v154Hits, '| requested=', _v154Req.slice(0,60), '| pick=', _v154Pick.slice(0,80), '| hash=', (_top.stream?.infoHash || '').slice(0,8), 'fileIdx=', (_top.stream as any)?.fileIdx ?? null);
     } catch (_) {}
-    console.log('[SORT v141_V357] picked top:', _topInfo.quality || '?', 'cached=' + (!!_top.stream.url), 'seeders=' + (_topInfo.seeders || 0), 'lang=' + (_topInfo.language || '?'), '| cached_n=' + _v141_cached.length, 'uncached_n=' + _v141_uncached.length);
+    /* V367_FIX_V141_REF_BUILD_TAG - _v141_cached/_v141_uncached were deleted
+       by V357's SDR/HDR partition but this log still referenced them ->
+       ReferenceError -> details white screen on EVERY title. Counts now come
+       from the V357 buckets. */
+    console.log('[SORT v141_V367] picked top:', _topInfo.quality || '?', 'cached=' + (!!_top.stream.url), 'seeders=' + (_topInfo.seeders || 0), 'lang=' + (_topInfo.language || '?'), '| cached_n=' + (_v357_cSdr.length + _v357_cHdr.length), 'uncached_n=' + (_v357_uSdr.length + _v357_uHdr.length));
   }
 
   // PATCH_V16A_COMMENTARY_SINK — partition commentary tracks to the end of the result.
@@ -1326,8 +1346,15 @@ const EpisodeCard = React.memo(function EpisodeCard({
 export default function DetailsScreen() {
   // V311_PERF_PROFILER - capture details-page lifecycle marks and ship
   // them to the backend /api/debug/perf endpoint for offline analysis.
-  v311Perf.start('details');
-  v311Perf.mark('MOUNT');
+  /* V369_PERF_ONCE - start()/mark() ran in the component BODY, so every
+     re-render (6x per open in lag_capture.log) reset the profiler and
+     shipped another bridge log.  Ref-guarded to fire once per mount. */
+  const _v369PerfStarted = React.useRef(false);
+  if (!_v369PerfStarted.current) {
+    _v369PerfStarted.current = true;
+    v311Perf.start('details');
+    v311Perf.mark('MOUNT');
+  }
   React.useLayoutEffect(() => { v311Perf.mark('FIRST_RENDER'); }, []);
   React.useEffect(() => {
     v311Perf.mark('FIRST_EFFECT');
@@ -1410,7 +1437,21 @@ export default function DetailsScreen() {
     // V190_BACK_CANCEL — drop in-flight stream fetch state-writes
     try { (useContentStore.getState() as any).cancelInFlightStreams?.(); } catch (_) {}
     // V186_BACK_INSTANT — hide heavy tree IMMEDIATELY, navigate on next frame.
-    _setV186Closing(true);
+    /* V361_FAST_UNMOUNT - clear heavy state BEFORE router.back() so React
+   has less to tear down (was 2960ms UNMOUNT). Drop stream arrays,
+   watchedEpisodes, sortedStreams so their child components can unmount
+   immediately instead of waiting for the whole tree teardown pass. */
+        const _v361_t0 = Date.now();
+        try { _setSortedStreams && _setSortedStreams([]); } catch (_) {}
+        try { setWatchedEpisodes && setWatchedEpisodes({}); } catch (_) {}
+        /* V363_BROAD_UNMOUNT - broaden clear: content (meta blob), global streams
+   store, and any large lists. React unmount cost was regressing to 2.7-3.6s
+   on titles with 30+ streams because those child components stayed mounted
+   until the parent tore down. */
+        try { setContent && setContent(null); } catch (_) {}
+        try { (useContentStore as any).setState({ streams: [], isLoadingStreams: false }); } catch (_) {}
+        console.log('[V361_UNMOUNT] state cleared t+' + (Date.now() - _v361_t0) + 'ms');
+        _setV186Closing(true);
     requestAnimationFrame(() => {
       try {
         if (!goToSeriesRootWithFocus()) router.back();
@@ -1432,12 +1473,27 @@ export default function DetailsScreen() {
         console.log('[V360_BACK] t0=hwBack fired');
         console.log('[BACK v134/v186] main hwBack fired');
       // Hide heavy tree on this frame.
-      _setV186Closing(true);
+      /* V361_FAST_UNMOUNT - clear heavy state BEFORE router.back() so React
+   has less to tear down (was 2960ms UNMOUNT). Drop stream arrays,
+   watchedEpisodes, sortedStreams so their child components can unmount
+   immediately instead of waiting for the whole tree teardown pass. */
+        const _v361_t0 = Date.now();
+        try { _setSortedStreams && _setSortedStreams([]); } catch (_) {}
+        try { setWatchedEpisodes && setWatchedEpisodes({}); } catch (_) {}
+        /* V363_BROAD_UNMOUNT - broaden clear: content (meta blob), global streams
+   store, and any large lists. React unmount cost was regressing to 2.7-3.6s
+   on titles with 30+ streams because those child components stayed mounted
+   until the parent tore down. */
+        try { setContent && setContent(null); } catch (_) {}
+        try { (useContentStore as any).setState({ streams: [], isLoadingStreams: false }); } catch (_) {}
+        console.log('[V361_UNMOUNT] state cleared t+' + (Date.now() - _v361_t0) + 'ms');
+        _setV186Closing(true);
         console.log('[V360_BACK] t=' + (Date.now() - _v360_backT0) + 'ms _setV186Closing done');
         // Navigate on the next frame so React can drop the subtree first.
       requestAnimationFrame(() => {
         try { if (goToSeriesRootWithFocus()) { console.log('[BACK v134] -> series-root-with-focus'); return; } } catch (_) {}
-        try { router.back(); console.log('[BACK v134] -> router.back()'); return; } catch (_) {}
+        try { router.back();
+            console.log('[V361_BACK_FIRED] router.back() called t+' + (Date.now() - _v361_t0) + 'ms'); return; } catch (_) {}
         try { router.replace('/(tabs)/discover'); console.log('[BACK v134] -> replace discover'); } catch (_) {}
       });
       return true;
@@ -2286,11 +2342,21 @@ const nextEpisodeData = nextEpisode ? {
     };
     
     try {
-      await AsyncStorage.setItem('currentPlaying', JSON.stringify({
-        contentType: cType,
-        contentId: id,
-        title: contentTitle,
-      }));
+      /* V363_CURPLAY_BLOB - move off SQLite (SQLITE_FULL crash) onto FS. */
+      try {
+        const _b363 = require('../../../src/utils/blobCache');
+        await _b363.setBlob('currentPlaying', JSON.stringify({
+          contentType: cType,
+          contentId: id,
+          title: contentTitle,
+        }));
+      } catch (_) {
+        await AsyncStorage.setItem('currentPlaying', JSON.stringify({
+          contentType: cType,
+          contentId: id,
+          title: contentTitle,
+        }));
+      }
     } catch (e) {
       console.log('[DETAILS] Error saving to AsyncStorage:', e);
     }
@@ -2844,7 +2910,9 @@ const nextEpisodeData = nextEpisode ? {
   }
   // V360_CLOSING_EARLY_RETURN
     if (_v186Closing) { return (<View style={{flex:1,backgroundColor:'#0c0c0c'}} />); }
-    $1 — Stremio-style menu host for this screen. */}
+  return (
+    <View style={styles.container}>
+      {/* V176K_POPOVER_MOUNTED - Stremio-style menu host for this screen. */}
       <V176kPopover />
       {/* Background Image — lightweight RN Image, no expo-image overhead */}
       {displayPoster ? (

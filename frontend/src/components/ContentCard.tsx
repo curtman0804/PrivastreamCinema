@@ -162,11 +162,21 @@ export async function v176MarkWatched(contentId: string | undefined | null): Pro
 const _v176ProgressSet = new Set<string>();
 const _v176ProgressSubs = new Set<() => void>();
 export function v176RegisterProgress(ids: Array<string | undefined | null>): void {
-  _v176ProgressSet.clear();
+  /* V369_SKIP_NOOP_REGISTER - discover re-registers the same id set on
+     every CW state change; notifying subscribers for an IDENTICAL set
+     triggered pointless re-render passes.  Only notify on real changes. */
+  const next = new Set<string>();
   for (const raw of (ids || [])) {
     if (!raw) continue;
-    _v176ProgressSet.add(String(raw));
+    next.add(String(raw));
   }
+  let changed = next.size !== _v176ProgressSet.size;
+  if (!changed) {
+    for (const k of next) { if (!_v176ProgressSet.has(k)) { changed = true; break; } }
+  }
+  if (!changed) return;
+  _v176ProgressSet.clear();
+  for (const k of next) _v176ProgressSet.add(k);
   _v176ProgressSubs.forEach((cb) => { try { cb(); } catch (_) {} });
 }
 export function v176HasProgress(contentId: string | undefined | null): boolean {
@@ -177,12 +187,61 @@ export function v176SubscribeProgress(cb: () => void): () => void {
   _v176ProgressSubs.add(cb);
   return () => { _v176ProgressSubs.delete(cb); };
 }
+/* V365_CW_INSTANT_CLEAR - tombstone registry + broadcast so the Discover
+   Continue-Watching row drops a cleared card on the SAME FRAME the user
+   taps "Clear Progress", no matter which screen the menu was opened from
+   (CW card, discover poster, episode card on details).  The tombstone also
+   shields the CW list from the refetch race: if a CW fetch response lands
+   while the background DELETE is still in flight, the stale item is
+   filtered out instead of flickering back onto the row. */
+const _V365_BUILD_TAG = 'V365_CW_INSTANT_CLEAR_BUILD_TAG';
+void _V365_BUILD_TAG;
+const _v365ClearedAt = new Map<string, number>();
+const _V365_TOMBSTONE_TTL_MS = 5 * 60 * 1000;
+export function v365MarkCleared(contentId: string | undefined | null, opts?: { silent?: boolean }): void {
+  if (!contentId) return;
+  const key = String(contentId);
+  _v365ClearedAt.set(key, Date.now());
+  if (!opts || !opts.silent) {
+    try { DeviceEventEmitter.emit('v365:cwCleared', key); } catch (_) {}
+  }
+}
+export function v365IsCleared(contentId: string | undefined | null): boolean {
+  if (!contentId) return false;
+  const key = String(contentId);
+  const at = _v365ClearedAt.get(key);
+  if (!at) return false;
+  if (Date.now() - at > _V365_TOMBSTONE_TTL_MS) {
+    _v365ClearedAt.delete(key);
+    return false;
+  }
+  return true;
+}
 export async function v176ClearProgress(contentId: string | undefined | null): Promise<void> {
   if (!contentId) return;
   const key = String(contentId);
   _v176ProgressSet.delete(key);
+  /* V365_CW_INSTANT_CLEAR - broadcast FIRST so Discover's CW row updates
+     on this frame; the HTTP delete below stays slow-lane fire-and-forget. */
+  v365MarkCleared(key);
   _v176ProgressSubs.forEach((cb) => { try { cb(); } catch (_) {} });
-  try { await (api as any).watchProgress.delete(key); } catch (_) { /* best-effort */ }
+  try { v369DeleteProgressOnce(key); } catch (_) { /* best-effort */ }
+}
+
+/* V369_SINGLE_FLIGHT_DELETE - "Clear Progress" fired TWO DELETEs 2ms apart
+   (onAfterChange -> discover handleRemove -> DELETE #1, then
+   v176ClearProgress -> DELETE #2 -> 404).  Both paths now route through
+   this 8s-window dedupe so exactly ONE HTTP call goes out per clear. */
+const _v369DeletedAt = new Map<string, number>();
+export function v369DeleteProgressOnce(contentId: string | undefined | null): void {
+  if (!contentId) return;
+  const key = String(contentId);
+  const now = Date.now();
+  if (now - (_v369DeletedAt.get(key) || 0) < 8000) return;
+  _v369DeletedAt.set(key, now);
+  try {
+    (api as any).watchProgress.delete(key).catch(() => { /* best-effort */ });
+  } catch (_) { /* best-effort */ }
 }
 
 /* Unified long-press menu used by ContentCard, LibraryCard, and
@@ -363,11 +422,19 @@ export const V176kPopover: React.FC = () => {
     /* V176O_CLOSE_BROADCAST — broadcast so every mounted popover instance
        (not just the topmost) closes on action select.  Without this, the
        user had to press back once per stacked Modal. */
+    /* V366_SYNC_POPOVER_ACTION - run the action on THIS tick, BEFORE the
+       Modal teardown + screen re-render occupy the JS thread.  The old
+       50ms setTimeout did not fire "50ms later" on a busy Firestick - it
+       fired after the whole close/re-render pass (measured 2.2s late in
+       the 09:53 logcat).  Optimistic actions (Clear Progress, Mark
+       Watched) are cheap setState + fire-and-forget HTTP, so running them
+       inline lets the poster update commit in the SAME render pass as the
+       modal close. */
+    const _V366_BUILD_TAG = 'V366_SYNC_POPOVER_ACTION_BUILD_TAG';
+    void _V366_BUILD_TAG;
+    try { a.onPress(); } catch (e) { console.log('[V176K] action error:', e); }
     try { DeviceEventEmitter.emit('v176k:close'); } catch (_) {}
     setOpen(false);
-    // Delay slightly so the close animation can start before the action
-    // triggers anything heavy (e.g. fetchLibrary).
-    setTimeout(() => { try { a.onPress(); } catch (e) { console.log('[V176K] action error:', e); } }, 50);
   }, []);
 
   if (!open || !payload) return null;
@@ -1167,10 +1234,20 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
      was the cause of the 10s post-paint freeze. */
   const _v172ContentId = ((item as any).content_id || _v160_id) as string | undefined;
   const [, _v172Bump] = useState(0);
+  /* V369_SCOPED_BUMP - only re-render THIS card when ITS OWN watched flag
+     actually flipped.  The old unconditional bump re-rendered every
+     mounted card on any watched-registry change. */
+  const _v369LastWatched = useRef<boolean>(v172IsWatched(_v172ContentId));
   useEffect(() => {
     let unsub: (() => void) | undefined;
     const t = setTimeout(() => {
-      unsub = v172SubscribeWatched(() => _v172Bump((x) => (x + 1) & 0xff));
+      unsub = v172SubscribeWatched(() => {
+        const _now = v172IsWatched(_v172ContentId);
+        if (_now !== _v369LastWatched.current) {
+          _v369LastWatched.current = _now;
+          _v172Bump((x) => (x + 1) & 0xff);
+        }
+      });
     }, 250);
     return () => { clearTimeout(t); if (unsub) try { unsub(); } catch (_) {} };
   }, []);
@@ -1179,13 +1256,11 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   /* V176_LONGPRESS_MENU — re-render when the CW progress registry changes
      so the unified long-press menu shows the right buttons.
      v238 — also deferred 250ms (same reason as v172 above). */
-  useEffect(() => {
-    let unsub: (() => void) | undefined;
-    const t = setTimeout(() => {
-      unsub = v176SubscribeProgress(() => _v172Bump((x) => (x + 1) & 0xff));
-    }, 250);
-    return () => { clearTimeout(t); if (unsub) try { unsub(); } catch (_) {} };
-  }, []);
+  /* V369_NO_PROGRESS_BUMP - subscription removed: ContentCard renders
+     NOTHING that depends on the progress registry (the long-press menu
+     reads v176HasProgress live at open time).  The old unconditional bump
+     re-rendered EVERY mounted card (~100) TWICE per Clear Progress -
+     measured as the 1.2s press-to-unmount freeze in lag_capture.log. */
 
   return (
     /* V176N_HOST_SINGLETON — render the popover host alongside every

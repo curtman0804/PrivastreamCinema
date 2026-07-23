@@ -48,7 +48,12 @@ import {
   v176ShowLongPressMenu as _v176ShowLongPressMenu,
   /* V176E_TV_LONGPRESS — register this CW card's menu handler with v173. */
   v173RegisterLongPress as _v173RegLP,
-  /* V176K_POPOVER */ V176kPopover, v176kMeasureAnchor
+  /* V176K_POPOVER */ V176kPopover, v176kMeasureAnchor,
+  /* V365_CW_INSTANT_CLEAR */
+  v365MarkCleared as _v365MarkCleared,
+  v365IsCleared as _v365IsCleared,
+  /* V369_SINGLE_FLIGHT_DELETE */
+  v369DeleteProgressOnce as _v369DeleteProgressOnce
 } from '../../src/components/ContentCard';
 import { colors } from '../../src/styles/colors';
 import { Image as RNImage } from 'react-native';
@@ -261,6 +266,46 @@ export default function DiscoverScreen() {
     return () => { try { sub.remove(); } catch (_) {} };
   }, []);
 
+  /* V365_CW_INSTANT_CLEAR - drop a cleared card from the CW row on the
+     same frame the user taps "Clear Progress", regardless of which screen
+     the long-press menu was opened from (CW card, discover poster, episode
+     card on the details page).  Previously a clear from details left the
+     stale card on Discover for up to 30s (focus-effect refetch throttle). */
+  const _V365_DISCOVER_BUILD_TAG = 'V365_CW_INSTANT_REMOVE_BUILD_TAG';
+  void _V365_DISCOVER_BUILD_TAG;
+  useEffect(() => {
+    const _v365Sub = DeviceEventEmitter.addListener('v365:cwCleared', (cid: string) => {
+      if (!cid) return;
+      try {
+        LayoutAnimation.configureNext({
+          duration: 120,
+          update: { type: LayoutAnimation.Types.easeInEaseOut },
+          delete: {
+            type: LayoutAnimation.Types.easeInEaseOut,
+            property: LayoutAnimation.Properties.opacity,
+          },
+        });
+      } catch (_) {}
+      /* V368_SCOPED_CW_REMOVE - React only eager-evaluates a setState
+         updater when that hook's queue is empty.  Since V366 the CW
+         long-press path queues its own removal in the SAME tick before this
+         listener runs, so the captured next-arrays stayed [] and the old
+         emptiness check force-hid the ENTIRE Continue Watching row.  The
+         updaters below only filter; section visibility is derived at render
+         time from the actual list state. */
+      try { ((globalThis as any).__psTags = (globalThis as any).__psTags || {})['V368_SCOPED_CW_REMOVE'] = 1; } catch (_) {}
+      setContinueWatching(prev => {
+        const next = (prev || []).filter(i => i.content_id !== cid);
+        return next.length === (prev || []).length ? prev : next;
+      });
+      setCachedCW(prev => {
+        const next = (prev || []).filter(i => i.content_id !== cid);
+        return next.length === (prev || []).length ? prev : next;
+      });
+    });
+    return () => { try { _v365Sub.remove(); } catch (_) {} };
+  }, []);
+
   // Use same card width calculation as ContentCard for consistency
   const POSTER_WIDTH = getCardWidth(width, isTV, 'medium');
   const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
@@ -270,7 +315,12 @@ export default function DiscoverScreen() {
     try {
       setIsLoadingProgress(true);
       const response = await api.watchProgress.getAll();
-      const _v204Next = response.continueWatching || [];
+      /* V365_CW_INSTANT_CLEAR - shield the fresh list from the refetch
+         race: recently-cleared ids stay tombstoned until the background
+         DELETE has had time to commit server-side (5 min TTL). */
+      const _v204Next = (response.continueWatching || []).filter(
+        (it: any) => !_v365IsCleared(it && it.content_id)
+      );
       // V274_CW_INSTANT_REMOVE — fresh CW data arrived; if it has items,
       // the force-hidden gate is no longer needed (user added something
       // new, or backend returned content they haven't seen locally).
@@ -511,10 +561,15 @@ export default function DiscoverScreen() {
         return; // recent enough — back-nav stays instant
       }
       const handle = InteractionManager.runAfterInteractions(() => {
-        if (cwElapsed >= 30000) fetchContinueWatching();
+        /* V370_POST_NAV_SETTLE - the CW refetch fired 51ms after the BACK
+           keyup, so its request + state commit competed with the screen
+           re-attach frame.  400ms lets the transition land first. */
+        if (cwElapsed >= 30000) setTimeout(() => { try { fetchContinueWatching(); } catch (_) {} }, 400);
         if (discoverElapsed >= 60000) {
           lastDiscoverFetchTime.current = Date.now();
-          fetchDiscover(); // no force flag — SWR pattern from store
+          /* V371_DISCOVER_SETTLE - was firing 128ms after BACK, stacking a
+             network fetch + multi-MB JSON parse onto the re-attach window. */
+          setTimeout(() => { try { fetchDiscover(); } catch (_) {} }, 900);
         }
       });
       return () => handle.cancel();
@@ -556,6 +611,17 @@ export default function DiscoverScreen() {
   // V316_CW_SHORT_SCROLL_RESCUE - debounce timer for the post-settle check
   const v316CwRescueTimer = useRef<any>(null);
   const handleSectionFocus = useCallback((sectionKey: string) => {
+    /* V363_SECTION_FOCUS_DEBOUNCE - coalesce rapid D-pad focus hops into
+       a single scrollTo per animation frame. Prevents the "focus cascade"
+       where arrowing past 3-4 rails fired 3-4 scrollTos back-to-back. */
+    (globalThis as any).__v363_pendingSection = sectionKey;
+    if ((globalThis as any).__v363_pendingRAF) {
+      cancelAnimationFrame((globalThis as any).__v363_pendingRAF);
+    }
+    (globalThis as any).__v363_pendingRAF = requestAnimationFrame(() => {
+      (globalThis as any).__v363_pendingRAF = null;
+      const key = (globalThis as any).__v363_pendingSection;
+      if (key !== sectionKey) return;  /* newer focus took over */
     // V279_DIAG — trace every section focus event with timestamp + current
     // scroll position so we can see whether the FIRST UP press is even
     // calling this for the CW row.
@@ -582,6 +648,9 @@ export default function DiscoverScreen() {
       // re-scroll during this window is force-snapped back to y=0.
       cwFocusLockUntilRef.current = Date.now() + 500;
       const _snap = () => {
+        /* V363_SNAP_ABORT - if the user D-padded off the CW row while our
+           timers were queued, the snap-to-0 would jerk them back up. Abort. */
+        if (lastFocusedSection.current !== '__cw__') return;
         if (scrollViewRef.current) {
           scrollViewRef.current.scrollTo({ y: 0, animated: false });
         }
@@ -592,6 +661,7 @@ export default function DiscoverScreen() {
       setTimeout(_snap, 320);
     }
     lastFocusedSection.current = sectionKey;
+  });
   }, []);
 
   // Row sync: keep all rows scrolled to the same horizontal offset
@@ -744,6 +814,69 @@ const flatRowsV54 = useMemo(() => {
 // one is computed in the background.
 const deferredFlatRows = useDeferredValue(flatRowsV54);
 
+/* V369_STABLE_ROW_PROPS - ServiceRow is React.memo'd, but every discover
+   re-render passed it a FRESH items array (.slice(0, 100)) and a FRESH
+   inline onItemFocus closure, defeating memo entirely: ANY state change
+   (CW clear, CW refetch landing after back-nav) re-rendered EVERY rail
+   and its cards.  lag_capture.log measured this as 52 skipped frames +
+   a 1051ms Davey on back-nav and the 1.2s Clear Progress freeze.  The
+   caches below hand ServiceRow identity-stable props so unchanged rails
+   bail out in the memo compare.  handleSectionFocus/handleItemFocus are
+   useCallback([]) stable, so the cached closures never go stale. */
+const _v369SliceCache = useRef(new WeakMap<any, any[]>()).current;
+const _v369EmptyItems = useRef<any[]>([]).current;
+const _v369StableSlice = (row: any): any[] => {
+  const src: any[] = row && row.items ? row.items : _v369EmptyItems;
+  let s = _v369SliceCache.get(src);
+  if (!s) { s = src.slice(0, 100); _v369SliceCache.set(src, s); }
+  return s;
+};
+const _v369FocusHandlers = useRef<Record<string, (ci: any) => void>>({}).current;
+const _v369RowFocusHandler = (rowKey: string, contentType: string) => {
+  const hk = rowKey + '|' + contentType;
+  let h = _v369FocusHandlers[hk];
+  if (!h) {
+    h = (ci: any) => {
+      handleSectionFocus(rowKey);
+      if (contentType !== 'channels') handleItemFocus(ci);
+    };
+    _v369FocusHandlers[hk] = h;
+  }
+  return h;
+};
+
+/* V371_VIEWPORT_RAILS - every rail stayed native-mounted, so popping back
+   from details forced Android to re-attach + measure/layout/draw the ENTIRE
+   tree in one frame: ~850ms main-thread stall (Choreographer skipped 51-55
+   frames) + ~1050ms Davey in EVERY capture, with the JS thread idle.  Rails
+   farther than ~2.5 rail-heights from the scroll offset now render a
+   fixed-height placeholder; they materialize as the user scrolls near. */
+const _V371_RAIL_H = Math.round(POSTER_HEIGHT + (isTV ? 96 : 80));
+const _V371_WINDOW = Math.round(_V371_RAIL_H * 2.6);
+const _v371ScrollYRef = useRef(0);
+const _v371LastSwapY = useRef(0);
+const [, _v371Bump] = useState(0);
+const _v371OnScrollY = (y: number) => {
+  _v371ScrollYRef.current = y;
+  if (Math.abs(y - _v371LastSwapY.current) > 300) {
+    _v371LastSwapY.current = y;
+    _v371Bump((x) => (x + 1) & 0xff);
+  }
+};
+useEffect(() => {
+  /* One pass after the V54 progressive row expansion (700ms) + first
+     layout, so rails that mounted just to get measured swap over to
+     placeholders before the user ever navigates. */
+  const t = setTimeout(() => { _v371Bump((x) => (x + 1) & 0xff); }, 1500);
+  return () => clearTimeout(t);
+}, []);
+const _v371NearViewport = (row: any): boolean => {
+  if (row.rowIdx === 0) return true;
+  const y = sectionPositions.current[row.key];
+  if (y === undefined) return true;
+  return Math.abs(y - _v371ScrollYRef.current) < _V371_WINDOW;
+};
+
 // Navigation handler (kept minimal for speed)
 const handleItemPress = useCallback((item: ContentItem) => {
   const id = item.imdb_id || item.id;
@@ -852,11 +985,11 @@ const handleItemPress = useCallback((item: ContentItem) => {
       setCwForceHidden(true);
     }
 
+    /* V365_CW_INSTANT_CLEAR - tombstone (silent: local lists already
+       filtered above) so a refetch can't re-add before DELETE commits. */
+    try { _v365MarkCleared(item.content_id, { silent: true }); } catch (_) {}
     // Then delete from server in background (don't await)
-    api.watchProgress.delete(item.content_id).catch(err => {
-      console.log('[Discover] Error removing from continue watching:', err);
-      // Optionally: restore the item if delete fails
-    });
+    _v369DeleteProgressOnce(item.content_id); /* V369_SINGLE_FLIGHT_DELETE */
   };
 
 // Render a continue watching item (Stremio style)
@@ -999,6 +1132,8 @@ return (
           // back to y=0 if the system tries to push it down.
           onScroll={(e) => {
             const y = e.nativeEvent?.contentOffset?.y ?? 0;
+            /* V371_VIEWPORT_RAILS - track offset + swap far rails. */
+            _v371OnScrollY(y);
             const lockUntil = cwFocusLockUntilRef.current || 0;
             const inLock = Date.now() < lockUntil;
             if (y > 0) {
@@ -1058,6 +1193,10 @@ return (
             // the user just cleared the last CW item, hide the row in
             // the SAME frame as the press.
             if (item.kind === 'cw' && cwForceHidden) return null;
+            /* V368_SCOPED_CW_REMOVE - derived emptiness: clearing the LAST
+               item hides the row in the same frame (both lists empty after
+               the filters), but a clear can never hide a non-empty row. */
+            if (item.kind === 'cw' && (continueWatching || []).length === 0 && (cachedCW || []).length === 0) return null;
             if (item.kind === 'cw') {
               // V108_ROW_SNAP: record CW row Y for back-scroll
               return (
@@ -1130,6 +1269,8 @@ return (
                   sectionPositions.current[item.key] = e.nativeEvent.layout.y;
                 }}
               >
+                {/* V371_VIEWPORT_RAILS */}
+                {_v371NearViewport(item) ? (
                 <ServiceRow
                   title={item.title}
                   serviceName={item.serviceName}
@@ -1139,24 +1280,23 @@ return (
                      kicks in beyond 100 if backend has more items.  Cold
                      boot adds ~85 ContentCards per row but React.memo on
                      the card + memoized rows keeps re-renders flat. */
-                  items={(item.items || []).slice(0, 100)}
+                  items={_v369StableSlice(item) /* V369_STABLE_ROW_PROPS */}
                   onItemPress={handleItemPress}
-                  onItemFocus={
-                    item.contentType !== 'channels'
-                      ? (ci) => {
-                          handleSectionFocus(item.key);
-                          handleItemFocus(ci);
-                        }
-                      : (ci) => {
-                          handleSectionFocus(item.key);
-                        }
-                  }
+                  onItemFocus={_v369RowFocusHandler(item.key, item.contentType) /* V369_STABLE_ROW_PROPS */}
                   rowIndex={item.rowIdx}
                   /* V316c_FOCUS_UP - only row 0 (Popular Movies) gets the
                      CW poster tag; deeper rows pass null and fall back to
                      default spatial navigation. */
                   nextFocusUpTag={item.rowIdx === 0 ? firstCWTag : null}
                 />
+                ) : (
+                  <View
+                    style={{ height: _V371_RAIL_H }}
+                    focusable={false}
+                    accessible={false}
+                    importantForAccessibility="no"
+                  />
+                )}
               </View>
             );
           })}

@@ -48,7 +48,7 @@ for %%I in (ota.zip) do echo Built ota.zip = %%~zI bytes
 REM ---- 3. Upload --------------------------------------------------------------
 echo.
 echo === [3/3] Uploading to api.privastreamsolutions.com ===
-curl --show-error -X POST "https://api.privastreamsolutions.com/api/expo-updates/upload" -H "Authorization: Bearer %PRIVASTREAM_OTA_TOKEN%" -H "x-runtime-version: 1.0.0" -H "x-platform: android" -F "file=@ota.zip"
+curl --show-error -X POST "https://api.privastreamsolutions.com/api/expo-updates/upload" -H "Authorization: Bearer %PRIVASTREAM_OTA_TOKEN%" -H "x-runtime-version: 1.1.0" -H "x-platform: android" -F "file=@ota.zip"
 if errorlevel 1 (
   echo.
   echo [ERROR] Upload failed.  Check token + network.

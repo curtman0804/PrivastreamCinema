@@ -17,6 +17,7 @@ import {
   findNodeHandle,
   BackHandler,
   PanResponder,
+  AppState,
 } from 'react-native';
 
 // Safe TV event handler imports - these may not exist in all RN versions
@@ -724,6 +725,51 @@ export default function PlayerScreen() {
     };
   }, [contentId, contentType, title, poster, backdrop, logo, season, episode, seriesId, isLive, infoHash, directUrl, url, fileIdx, filename]);
   
+  /* V364_STANDBY_EXIT - Stremio-style standby handling.  Premiumize URLs
+     are short-lived signed links.  If the device sleeps mid-playback the
+     paused session survives, plays the buffered part on wake, then dies
+     when ExoPlayer refetches from the expired URL.  Stremio never lets a
+     stream session survive standby: it keeps the timestamp, kills the
+     session, and re-resolves on reopen.  Same here: on background we
+     flush progress and tear the player down; Details/CW re-resolves a
+     fresh link and seeks back (V147_NO_STALE_URL flow). */
+  const _v364ExitedRef = useRef(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const _v364OnAppState = (next: string) => {
+      if (next !== 'background') return;
+      if (isCasting) return; /* cast keeps playing on the remote device */
+      if (_v364ExitedRef.current) return;
+      _v364ExitedRef.current = true;
+      console.log('[V364_STANDBY_EXIT] app backgrounded - saving progress + closing player');
+      try { if (videoRef.current) { videoRef.current.pauseAsync(); } } catch (_) {}
+      try {
+        if (currentPositionRef.current > 0 && currentDurationRef.current > 0) {
+          saveWatchProgress(currentPositionRef.current, currentDurationRef.current, true);
+        }
+      } catch (_) {}
+      try {
+        let target: string | null = null;
+        if (seriesId && season && episode) {
+          target = `/details/series/${seriesId}:${season}:${episode}`;
+        } else if (contentId) {
+          const cid = String(contentId);
+          const base = cid.includes(':') ? cid.split(':')[0] : cid;
+          target = `/details/${(contentType as string) || 'movie'}/${base}`;
+        }
+        if (router.canGoBack && router.canGoBack()) {
+          router.back();
+        } else if (target) {
+          router.replace(target as any);
+        }
+      } catch (_) {
+        try { router.back(); } catch (__) {}
+      }
+    };
+    const _v364Sub = AppState.addEventListener('change', _v364OnAppState);
+    return () => { try { _v364Sub.remove(); } catch (_) {} };
+  }, [isCasting, seriesId, season, episode, contentId, contentType, saveWatchProgress]);
+
   // Format time helper
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -1965,7 +2011,9 @@ export default function PlayerScreen() {
     try {
       console.log('[SUBTITLES] Making API call for:', cType, cId);
       const response = await api.subtitles.get(cType, cId);
-      console.log('[SUBTITLES] API response:', response);
+      /* V366_SUBS_LOG_TRIM_BUILD_TAG - was dumping the full 35-language
+         subtitle JSON object to logcat (expensive Hermes serialization). */
+      console.log('[SUBTITLES] API response: n=' + (response?.subtitles?.length ?? 0));
       
       if (response?.subtitles && response.subtitles.length > 0) {
         console.log(`[SUBTITLES] Setting ${response.subtitles.length} subtitle options`);
@@ -2046,7 +2094,15 @@ export default function PlayerScreen() {
       
       // Fallback to AsyncStorage
       try {
-        const storedData = await AsyncStorage.getItem('currentPlaying');
+        /* V363_CURPLAY_BLOB_READ - prefer blobCache, fall back to AsyncStorage. */
+        let storedData: string | null = null;
+        try {
+          const _b363 = require('../src/utils/blobCache');
+          storedData = await _b363.getBlob('currentPlaying');
+        } catch (_) { /* blobCache import failed */ }
+        if (storedData == null) {
+          storedData = await AsyncStorage.getItem('currentPlaying');
+        }
         if (storedData && isMounted) {
           const parsed = JSON.parse(storedData);
           const { contentType: cType, contentId: cId } = parsed;

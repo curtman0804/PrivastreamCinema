@@ -27,6 +27,8 @@ const MIGRATION_KEY = '@v344:mmkv_migrated_v1';
 let _migrationPromise: Promise<{ migrated: number; skipped: number; failed: number }> | null = null;
 
 export async function ensureMMKVMigrated(): Promise<{ migrated: number; skipped: number; failed: number }> {
+  // V361_MMKV_KILL - native module was rolled back; never run migration.
+  return { migrated: 0, skipped: 0, failed: 0 };
   if (_migrationPromise) return _migrationPromise;
   _migrationPromise = _run();
   return _migrationPromise;

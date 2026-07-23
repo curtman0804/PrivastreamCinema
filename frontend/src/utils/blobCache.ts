@@ -8,7 +8,11 @@
  * Ships as OTA - no native module, no APK rebuild.
  * ~10-15x faster than AsyncStorage for large values (>50 KB).
  */
-import * as FileSystem from 'expo-file-system';
+/* V371_FS_LEGACY - SDK 54 moved getInfoAsync/documentDirectory to the
+   legacy subpath; the old import made EVERY setBlob throw, so the stream/
+   meta disk cache silently stopped persisting (3+ warning lines spammed
+   into logcat per fetch - see lag2.log). */
+import * as FileSystem from 'expo-file-system/legacy';
 
 const DIR = (FileSystem.documentDirectory || '') + 'blob-cache/';
 
