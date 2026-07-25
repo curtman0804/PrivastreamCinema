@@ -572,7 +572,24 @@ export default function DiscoverScreen() {
           setTimeout(() => { try { fetchDiscover(); } catch (_) {} }, 900);
         }
       });
-      return () => handle.cancel();
+      return () => {
+        handle.cancel();
+        /* V375_PRUNE_ON_BLUR - screen just blurred (details push): focus is
+           gone, so trimming far rails back to placeholders is invisible and
+           keeps the back re-attach cheap. Keep focused row +/-2 and row 0. */
+        try {
+          const _f = _v371FocusedRowIdx.current;
+          const _keep: Record<string, boolean> = {};
+          for (const _k in _v371MountedRails.current) {
+            const _idx = _v371RowIdxByKey.current[_k];
+            if (_idx === 0 || (typeof _idx === 'number' && Math.abs(_idx - _f) <= 2)) {
+              _keep[_k] = true;
+            }
+          }
+          _v371MountedRails.current = _keep;
+          _v371Bump((x) => (x + 1) & 0xff);
+        } catch (_) {}
+      };
     }, [fetchContinueWatching])
   );
 
@@ -838,6 +855,7 @@ const _v369RowFocusHandler = (rowKey: string, contentType: string) => {
   if (!h) {
     h = (ci: any) => {
       handleSectionFocus(rowKey);
+      _v371OnRowFocus(rowKey); /* V373_FOCUS_ANCHORED_RAILS */
       if (contentType !== 'channels') handleItemFocus(ci);
     };
     _v369FocusHandlers[hk] = h;
@@ -870,11 +888,52 @@ useEffect(() => {
   const t = setTimeout(() => { _v371Bump((x) => (x + 1) & 0xff); }, 1500);
   return () => clearTimeout(t);
 }, []);
+/* V373_FOCUS_ANCHORED_RAILS - V371 gated rails on scroll distance alone,
+   which could unmount the rail HOLDING D-pad focus (placeholder height
+   estimates drift vs real heights near the bottom of the list), snapping
+   the selector back to the first Continue Watching card.  The focused row
+   and its 2 neighbors in each direction are now ALWAYS mounted - focus can
+   never be standing on a rail that unmounts. */
+const _v371FocusedRowIdx = useRef<number>(0);
+const _v371RowIdxByKey = useRef<Record<string, number>>({});
+const _v371OnRowFocus = (rowKey: string) => {
+  const idx = _v371RowIdxByKey.current[rowKey];
+  if (typeof idx === 'number' && idx !== _v371FocusedRowIdx.current) {
+    _v371FocusedRowIdx.current = idx;
+    _v371Bump((x) => (x + 1) & 0xff);
+  }
+};
+/* V374_EXACT_PLACEHOLDERS - placeholders now reuse each rail's MEASURED
+   height so real<->placeholder swaps cause ZERO layout shift.  The old
+   estimated height shifted every rail below on each swap, which made the
+   selector ping-pong between CW and other rows while scrolling up. */
+const _v371HeightByKey = useRef<Record<string, number>>({});
+const _v371IsRealRef = useRef<Record<string, boolean>>({});
+/* V375_ONE_WAY_RAILS - while browsing, rails only materialize; a mounted
+   rail NEVER unmounts under the selector (lag3.log showed real<->placeholder
+   swaps mid-navigation ping-ponging focus between the same cards).  Far
+   rails are pruned back to placeholders only on screen blur.  Unmeasured
+   rails use an estimated position instead of force-mounting, so cold boot
+   mounts only the top rails. */
+const _v371MountedRails = useRef<Record<string, boolean>>({});
 const _v371NearViewport = (row: any): boolean => {
-  if (row.rowIdx === 0) return true;
-  const y = sectionPositions.current[row.key];
-  if (y === undefined) return true;
-  return Math.abs(y - _v371ScrollYRef.current) < _V371_WINDOW;
+  if (typeof row.rowIdx === 'number') _v371RowIdxByKey.current[row.key] = row.rowIdx;
+  if (_v371MountedRails.current[row.key]) {
+    _v371IsRealRef.current[row.key] = true;
+    return true;
+  }
+  let near: boolean;
+  if (row.rowIdx === 0) {
+    near = true;
+  } else if (Math.abs(row.rowIdx - _v371FocusedRowIdx.current) <= 2) {
+    near = true;
+  } else {
+    const y = sectionPositions.current[row.key] ?? (row.rowIdx * _V371_RAIL_H);
+    near = Math.abs(y - _v371ScrollYRef.current) < _V371_WINDOW;
+  }
+  if (near) _v371MountedRails.current[row.key] = true;
+  _v371IsRealRef.current[row.key] = near;
+  return near;
 };
 
 // Navigation handler (kept minimal for speed)
@@ -1267,6 +1326,11 @@ return (
                 key={item.key}
                 onLayout={(e) => {
                   sectionPositions.current[item.key] = e.nativeEvent.layout.y;
+                  /* V374_EXACT_PLACEHOLDERS - only record while the real
+                     rail is rendered (never the placeholder's height). */
+                  if (_v371IsRealRef.current[item.key]) {
+                    _v371HeightByKey.current[item.key] = e.nativeEvent.layout.height;
+                  }
                 }}
               >
                 {/* V371_VIEWPORT_RAILS */}
@@ -1291,7 +1355,7 @@ return (
                 />
                 ) : (
                   <View
-                    style={{ height: _V371_RAIL_H }}
+                    style={{ height: _v371HeightByKey.current[item.key] || _V371_RAIL_H }}
                     focusable={false}
                     accessible={false}
                     importantForAccessibility="no"
