@@ -652,6 +652,10 @@ export default function DiscoverScreen() {
     false && console.log('[V279_DIAG]   sectionY=' + sectionY + ' lastFocusedSection=' + lastFocusedSection.current);
     if (sectionY === undefined || !scrollViewRef.current) return;
     const target = Math.max(0, sectionY - 12);
+    /* V382_LOCK_RELEASE - focus moved to a non-CW row: kill the V278 CW
+       snap-back lock NOW so this row-snap scroll isn't fought to y=0
+       ("selector moves but the page doesn't"). */
+    if (sectionKey !== '__cw__') { cwFocusLockUntilRef.current = 0; }
     scrollViewRef.current.scrollTo({ y: target, animated: false });
     false && console.log('[V279_DIAG]   scrollTo(' + target + ')');
     // V277_CW_SNAP_HARDER — v238g only retried ONCE at 50ms which left the
@@ -715,7 +719,9 @@ export default function DiscoverScreen() {
       api.content.getMeta(it.type, id).then((meta) => {
         setMetaCache(id, meta);
         if (meta.background) {
-          try { Image.prefetch(meta.background); } catch (_) {}
+          /* V382_MEM - disk-only: default policy decoded every full-res
+             backdrop into the shared memory cache while browsing. */
+          try { Image.prefetch(meta.background, 'disk'); } catch (_) {}
         }
       }).catch(() => {});
     }, 350);
@@ -1198,7 +1204,7 @@ return (
             if (y > 0) {
               false && console.log('[V279_DIAG] onScroll y=' + y.toFixed(1) + ' inLock=' + inLock + ' t=' + Date.now());
             }
-            if (inLock && y > 0 && scrollViewRef.current) {
+            if (inLock && y > 0 && lastFocusedSection.current === '__cw__' && scrollViewRef.current) { /* V382_LOCK_SCOPE */
               scrollViewRef.current.scrollTo({ y: 0, animated: false });
               false && console.log('[V279_DIAG]   → SNAP BACK to 0');
             }
@@ -1351,7 +1357,12 @@ return (
                   /* V316c_FOCUS_UP - only row 0 (Popular Movies) gets the
                      CW poster tag; deeper rows pass null and fall back to
                      default spatial navigation. */
-                  nextFocusUpTag={item.rowIdx === 0 ? firstCWTag : null}
+                  /* V382_POSITIONAL_UP - the forced V316c tag sent EVERY
+                      UP press to one "first-mounted" CW card (last mount
+                      wins, often card #2). CW cards share the same column
+                      grid as row cards, so default spatial navigation
+                      already lands UP-from-card-N on CW-card-N. */
+                  nextFocusUpTag={null}
                 />
                 ) : (
                   <View

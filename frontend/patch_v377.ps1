@@ -1,31 +1,52 @@
-/* V379_MMKV_V4_COMPAT - react-native-mmkv v4 removed `new MMKV()` (now
- * `createMMKV()`) and renamed `.delete()` to `.remove()`. This factory works
- * on both v3 and v4 and returns an instance where BOTH .delete and .remove
- * exist, so downstream shim code never needs to care about the version. */
-const _v379mod: any = require('react-native-mmkv');
-const _v379make = (cfg?: any): any => {
-  const m: any = _v379mod && _v379mod.createMMKV
-    ? _v379mod.createMMKV(cfg)
-    : new _v379mod.MMKV(cfg);
-  if (typeof m.delete === 'function') return m; // v3 - use as-is
-  // v4 HybridObject: wrap in plain JS object (can't add props to native obj)
-  return {
-    set: (k: any, v: any) => m.set(k, v),
-    getString: (k: any) => m.getString(k),
-    getNumber: (k: any) => m.getNumber(k),
-    getBoolean: (k: any) => m.getBoolean(k),
-    getBuffer: (k: any) => m.getBuffer && m.getBuffer(k),
-    contains: (k: any) => m.contains(k),
-    delete: (k: any) => m.remove(k),
-    remove: (k: any) => m.remove(k),
-    getAllKeys: () => m.getAllKeys(),
-    clearAll: () => m.clearAll(),
-    recrypt: (k: any) => m.encrypt && m.encrypt(k),
-    trim: () => m.trim && m.trim(),
-    addOnValueChangedListener: (cb: any) =>
-      m.addOnValueChangedListener && m.addOnValueChangedListener(cb),
-  };
-};
+# ============================================================================
+# patch_v377.ps1 - MMKV migration, phase 2: real native MMKV engine
+#
+# PREREQUISITE (run FIRST, in the frontend folder):
+#   npx expo install react-native-mmkv react-native-nitro-modules
+#
+# What this patch does: replaces src\utils\mmkvStorage.ts with a TRI-TIER
+# engine:
+#   1. react-native-mmkv (native, JSI, ~30x faster)  <- used on the NEW APK
+#   2. FS KV store (V376)                            <- fallback on the OLD APK
+#   3. legacy SQLite AsyncStorage                    <- read-only migration source
+# Reads that miss a tier fall through and migrate the value UP, so sessions,
+# PM keys and watch progress carry forward automatically at every step.
+#
+# SAFE ORDERING: the OTA bundle built after this patch still runs fine on
+# your CURRENT APK (MMKV instantiation throws -> caught -> FS engine).  The
+# native engine activates the moment you install the rebuilt APK.
+#
+# Idempotent: safe to re-run. Prints [OK]/[SKIP]/[FATAL].
+# ============================================================================
+
+$ErrorActionPreference = 'Stop'
+$Root = 'C:\Users\Curtm\PrivastreamCinema\frontend'
+Set-Location $Root
+
+Write-Host ""
+Write-Host "=========================================" -ForegroundColor Cyan
+Write-Host "  V377 native MMKV tri-tier engine" -ForegroundColor Cyan
+Write-Host "=========================================" -ForegroundColor Cyan
+
+# Guard: the mmkv JS package must be installed or Metro will fail to bundle.
+if (!(Test-Path -LiteralPath (Join-Path $Root 'node_modules\react-native-mmkv\package.json'))) {
+  Write-Host "[FATAL] react-native-mmkv is not installed. Run first:" -ForegroundColor Red
+  Write-Host "        npx expo install react-native-mmkv react-native-nitro-modules" -ForegroundColor Red
+  exit 1
+}
+
+$shimPath = Join-Path $Root 'src\utils\mmkvStorage.ts'
+if (!(Test-Path -LiteralPath $shimPath)) {
+  Write-Host "[FATAL] src\utils\mmkvStorage.ts not found (V376 should have created it)" -ForegroundColor Red
+  exit 1
+}
+$cur = [System.IO.File]::ReadAllText($shimPath)
+if ($cur.Contains('V377_MMKV_TRI_TIER')) {
+  Write-Host "[SKIP] shim already V377" -ForegroundColor Yellow
+} else {
+  Copy-Item -LiteralPath $shimPath -Destination ($shimPath + '.bak_v377') -Force
+
+$shim = @'
 /* mmkvStorage.ts - V377_MMKV_TRI_TIER  (MMKV migration phase 2)
  *
  * AsyncStorage-compatible persistent KV store with three engines:
@@ -43,7 +64,7 @@ let _mmkv: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { MMKV } = require('react-native-mmkv');
-  const inst = _v379make({ id: 'privastream-kv-v1' });
+  const inst = new MMKV({ id: 'privastream-kv-v1' });
   inst.set('__v377_probe__', '1');
   inst.delete('__v377_probe__');
   _mmkv = inst;
@@ -241,33 +262,21 @@ const AsyncStorage = {
 };
 
 export default AsyncStorage;
-// ============================================================================
-// V378_PROBE â€” independent MMKV init probe. Logs the EXACT failure reason.
-// Remove after debugging.
-// ============================================================================
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const _v378mod: any = require('react-native-mmkv');
-  console.log('[kvStore][V378] mmkv module keys=' + Object.keys(_v378mod || {}).join(','));
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const _v378nitro: any = require('react-native-nitro-modules');
-    console.log('[kvStore][V378] nitro module keys=' + Object.keys(_v378nitro || {}).join(','));
-    try {
-      const _v378box = _v378nitro.NitroModules
-        ? _v378nitro.NitroModules.createHybridObject('MmkvPlatformContext')
-        : null;
-      console.log('[kvStore][V378] MmkvPlatformContext=' + (_v378box ? 'OK' : 'NitroModules missing'));
-    } catch (e3: any) {
-      console.log('[kvStore][V378] MmkvPlatformContext ERR=' + (e3 && e3.message ? e3.message : String(e3)));
-    }
-  } catch (e2: any) {
-    console.log('[kvStore][V378] nitro require ERR=' + (e2 && e2.message ? e2.message : String(e2)));
-  }
-  const _v378i = _v379make({ id: 'v378probe' });
-  _v378i.set('t', '1');
-  console.log('[kvStore][V378] MMKV constructor OK, roundtrip=' + _v378i.getString('t'));
-} catch (e: any) {
-  console.log('[kvStore][V378] MMKV init ERR=' + (e && e.message ? e.message : String(e)));
-  console.log('[kvStore][V378] MMKV init STACK=' + (e && e.stack ? String(e.stack).slice(0, 600) : 'none'));
+'@
+
+  [System.IO.File]::WriteAllText($shimPath, $shim)
+  Write-Host "[OK] shim upgraded to V377 tri-tier (backup: .bak_v377)" -ForegroundColor Green
 }
+
+Write-Host ""
+Write-Host "=========================================" -ForegroundColor Cyan
+Write-Host "  V377 applied. Next steps:" -ForegroundColor Cyan
+Write-Host "  1. deploy_ota.bat   (current APK keeps working via FS engine)"
+Write-Host "  2. Rebuild the APK the same way you built the current one."
+Write-Host "     If you use prebuild:  npx expo prebuild --platform android --clean"
+Write-Host "     (autolinking picks up MMKV automatically)"
+Write-Host "  3. adb install -r the new APK on the Firestick."
+Write-Host "  4. Verify boot log:  adb logcat | findstr kvStore"
+Write-Host "     -> must say: MMKV native engine ACTIVE"
+Write-Host "  5. Confirm you are still logged in + progress intact."
+Write-Host "=========================================" -ForegroundColor Cyan

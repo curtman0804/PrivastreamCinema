@@ -1,0 +1,183 @@
+/* mmkvStorage.ts - V376_FS_KV
+ *
+ * AsyncStorage-compatible persistent KV store WITHOUT SQLite.
+ * Backed by expo-file-system (one file per key) - no 6 MB cap, no
+ * SQLITE_FULL, ships via OTA (no native module).
+ *
+ * - Reversible key encoding: no collisions, getAllKeys returns real keys.
+ * - In-memory read cache for values < 256 KB: repeat reads are instant.
+ * - Per-key write chains: concurrent writes to a key never interleave.
+ * - NO eviction: this is persistent storage, not a cache.
+ * - LAZY MIGRATION from the legacy SQLite AsyncStorage: a read that
+ *   misses here falls back to SQLite, copies the value forward, and
+ *   returns it.  Auth sessions and settings survive the switch.
+ *
+ * Future: when the app gets its next NATIVE build, a react-native-mmkv
+ * tier can be added at the top of this file with zero call-site changes.
+ */
+import * as FileSystem from 'expo-file-system/legacy';
+import RealAsyncStorage from '@react-native-async-storage/async-storage';
+
+const DIR = (FileSystem.documentDirectory || '') + 'kv-store/';
+const MEM_CACHE_MAX_VALUE = 262144; // 256 KB
+
+let _dirReady: Promise<void> | null = null;
+function ensureDir(): Promise<void> {
+  if (_dirReady) return _dirReady;
+  _dirReady = (async () => {
+    try {
+      const info = await FileSystem.getInfoAsync(DIR);
+      if (!info.exists) {
+        await FileSystem.makeDirectoryAsync(DIR, { intermediates: true });
+      }
+    } catch (e) {
+      _dirReady = null;
+      throw e;
+    }
+  })();
+  return _dirReady;
+}
+
+/* Reversible, filename-safe key encoding. */
+function enc(key: string): string {
+  return encodeURIComponent(key).replace(/~/g, '%7E').replace(/%/g, '~');
+}
+function dec(name: string): string {
+  try { return decodeURIComponent(name.replace(/~/g, '%')); } catch { return name; }
+}
+
+const _mem = new Map<string, string | null>();
+const _writeChains = new Map<string, Promise<void>>();
+
+function _chain(key: string, op: () => Promise<void>): Promise<void> {
+  const prev = _writeChains.get(key) || Promise.resolve();
+  const next = prev.then(op, op);
+  _writeChains.set(key, next);
+  return next;
+}
+
+async function _fsRead(key: string): Promise<string | null> {
+  try {
+    await ensureDir();
+    const path = DIR + enc(key) + '.kv';
+    const info = await FileSystem.getInfoAsync(path);
+    if (!info.exists) return null;
+    return await FileSystem.readAsStringAsync(path);
+  } catch {
+    return null;
+  }
+}
+
+async function _fsWrite(key: string, value: string): Promise<void> {
+  try {
+    await ensureDir();
+    await FileSystem.writeAsStringAsync(DIR + enc(key) + '.kv', value);
+  } catch (e: any) {
+    console.log('[kvStore] write failed key=' + key + ' err=' + (e && e.message ? e.message : String(e)));
+  }
+}
+
+async function _fsDelete(key: string): Promise<void> {
+  try {
+    await ensureDir();
+    await FileSystem.deleteAsync(DIR + enc(key) + '.kv', { idempotent: true });
+  } catch { /* ignore */ }
+}
+
+function _memSet(key: string, value: string | null): void {
+  if (value !== null && value.length > MEM_CACHE_MAX_VALUE) {
+    _mem.delete(key);
+  } else {
+    _mem.set(key, value);
+  }
+}
+
+async function getItem(key: string): Promise<string | null> {
+  if (_mem.has(key)) return _mem.get(key) ?? null;
+  let v = await _fsRead(key);
+  if (v === null) {
+    /* V376 lazy migration from the legacy SQLite store */
+    try { v = await RealAsyncStorage.getItem(key); } catch { v = null; }
+    if (v !== null) {
+      const vv = v;
+      _chain(key, () => _fsWrite(key, vv));
+    }
+  }
+  _memSet(key, v);
+  return v;
+}
+
+async function setItem(key: string, value: string): Promise<void> {
+  _memSet(key, value);
+  await _chain(key, () => _fsWrite(key, value));
+}
+
+async function removeItem(key: string): Promise<void> {
+  _mem.set(key, null);
+  await _chain(key, () => _fsDelete(key));
+  try { await RealAsyncStorage.removeItem(key); } catch { /* ignore */ }
+}
+
+async function getAllKeys(): Promise<string[]> {
+  const out = new Set<string>();
+  try {
+    await ensureDir();
+    const files = await FileSystem.readDirectoryAsync(DIR);
+    for (const f of files) {
+      if (f.endsWith('.kv')) out.add(dec(f.slice(0, -3)));
+    }
+  } catch { /* ignore */ }
+  try {
+    const legacy = await RealAsyncStorage.getAllKeys();
+    for (const k of legacy) out.add(k);
+  } catch { /* ignore */ }
+  return Array.from(out);
+}
+
+async function multiGet(keys: readonly string[]): Promise<Array<[string, string | null]>> {
+  const out: Array<[string, string | null]> = [];
+  for (const k of keys) out.push([k, await getItem(k)]);
+  return out;
+}
+
+async function multiSet(pairs: readonly (readonly [string, string])[]): Promise<void> {
+  for (const [k, v] of pairs) await setItem(k, v);
+}
+
+async function multiRemove(keys: readonly string[]): Promise<void> {
+  for (const k of keys) await removeItem(k);
+}
+
+async function mergeItem(key: string, value: string): Promise<void> {
+  try {
+    const cur = await getItem(key);
+    if (!cur) { await setItem(key, value); return; }
+    const a = JSON.parse(cur);
+    const b = JSON.parse(value);
+    await setItem(key, JSON.stringify({ ...a, ...b }));
+  } catch { /* ignore */ }
+}
+
+async function clear(): Promise<void> {
+  try {
+    _mem.clear();
+    _writeChains.clear();
+    await FileSystem.deleteAsync(DIR, { idempotent: true });
+    _dirReady = null;
+  } catch { /* ignore */ }
+  try { await RealAsyncStorage.clear(); } catch { /* ignore */ }
+}
+
+const AsyncStorage = {
+  getItem,
+  setItem,
+  removeItem,
+  getAllKeys,
+  multiGet,
+  multiSet,
+  multiRemove,
+  mergeItem,
+  clear,
+};
+
+export default AsyncStorage;

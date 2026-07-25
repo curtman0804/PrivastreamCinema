@@ -63,6 +63,7 @@ export function v160RegisterPoster(imdbId: string | undefined | null, url: strin
   if (!key) return;
   if (!_v160PosterRegistry[key]) {
     _v160PosterRegistry[key] = String(url);
+    _v383Persist(); /* V383_POSTER_PERSIST */
     /* V166_POSTER_SUB — notify any subscribers (e.g. Continue Watching) */
     const subs = _v166PosterSubs[key];
     if (subs && subs.size) {
@@ -85,6 +86,56 @@ export function v160SubscribePoster(imdbId: string | undefined | null, cb: (url:
     const s = _v166PosterSubs[key];
     if (s) { s.delete(cb); if (s.size === 0) delete _v166PosterSubs[key]; }
   };
+}
+
+/* V383_POSTER_PERSIST - the registry was in-memory only: it reset every
+   launch and only filled when a rail ContentCard actually mounted (V371
+   viewport rails = most never do), so Continue Watching often painted a
+   stale watch-progress poster instead of the canonical rail poster.
+   Persist the registry to MMKV and hydrate it SYNCHRONOUSLY at module load
+   so every surface agrees from first paint, stable across sessions. */
+const _V383_REG_KEY = '@ps_poster_reg_v1';
+let _v383Timer: any = null;
+function _v383Persist(): void {
+  if (_v383Timer) return;
+  _v383Timer = setTimeout(() => {
+    _v383Timer = null;
+    try {
+      /* light cap so the blob can never grow unbounded */
+      if (Object.keys(_v160PosterRegistry).length > 3000) return;
+      AsyncStorage.setItem(_V383_REG_KEY, JSON.stringify(_v160PosterRegistry)).catch(() => {});
+    } catch (_) {}
+  }, 1500);
+}
+function _v383Hydrate(raw: string | null): void {
+  if (!raw) return;
+  try {
+    const obj = JSON.parse(raw) as Record<string, string>;
+    for (const k of Object.keys(obj)) {
+      if (!_v160PosterRegistry[k] && obj[k]) {
+        _v160PosterRegistry[k] = obj[k];
+        const subs = _v166PosterSubs[k];
+        if (subs && subs.size) subs.forEach(cb => { try { cb(obj[k]); } catch (_) {} });
+      }
+    }
+  } catch (_) {}
+}
+/* Sync hydrate straight from MMKV (same instance id as the kv shim) so the
+   registry is already full BEFORE the first card renders. Falls back to the
+   async shim on devices without native MMKV. */
+let _v383Hydrated = false;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const _v383m: any = require('react-native-mmkv');
+  const _v383inst: any = _v383m.createMMKV
+    ? _v383m.createMMKV({ id: 'privastream-kv-v1' })
+    : new _v383m.MMKV({ id: 'privastream-kv-v1' });
+  const _v383raw = _v383inst.getString(_V383_REG_KEY);
+  _v383Hydrate(_v383raw === undefined ? null : _v383raw);
+  _v383Hydrated = true;
+} catch (_) { /* no native MMKV on this device */ }
+if (!_v383Hydrated) {
+  AsyncStorage.getItem(_V383_REG_KEY).then(_v383Hydrate).catch(() => {});
 }
 
 /* ─────────────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '../utils/mmkvStorage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 // V287_PREMIUMIZE_MIDDLE_ISOLATION
