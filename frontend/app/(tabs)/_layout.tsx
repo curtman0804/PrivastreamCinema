@@ -4,6 +4,8 @@ import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid, findNodeHandle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+/* V436_TAB_NEXTFOCUSUP */
+import { v436GetLastFocusedTag, v436Subscribe } from '../../src/components/ContentCard';
 
 // V261_TAB_FOCUS_CHAIN — module-level map of route.name -> native tag.
 // Populated as each tab button mounts.  Used to wire every tab's
@@ -102,6 +104,12 @@ export default function TabsLayout() {
           const btnRef = useRef<any>(null);
           const [, _force] = useState(0);
 
+          /* V436 - re-render tab button when last-focused tile tag changes. */
+          useEffect(() => {
+            const unsub = v436Subscribe(() => _force((n) => n + 1));
+            return unsub;
+          }, []);
+
           // Figure out which tab this button represents.
           const blob = String(
             (props.accessibilityLabel || '') + ' ' +
@@ -170,6 +178,11 @@ export default function TabsLayout() {
           // Trap DOWN so user can't fall off the bottom into nothing.
           if (selfTag > 0) {
             trap.nextFocusDown = selfTag;
+          }
+          /* V436_TAB_NEXTFOCUSUP - UP jumps to last-focused tile's native tag. */
+          const _v436Tag = v436GetLastFocusedTag();
+          if (_v436Tag && _v436Tag > 0) {
+            trap.nextFocusUp = _v436Tag;
           }
           // UP is intentionally NOT set — Android TV's positional search
           // will find the closest poster directly above the focused tab,

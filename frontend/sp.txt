@@ -1,0 +1,338 @@
+--------- beginning of main
+--------- beginning of system
+08-10 15:10:41.487 I/ReactNativeJS( 7174): Running "main"
+08-10 15:10:41.778 I/ReactNativeJS( 7174): [kvStore] MMKV native engine ACTIVE
+08-10 15:10:41.778 I/ReactNativeJS( 7174): [kvStore][V378] mmkv module keys=createMMKV,existsMMKV,deleteMMKV,useMMKV,useMMKVBoolean,useMMKVBuffer,useMMKVNumber,useMMKVObject,useMMKVString,useMMKVListener,useMMKVKeys
+08-10 15:10:41.778 I/ReactNativeJS( 7174): [kvStore][V378] nitro module keys=getHybridObjectConstructor,NitroModules,isRuntimeAlive,getHostComponent,callback
+08-10 15:10:41.779 I/ReactNativeJS( 7174): [kvStore][V378] MmkvPlatformContext ERR=NitroModulesProxy.createHybridObject(...): Cannot create an instance of HybridObject "MmkvPlatformContext" - It has not yet been registered in the Nitro Modules HybridObjectRegistry! Suggestions:
+08-10 15:10:41.779 I/ReactNativeJS( 7174): - If you use Nitrogen, make sure your `nitro.json` contains `MmkvPlatformContext` on this platform.
+08-10 15:10:41.779 I/ReactNativeJS( 7174): - If you use Nitrogen, make sure your library (*Package.kt)/app (MainApplication.kt) calls `$$androidCxxLibName$$OnLoad.initializeNative()` somewhere on app-startup.
+08-10 15:10:41.779 I/ReactNativeJS( 7174): - If you use Nitrogen, make sure your `cpp-adapter.cpp`/`OnLoad.cpp` calls `margelo::nitro::$$cxxNamespace$$::registerNatives()` inside `facebook::jni::initialize(...)`.
+08-10 15:10:41.779 I/ReactNativeJS( 7174): - If you use Nitrogen, inspect the generated `$$androidCxxLibName$$OnLoad.cpp` file.
+08-10 15:10:41.779 I/ReactNativeJS( 7174): - If you don't use Nitrogen, make sure you called `HybridObjectRegistry.registerHybridObject(...)`.- All registered HybridObjects: [MMKVPlatformContext, MMKVFactory]
+08-10 15:10:41.780 I/ReactNativeJS( 7174): [kvStore][V378] MMKV constructor OK, roundtrip=1
+08-10 15:10:41.780 I/ReactNativeJS( 7174): '[API] Using hardcoded backend URL:', 'http://5.161.49.99:8001'
+08-10 15:10:41.782 I/ReactNativeJS( 7174): [V265_SQLITE_SWALLOW] AsyncStorage write methods now SQLITE_FULL-safe
+08-10 15:10:41.921 I/ReactNativeJS( 7174): '[OTA v251]', 'checkForUpdateAsync...'
+08-10 15:10:41.945 I/ReactNativeJS( 7174): [V268_PURGE] no bloat keys
+08-10 15:10:41.949 I/ReactNativeJS( 7174): '[V260_NUKE] AsyncStorage key buckets:', '{"@pm_key_v1":1,"@pm_key_v297_seeded":1,"@ps_cw_v1":1,"auth_token":1}', 'total=', 4
+08-10 15:10:41.953 I/ReactNativeJS( 7174): [V390] watched union: 0 entries from 0 tiers
+08-10 15:10:42.309 I/ReactNativeJS( 7174): '[OTA v251]', 'check result', { isAvailable: false, manifestId: undefined, ms: 388 }
+08-10 15:10:42.312 I/ReactNativeJS( 7174): '[V260_NUKE] purged', 3, 'cache entries; kept', 1
+08-10 15:11:04.764 I/ReactNativeJS( 7174): '[API] Request:', 'POST', 'http://5.161.49.99:8001/api/auth/login'
+08-10 15:11:05.163 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/auth/login'
+08-10 15:11:05.224 I/ReactNativeJS( 7174): [V444_BOOT] ServiceRow module loaded; v443 map-read=DISABLED
+08-10 15:11:05.348 I/ReactNativeJS( 7174): [V444_FE] regain-focus cwElapsed=1786389065348 discElapsed=1786389065348
+08-10 15:11:05.350 I/ReactNativeJS( 7174): [V444_BOOT] Discover mount kick + timestamps stamped
+08-10 15:11:05.355 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/watch-progress'
+08-10 15:11:05.355 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/addons'
+08-10 15:11:05.418 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/watch-progress'
+08-10 15:11:05.481 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/addons'
+08-10 15:11:06.749 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/discover-organized'
+08-10 15:11:06.753 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/watch-progress'
+08-10 15:11:06.758 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/discover-organized'
+08-10 15:11:06.815 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/watch-progress'
+08-10 15:11:07.003 I/ReactNativeJS( 7174): [V316d] CW poster claim tag=292
+08-10 15:11:07.003 I/ReactNativeJS( 7174): [V316d] CW poster claim tag=330
+08-10 15:11:08.639 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt37287335'
+08-10 15:11:08.639 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0427340'
+08-10 15:11:08.640 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt10872600'
+08-10 15:11:09.248 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/discover-organized'
+08-10 15:11:10.639 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/discover-organized'
+08-10 15:11:11.328 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0427340'
+08-10 15:11:11.330 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt12042730'
+08-10 15:11:11.334 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt37287335'
+08-10 15:11:11.336 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt15047880'
+08-10 15:11:11.339 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt10872600'
+08-10 15:11:11.342 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt31170389'
+08-10 15:11:11.550 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt31170389'
+08-10 15:11:11.553 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt11198330'
+08-10 15:11:11.556 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt15047880'
+08-10 15:11:11.558 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt36303968'
+08-10 15:11:11.562 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt12042730'
+08-10 15:11:11.565 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt14688458'
+08-10 15:11:11.605 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt36303968'
+08-10 15:11:11.608 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt13592494'
+08-10 15:11:11.612 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt14688458'
+08-10 15:11:11.616 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt34675596'
+08-10 15:11:11.623 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt11198330'
+08-10 15:11:11.654 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt30494226'
+08-10 15:11:11.658 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt13592494'
+08-10 15:11:11.661 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt18259538'
+08-10 15:11:11.665 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt34675596'
+08-10 15:11:11.667 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt36619926'
+08-10 15:11:11.697 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt30494226'
+08-10 15:11:11.700 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt10375624'
+08-10 15:11:11.704 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt18259538'
+08-10 15:11:11.706 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt32432654'
+08-10 15:11:11.710 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt36619926'
+08-10 15:11:11.713 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt39143902'
+08-10 15:11:11.746 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt10375624'
+08-10 15:11:11.749 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt28919914'
+08-10 15:11:11.753 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt32432654'
+08-10 15:11:11.756 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt13111078'
+08-10 15:11:11.760 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt39143902'
+08-10 15:11:11.763 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt18546730'
+08-10 15:11:11.801 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt28919914'
+08-10 15:11:11.805 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt14681924'
+08-10 15:11:11.809 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt13111078'
+08-10 15:11:11.813 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt3530232'
+08-10 15:11:11.817 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt18546730'
+08-10 15:11:11.850 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt14681924'
+08-10 15:11:11.929 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt3530232'
+08-10 15:11:13.148 I/ReactNativeJS( 7174): [V176M] longSelect rx getter=false legacy=true
+08-10 15:11:14.215 I/ReactNativeJS( 7174): '[API] Request:', 'DELETE', 'http://5.161.49.99:8001/api/watch-progress/tt0121955%3A1%3A1'
+08-10 15:11:14.287 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/watch-progress/tt0121955%3A1%3A1'
+08-10 15:11:14.764 I/ReactNativeJS( 7174): [V176M] focus reg id=tt37287335
+08-10 15:11:15.306 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt32268156'
+08-10 15:11:15.307 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0145487'
+08-10 15:11:15.307 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0094625'
+08-10 15:11:15.353 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt32268156'
+08-10 15:11:15.356 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0480239'
+08-10 15:11:15.359 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0145487'
+08-10 15:11:15.368 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt31514146'
+08-10 15:11:15.375 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0094625'
+08-10 15:11:15.385 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt1119646'
+08-10 15:11:15.388 I/ReactNativeJS( 7174): [V176M] focus reg id=tt11198330
+08-10 15:11:15.406 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0480239'
+08-10 15:11:15.535 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt31514146'
+08-10 15:11:15.543 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt1119646'
+08-10 15:11:15.545 I/ReactNativeJS( 7174): [V176M] focus reg id=tt18259538
+08-10 15:11:16.128 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt38264832'
+08-10 15:11:16.128 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt7587890'
+08-10 15:11:16.129 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt9892936'
+08-10 15:11:16.187 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt38264832'
+08-10 15:11:16.190 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt8323628'
+08-10 15:11:16.194 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt9892936'
+08-10 15:11:16.197 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0203259'
+08-10 15:11:16.212 I/ReactNativeJS( 7174): [V176M] focus reg id=tt28919914
+08-10 15:11:16.548 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt7587890'
+08-10 15:11:16.556 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt8323628'
+08-10 15:11:16.559 I/ReactNativeJS( 7174): [V176M] focus reg id=tt32268156
+08-10 15:11:16.577 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt0203259'
+08-10 15:11:17.113 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt33612209'
+08-10 15:11:17.113 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt33978029'
+08-10 15:11:17.113 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0111257'
+08-10 15:11:17.568 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt33612209'
+08-10 15:11:17.574 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt8036976'
+08-10 15:11:17.586 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt33978029'
+08-10 15:11:17.589 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt5311514'
+08-10 15:11:17.594 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0111257'
+08-10 15:11:17.692 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt27543562'
+08-10 15:11:17.697 I/ReactNativeJS( 7174): '[PREFETCH v138] kicking /api/streams for focused movie', 'tt32268156'
+08-10 15:11:17.702 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt8036976'
+08-10 15:11:17.704 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt7472896'
+08-10 15:11:17.734 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt5311514'
+08-10 15:11:17.740 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt14452776'
+08-10 15:11:17.750 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt27543562'
+08-10 15:11:17.753 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0106179'
+08-10 15:11:17.772 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt7472896'
+08-10 15:11:17.775 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt32565993'
+08-10 15:11:17.802 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt14452776'
+08-10 15:11:17.809 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt4698684'
+08-10 15:11:17.824 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt32565993'
+08-10 15:11:17.827 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0443701'
+08-10 15:11:17.866 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt4698684'
+08-10 15:11:17.868 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt15782690'
+08-10 15:11:17.871 I/ReactNativeJS( 7174): [V176M] focus reg id=tt13111078
+08-10 15:11:17.889 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt0106179'
+08-10 15:11:17.903 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0816692'
+08-10 15:11:17.907 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0443701'
+08-10 15:11:17.998 I/ReactNativeJS( 7174): [V176M] focus reg id=tt33612209
+08-10 15:11:18.008 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0816692'
+08-10 15:11:18.011 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt15782690'
+08-10 15:11:18.902 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt10986410'
+08-10 15:11:18.902 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt35618070'
+08-10 15:11:18.903 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt4600360'
+08-10 15:11:19.170 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt35618070'
+08-10 15:11:19.173 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt31849235'
+08-10 15:11:19.177 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt10986410'
+08-10 15:11:19.184 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt4600360'
+08-10 15:11:19.189 I/ReactNativeJS( 7174): [V176M] focus reg id=tt27543562
+08-10 15:11:19.192 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt1375666'
+08-10 15:11:19.193 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0120737'
+08-10 15:11:19.236 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt31849235'
+08-10 15:11:19.239 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt6723592'
+08-10 15:11:19.244 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt1375666'
+08-10 15:11:19.246 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt1291580'
+08-10 15:11:19.251 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0120737'
+08-10 15:11:19.254 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0468569'
+08-10 15:11:19.279 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt6723592'
+08-10 15:11:19.282 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt8946378'
+08-10 15:11:19.297 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt1291580'
+08-10 15:11:19.300 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0468569'
+08-10 15:11:19.325 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt8946378'
+08-10 15:11:19.580 I/ReactNativeJS( 7174): [V176M] focus reg id=tt12042730
+08-10 15:11:20.241 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0460681'
+08-10 15:11:20.241 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt8550800'
+08-10 15:11:20.241 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt10155688'
+08-10 15:11:20.298 I/ReactNativeJS( 7174): [V176M] focus reg id=tt10986410
+08-10 15:11:20.335 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt8550800'
+08-10 15:11:20.351 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt2356777'
+08-10 15:11:20.363 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt10155688'
+08-10 15:11:20.366 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt8772296'
+08-10 15:11:20.644 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt0460681'
+08-10 15:11:20.659 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0185906'
+08-10 15:11:20.665 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt2356777'
+08-10 15:11:20.670 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt8772296'
+08-10 15:11:21.112 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt0185906'
+08-10 15:11:21.117 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt1341338'
+08-10 15:11:21.117 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0247745'
+08-10 15:11:21.118 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt26658104'
+08-10 15:11:21.419 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt1341338'
+08-10 15:11:21.422 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt26658104'
+08-10 15:11:21.425 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0247745'
+08-10 15:11:21.426 I/ReactNativeJS( 7174): [V176M] focus reg id=tt1375666
+08-10 15:11:21.430 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt36885662'
+08-10 15:11:21.430 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0149460'
+08-10 15:11:21.484 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt36885662'
+08-10 15:11:21.489 I/ReactNativeJS( 7174): [V176M] focus reg id=tt0460681
+08-10 15:11:21.762 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt0149460'
+08-10 15:11:22.251 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt34963732'
+08-10 15:11:22.251 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0119217'
+08-10 15:11:22.251 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt1856101'
+08-10 15:11:22.493 I/ReactNativeJS( 7174): [V176M] focus reg id=tt1341338
+08-10 15:11:22.508 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0119217'
+08-10 15:11:22.511 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt1596363'
+08-10 15:11:22.514 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt1856101'
+08-10 15:11:22.517 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt14107334'
+08-10 15:11:22.520 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt34963732'
+08-10 15:11:22.523 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt34991493'
+08-10 15:11:22.553 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt1596363'
+08-10 15:11:22.556 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt26656917'
+08-10 15:11:22.562 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt14107334'
+08-10 15:11:22.565 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt12327578'
+08-10 15:11:22.569 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt34991493'
+08-10 15:11:22.571 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt14186672'
+08-10 15:11:22.620 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt26656917'
+08-10 15:11:22.623 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0407362'
+08-10 15:11:22.634 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt14186672'
+08-10 15:11:22.639 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt12327578'
+08-10 15:11:22.680 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt0407362'
+08-10 15:11:22.762 I/ReactNativeJS( 7174): [V176M] focus reg id=tt36303968
+08-10 15:11:23.637 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt24950660'
+08-10 15:11:23.637 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt12758060'
+08-10 15:11:23.638 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt16311594'
+08-10 15:11:23.878 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt16311594'
+08-10 15:11:23.883 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt33499146'
+08-10 15:11:23.886 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt24950660'
+08-10 15:11:23.893 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt13654226'
+08-10 15:11:23.896 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt12758060'
+08-10 15:11:23.898 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt5537002'
+08-10 15:11:23.901 I/ReactNativeJS( 7174): [V176M] focus reg id=tt34963732
+08-10 15:11:23.937 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt13654226'
+08-10 15:11:23.941 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt16418808'
+08-10 15:11:23.945 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt33499146'
+08-10 15:11:23.949 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt33332385'
+08-10 15:11:23.986 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt5537002'
+08-10 15:11:23.990 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt22202452'
+08-10 15:11:23.997 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt16418808'
+08-10 15:11:24.018 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt33332385'
+08-10 15:11:24.040 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt22202452'
+08-10 15:11:24.398 I/ReactNativeJS( 7174): [V176M] focus reg id=tt13111078
+08-10 15:11:25.321 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt28650488'
+08-10 15:11:25.321 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt32547691'
+08-10 15:11:25.321 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0332452'
+08-10 15:11:25.653 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0332452'
+08-10 15:11:25.656 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt5177120'
+08-10 15:11:25.664 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt32547691'
+08-10 15:11:25.666 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt28650488'
+08-10 15:11:25.668 I/ReactNativeJS( 7174): [V176M] focus reg id=tt24950660
+08-10 15:11:25.671 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt37094589'
+08-10 15:11:25.671 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt29666911'
+08-10 15:11:25.723 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt5177120'
+08-10 15:11:25.727 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt4236770'
+08-10 15:11:25.732 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt29666911'
+08-10 15:11:25.736 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt35587659'
+08-10 15:11:25.739 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt37094589'
+08-10 15:11:25.745 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0160904'
+08-10 15:11:25.771 I/ReactNativeJS( 7174): [V176M] focus reg id=tt10986410
+08-10 15:11:25.783 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt35587659'
+08-10 15:11:25.790 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt33092192'
+08-10 15:11:25.798 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt4236770'
+08-10 15:11:25.862 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt0160904'
+08-10 15:11:25.869 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt33092192'
+08-10 15:11:26.402 I/ReactNativeJS( 7174): [V176M] focus reg id=tt37287335
+08-10 15:11:26.634 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0898266'
+08-10 15:11:26.635 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt31589662'
+08-10 15:11:26.635 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt43643879'
+08-10 15:11:26.692 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt43643879'
+08-10 15:11:26.694 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt1442464'
+08-10 15:11:26.742 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt31589662'
+08-10 15:11:26.745 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt6226232'
+08-10 15:11:26.780 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt0898266'
+08-10 15:11:26.799 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt3469050'
+08-10 15:11:26.822 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt6226232'
+08-10 15:11:26.850 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt1442464'
+08-10 15:11:26.886 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt3469050'
+08-10 15:11:27.050 I/ReactNativeJS( 7174): [V176M] focus reg id=tt37094589
+08-10 15:11:27.540 I/ReactNativeJS( 7174): [V176M] focus reg id=tt0898266
+08-10 15:11:34.137 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/search?q=South%20park&skip=0&limit=30'
+08-10 15:11:34.294 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/search?q=South%20park&skip=0&limit=30'
+08-10 15:11:34.559 I/ReactNativeJS( 7174): '[V450_SEARCH_UX] auto-focus target:', 'tt0158983'
+08-10 15:11:34.560 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/category/undefined/undefined?skip=1&limit=100'
+08-10 15:11:34.560 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/category/undefined/undefined?skip=12&limit=100'
+08-10 15:11:34.688 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/category/undefined/undefined?skip=12&limit=100'
+08-10 15:11:34.690 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0121955'
+08-10 15:11:34.693 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/category/undefined/undefined?skip=1&limit=100'
+08-10 15:11:34.720 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0158983'
+08-10 15:11:34.721 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt38117696'
+08-10 15:11:34.763 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt38117696'
+08-10 15:11:34.765 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt30505159'
+08-10 15:11:34.791 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt0158983'
+08-10 15:11:34.795 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt32375562'
+08-10 15:11:34.848 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/series/tt0121955'
+08-10 15:11:34.862 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt29474455'
+08-10 15:11:34.866 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt30505159'
+08-10 15:11:34.868 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt16375288'
+08-10 15:11:34.871 I/ReactNativeJS( 7174): '[V443_RECV_MARKER] card', 'tt0158983', 'received v443:navBack'
+08-10 15:11:34.873 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt32375562'
+08-10 15:11:34.958 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt29474455'
+08-10 15:11:34.961 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/content/meta/movie/tt16375288'
+08-10 15:11:34.963 I/ReactNativeJS( 7174): [V176M] focus reg id=tt0158983
+08-10 15:11:35.069 I/ReactNativeJS( 7174): '[V443_RECV_MARKER] card', 'tt0158983', 'received v443:navBack'
+08-10 15:11:35.208 I/ReactNativeJS( 7174): [V176M] focus reg id=tt0121955
+08-10 15:11:36.272 I/ReactNativeJS( 7174): [V311_PERF] details/MOUNT +0ms (total 0ms)
+08-10 15:11:36.486 I/ReactNativeJS( 7174): [V311_PERF] details/FIRST_RENDER +214ms (total 214ms)
+08-10 15:11:36.491 I/ReactNativeJS( 7174): [V311_PERF] details/FIRST_EFFECT +5ms (total 219ms)
+08-10 15:11:36.497 I/ReactNativeJS( 7174): '[PREWARM v180] kicked', 3, 'PM resolves for top cached streams'
+08-10 15:11:36.741 I/ReactNativeJS( 7174): [V400] English exists (6) - foreign hidden (45)
+08-10 15:11:36.741 I/ReactNativeJS( 7174): [V398 ENGLISH WALL] eng=6 foreign=45
+08-10 15:11:36.751 I/ReactNativeJS( 7174): [V405 QUALITY] top3=1080p(c), 1080p(c), 1080p(c) | demoted=0
+08-10 15:11:36.751 I/ReactNativeJS( 7174): [V404 PROMOTE] promoted=1 demoted=0 mid=5
+08-10 15:11:36.751 I/ReactNativeJS( 7174): '[V357 PARTITION]', 'cached_sdr=5', 'cached_hdr=1', 'uncached_sdr=0', 'uncached_hdr=0'
+08-10 15:11:36.752 I/ReactNativeJS( 7174): '[SORT v141_V367] picked top:', '1080p', 'cached=true', 'seeders=16', 'lang=ENG', '| cached_n=6', 'uncached_n=0'
+08-10 15:11:36.753 I/ReactNativeJS( 7174): [PREWARM v291] Kicking client-side PM resolve for top stream: 11f155265701f5102ac0977bfc8c43d40156cb4d
+08-10 15:11:36.921 I/ReactNativeJS( 7174): '[FOCUS v134] details focused, clearing overlay; autoPlayParam=', undefined, ' isPlayLoading-cleared'
+08-10 15:11:36.926 I/ReactNativeJS( 7174): [v296] no PM key on device â€” skipping cache check
+08-10 15:11:36.931 I/ReactNativeJS( 7174): '[API] Request:', 'POST', 'http://5.161.49.99:8001/api/stream/start/11f155265701f5102ac0977bfc8c43d40156cb4d?fileIdx=39&filename=The+Last+House+%282026%29+1080p+WEBRip+5.1-LAMA%0A%F0%9F%91%A4+16+%F0%9F%92%BE+2.07+GB+%E2%9A%99%EF%B8%8F+ThePirateBay'
+08-10 15:11:36.933 I/ReactNativeJS( 7174): [v297] PM key seeded into AsyncStorage (was empty)
+08-10 15:11:36.939 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/library'
+08-10 15:11:37.046 I/ReactNativeJS( 7174): '[PREWARM v180] kicked', 3, 'PM resolves for top cached streams'
+08-10 15:11:37.068 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/stream/start/11f155265701f5102ac0977bfc8c43d40156cb4d?fileIdx=39&filename=The+Last+House+%282026%29+1080p+WEBRip+5.1-LAMA%0A%F0%9F%91%A4+16+%F0%9F%92%BE+2.07+GB+%E2%9A%99%EF%B8%8F+ThePirateBay'
+08-10 15:11:37.077 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/library'
+08-10 15:11:40.677 I/ReactNativeJS( 7174): [FOCUS v135] onFocus ep=1 (one-shot guard set)
+08-10 15:11:41.539 I/ReactNativeJS( 7174): [V311_PERF] details/MOUNT +0ms (total 0ms)
+08-10 15:11:41.654 I/ReactNativeJS( 7174): [V311_PERF] details/FIRST_RENDER +115ms (total 115ms)
+08-10 15:11:41.659 I/ReactNativeJS( 7174): [V311_PERF] details/FIRST_EFFECT +5ms (total 120ms)
+08-10 15:11:41.664 I/ReactNativeJS( 7174): '[PREWARM v180] kicked', 3, 'PM resolves for top cached streams'
+08-10 15:11:41.670 I/ReactNativeJS( 7174): [PREWARM v291] Kicking client-side PM resolve for top stream: 11f155265701f5102ac0977bfc8c43d40156cb4d
+08-10 15:11:41.859 I/ReactNativeJS( 7174): '[FOCUS v134] details focused, clearing overlay; autoPlayParam=', undefined, ' isPlayLoading-cleared'
+08-10 15:11:41.900 I/ReactNativeJS( 7174): [META] CACHE HIT for series/tt0121955
+08-10 15:11:41.917 I/ReactNativeJS( 7174): '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/library'
+08-10 15:11:42.084 I/ReactNativeJS( 7174): [FOCUS v135] onBlur ep=1 (userMoved=true)
+08-10 15:11:42.247 I/ReactNativeJS( 7174): '[API] Response OK:', '/api/library'
+08-10 15:11:43.305 I/ReactNativeJS( 7174): [V400] English exists (19) - foreign hidden (10)
+08-10 15:11:43.305 I/ReactNativeJS( 7174): [V398 ENGLISH WALL] eng=19 foreign=10
+08-10 15:11:43.342 I/ReactNativeJS( 7174): [V405 QUALITY] top3=2160p, 1080p, 1080p | demoted=16
+08-10 15:11:43.342 I/ReactNativeJS( 7174): [V404 PROMOTE] promoted=1 demoted=16 mid=2
+08-10 15:11:43.342 I/ReactNativeJS( 7174): '[V357 PARTITION]', 'cached_sdr=2', 'cached_hdr=0', 'uncached_sdr=8', 'uncached_hdr=9'
+08-10 15:11:43.343 I/ReactNativeJS( 7174): '[SORT v141_V367] picked top:', '4K', 'cached=false', 'seeders=18', 'lang=ENG', '| cached_n=2', 'uncached_n=17'
+08-10 15:11:43.346 I/ReactNativeJS( 7174): [PREWARM v291] Kicking client-side PM resolve for top stream: 42dac599757ec9c63831c0d9a89313d0b6a2466b
+08-10 15:11:43.354 I/ReactNativeJS( 7174): [PREWARM v291] Kicking client-side PM resolve for top stream: 42dac599757ec9c63831c0d9a89313d0b6a2466b
+08-10 15:11:43.631 I/ReactNativeJS( 7174): '[PREWARM v180] kicked', 3, 'PM resolves for top cached streams'
+08-10 15:11:43.639 I/ReactNativeJS( 7174): '[PREWARM v180] kicked', 3, 'PM resolves for top cached streams'
+08-10 15:11:43.644 I/ReactNativeJS( 7174): '[PM v287] resolved', '11f15526', '→', 'https://5-cdn2-ovh-bea.energycdn.com/cdn3sto/wisevillagechie'
+08-10 15:11:43.850 I/ReactNativeJS( 7174): '[v296] PM /cache/check:', '27/29', 'cached for', 'tt0121955:29'
+08-10 15:11:44.046 I/ReactNativeJS( 7174): '[PM v287] resolved', '42dac599', '→', 'https://6-cdn2-ovh-bea.energycdn.com/cdn3sto/splendidleopard'
+08-10 15:11:44.047 I/ReactNativeJS( 7174): '[v296] PM /cache/check:', '27/29', 'cached for', 'tt0121955:1:1:29'

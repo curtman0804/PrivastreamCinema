@@ -29,7 +29,7 @@ import Constants from 'expo-constants';
 import { useContentStore, getMetaCache, setMetaCache, hydrateMetaFromDisk } from '../../../src/store/contentStore';
 import { v311Perf } from '../../../src/utils/v311_perf'; // V311_PERF_PROFILER
 
-// v238 cache buster — append &_t=<ts> to ANY URL handed to the player so
+// v238 cache buster â€” append &_t=<ts> to ANY URL handed to the player so
 // Firestick's aggressive media cache can't replay a stale wrong-content
 // stream URL. Safe for proxy, torrent-video, and external CDN URLs.
 function _v237_bustUrl(u: any) {
@@ -44,7 +44,7 @@ const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
 
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage from '../../../src/utils/mmkvStorage';
-/* V176C_EPISODE_MENU_IMPORT — Stremio-style menu helpers for episode posters. */
+/* V176C_EPISODE_MENU_IMPORT â€” Stremio-style menu helpers for episode posters. */
 import {
   v172IsWatched as _v176cV172IsWatched,
   v172SubscribeWatched as _v176cV172SubWatched,
@@ -61,7 +61,7 @@ const { width, height } = Dimensions.get('window');
 // Stremio-style animated indeterminate loading bar. Renders a thin gold
 // segment that slides across a dark track. Pure Animated.Value so it runs
 // on the native thread and doesn't stutter on Firestick.
-// PATCH_V154_MATCH_HELPER — sanity check that the stream we are about to play
+// PATCH_V154_MATCH_HELPER â€” sanity check that the stream we are about to play
 // actually has SOME word from the requested content title.  Returns count of
 // matching significant words; 0 means the filename is unrelated to the request.
 function _v154TitleOverlap(requestedTitle: string, streamTitle: string): number {
@@ -121,12 +121,12 @@ function AutoPlayLoadingBar() {
 }
 
 // Focusable Button Component
-// v238c — helper used in both player metadata + autoPlayOverlay text.
-// MUST be module-level (was nested inside handleStreamSelect → caused
+// v238c â€” helper used in both player metadata + autoPlayOverlay text.
+// MUST be module-level (was nested inside handleStreamSelect â†’ caused
 // ReferenceError when the overlay tried to render).
 const _v238ValidNum = (n: any) => (n != null && !Number.isNaN(Number(n)));
 
-// PATCH_V244_MEMO — kill re-render storms during stream loading on Firestick.
+// PATCH_V244_MEMO â€” kill re-render storms during stream loading on Firestick.
 // FocusableButton/ChipButton/EpisodeCard each render dozens of times per page;
 // without React.memo every parent re-render (stream progress, focus change,
 // stream sort) re-renders ALL of them.  React.memo skips when props are equal.
@@ -162,7 +162,7 @@ const FocusableButton = React.memo(function FocusableButton({
 });
 
 // Clickable chip for genre/cast/director - routes to search
-// PATCH_V244_MEMO — see FocusableButton above.
+// PATCH_V244_MEMO â€” see FocusableButton above.
 const ChipButton = React.memo(function ChipButton({ label, onPress, hasTVPreferredFocus = false }: { label: string; onPress: () => void; hasTVPreferredFocus?: boolean }) {
   const [isFocused, setIsFocused] = useState(false);
   return (
@@ -180,8 +180,8 @@ const ChipButton = React.memo(function ChipButton({ label, onPress, hasTVPreferr
 
 
 // Parse stream info helper - used by StreamCard and sorting
-// PATCH_V11A_PARSE_CACHE — module-level cache so each Stream object is parsed exactly once.
-// PATCH_V19A_PARSE_CACHE — module-level WeakMap cache for parseStreamInfo.
+// PATCH_V11A_PARSE_CACHE â€” module-level cache so each Stream object is parsed exactly once.
+// PATCH_V19A_PARSE_CACHE â€” module-level WeakMap cache for parseStreamInfo.
 const _parseStreamInfoCache = new WeakMap<Stream, any>();
 
 function parseStreamInfo(stream: Stream) {
@@ -202,9 +202,9 @@ function parseStreamInfo(stream: Stream) {
   else if (name.includes('720') || title.includes('720')) quality = '720p';
   else if (name.toUpperCase().includes('HD') && !name.toUpperCase().includes('SD')) quality = 'HD';
 
-  // PATCH_V9_CODEC_DETECTION — Firestick decodes H.264/AVC reliably; HEVC/x265 stutters or shows black frames
+  // PATCH_V9_CODEC_DETECTION â€” Firestick decodes H.264/AVC reliably; HEVC/x265 stutters or shows black frames
   const isHEVC = combined.includes('HEVC') || combined.includes('X265') || combined.includes('H265') || combined.includes('H.265');
-  // PATCH_V153_HDR_BROAD — wide detection: explicit HDR tags, 10-bit signaling,
+  // PATCH_V153_HDR_BROAD â€” wide detection: explicit HDR tags, 10-bit signaling,
   // wide-color-gamut metadata names, and a presumption that any UNTAGGED 4K HEVC
   // release is HDR (true for ~95% of 4K HEVC encodes in the wild).
   const _v153HasExplicitSDR = combined.includes('SDR')
@@ -223,7 +223,7 @@ function parseStreamInfo(stream: Stream) {
   const _v153IsPresumed4KHEVC = (quality === '4K' && isHEVC && !_v153HasExplicitSDR);
   const isHDR = _v153HasExplicitHDR || _v153IsPresumed4KHEVC;
 
-  // PATCH_V12_COMMENTARY_DETECT — exclude commentary tracks (creator/director/audio commentary).
+  // PATCH_V12_COMMENTARY_DETECT â€” exclude commentary tracks (creator/director/audio commentary).
   // Heavy penalty in computeScore guarantees these sink to the bottom of the list.
   const isCommentary = (
     combined.includes('COMMENTARY') ||
@@ -243,14 +243,14 @@ function parseStreamInfo(stream: Stream) {
   let source = stream.addon || 'Unknown';
   if (stream.provider) {
     source = stream.provider;
-  } else if (name.includes('TPB') || name.includes('🏴‍☠️')) source = 'TPB+';
-  else if (name.includes('⚡') || name.includes('Torrentio')) source = 'Torrentio';
+  } else if (name.includes('TPB') || name.includes('ðŸ´â€â˜ ï¸')) source = 'TPB+';
+  else if (name.includes('âš¡') || name.includes('Torrentio')) source = 'Torrentio';
   else if (name.includes('EZTV')) source = 'EZTV';
   else if (name.includes('YTS') || name.includes('YIFY')) source = 'YTS';
   
   // Extract size from title
   let size = '';
-  const sizeMatch = title.match(/💾\s*([\d.]+\s*[GM]B)/i);
+  const sizeMatch = title.match(/ðŸ’¾\s*([\d.]+\s*[GM]B)/i);
   if (sizeMatch) size = sizeMatch[1];
   if (!size) {
     const sizeMatch2 = title.match(/([\d.]+)\s*(GB|MB)/i);
@@ -260,11 +260,11 @@ function parseStreamInfo(stream: Stream) {
   // Extract seeders
   let seeders = stream.seeders || 0;
   if (!seeders) {
-    const seederMatch = title.match(/👤\s*(\d+)/);
+    const seederMatch = title.match(/ðŸ‘¤\s*(\d+)/);
     if (seederMatch) seeders = parseInt(seederMatch[1], 10);
   }
   if (!seeders) {
-    const peerMatch = title.match(/🌱\s*(\d+)/);
+    const peerMatch = title.match(/ðŸŒ±\s*(\d+)/);
     if (peerMatch) seeders = parseInt(peerMatch[1], 10);
   }
   
@@ -281,46 +281,50 @@ function parseStreamInfo(stream: Stream) {
     'THAI', 'INDONESIAN', 'VIETNAMESE', 'SWEDISH',
     'MULTI',
   ];
-  const FOREIGN_FLAGS = ['🇫🇷', '🇪🇸', '🇲🇽', '🇧🇷', '🇩🇪', '🇮🇹', '🇷🇺', '🇵🇹', '🇵🇱', '🇳🇱', '🇨🇳', '🇯🇵', '🇰🇷', '🇮🇳', '🇹🇷'];
-  const HAS_ENGLISH = combined.includes('ENGLISH') || combined.includes('🇬🇧') || combined.includes('🇺🇸') || combined.includes('EN/') || combined.includes('/EN');
+  const FOREIGN_FLAGS = ['ðŸ‡«ðŸ‡·', 'ðŸ‡ªðŸ‡¸', 'ðŸ‡²ðŸ‡½', 'ðŸ‡§ðŸ‡·', 'ðŸ‡©ðŸ‡ª', 'ðŸ‡®ðŸ‡¹', 'ðŸ‡·ðŸ‡º', 'ðŸ‡µðŸ‡¹', 'ðŸ‡µðŸ‡±', 'ðŸ‡³ðŸ‡±', 'ðŸ‡¨ðŸ‡³', 'ðŸ‡¯ðŸ‡µ', 'ðŸ‡°ðŸ‡·', 'ðŸ‡®ðŸ‡³', 'ðŸ‡¹ðŸ‡·'];
+  const HAS_ENGLISH = combined.includes('ENGLISH') || combined.includes('ðŸ‡¬ðŸ‡§') || combined.includes('ðŸ‡ºðŸ‡¸') || combined.includes('EN/') || combined.includes('/EN');
   
-  let language = 'ENG';
+  // v472d - collect ALL detected language flags (multi-audio support)
+  const _v472_flagSet = new Set<string>();
   let isForeign = false;
-  
+  const _V470_KW_TO_FLAG: Record<string, string> = {
+    'FRENCH': '\u{1F1EB}\u{1F1F7}', 'TRUEFRENCH': '\u{1F1EB}\u{1F1F7}', 'VFF': '\u{1F1EB}\u{1F1F7}', 'VFQ': '\u{1F1EB}\u{1F1F7}', 'VOSTFR': '\u{1F1EB}\u{1F1F7}',
+    'SPANISH': '\u{1F1EA}\u{1F1F8}', 'CASTELLANO': '\u{1F1EA}\u{1F1F8}', 'LATINO': '\u{1F1F2}\u{1F1FD}',
+    'GERMAN': '\u{1F1E9}\u{1F1EA}', 'DEUTSCH': '\u{1F1E9}\u{1F1EA}',
+    'ITALIAN': '\u{1F1EE}\u{1F1F9}', 'ITALIANO': '\u{1F1EE}\u{1F1F9}',
+    'RUSSIAN': '\u{1F1F7}\u{1F1FA}',
+    'HINDI': '\u{1F1EE}\u{1F1F3}', 'TAMIL': '\u{1F1EE}\u{1F1F3}', 'TELUGU': '\u{1F1EE}\u{1F1F3}',
+    'PORTUGUESE': '\u{1F1F5}\u{1F1F9}', 'DUBLADO': '\u{1F1E7}\u{1F1F7}', 'BRAZILIAN': '\u{1F1E7}\u{1F1F7}',
+    'DUBBED': '\u{1F399}\uFE0F',
+    'MULTI': '\u{1F310}',
+    'KOREAN': '\u{1F1F0}\u{1F1F7}', 'JAPANESE': '\u{1F1EF}\u{1F1F5}',
+    'CHINESE': '\u{1F1E8}\u{1F1F3}', 'MANDARIN': '\u{1F1E8}\u{1F1F3}', 'CANTONESE': '\u{1F1ED}\u{1F1F0}',
+    'TURKISH': '\u{1F1F9}\u{1F1F7}', 'ARABIC': '\u{1F1F8}\u{1F1E6}',
+    'POLISH': '\u{1F1F5}\u{1F1F1}', 'DUTCH': '\u{1F1F3}\u{1F1F1}', 'CZECH': '\u{1F1E8}\u{1F1FF}',
+    'THAI': '\u{1F1F9}\u{1F1ED}', 'INDONESIAN': '\u{1F1EE}\u{1F1E9}', 'VIETNAMESE': '\u{1F1FB}\u{1F1F3}',
+    'SWEDISH': '\u{1F1F8}\u{1F1EA}', 'NORWEGIAN': '\u{1F1F3}\u{1F1F4}', 'DANISH': '\u{1F1E9}\u{1F1F0}', 'FINNISH': '\u{1F1EB}\u{1F1EE}',
+    'HUNGARIAN': '\u{1F1ED}\u{1F1FA}', 'GREEK': '\u{1F1EC}\u{1F1F7}', 'HEBREW': '\u{1F1EE}\u{1F1F1}',
+    'ROMANIAN': '\u{1F1F7}\u{1F1F4}', 'UKRAINIAN': '\u{1F1FA}\u{1F1E6}', 'BULGARIAN': '\u{1F1E7}\u{1F1EC}',
+  };
   for (const kw of FOREIGN_KEYWORDS) {
     if (combined.includes(kw)) {
       isForeign = true;
-      if (kw.includes('FRENCH') || kw === 'VFF' || kw === 'VFQ' || kw === 'VOSTFR' || kw === 'TRUEFRENCH') language = 'FRE';
-      else if (kw.includes('SPANISH') || kw === 'LATINO' || kw === 'CASTELLANO') language = 'SPA';
-      else if (kw.includes('GERMAN') || kw === 'DEUTSCH') language = 'GER';
-      else if (kw.includes('ITALIAN') || kw === 'ITALIANO') language = 'ITA';
-      else if (kw.includes('RUSSIAN')) language = 'RUS';
-      else if (kw.includes('HINDI')) language = 'HIN';
-      else if (kw === 'DUBBED' || kw === 'DUBLADO') language = 'DUB';
-      else if (kw === 'MULTI') language = 'MULTI';
-      else language = 'OTHER';
-      break;
+      _v472_flagSet.add(_V470_KW_TO_FLAG[kw] || '\u{1F30D}');
     }
   }
   for (const flag of FOREIGN_FLAGS) {
     if (title.includes(flag) || name.includes(flag)) {
       isForeign = true;
-      if (flag === '🇫🇷') language = 'FRE';
-      else if (flag === '🇪🇸' || flag === '🇲🇽') language = 'SPA';
-      else if (flag === '🇩🇪') language = 'GER';
-      else if (flag === '🇮🇹') language = 'ITA';
-      else if (flag === '🇷🇺') language = 'RUS';
-      else if (flag === '🇮🇳') language = 'HIN';
-      else language = 'OTHER';
-      break;
+      _v472_flagSet.add(flag);
     }
   }
-  
-  if (HAS_ENGLISH && isForeign) language = 'MULTI';
-  if (HAS_ENGLISH && !isForeign) language = 'ENG';
+  if (HAS_ENGLISH) _v472_flagSet.add('\u{1F1FA}\u{1F1F8}');
+  if (_v472_flagSet.size === 0) _v472_flagSet.add('\u{1F1FA}\u{1F1F8}');
+  const languages: string[] = Array.from(_v472_flagSet);
+  const language: string = languages[0];
   
   // PATCH_V11A_PARSE_CACHE_SET
-  const _result = { quality, source, size, seeders, title, language, isForeign, isHEVC, isHDR, isCommentary };
+  const _result = { quality, source, size, seeders, title, language, languages, isForeign, isHEVC, isHDR, isCommentary };
   _parseStreamInfoCache.set(stream, _result);
   const _v19Result = _result;
   _parseStreamInfoCache.set(stream, _v19Result);
@@ -328,7 +332,7 @@ function parseStreamInfo(stream: Stream) {
 }
 
 // Sort streams: English first (by seeds desc), then other languages (by seeds desc)
-// V157_WRONG_TITLE_GUARD — module-level mutable meta holder.  The
+// V157_WRONG_TITLE_GUARD â€” module-level mutable meta holder.  The
 // details screen writes its current content here every render (before
 // any useMemo runs), and sortStreamsByLanguage reads it as its first
 // step.  This keeps the sort function's signature unchanged across
@@ -337,7 +341,7 @@ let _v157_currentMeta: { title: string; year: string; isMovie: boolean; isSeries
   title: '', year: '', isMovie: false, isSeries: false, seriesWords: [],
 };
 
-// V296_PM_CACHE_AWARENESS_BUILD_TAG — verification marker, never rendered.
+// V296_PM_CACHE_AWARENESS_BUILD_TAG â€” verification marker, never rendered.
 //
 // Module-level map of infoHash (lowercase) -> known-cached-on-PM boolean.
 // Populated by a useEffect in the details component on streams load:
@@ -349,7 +353,7 @@ let _v157_currentMeta: { title: string; year: string; isMovie: boolean; isSeries
 // Rationale (v296):
 //   Pre-V292: Project Hail Mary picked the 1xbet stream because it was
 //   the ONLY PM-cached torrent on the user's account.  V292 hard-filtered
-//   it → fell back to clean+uncached → PM returned null → "unable to
+//   it â†’ fell back to clean+uncached â†’ PM returned null â†’ "unable to
 //   play video".  V296 makes the watermark filter conditional: only drop
 //   dirty streams when at least one clean stream is cached.  Otherwise
 //   keep dirty as a last-resort playable option.
@@ -360,9 +364,9 @@ const _v296_cacheMap = new Map<string, boolean>();
 // per app session (not on every render).
 const _v296_checkedKeys = new Set<string>();
 
-// V161_SERIES_TITLE_GUARD — for series, build the set of required title
+// V161_SERIES_TITLE_GUARD â€” for series, build the set of required title
 // words (length >= 3, non-stopword) and reject streams whose pre-SxxExx
-// part is missing any of them.  Catches the "How It's Made" → "How the
+// part is missing any of them.  Catches the "How It's Made" â†’ "How the
 // States Got Their Shapes" case.
 const _V161_STOPWORDS = new Set(['the','and','for','from','your','that','this','with','into']);
 function _v161_seriesTitleWords(title: string): string[] {
@@ -373,7 +377,7 @@ function _v161_seriesTitleWords(title: string): string[] {
   return tokens.filter((w: string) => w.length >= 3 && !_V161_STOPWORDS.has(w));
 }
 function _v161_isWrongSeriesStream(stream: any, meta: { isSeries: boolean; seriesWords: string[] }): boolean {
-  return false; // v233 client filters disabled — backend already returns only id-matched streams
+  return false; // v233 client filters disabled â€” backend already returns only id-matched streams
   if (!meta.isSeries || !meta.seriesWords || meta.seriesWords.length === 0) return false;
   const raw = ((stream && (stream.title || '')) + ' ' + (stream && (stream.name || ''))).trim();
   if (!raw) return false;
@@ -425,7 +429,7 @@ function _v157_extractSequelMarkers(text: string): Set<number> {
 }
 
 function _v157_isWrongTitleStream(stream: any, meta: { title: string; year: string; isMovie: boolean }): boolean {
-  return false; // v233 client filters disabled — backend already returns only id-matched streams
+  return false; // v233 client filters disabled â€” backend already returns only id-matched streams
   if (!meta.isMovie || !meta.title) return false;
   const txt = ((stream && (stream.title || '')) + ' ' + (stream && (stream.name || ''))).trim();
   if (!txt) return false;
@@ -438,7 +442,7 @@ function _v157_isWrongTitleStream(stream: any, meta: { title: string; year: stri
       const years = yMatches.map(y => parseInt(y, 10));
       let anyOk = false;
       for (const y of years) { if (Math.abs(y - reqYearN) <= 1) { anyOk = true; break; } }
-      if (!anyOk) return true; // reject — year mismatch
+      if (!anyOk) return true; // reject â€” year mismatch
     }
   }
 
@@ -466,6 +470,68 @@ function _v157_isWrongTitleStream(stream: any, meta: { title: string; year: stri
 // the cache misses and we recompute exactly once.
 let _v312_sortCacheInput: Stream[] | null = null;
 let _v312_sortCacheOutput: Stream[] | null = null;
+// V441_MOVIE_TITLE_MATCH_PACK_GUARD - stronger than v440. See patch_v441.ps1.
+function _v441_movieTitleMatch(filePath: string, movieTitle: string, movieYear: any): number {
+  if (!filePath || !movieTitle) return 0;
+  const _norm = (s: string) => String(s || '')
+    .toLowerCase()
+    .replace(/\[.*?\]|\(.*?\)/g, ' ')
+    .replace(/[._\-:'!,?]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const _stop = new Set(['the','a','an','of','and','in','on','for','to','with','part','vol','volume']);
+  const _tokens = (s: string) => _norm(s).split(' ').filter((t: string) => t.length >= 2 && !_stop.has(t));
+  const fileTokens = new Set(_tokens(filePath));
+  const titleTokens = _tokens(movieTitle);
+  if (titleTokens.length === 0) return 1; // no title -> no penalty
+  let hits = 0;
+  for (const t of titleTokens) if (fileTokens.has(t)) hits++;
+  const ratio = hits / titleTokens.length;
+  let yearBonus = 0;
+  if (movieYear) {
+    const y = parseInt(String(movieYear).slice(0, 4), 10);
+    if (!isNaN(y)) {
+      const fileYears = String(filePath).match(/\b(19\d{2}|20\d{2})\b/g);
+      if (fileYears) {
+        for (const fy of fileYears) {
+          if (Math.abs(parseInt(fy, 10) - y) <= 1) { yearBonus = 0.5; break; }
+        }
+      }
+    }
+  }
+  return ratio + yearBonus;
+}
+function _v441_pickMovieFile(videos: any[], movieTitle: string, movieYear: any): any | null {
+  if (!videos || videos.length === 0) return null;
+  const _norm = (s: string) => String(s || '').toLowerCase().replace(/[._\-:'!,?]+/g,' ').replace(/\s+/g,' ').trim();
+  const _stop = new Set(['the','a','an','of','and','in','on','for','to','with','part','vol','volume']);
+  const _tokens = (s: string) => _norm(s).split(' ').filter((t: string) => t.length >= 2 && !_stop.has(t));
+  const titleTokens = _tokens(movieTitle);
+  const scored = videos.map((v: any) => ({
+    v,
+    score: _v441_movieTitleMatch(v.path || v.link || '', movieTitle, movieYear),
+    size: v.size || 0,
+  }));
+  scored.sort((a: any, b: any) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.size - a.size;
+  });
+  const top = scored[0];
+  // Strict refuse: title provided, has >=2 significant tokens, top file
+  // matches less than half of them.  This catches BOTH multi-file packs
+  // (Marvel MCU pack containing an Iron Man mkv) and single-file torrents
+  // that are grossly mislabelled at the tracker level.
+  if (titleTokens.length >= 2 && top.score < 0.5) {
+    try { console.log('[V441] REFUSE: title="' + movieTitle + '" (' + titleTokens.length + ' toks) topScore=' + top.score.toFixed(2) + ' files=' + scored.length + ' topPath=' + String(top.v.path || '').slice(0, 100)); } catch (_) {}
+    return null;
+  }
+  try { console.log('[V441] pick score=' + top.score.toFixed(2) + ' size=' + Math.round(top.size / 1e6) + 'MB path=' + String(top.v.path || '').slice(0, 100)); } catch (_) {}
+  return top.v;
+}
+// Back-compat alias so any leftover v440 references keep working
+const _v440_movieTitleMatch = _v441_movieTitleMatch;
+const _v440_pickMovieFile = _v441_pickMovieFile;
+// V441_END
 function sortStreamsByLanguage(streams: Stream[]): Stream[] {
   /* V324_FORCE_4K - quality histogram of input streams so we can see
      whether 4K options are even reaching the scorer. */
@@ -497,7 +563,7 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
   return _v312_result;
 }
 function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
-  // V292/V296 — gambling/spam watermark detection.  These rips have
+  // V292/V296 â€” gambling/spam watermark detection.  These rips have
   // hard-burned 1xbet/etc logos that ruin viewing.  We DETECT them
   // with these regexes so V296 can decide whether to hard-drop them
   // (only if a clean+cached PM alternative exists) or keep them as
@@ -506,14 +572,14 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
   // V317_STRICT_SPAM_DROP - expanded affiliate list seen on Torrentio.
   const _V292_WATERMARK_RE = /(1xbet|1xstavka|melbet|mostbet|parimatch|4rabet|dafabet|betway|bet365|22bet|stake\.com|ftcam|fxgg|hcam|ctcam|cam\.rip|hdcam|telesync|tsrip|tcrip|tc-?rip|cam-rip|new\.?source|sourceqr|sourcetv|x-?cam|hd-?cam)/i;
   // Be slightly less strict for the literal token "cam" (could be in a
-  // legit URL) — require word boundaries for that one.
+  // legit URL) â€” require word boundaries for that one.
   const _V292_CAM_RE = /\b(cam|ts|tc)\b.*\b(rip|new|source)\b|\b(rip|new|source)\b.*\b(cam|ts|tc)\b/i;
   const _v296_isWatermark = (s: any): boolean => {
     // V317_STRICT_SPAM_DROP - also scan stream.url to catch spam URLs.
     const blob = `${s?.title || ''} ${s?.name || ''} ${s?.filename || ''} ${s?.url || ''}`;
     return _V292_WATERMARK_RE.test(blob) || _V292_CAM_RE.test(blob);
   };
-  // V296 — check whether any CLEAN (non-watermarked) stream is known
+  // V296 â€” check whether any CLEAN (non-watermarked) stream is known
   // PM-cached.  Only then is it safe to hard-drop the watermarked ones.
   // _v296_cacheMap is populated by the component's PM /cache/check effect.
   const _v296_cleanStreams = streams.filter((s: any) => !_v296_isWatermark(s));
@@ -526,19 +592,19 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     const _before = streams.length;
     streams = _v296_cleanStreams;
     if (_before !== streams.length) {
-      console.log('[v296] CLEAN+CACHED available — dropped', _before - streams.length, 'watermarked streams (of', _before + ')');
+      console.log('[v296] CLEAN+CACHED available â€” dropped', _before - streams.length, 'watermarked streams (of', _before + ')');
     }
   } else {
     // No clean+cached. Keep ALL streams (clean + watermarked) so the user
-    // still gets playback — the score sort below ensures clean ranks
+    // still gets playback â€” the score sort below ensures clean ranks
     // higher than watermarked.  This rescues titles like Project Hail Mary
     // whose only cached option is watermarked.
     const _wm = streams.filter(_v296_isWatermark).length;
     if (_wm > 0) {
-      console.log('[v296] no clean+cached — keeping', _wm, 'watermarked stream(s) as fallback');
+      console.log('[v296] no clean+cached â€” keeping', _wm, 'watermarked stream(s) as fallback');
     }
   }
-  // V337_ROBUST_BAIT_FILTER — fixes V334 misses by checking multiple fields and
+  // V337_ROBUST_BAIT_FILTER â€” fixes V334 misses by checking multiple fields and
   // normalizing the input. V334 only checked stream.name and assumed real
   // newlines; real Torrentio streams sometimes carry literal '\n' sequences
   // (escaped) instead of '\n' (newline char), which slipped past V334.
@@ -588,11 +654,11 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     }
     streams = _v337_kept;
   }
-  // V334_HARD_DROP_CAM — unconditionally drop CAM/HDCAM/TS/TC/TELESYNC/WORKPRINT/
+  // V334_HARD_DROP_CAM â€” unconditionally drop CAM/HDCAM/TS/TC/TELESYNC/WORKPRINT/
   // SCR/DVDSCR quality streams. Unlike V296 (which keeps watermarked streams as
   // last-resort fallback), V334 hard-drops them. Reasoning: CAM-class streams
   // are 100% bait for unreleased titles (1xbet overlays burned in) and Premiumize
-  // cannot resolve them — they cause 30-sec "stream timeout" errors.
+  // cannot resolve them â€” they cause 30-sec "stream timeout" errors.
   const _V334_CAM_QUALITY_RE = /(?:^|\n|\[|\||\s)(cam|hdcam|cam-?rip|camrip|hd-?ts|hdtc|telesync|tsrip|tcrip|workprint|preair|scr|dvdscr|screener|r5)(?:\s|\n|\]|\||$)/i;
   {
     const _v334_before = streams.length;
@@ -604,7 +670,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
       console.log('[v334] dropped', _v334_before - streams.length, 'CAM-quality streams (of', _v334_before + ')');
     }
   }
-  // V157_FILTER_APPLIED — reject streams from other movies (wrong year /
+  // V157_FILTER_APPLIED â€” reject streams from other movies (wrong year /
   // wrong sequel volume) before any sort runs.  Conservative: only
   // applies for movies, never for series.  Reads _v157_currentMeta
   // which is set by the details component on every render.
@@ -621,7 +687,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     }
     streams = _v157_kept;
   }
-  // V161_SERIES_FILTER_APPLIED — same idea as v157, but for series.
+  // V161_SERIES_FILTER_APPLIED â€” same idea as v157, but for series.
   // Reject streams whose pre-SxxExx prefix is missing any of the
   // required series-title words.
   if (_v157_currentMeta.isSeries && _v157_currentMeta.seriesWords && _v157_currentMeta.seriesWords.length > 0) {
@@ -637,7 +703,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     }
     streams = _v161_kept;
   }
-  // PATCH_V16A_COMMENTARY_SINK — local commentary detector. Independent of V12/V9.
+  // PATCH_V16A_COMMENTARY_SINK â€” local commentary detector. Independent of V12/V9.
   // Tested: 'Commentary', 'Audio Commentary', 'Director Commentary',
   // 'Creator Comm', '[COMM]', 'Comm.', 'with commentary', etc.
   const _isCommentaryStream = (s: any): boolean => {
@@ -664,21 +730,21 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     return 2;
   };
 
-  // Sort priority (top→bottom):
-  //   1. Streams with a DIRECT URL (debrid-cached, e.g. Premiumize) — instant play
+  // Sort priority (topâ†’bottom):
+  //   1. Streams with a DIRECT URL (debrid-cached, e.g. Premiumize) â€” instant play
   //   2. Streams with infoHash only (uncached torrent, needs debrid resolve or BT)
-  //   3. Within each group: ENG → MULTI → other languages, then higher seeders first
+  //   3. Within each group: ENG â†’ MULTI â†’ other languages, then higher seeders first
   //
-  // This was the root cause of "all streams failed" after RD premium expired —
+  // This was the root cause of "all streams failed" after RD premium expired â€”
   // the previous sort put infoHash streams FIRST, so every Play click tried RD
   // (which 403'd) instead of a cached Premiumize URL that would have played instantly.
-  // PATCH_V9_SCORED_SORT — produces a stable, consistent best pick across every episode.
+  // PATCH_V9_SCORED_SORT â€” produces a stable, consistent best pick across every episode.
   // English+quality dominate; codec/HDR penalties keep Firestick happy; direct URL is
   // a tiebreaker (instant Premiumize) that never overrides quality.
-  /* v121b-quality-boost */ const QUALITY_PTS: Record<string, number> = { '4K': 800, '1080p': 600, '720p': 400, 'HD': 300, 'SD': 0 };
+  /* v121b-quality-boost */ const QUALITY_PTS: Record<string, number> = { '4K': 400, '1080p': 1200, '720p': 400, 'HD': 300, 'SD': 0 }; /* V453_PREFER_1080P_SDR_QUALITY_PTS */
   const computeScore = (info: ReturnType<typeof parseStreamInfo>, stream: Stream): number => {
     let s = 0;
-    // V296_PM_CACHE_BONUS — huge boost for streams known cached on Premiumize
+    // V296_PM_CACHE_BONUS â€” huge boost for streams known cached on Premiumize
     // and corresponding penalty for known-uncached.  Unknown = neutral.
     // This guarantees we pick a cached stream when one exists, even if a
     // non-cached one has slightly higher technical quality.
@@ -687,7 +753,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
       if (_v296cached === true) s += 5000;
       else if (_v296cached === false) s -= 2000;
     }
-    // V296_WATERMARK_SOFT_PENALTY — keeps watermarked streams in the pool
+    // V296_WATERMARK_SOFT_PENALTY â€” keeps watermarked streams in the pool
     // but ranks them last.  Combined with the conditional hard-drop above,
     // they only ever get picked when no cleaner alternative exists.
     {
@@ -699,9 +765,9 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
       const _V296_CAM_RE = /\b(cam|ts|tc)\b.*\b(rip|new|source)\b|\b(rip|new|source)\b.*\b(cam|ts|tc)\b/i;
       if (_V296_WM_RE.test(_v296wmBlob) || _V296_CAM_RE.test(_v296wmBlob)) s -= 12000;
     }
-    // PATCH_V12_COMMENTARY_PENALTY — guarantee commentary tracks rank LAST
+    // PATCH_V12_COMMENTARY_PENALTY â€” guarantee commentary tracks rank LAST
     if (info.isCommentary) s -= 2000;
-    // PATCH_V18_BLURAY_SERIES_PENALTY — Blu-ray rips of series often have creator commentary as the
+    // PATCH_V18_BLURAY_SERIES_PENALTY â€” Blu-ray rips of series often have creator commentary as the
     // DEFAULT audio track (R&M, Family Guy, Rick & Morty, etc.). expo-av can't
     // switch tracks, so we deprioritize series Blu-rays in favor of WEB-DL/WEBRip
     // which come from streaming services that never include commentary.
@@ -792,12 +858,12 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
         const _v324szM = (_v323blob + ' ' + (info.size || '')).toUpperCase().match(/([\d.]+)\s*GB/);
         const _v324GB = _v324szM ? parseFloat(_v324szM[1]) : 0;
         if (_v324GB >= 15) {
-          s += 6000;
+          s += 0; /* V453_KILL_V324_BIG - was +6000 */
           try {
             false && console.log('[V324] BIG-4K bonus +6000 size=' + _v324GB + 'GB | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
           } catch (_) {}
         } else if (_v324GB >= 8) {
-          s += 2000;
+          s += 0; /* V453_KILL_V324_MID - was +2000 */
           try {
             false && console.log('[V324] MID-4K bonus +2000 size=' + _v324GB + 'GB | ' + _v323blob.slice(0, 80).replace(/\n/g, ' '));
           } catch (_) {}
@@ -835,14 +901,14 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
         }
       }
     }
-    /* v121e-codec-penalty */ /* v127-codec-rebalance */ /* V272_FIRESTICK_HEVC — Firestick's HEVC decoder is unreliable; bump non-HEVC bonus from +100 to +300 and add explicit HEVC penalty. */ /* V319_QUALITY_FIRST */ if (!info.isHEVC) s += 0; else s += 200;
-    /* PATCH_V150_HDR — keep SDR bonus, add real HDR penalty so SDR at any
-       resolution always wins over HDR (display can't tone-map → dark image).
-       V272_SDR_FIRESTICK — Firestick output washes HDR colors on SDR TVs.
-       Bumped HDR penalty -800 → -3000 so SDR ALWAYS wins when both exist,
+    /* v121e-codec-penalty */ /* v127-codec-rebalance */ /* V272_FIRESTICK_HEVC â€” Firestick's HEVC decoder is unreliable; bump non-HEVC bonus from +100 to +300 and add explicit HEVC penalty. */ /* V319_QUALITY_FIRST */ if (!info.isHEVC) s += 0; else s += 200;
+    /* PATCH_V150_HDR â€” keep SDR bonus, add real HDR penalty so SDR at any
+       resolution always wins over HDR (display can't tone-map â†’ dark image).
+       V272_SDR_FIRESTICK â€” Firestick output washes HDR colors on SDR TVs.
+       Bumped HDR penalty -800 â†’ -3000 so SDR ALWAYS wins when both exist,
        while still allowing HDR-only titles to play (cascading fallback). */
     /* V351b_HDR_NUKE */ if (!info.isHDR) s += 0; else s -= 8000;
-    /* V272_DOLBY_VISION — DV is worst on non-DV displays (green/purple tint).
+    /* V272_DOLBY_VISION â€” DV is worst on non-DV displays (green/purple tint).
        Extra penalty so HDR10 beats DV when both are available. */
     {
       const _v272t = ((stream.title || '') + ' ' + (stream.name || '')).toUpperCase();
@@ -868,7 +934,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
         false && console.log('[V339] QxR/r00t penalty -2500 |', String(stream.name || '').slice(0, 80));
       }
     }
-    /* V158_AUDIO_PENALTY — reject lossless / ExoPlayer-incompatible audio.
+    /* V158_AUDIO_PENALTY â€” reject lossless / ExoPlayer-incompatible audio.
        Triggered by the real bug: GOTG 2 picked a BluRay REMUX with
        DTS-HD MA 7.1, and ExoPlayer's AudioTrack.init() failed with
        Config(48000, 6396, 47998).  Penalize -1500 so any AC3/AAC
@@ -888,7 +954,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
       );
       /* V358_KILL_LOSSLESS */ if (_v158_badAudio) s -= 20000;
     }
-    /* PATCH_V146_AUDIO_PENALTY — penalize audio codecs that the Google TV
+    /* PATCH_V146_AUDIO_PENALTY â€” penalize audio codecs that the Google TV
        Streamer / Firestick can't initialize at runtime even when ExoPlayer
        reports format_supported=YES.  Order matters: most specific first. */
     {
@@ -907,19 +973,19 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
         }
     }
     /* v141-cached-first-seeds-matter */
-    // Cached / direct URL boost is now a partition gate — see below.  Keep
+    // Cached / direct URL boost is now a partition gate â€” see below.  Keep
     // a small intra-bucket nudge so tied cached streams prefer ones with
     // a working URL set.
     if (stream.url) s += 50;
     const sd = info.seeders || 0;
-    // V351: boosted seeder cap from +240 to +500 — high-seed streams reliable
-    /* V354_SEEDER_HEAVY — seeders scale up to +1200; a 1000-seed stream
+    // V351: boosted seeder cap from +240 to +500 â€” high-seed streams reliable
+    /* V354_SEEDER_HEAVY â€” seeders scale up to +1200; a 1000-seed stream
        beats a 5-seed one by ~1000pts. Reliability > quality tags. */
     if (sd > 0) s += Math.min(Math.log10(sd + 1) * 320, 1200);
-    /* V354_LOW_SEED_PENALTY — <3 seeders is essentially dead. Nuke them
+    /* V354_LOW_SEED_PENALTY â€” <3 seeders is essentially dead. Nuke them
        from contention so they never win auto-play. */
     if (sd < 3) s -= 10000;
-    /* V351_TPB_BOOST — ThePirateBay + torrentio-with-tpb-in-title streams
+    /* V351_TPB_BOOST â€” ThePirateBay + torrentio-with-tpb-in-title streams
        are the most reliable historically. Boost source explicitly. */
     {
       const _v351t = (info.title || stream.title || stream.name || '').toLowerCase();
@@ -929,7 +995,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
         s += 2000;
       }
     }
-    /* V171_STABLE_TIEBREAKER — add a tiny deterministic value from a
+    /* V171_STABLE_TIEBREAKER â€” add a tiny deterministic value from a
        stable hash of infoHash/URL/title.  Magnitude < 0.1 so it CANNOT
        override any real score difference (quality / codec / language /
        seeders all weigh hundreds of points), but it pins the order of
@@ -948,15 +1014,45 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     }
     return s;
   };
-  // v141: HARD partition — every CACHED stream (stream.url present) sorts
+  // v141: HARD partition â€” every CACHED stream (stream.url present) sorts
   // above every UNCACHED stream, regardless of quality/score.  Inside each
   // bucket the score sort (cached-first, then quality, then seeders) wins.
   // V357_SDR_HARD_PARTITION - SDR always beats HDR
     const _v357_isHdr = (p) => !!(p && p.info && p.info.isHDR);
-    const _v357_cSdr = parsed.filter((p) => !!p.stream.url && !_v357_isHdr(p));
-    const _v357_cHdr = parsed.filter((p) => !!p.stream.url && _v357_isHdr(p));
-    const _v357_uSdr = parsed.filter((p) => !p.stream.url && !_v357_isHdr(p));
-    const _v357_uHdr = parsed.filter((p) => !p.stream.url && _v357_isHdr(p));
+    /* V398_ENGLISH_WALL - language is now the TOPMOST wall. The cached
+       partition used to run above language, so a PM-cached foreign release
+       always beat every uncached English stream (V323's -5000 only reorders
+       WITHIN a bucket). All foreign streams now go to the very back.
+       Detection widened: flag emojis, CJK, MULTi/DUAL, short lang tags. */
+    const _v398IsForeign = (p: any): boolean => {
+      try {
+        if (p && p.info && p.info.isForeign === true) return true;
+        const _raw = String((p && p.stream && ((p.stream as any).title || (p.stream as any).name || (p.stream as any).filename)) || '');
+        if (/[\u0400-\u04FF]/.test(_raw)) return true; /* Cyrillic */
+        if (/[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(_raw)) return true; /* CJK */
+        const _fl = _raw.match(/\uD83C[\uDDE6-\uDDFF]\uD83C[\uDDE6-\uDDFF]/g) || [];
+        const _engFl = ['\uD83C\uDDEC\uD83C\uDDE7', '\uD83C\uDDFA\uD83C\uDDF8', '\uD83C\uDDE8\uD83C\uDDE6', '\uD83C\uDDE6\uD83C\uDDFA', '\uD83C\uDDF3\uD83C\uDDFF', '\uD83C\uDDEE\uD83C\uDDEA'];
+        for (let _i = 0; _i < _fl.length; _i++) { if (_engFl.indexOf(_fl[_i]) === -1) return true; }
+        const _u = _raw.toUpperCase().replace(/MULTI[\s.\-]?SUBS?/g, '');
+        if (/\bVOSTFR\b|\bVOSTA\b|\bVFF\b|\bVFQ\b|\bTRUEFRENCH\b|\bFRENCH\b|\bFRA\b/.test(_u)) return true;
+        if (/\bGERMAN\b|\bDEUTSCH\b|\bGER\b|\bDEU\b/.test(_u)) return true;
+        if (/\bITALIAN\b|\bITALIANO\b|\bITA\b/.test(_u)) return true;
+        if (/\bSPANISH\b|\bESPANOL\b|\bCASTELLANO\b|\bLATINO\b/.test(_u)) return true;
+        if (/\bRUSSIAN\b|\bRUS\b|\bUKRAINIAN\b|\bUKR\b/.test(_u)) return true;
+        if (/\bKOREAN\b|\bKOR\b|\bJAPANESE\b|\bJPN\b|\bCHINESE\b|\bCHS\b|\bCHT\b/.test(_u)) return true;
+        if (/\bPOLISH\b|\bLEKTOR\b|\bTURKISH\b|\bHINDI\b|\bTAMIL\b|\bTELUGU\b|\bDUBLADO\b|\bPORTUGUESE\b|\bDUTCH\b/.test(_u)) return true;
+        if (/\bMULTI\b|\bMULTI[\s.\-]?AUDIO\b|\bDUAL\b|\bDUAL[\s.\-]?AUDIO\b|\bDUBBED\b/.test(_u)) return true;
+        return false;
+      } catch (_) { return false; }
+    };
+    let _v398eng = parsed.filter((p) => !_v398IsForeign(p));
+    const _v398for = parsed.filter((p) => _v398IsForeign(p));
+    const _v357_cSdr = _v398eng.filter((p) => !!p.stream.url && !_v357_isHdr(p));
+    const _v357_cHdr = _v398eng.filter((p) => !!p.stream.url && _v357_isHdr(p));
+    const _v357_uSdr = _v398eng.filter((p) => !p.stream.url && !_v357_isHdr(p));
+    const _v357_uHdr = _v398eng.filter((p) => !p.stream.url && _v357_isHdr(p));
+    const _v398f_c = _v398for.filter((p) => !!p.stream.url);
+    const _v398f_u = _v398for.filter((p) => !p.stream.url);
     /* V370_PRECOMPUTED_SCORES - computeScore (~50 regex tests + ~8 string
        allocations per call) ran INSIDE the sort comparator: ~700 calls for
        59 streams instead of 59.  That was the 850ms JS stall between
@@ -978,11 +1074,106 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     for (const p of _v357_cHdr) parsed.push(p);
     for (const p of _v357_uSdr) parsed.push(p);
     for (const p of _v357_uHdr) parsed.push(p);
+    _v398f_c.sort(_v357_sortScore);
+    _v398f_u.sort(_v357_sortScore);
+    /* V400_ENGLISH_HARD_GUARD - v398b left foreign at the tail of `parsed`,
+       but the play flow uses .find(p => p.stream.url) which walks past
+       English UNCACHED entries (no URL) and lands on the first foreign
+       CACHED entry. Result: German/Russian still auto-played whenever
+       there was no English cached release. Fix: when ANY English stream
+       exists, drop foreign from `parsed` entirely. Foreign is only
+       appended when the English pool is completely empty. */
+    // v471: unconditionally append foreign to tail so ALL streams render.
+    // English still ranks higher due to V323's -5000 foreign penalty upstream.
+    for (const p of _v398f_c) parsed.push(p);
+    for (const p of _v398f_u) parsed.push(p);
+    if (_v398eng.length === 0) {
+      console.log('[V471] no english - only foreign (' + (_v398f_c.length + _v398f_u.length) + ')');
+    } else {
+      console.log('[V471] eng=' + _v398eng.length + ' + foreign appended=' + (_v398f_c.length + _v398f_u.length));
+    }
+    console.log('[V398 ENGLISH WALL] eng=' + _v398eng.length + ' foreign=' + _v398for.length);
+    /* V403_ENG_GROUP_PROMOTE - regex-based english-only release-group boost.
+       Detector on release title alone cannot distinguish an English-titled
+       release with foreign audio from a real English release. Instead we
+       promote streams whose title contains a known English-only p2p/scene
+       group tag to the very front of `parsed`, and demote known multi-
+       audio Blu-Ray packagers (CtrlHD) below them. */
+    try {
+      var _v403GetTitle = function (p) {
+        try {
+          var s = (p && p.stream) || {};
+          return String((s.title || s.name || s.filename || '') + ' ' + ((p && p.info && p.info.title) || '')).toUpperCase();
+        } catch (_) { return ''; }
+      };
+      /* English-only groups: web-p2p and scene releases that virtually
+         never carry foreign audio tracks. Conservative on purpose. */
+      var _v403Whitelist = /\b(?:PSA|EDITH|FLUX|NTB|NTG|PLAYWEB|PLAYHD|GALAXYRG|GALAXYTV|KOGI|TEPES|RUBIK|ETHEL|HONE|TRUFFLE|ELITE|INSPIRE|EMBER|RCVR|SMURF|ORENJI|TERMINAL|MEMENTO|DEFLATE|LAZY|SVA|JYK|KRALIMARKO|TSAHDMI|MZABI|SPARKS|DIMENSION|LOL|KILLERS|ASAP|EVOLVE|FLEET|TBS|RARBG|YIFY|YTS|SUCCESSFULCRAB|MINX|FTP|KOGI|W4F|CAKES|PUBLICHD|CBFM|GGWP|WELP|SYNCOPY|CADAVER|FLUX|MEECH|FGT|SHORTBREHD)\b/;
+      /* Groups whose titles look English but often ship multi-audio Blu-Ray
+         (default track may not be English via debrid transcode). */
+      /* V404_DISCRIP_DEMOTE - widen demote list. These markers mean the
+         file is a whole Blu-Ray disc, season pack, or contains extras
+         (featurettes, commentary, fireside chats, deleted scenes, etc.).
+         When Torrentio matches such a file to a single episode request,
+         it just serves the concatenated disc as-is - which is why South
+         Park S1E1 played through a "fireside chat with the creators"
+         before the episode. Always demote below clean single-file rips. */
+      var _v403Demote = /(?:\bCTRLHD\b|\bIMMERSE\b|\bWIKI\b|\bD-Z0N3\b|\bUSURY\b|\bCOMPLETE\b|\bSEASON\.?\s?\d\b|\bSEASONS?\b|\bBOXSET\b|\bBOX\.SET\b|\bBDMV\b|\bBD(?:25|50|66|100)\b|\bBLURAY-FULL\b|\bDISC\.?\d?\b|\bDISK\.?\d?\b|\bEXTRAS?\b|\bFEATURETTES?\b|\bCOMMENTAR(?:Y|IES)\b|\bBEHIND\.?THE\.?SCENES\b|\bDELETED\.?SCENES\b|\bCREATORS?\b|\bMAKING\.?OF\b|\bREMUX\b|\bUHD\.?BLURAY\.?COMPLETE\b|\bALL\.EPISODES\b)/;
+      var _promo = [];
+      var _demoted = [];
+      var _mid = [];
+      for (var _i = 0; _i < parsed.length; _i++) {
+        var _t = _v403GetTitle(parsed[_i]);
+        /* V404 - check demote FIRST so a disc-rip tagged with a good
+           group name (e.g. S01.COMPLETE.BluRay-PSA) still gets demoted. */
+        if (_v403Demote.test(_t)) _demoted.push(parsed[_i]);
+        else if (_v403Whitelist.test(_t)) _promo.push(parsed[_i]);
+        else _mid.push(parsed[_i]);
+      }
+      /* V405_BEST_QUALITY_FIRST - user wants "english + best quality."
+         Merge promo + mid into one pool and sort by:
+           1) resolution DESC (2160 > 1440 > 1080 > 720 > 480)
+           2) whitelist tie-breaker (english-only group wins)
+           3) cached tie-breaker (has URL wins)
+         Demoted bucket stays at the bottom, also sorted by res DESC. */
+      var _v405Res = function (p) {
+        var t = _v403GetTitle(p);
+        if (/\b2160P\b|\b4K\b|\bUHD\b/.test(t)) return 2160;
+        if (/\b1440P\b|\bQHD\b/.test(t))         return 1440;
+        if (/\b1080P\b|\bFHD\b/.test(t))         return 1080;
+        if (/\b720P\b|\bHD\b/.test(t))           return 720;
+        if (/\b480P\b|\bSD\b/.test(t))           return 480;
+        return 0;
+      };
+      var _v405Cached = function (p) {
+        try { return (p && p.stream && p.stream.url) ? 1 : 0; } catch (_) { return 0; }
+      };
+      var _v405Cmp = function (a, b) {
+        var ra = _v405Res(a), rb = _v405Res(b);
+        if (rb !== ra) return rb - ra;
+        var wa = _v403Whitelist.test(_v403GetTitle(a)) ? 1 : 0;
+        var wb = _v403Whitelist.test(_v403GetTitle(b)) ? 1 : 0;
+        if (wb !== wa) return wb - wa;
+        return _v405Cached(b) - _v405Cached(a);
+      };
+      var _v405Pool = _promo.concat(_mid);
+      _v405Pool.sort(_v405Cmp);
+      _demoted.sort(function (a, b) { return _v405Res(b) - _v405Res(a); });
+      parsed.length = 0;
+      for (var _k = 0; _k < _v405Pool.length;   _k++) parsed.push(_v405Pool[_k]);
+      for (var _k = 0; _k < _demoted.length;    _k++) parsed.push(_demoted[_k]);
+      try {
+        console.log('[V405 QUALITY] top3=' + _v405Pool.slice(0, 3).map(function (p) {
+          return _v405Res(p) + 'p' + (_v405Cached(p) ? '(c)' : '');
+        }).join(', ') + ' | demoted=' + _demoted.length);
+      } catch (_) {}
+      console.log('[V404 PROMOTE] promoted=' + _promo.length + ' demoted=' + _demoted.length + ' mid=' + _mid.length);
+    } catch (_) {}
     console.log('[V357 PARTITION]', 'cached_sdr=' + _v357_cSdr.length, 'cached_hdr=' + _v357_cHdr.length, 'uncached_sdr=' + _v357_uSdr.length, 'uncached_hdr=' + _v357_uHdr.length);
   if (parsed.length > 0) {
     const _top = parsed[0];
     const _topInfo = _top.info;
-    /* PATCH_V154_LOG_SORT — content mismatch trace */
+    /* PATCH_V154_LOG_SORT â€” content mismatch trace */
     try {
       const _v154Req = (((content as any)?.name || (content as any)?.title || (name as any) || '') as string);
       const _v154Pick = ((_top.stream?.title || _top.stream?.name || '') as string);
@@ -996,7 +1187,7 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
     console.log('[SORT v141_V367] picked top:', _topInfo.quality || '?', 'cached=' + (!!_top.stream.url), 'seeders=' + (_topInfo.seeders || 0), 'lang=' + (_topInfo.language || '?'), '| cached_n=' + (_v357_cSdr.length + _v357_cHdr.length), 'uncached_n=' + (_v357_uSdr.length + _v357_uHdr.length));
   }
 
-  // PATCH_V16A_COMMENTARY_SINK — partition commentary tracks to the end of the result.
+  // PATCH_V16A_COMMENTARY_SINK â€” partition commentary tracks to the end of the result.
   // Whatever score-based sort ran above, commentary always sinks last so
   // the Play button (sorted[0]) and auto-play never select a commentary
   // track even if it scored highest by language/quality/seeders.
@@ -1010,12 +1201,12 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
 }
 
 // Stream Card Component - 3-row vertical layout (PATCH_V19A_STREAMCARD_MEMO React.memo)
-// V302_STREAMCARD_REDESIGN_BUILD_TAG — top-center play button, removes the
+// V302_STREAMCARD_REDESIGN_BUILD_TAG â€” top-center play button, removes the
 // "Stream" label row, moves size into the bottom badge row right of
 // quality, bumps card font sizes for legibility on TV/Firestick at 10ft.
 //
 // Layout:
-//   [        ▶  (large, centered, gold)        ]
+//   [        â–¶  (large, centered, gold)        ]
 //   [  [LANG]  [QUALITY]  9.1 GB                ]
 //
 // Verification: findstr /C:"V302_STREAMCARD_REDESIGN_BUILD_TAG"
@@ -1030,13 +1221,13 @@ const StreamCard = React.memo(function StreamCardInner({
   onPress: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
-  const { quality, size, language, isForeign, isCommentary } = parseStreamInfo(stream);
-  // V301/V302: source + seeders intentionally NOT destructured — they used
+  const { quality, size, language, isForeign, isCommentary, languages } = parseStreamInfo(stream) as any;
+  // V301/V302: source + seeders intentionally NOT destructured â€” they used
   // to surface provider names (e.g. "Torrentio") and seed counts which leak
   // torrent terminology to end users.  parseStreamInfo still computes them
   // for use by the sort/score logic, but the card no longer renders them.
 
-  // V277_STREAMS_NO_OVERSCROLL — when the user is on a stream card and
+  // V277_STREAMS_NO_OVERSCROLL â€” when the user is on a stream card and
   // presses DOWN, Android TV searches for a focusable below.  Because
   // there's nothing below the streams row but ScrollView empty space,
   // the system was scrolling the ScrollView a few pixels further before
@@ -1057,38 +1248,33 @@ const StreamCard = React.memo(function StreamCardInner({
       onPress={onPress}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
-      // V277_STREAMS_NO_OVERSCROLL — block DOWN so ScrollView can't shift.
+      // V277_STREAMS_NO_OVERSCROLL â€” block DOWN so ScrollView can't shift.
       nextFocusDown={selfTag ?? undefined}
     >
-      {/* PATCH_V18_TOPRIGHT_BUBBLE — gold chat-bubble at top-right when stream is commentary */}
+      {/* PATCH_V18_TOPRIGHT_BUBBLE â€” gold chat-bubble at top-right when stream is commentary */}
       {isCommentary && (
         <View style={styles.commentaryBadgeTopRight} pointerEvents="none">
           <Ionicons name="chatbubble" size={12} color="#B8A05C" />
         </View>
       )}
-      {/* V302: Top — large centered play button. */}
-      <View style={styles.streamPlayTop}>
-        <Ionicons name="play-circle" size={42} color="#B8A05C" />
+            {/* v474 TOP row: quality | play | size, centered */}
+      <View style={styles.v472cTopRow}>
+        <View style={[styles.qualityBadge, quality === '4K' && styles.qualityBadge4K]}>
+          <Text style={styles.qualityText}>{quality}</Text>
+        </View>
+        <Ionicons name="play-circle" size={34} color="#B8A05C" style={styles.v474PlayIcon} />
+        {size ? (<Text style={styles.v472cSizeText} numberOfLines={1}>{size}</Text>) : null}
       </View>
-      
-      {/* V302: Bottom — single row: language, quality, size. */}
+      {/* v472c BOTTOM row: language flag pills */}
       <View style={styles.streamCardFooter}>
-        <View style={styles.streamBadgeRow}>
-          <View style={[
-            styles.langBadge, 
-            isForeign ? styles.langBadgeForeign : styles.langBadgeEnglish
-          ]}>
-            <Text style={[
-              styles.langBadgeText,
-              isForeign ? styles.langBadgeTextForeign : styles.langBadgeTextEnglish
-            ]}>{language}</Text>
-          </View>
-          <View style={[styles.qualityBadge, quality === '4K' && styles.qualityBadge4K]}>
-            <Text style={styles.qualityText}>{quality}</Text>
-          </View>
-          {size ? (
-            <Text style={styles.streamSizeText} numberOfLines={1}>{size}</Text>
-          ) : null}
+        <View style={styles.v472cFlagRow}>
+          {(Array.isArray(languages) && languages.length > 0 ? languages : [language]).map(function(f, i) {
+            return (
+              <View key={i} style={[styles.langBadge, isForeign ? styles.langBadgeForeign : styles.langBadgeEnglish]}>
+                <Text style={styles.langBadgeText}>{f}</Text>
+              </View>
+            );
+          })}
         </View>
       </View>
     </Pressable>
@@ -1098,7 +1284,7 @@ const StreamCard = React.memo(function StreamCardInner({
 // Episode Card Component
 // Placeholder component for missing posters/thumbnails
 function ComingSoonPlaceholder({ width, height }: { width: number | string; height: number | string }) {
-  // V274_LOGO_PLACEHOLDER — strip "Coming Soon" wordmark, show ONLY the
+  // V274_LOGO_PLACEHOLDER â€” strip "Coming Soon" wordmark, show ONLY the
   // Privastream logo centered on a dark card so the same placeholder is
   // reused as a skeleton everywhere (poster fallbacks, missing thumbs,
   // cold-boot skeleton).
@@ -1123,10 +1309,10 @@ function ComingSoonPlaceholder({ width, height }: { width: number | string; heig
   );
 }
 
-// PATCH_V244_MEMO — EpisodeCard re-renders on every parent state change.
+// PATCH_V244_MEMO â€” EpisodeCard re-renders on every parent state change.
 // With ~20+ episodes per series page, that's 20+ Pressable re-renders per
 // D-pad tick on Firestick.  React.memo skips when episode/onPress identity
-// doesn't change — Episodes are passed by reference from a memoized list.
+// doesn't change â€” Episodes are passed by reference from a memoized list.
 const EpisodeCard = React.memo(function EpisodeCard({
   episode,
   fallbackPoster,
@@ -1147,7 +1333,7 @@ const EpisodeCard = React.memo(function EpisodeCard({
   // v124ab-inject-useref: declare pressableRef + retry-focus effect for EpisodeCard.
   /* v128-focus-cancel */
   const pressableRef = useRef<any>(null);
-  // V278_EPISODES_NO_OVERSCROLL — pin nextFocusDown to self so Android TV
+  // V278_EPISODES_NO_OVERSCROLL â€” pin nextFocusDown to self so Android TV
   // doesn't shift the ScrollView past the episode row.  Same approach as
   // V277 for StreamCard.
   const [selfTag, setSelfTag] = useState<number | null>(null);
@@ -1214,7 +1400,7 @@ const EpisodeCard = React.memo(function EpisodeCard({
   }, [autoFocus, episode.episode]);
   const thumbUri = episode.thumbnail || fallbackPoster;
 
-  /* V176C_EPISODE_MENU — press-timing long-press (Pressable.onLongPress
+  /* V176C_EPISODE_MENU â€” press-timing long-press (Pressable.onLongPress
      is unreliable on Firestick / Android TV) opens a Stremio-style menu
      for this episode.  The id must match what the player writes to
      AsyncStorage[privastream_watched]. */
@@ -1228,7 +1414,7 @@ const EpisodeCard = React.memo(function EpisodeCard({
     if (!id) return;
     const title = `S${(episode as any).season ?? '?'} \u00B7 E${(episode as any).episode ?? '?'}`
       + ((episode as any).name ? ` \u2014 ${(episode as any).name}` : '');
-    /* V176K_POPOVER_MOUNTED — episodes use a custom action set (no Library). */
+    /* V176K_POPOVER_MOUNTED â€” episodes use a custom action set (no Library). */
     const actions: any[] = [];
     const hasProg = _v176cV176HasProg(id);
     if (hasProg) {
@@ -1249,7 +1435,7 @@ const EpisodeCard = React.memo(function EpisodeCard({
     v176kEmitOpen({ anchor, title, actions });
   }, [episode, isWatched, onMarkUnwatched, _v176cEpId]);
 
-  /* V176I_EPISODE_PAINT — ref-of-latest-opener so the v173 dispatcher
+  /* V176I_EPISODE_PAINT â€” ref-of-latest-opener so the v173 dispatcher
      never holds a stale watched-state closure between long-presses. */
   const _v176iEpLpRef = useRef<(() => void) | null>(null);
   _v176iEpLpRef.current = _v176cOpenEpMenu;
@@ -1283,10 +1469,10 @@ const EpisodeCard = React.memo(function EpisodeCard({
       onPressIn={_v176cPressIn}
       onPressOut={_v176cPressOut}
       onLongPress={_v176cOpenEpMenu}
-      // V278_EPISODES_NO_OVERSCROLL — stop Android TV from shifting the
+      // V278_EPISODES_NO_OVERSCROLL â€” stop Android TV from shifting the
       // ScrollView past the episode row when DOWN is pressed.
       nextFocusDown={selfTag ?? undefined}
-      /* V176H2_EPISODE_FOCUS_MERGE — ONE merged onFocus that does BOTH
+      /* V176H2_EPISODE_FOCUS_MERGE â€” ONE merged onFocus that does BOTH
          the v135 focus-state bookkeeping AND the v173 long-press
          registration.  The previous build had TWO onFocus props on the
          same Pressable, so React dropped the v173 registration and
@@ -1298,7 +1484,7 @@ const EpisodeCard = React.memo(function EpisodeCard({
         hasFocusedRef.current = true;
         focusGrabbedOnceRef.current = true;
         console.log('[FOCUS v135] onFocus ep=' + episode.episode + ' (one-shot guard set)');
-        /* V176I_EPISODE_PAINT — register a stable wrapper that reads
+        /* V176I_EPISODE_PAINT â€” register a stable wrapper that reads
            the latest opener from the ref, so toggling watched in the
            menu doesn't strand the next long-press with a stale value. */
         try { _v173RegLP(() => { try { _v176iEpLpRef.current && _v176iEpLpRef.current(); } catch (_) {} }); } catch (_) {}
@@ -1325,7 +1511,7 @@ const EpisodeCard = React.memo(function EpisodeCard({
         ) : (
           <ComingSoonPlaceholder width="100%" height={90} />
         )}
-        {/* V176I_EPISODE_PAINT — also consult the in-memory _v172WatchedSet
+        {/* V176I_EPISODE_PAINT â€” also consult the in-memory _v172WatchedSet
             so Mark-as-Watched lights up the gold check the instant the menu
             closes, no parent state refresh required. */}
         {(isWatched || (!!_v176cEpId && _v176cV172IsWatched(_v176cEpId))) && (
@@ -1369,7 +1555,7 @@ export default function DetailsScreen() {
     resumeEpisode,
     // Display data passed via route params for INSTANT rendering
     name: paramName, poster: paramPoster,
-    // v238 — accept backdrop + logo from caller for INSTANT detail-page paint
+    // v238 â€” accept backdrop + logo from caller for INSTANT detail-page paint
     background: paramBackground,
     logo: paramLogo,
     autoPlay: autoPlayParam,
@@ -1418,14 +1604,39 @@ export default function DetailsScreen() {
     const s = parts[1] || '';
     const e = parts[2] || '';
     console.log('[BACK-UI v124w] fired idStr=' + idStr + ' season=' + s + ' episode=' + e);
+    /* V386_BACK_TO_SERIES_ROOT - Continue Watching (and other deep links)
+       push the EPISODE page directly from Discover, so the series root is
+       NOT underneath us in the stack and a plain router.back() lands on
+       Discover. Inspect the nav state: if the previous route IS this
+       series' root, back() as before; otherwise REPLACE this episode page
+       with the series root so back always lands on episode selection. */
+    const _v386Base = parts[0] || idStr;
+    let _v386PrevIsRoot = false;
     try {
-      router.back();
-      // After back lands us on RMroot, push focus params so the selector
-      // highlights the just-watched episode.
-      setTimeout(() => {
-        try { router.setParams({ selectedSeason: s, selectedEpisode: e } as any); }
-        catch (err) { console.log('[BACK-UI v124w] setParams error', err); }
-      }, 80);
+      const _st: any = (navigation as any).getState ? (navigation as any).getState() : null;
+      const _routes: any[] = (_st && _st.routes) ? _st.routes : [];
+      const _idx = (typeof _st?.index === 'number') ? _st.index : (_routes.length - 1);
+      const _prev = _idx > 0 ? _routes[_idx - 1] : null;
+      const _prevId = (_prev && _prev.params) ? decodeURIComponent(String((_prev.params as any).id || '')) : '';
+      _v386PrevIsRoot = !!_prev && _prevId === _v386Base;
+      console.log('[V386_BACK] prevId=' + _prevId + ' base=' + _v386Base + ' prevIsRoot=' + _v386PrevIsRoot);
+    } catch (_e386) { console.log('[V386_BACK] state inspect failed'); }
+    try {
+      if (_v386PrevIsRoot) {
+        router.back();
+        // After back lands us on RMroot, push focus params so the selector
+        // highlights the just-watched episode.
+        setTimeout(() => {
+          try { router.setParams({ selectedSeason: s, selectedEpisode: e } as any); }
+          catch (err) { console.log('[BACK-UI v124w] setParams error', err); }
+        }, 80);
+      } else {
+        console.log('[V386_BACK] no series root beneath - replacing with root');
+        router.replace({
+          pathname: `/details/series/${encodeURIComponent(_v386Base)}`,
+          params: { selectedSeason: s, selectedEpisode: e },
+        } as any);
+      }
       return true;
     } catch (err) {
       console.log('[BACK-UI v124w] router.back error', err);
@@ -1434,9 +1645,9 @@ export default function DetailsScreen() {
   }, [id, type, router, navigation]);
 
   const handleBack = useCallback(() => {
-    // V190_BACK_CANCEL — drop in-flight stream fetch state-writes
+    // V190_BACK_CANCEL â€” drop in-flight stream fetch state-writes
     try { (useContentStore.getState() as any).cancelInFlightStreams?.(); } catch (_) {}
-    // V186_BACK_INSTANT — hide heavy tree IMMEDIATELY, navigate on next frame.
+    // V186_BACK_INSTANT â€” hide heavy tree IMMEDIATELY, navigate on next frame.
     /* V361_FAST_UNMOUNT - clear heavy state BEFORE router.back() so React
    has less to tear down (was 2960ms UNMOUNT). Drop stream arrays,
    watchedEpisodes, sortedStreams so their child components can unmount
@@ -1462,10 +1673,10 @@ export default function DetailsScreen() {
   }, [goToSeriesRootWithFocus, router]);
 
   useEffect(() => {
-    // PATCH_V34_DETAILS_BACK — back ALWAYS does something visible:
-    //   1. Series-episode page → goToSeriesRootWithFocus() handles it (returns true)
-    //   2. Movies / series-roots → router.back() to previous screen
-    //   3. Deep-linked (empty stack) → fall back to Discover tab
+    // PATCH_V34_DETAILS_BACK â€” back ALWAYS does something visible:
+    //   1. Series-episode page â†’ goToSeriesRootWithFocus() handles it (returns true)
+    //   2. Movies / series-roots â†’ router.back() to previous screen
+    //   3. Deep-linked (empty stack) â†’ fall back to Discover tab
     //   4. ALWAYS return true so Android can't force-exit
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       /* v134-back-diag + V186_BACK_INSTANT */
@@ -1504,13 +1715,13 @@ export default function DetailsScreen() {
 
 
   
-  // Use zustand SELECTORS — only re-render when these specific fields change
+  // Use zustand SELECTORS â€” only re-render when these specific fields change
   // This prevents re-renders from unrelated store changes (discover data, addons, etc.)
   const streams = useContentStore(s => s.streams);
   const isLoadingStreams = useContentStore(s => s.isLoadingStreams);
   const fetchStreams = useContentStore(s => s.fetchStreams);
-  // PATCH_V19A_SORTED_MEMO — memoize the sorted streams list.
-  // V157_SORTED_MOVED — sortedStreams useMemo relocated to AFTER content
+  // PATCH_V19A_SORTED_MEMO â€” memoize the sorted streams list.
+  // V157_SORTED_MOVED â€” sortedStreams useMemo relocated to AFTER content
   // declaration so the meta filter has the current content's title+year
   // in scope.
   const library = useContentStore(s => s.library);
@@ -1520,7 +1731,7 @@ export default function DetailsScreen() {
   
   // Try meta cache first (instant), then route params, then bare minimum
   const cachedMeta = id ? getMetaCache(id) : null;
-  // V306_INITIAL_BACKDROP_BUILD_TAG — wire the background + logo router
+  // V306_INITIAL_BACKDROP_BUILD_TAG â€” wire the background + logo router
   // params into initialContent so the backdrop image renders on the FIRST
   // frame instead of staying blank until the /meta network call returns
   // (typically 5-8s on cold cache).  V238 passed these params from
@@ -1540,10 +1751,10 @@ export default function DetailsScreen() {
   
   const [content, setContent] = useState<ContentItem | null>(initialContent);
 
-  // PATCH_V244_META_HYDRATE — on cold start, in-memory _metaCache is
+  // PATCH_V244_META_HYDRATE â€” on cold start, in-memory _metaCache is
   // empty so Details would paint with just (paramName + paramPoster)
   // while waiting ~7s for the network /meta call.  Try the 24h disk
-  // cache FIRST — typically yields a full meta object in ~30-80ms,
+  // cache FIRST â€” typically yields a full meta object in ~30-80ms,
   // so the user sees cast / plot / episodes almost immediately.
   // Network refresh still runs after to pull any updates.
   useEffect(() => {
@@ -1560,7 +1771,7 @@ export default function DetailsScreen() {
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-  // V157_META_INJECTED_HERE — synchronously update the module-level meta
+  // V157_META_INJECTED_HERE â€” synchronously update the module-level meta
   // holder BEFORE the sort useMemo runs.  This guarantees the title/year
   // guard in sortStreamsByLanguage sees the current content's name+year
   // on every render.
@@ -1597,7 +1808,7 @@ export default function DetailsScreen() {
   }, [streams, _v157_currentMeta.title, _v157_currentMeta.year, _v157_currentMeta.isMovie]);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
-  // V186_BACK_INSTANT — when true, the Details tree renders a flat placeholder
+  // V186_BACK_INSTANT â€” when true, the Details tree renders a flat placeholder
   // so React Native drops the heavy subtree (BackgroundImage + FlatLists +
   // dozens of FocusableButtons) on the SAME frame, then router.back() fires
   // on the next animation frame.  Result: back feels instant on Firestick.
@@ -1664,7 +1875,7 @@ export default function DetailsScreen() {
   //   1) explicit paramSelectedEpisode (set by goToSeriesRootWithFocus
   //      when the user backs out of an episode page)
   //   2) highest-numbered watched episode in the current season
-  //   3) null → first card takes focus (FlatList default)
+  //   3) null â†’ first card takes focus (FlatList default)
   const targetEpisodeNumber = useMemo(() => {
     if (type !== 'series') return null;
     const fromParam = paramSelectedEpisode != null
@@ -1688,7 +1899,7 @@ export default function DetailsScreen() {
     return idx >= 0 ? idx : 0;
   }, [episodesForSeason, targetEpisodeNumber]);
 
-  /* V139_SERIES_EPISODE_PREWARM — when the user lands on a series-root
+  /* V139_SERIES_EPISODE_PREWARM â€” when the user lands on a series-root
      page, kick off prefetchStreams for the auto-focused episode in the
      background.  v170b's registry means the click will await the same
      in-flight promise -- streams paint instantly with no spinner. */
@@ -1712,24 +1923,24 @@ export default function DetailsScreen() {
       // Only fetch meta for series (need episodes) or if missing background
       const needsMeta = type === 'series' || !content?.background;
       if (needsMeta) {
-        // PATCH_V39_DEFER_MOUNT_IO — defer meta fetch off the mount path
+        // PATCH_V39_DEFER_MOUNT_IO â€” defer meta fetch off the mount path
         setTimeout(() => { try { loadContent(); } catch (_) {} }, 0);
       }
     }
-    // PATCH_V39_DEFER_MOUNT_IO — defer library fetch off the mount path
+    // PATCH_V39_DEFER_MOUNT_IO â€” defer library fetch off the mount path
     setTimeout(() => { try { fetchLibrary(); } catch (_) {} }, 0);
     if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
-      // V188_NO_ZERO_FLASH — sync-seed loading state so the very first render
+      // V188_NO_ZERO_FLASH â€” sync-seed loading state so the very first render
       // shows "Finding Streams..." instead of momentarily flashing "0 Streams"
       // (which can happen if streams=[] is left over from a prior failed load).
       try { (useContentStore as any).setState({ streams: [], isLoadingStreams: true, error: null }); } catch (_) {}
-      // PATCH_V37_DEFER_STREAMS — defer to next tick so the details page paints
+      // PATCH_V37_DEFER_STREAMS â€” defer to next tick so the details page paints
       // instantly; streams load in the background and populate as they arrive.
       const _v37StreamsTimer = setTimeout(() => { try { fetchStreams(type, id); } catch (_) {} }, 0);
     }
   }, [id, type]);
 
-  /* V180_PREWARM — when sortedStreams populates, fire-and-forget POST to
+  /* V180_PREWARM â€” when sortedStreams populates, fire-and-forget POST to
      /api/stream/start/<infoHash> for the top 3 cached candidates.  The
      backend (v179b) writes the resolved PM URL to Redis, so by the time
      the user clicks Play the status poll lands on "ready" immediately
@@ -1755,7 +1966,7 @@ export default function DetailsScreen() {
         if (!_hash || _hash.length !== 40) continue;
         if (_v180_prewarmedRef.current.has(_hash)) continue;
         _v180_prewarmedRef.current.add(_hash);
-        // Fire-and-forget — never await, never bubble errors.
+        // Fire-and-forget â€” never await, never bubble errors.
         try {
           fetch(`${_backend}/api/stream/start/${_hash}`, {
             method: "POST",
@@ -1786,7 +1997,7 @@ export default function DetailsScreen() {
     }
   }, [seasons, paramSelectedSeason]);
 
-  // Hardware back (Firestick remote / Android back) — when the user reached
+  // Hardware back (Firestick remote / Android back) â€” when the user reached
   // this detail page via Play-Next autoplay, intercept back so they go to
   // the episodes list (series root) instead of the previous episode's page.
   // Matches Stremio: back from next-up screen = back to the show, not to EP-N-1.
@@ -1821,7 +2032,7 @@ export default function DetailsScreen() {
     }
   }, [content, library]);
 
-  // Load watched episodes from AsyncStorage — reload on EVERY screen focus
+  // Load watched episodes from AsyncStorage â€” reload on EVERY screen focus
   // so checkmarks appear immediately after returning from the player
   useFocusEffect(
     useCallback(() => {
@@ -1853,10 +2064,10 @@ export default function DetailsScreen() {
 
   // AUTO-PLAY: When navigated from "Play Next", auto-select best stream from
   // the FRESH stream list. We deliberately do NOT carry over the previous
-  // episode's torrent hash — Stremio doesn't either. Each episode click does
+  // episode's torrent hash â€” Stremio doesn't either. Each episode click does
   // a clean Torrentio scrape and picks the best (debrid-cached, top seeded) stream.
   //
-  // We wait for `content` to populate before firing — this ensures the player's
+  // We wait for `content` to populate before firing â€” this ensures the player's
   // loading screen has the series backdrop/logo (not a blank black screen).
   const streamsLoadedFreshRef = useRef(false);
   const autoPlayAttemptsRef = useRef(0);
@@ -1864,7 +2075,7 @@ export default function DetailsScreen() {
 
   // CRITICAL: Reset the auto-play state when the episode id changes.
   // Expo Router uses router.replace() between episodes which re-renders this
-  // component instead of unmounting it — so refs persist and would otherwise
+  // component instead of unmounting it â€” so refs persist and would otherwise
   // block the second/third/Nth auto-transition. Resetting here makes every
   // new id behave like a fresh mount.
   useEffect(() => {
@@ -1898,10 +2109,10 @@ export default function DetailsScreen() {
       const bestStream = sorted[0];
       if (bestStream) {
         console.log('[AUTOPLAY] Content ready:', contentReady, '- selecting best stream for', id, '->', bestStream.title || bestStream.name);
-        // V274_SEAMLESS_CW_LOADING — was clearing autoPlay param + waiting
+        // V274_SEAMLESS_CW_LOADING â€” was clearing autoPlay param + waiting
         // 200ms before navigating, which caused the overlay condition
-        // `autoPlayParam === 'true'` to flip false → details flash → 200ms
-        // gap → player loading screen.  Now: keep the loading overlay up,
+        // `autoPlayParam === 'true'` to flip false â†’ details flash â†’ 200ms
+        // gap â†’ player loading screen.  Now: keep the loading overlay up,
         // fire navigation IMMEDIATELY.  The details page unmounts on the
         // navigation tick and the player's loading screen takes over with
         // no visible gap.
@@ -1915,7 +2126,7 @@ export default function DetailsScreen() {
     }
   }, [streams, isLoadingStreams, autoPlayParam, id, content]);
 
-  // V297_PM_KEY_SEED_BUILD_TAG — verification marker, never rendered.
+  // V297_PM_KEY_SEED_BUILD_TAG â€” verification marker, never rendered.
   //
   // Seeds the user's Premiumize API key into AsyncStorage on first app run
   // so on-device PM resolution works without requiring manual entry in the
@@ -1929,7 +2140,7 @@ export default function DetailsScreen() {
   //   1. If '@pm_key_v1' already has a non-empty value, do nothing.
   //   2. Else, write the build-constant key and set '@pm_key_v297_seeded=1'.
   //   3. If the user later clears the key via the Privacy Settings UI, the
-  //      seed flag remains set so we do NOT re-seed — user retains control.
+  //      seed flag remains set so we do NOT re-seed â€” user retains control.
   const _V297_PM_KEY_SEED_BUILD_TAG = 'V297_PM_KEY_SEED_BUILD_TAG';
   void _V297_PM_KEY_SEED_BUILD_TAG;
   useEffect(() => {
@@ -1943,14 +2154,14 @@ export default function DetailsScreen() {
         }
         const _existing = await AsyncStorage.getItem('@pm_key_v1');
         if (_existing && _existing.trim()) {
-          // Key already present — just record that we've completed the seed
+          // Key already present â€” just record that we've completed the seed
           // step so we never overwrite it on future boots.
           if (!_cancelled) {
             await AsyncStorage.setItem('@pm_key_v297_seeded', '1');
           }
           return;
         }
-        // No key on device — seed it now.
+        // No key on device â€” seed it now.
         if (_cancelled) return;
         await AsyncStorage.setItem('@pm_key_v1', 'mfdjfcfm9cnq757s');
         await AsyncStorage.setItem('@pm_key_v297_seeded', '1');
@@ -1962,7 +2173,7 @@ export default function DetailsScreen() {
     return () => { _cancelled = true; };
   }, []);
 
-  // V296_PM_CACHE_CHECK — when streams load, POST every infoHash (up to 50)
+  // V296_PM_CACHE_CHECK â€” when streams load, POST every infoHash (up to 50)
   // to Premiumize's /cache/check endpoint.  Results populate _v296_cacheMap
   // which the sort + score logic above reads.  Side effect: sets cacheTick
   // to trigger a re-sort once the response arrives.
@@ -1978,7 +2189,7 @@ export default function DetailsScreen() {
       try {
         const _pmKey = await AsyncStorage.getItem('@pm_key_v1');
         if (!_pmKey || !_pmKey.trim()) {
-          console.log('[v296] no PM key on device — skipping cache check');
+          console.log('[v296] no PM key on device â€” skipping cache check');
           return;
         }
         const _hashes: string[] = [];
@@ -2040,7 +2251,7 @@ export default function DetailsScreen() {
       if (topStream?.infoHash && topStream.infoHash !== prewarmedRef.current) {
         prewarmedRef.current = topStream.infoHash;
         console.log(`[PREWARM v291] Kicking client-side PM resolve for top stream: ${topStream.infoHash}`);
-        // V291 — was api.stream.prewarm() which hit a now-defunct backend
+        // V291 â€” was api.stream.prewarm() which hit a now-defunct backend
         // endpoint after middle-isolation.  api.stream.start() in v287
         // client.ts kicks _kickPmResolve() on-device when a PM key is
         // present and returns immediately.  Result: PM URL is cached
@@ -2060,11 +2271,11 @@ export default function DetailsScreen() {
     }
   }, [streams, isLoadingStreams]);
 
-  // PATCH_V151_PRERESOLVE — superset of v148.  Fire start_and_wait on the
+  // PATCH_V151_PRERESOLVE â€” superset of v148.  Fire start_and_wait on the
   // FIRST stream batch (no isLoadingStreams gate) and pre-warm the top TWO
   // hashes in parallel so a late-arriving better stream is also ready.
   //
-  // V291_DISABLED — this entire hook hits /api/stream/start_and_wait which
+  // V291_DISABLED â€” this entire hook hits /api/stream/start_and_wait which
   // is a backend endpoint that can no longer resolve PM after middle-
   // isolation.  Each call hangs for the full 8s abort budget.  Killing it
   // when a Premiumize key is present (the v291 hook above handles client-
@@ -2072,12 +2283,12 @@ export default function DetailsScreen() {
   const preresolvedHashesRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!streams || streams.length === 0) return;
-    // V291 — bail out entirely when PM key is set; v291 prewarm handles it.
+    // V291 â€” bail out entirely when PM key is set; v291 prewarm handles it.
     (async () => {
       try {
         const _pmKey = await AsyncStorage.getItem('@pm_key_v1');
         if (_pmKey) {
-          false && console.log('[PRERESOLVE v151] skipped — PM key present, v291 prewarm handles this');
+          false && console.log('[PRERESOLVE v151] skipped â€” PM key present, v291 prewarm handles this');
           return;
         }
       } catch (_) {}
@@ -2086,18 +2297,18 @@ export default function DetailsScreen() {
     // Pre-resolve top 2 candidates that don't already have a URL
     const targets = sorted.slice(0, 4).filter((s: any) => s && s.infoHash && !s.url).slice(0, 2);
     if (targets.length === 0) {
-      // All top candidates already cached — record their hashes and skip
+      // All top candidates already cached â€” record their hashes and skip
       for (const s of sorted.slice(0, 2)) {
         if (s?.infoHash) preresolvedHashesRef.current.add(s.infoHash);
       }
       return;
     }
-    // V291 — wrap the entire backend-fetch loop in an async PM-key check
+    // V291 â€” wrap the entire backend-fetch loop in an async PM-key check
     // so we don't fire the dead start_and_wait endpoint at all.
     (async () => {
       try {
         const _pmKey = await AsyncStorage.getItem('@pm_key_v1');
-        if (_pmKey) return; // V291 — bail
+        if (_pmKey) return; // V291 â€” bail
       } catch (_) {}
     for (const tgt of targets) {
       if (preresolvedHashesRef.current.has(tgt.infoHash)) continue;
@@ -2141,7 +2352,7 @@ export default function DetailsScreen() {
         }
       })();
     }
-    })(); // V291 — close PM-key gate IIFE
+    })(); // V291 â€” close PM-key gate IIFE
   }, [streams, id]);
 
   const loadContent = async () => {
@@ -2153,13 +2364,13 @@ export default function DetailsScreen() {
       setContent(data);
     } catch (error) {
       console.log('Failed to fetch meta:', error);
-      // Keep using the initial content from params — already set
+      // Keep using the initial content from params â€” already set
     }
     setIsLoadingContent(false);
   };
 
   const handleStreamSelect = async (stream: Stream) => {
-    // V298_INLINE_PM_KEY_SEED_BUILD_TAG — eliminate the race between V297's
+    // V298_INLINE_PM_KEY_SEED_BUILD_TAG â€” eliminate the race between V297's
     // mount useEffect (async, may not finish before user taps Play) and the
     // PM short-circuit in client.ts.  We re-check + write the key INLINE,
     // awaited, before any PM-dependent code path runs.  After this returns,
@@ -2185,7 +2396,7 @@ export default function DetailsScreen() {
     if ((stream as any).info_hash && !stream.infoHash) {
       stream = { ...stream, infoHash: (stream as any).info_hash } as any;
     }
-    // V293_FORCE_FRESH_PM — when a Premiumize key is configured and the
+    // V293_FORCE_FRESH_PM â€” when a Premiumize key is configured and the
     // chosen stream has an infoHash, ignore any cached direct URL (it may
     // be a stale PM link that expo-video will reject with "unable to
     // play video") and force the player's infoHash branch which carries a
@@ -2205,7 +2416,7 @@ export default function DetailsScreen() {
       const _v293_pmKey = await AsyncStorage.getItem('@pm_key_v1');
       if (_v293_pmKey && stream.infoHash) {
         if (stream.url) {
-          console.log('[v295] PM+infoHash present — stripping url (was', String(stream.url).slice(0,60), ') to force fresh on-device PM resolve');
+          console.log('[v295] PM+infoHash present â€” stripping url (was', String(stream.url).slice(0,60), ') to force fresh on-device PM resolve');
           stream = { ...stream, url: undefined } as any;
         }
         // Always wipe local PM cache for this infoHash before re-resolve.
@@ -2247,23 +2458,23 @@ export default function DetailsScreen() {
         const _data = await _resp.json().catch(() => ({}));
         console.log('[DETAILS v129] upgrade-race status=', _data && _data.status);
         if (_data && _data.status === 'ready' && _data.debrid_url) {
-          // Upgrade wins — inject resolved URL, fall through to existing path
+          // Upgrade wins â€” inject resolved URL, fall through to existing path
           stream = { ...stream, url: `${_bUrl}${_data.debrid_url}` } as any;
           console.log('[DETAILS v129] UPGRADED (quality-upgraded)');
         } else {
-          // Upgrade lost — pick top cached stream from this content's streams
+          // Upgrade lost â€” pick top cached stream from this content's streams
           const _cachedFallback = streams.find((s) => s !== stream && s.url && !(s as any).upgrade_candidate);
           if (_cachedFallback) {
-            console.log('[DETAILS v129] upgrade lost — using cached fallback:', _cachedFallback.name || '');
+            console.log('[DETAILS v129] upgrade lost â€” using cached fallback:', _cachedFallback.name || '');
             stream = _cachedFallback;
           } else {
-            console.log('[DETAILS v129] no cached fallback — proceeding with infoHash (player resolves)');
+            console.log('[DETAILS v129] no cached fallback â€” proceeding with infoHash (player resolves)');
           }
         }
       } catch (_v129e) {
         console.log('[DETAILS v129] upgrade-race threw:', _v129e);
       }
-      // Note: we deliberately leave setIsPlayLoading(true) — router.push
+      // Note: we deliberately leave setIsPlayLoading(true) â€” router.push
       // will unmount this screen and the overlay vanishes with it.
     }
     const subtitleContentId = isEpisodePage 
@@ -2277,9 +2488,9 @@ export default function DetailsScreen() {
     // Always pass current-episode metadata for series content so the
 // player's loading screen can render "S3E6 - Rest and Ricklaxation"
 // with the correct backdrop, regardless of whether there's a next ep.
-// v238c — also defend against NaN.  Some CW entries (porn / JT / PT
-// addons) have content_id="pt:NaN:1054329" or "jt:NaN:NaN" — parseInt
-// returns NaN, NaN != null is TRUE, String(NaN) === "NaN" → player
+// v238c â€” also defend against NaN.  Some CW entries (porn / JT / PT
+// addons) have content_id="pt:NaN:1054329" or "jt:NaN:NaN" â€” parseInt
+// returns NaN, NaN != null is TRUE, String(NaN) === "NaN" â†’ player
 // rendered "Episode NaN"/"Episode null".  Fall back through valid
 // resumeSeason/resumeEpisode then empty string.
 const _v238ValidNum = (n: any) => (n != null && !Number.isNaN(Number(n)));
@@ -2308,9 +2519,31 @@ const nextEpisodeData = nextEpisode ? {
       (type === 'series' && resumeEpisodeId === subtitleContentId)
     );
     const resumeData = shouldResume ? { resumePosition } : {};
+
+    /* V384_ONE_LOADING_SCREEN - hand the player the EXACT image and text
+       the details overlay is showing, so its loading screen paints the
+       same pixels and the handoff is invisible. */
+    const _v384OverlayUri = ((paramPoster /* V387_STABLE_OVERLAY_IMAGE */ || currentEpisode?.thumbnail || nextBackdropParam || content?.background || content?.poster || nextPosterParam) || '') as string;
+    const _v384EpLine = type === 'series'
+      ? String(nextTitleParam
+          || currentEpisode?.name
+          || (_v238ValidNum(episodeNumber)
+                ? `Episode ${episodeNumber}`
+                : (_v238ValidNum(resumeEpisode) ? `Episode ${resumeEpisode}` : '')))
+      : '';
+    const _v384sN = _v238ValidNum(episodeSeason) ? episodeSeason : (_v238ValidNum(resumeSeason) ? resumeSeason : null);
+    const _v384eN = _v238ValidNum(episodeNumber) ? episodeNumber : (_v238ValidNum(resumeEpisode) ? resumeEpisode : null);
+    const _v384SELine = type === 'series'
+      ? (((_v384sN != null) ? `S${_v384sN}` : '') + ((_v384eN != null) ? ` E${_v384eN}` : '')).trim()
+      : '';
+    const _v384Pass = {
+      ovName: (content?.name || '') as string,
+      ovEp: _v384EpLine,
+      ovSE: _v384SELine,
+    };
     
     const buildFallbackUrls = async (): Promise<string[]> => {
-      /* V354_HEALTHY_STREAMS_ONLY — Only include streams with enough seeders
+      /* V354_HEALTHY_STREAMS_ONLY â€” Only include streams with enough seeders
          to actually stream reliably via /api/stream/torrent-video. Sort the
          fallback pool by seeder count DESC so cascade tries the most
          reliable torrents first. If the healthy pool is empty (unlikely
@@ -2361,7 +2594,7 @@ const nextEpisodeData = nextEpisode ? {
       console.log('[DETAILS] Error saving to AsyncStorage:', e);
     }
 
-    // V300_PM_BATCH_CACHE_RESOLVE_BUILD_TAG — replaces V299's single-hash
+    // V300_PM_BATCH_CACHE_RESOLVE_BUILD_TAG â€” replaces V299's single-hash
     // attempt with a batched approach: POST every candidate infoHash to PM
     // /cache/check in ONE call, pick the highest-quality stream whose hash
     // is cached, then directdl-resolve THAT one.  Eliminates the "wrong
@@ -2369,7 +2602,7 @@ const nextEpisodeData = nextEpisode ? {
     // torrent first, V300 finds a cached sibling and uses it.
     // If literally no infoHash in the streams list is cached on the user's
     // PM account, V300 falls through to the existing flow (which will
-    // also fail) — that's a PM cache reality issue, not a code bug.
+    // also fail) â€” that's a PM cache reality issue, not a code bug.
     //
     // Verification:
     //   findstr /C:"V300_PM_BATCH_CACHE_RESOLVE_BUILD_TAG" "app\details\[type]\[id].tsx"
@@ -2465,12 +2698,17 @@ const nextEpisodeData = nextEpisode ? {
                     );
                   }
                   if (!_v300_file) {
-                    _v300_videos.sort((a: any, b: any) => (b.size || 0) - (a.size || 0));
-                    _v300_file = _v300_videos[0];
+                    // V441_MOVIE_TITLE_MATCH_PACK_GUARD
+                    const _v441_mt = ((content as any)?.name || (content as any)?.title || (paramName as any) || '') as string;
+                    const _v441_my = ((content as any)?.releaseInfo || (content as any)?.year || (content as any)?.releaseYear || '') as any;
+                    _v300_file = _v441_pickMovieFile(_v300_videos, _v441_mt, _v441_my);
+                    if (!_v300_file) {
+                      console.log('[v300/V441] pack refused - no title match; falling through');
+                    }
                   }
                   if (_v300_file && _v300_file.link) {
-                    console.log('[v300] PM SUCCESS via', _v300_picked.hash.slice(0,12), '→', String(_v300_file.link).slice(0,80));
-                    /* V353_ADD_FALLBACKS — compute the full 60-URL fallback
+                    console.log('[v300] PM SUCCESS via', _v300_picked.hash.slice(0,12), 'â†’', String(_v300_file.link).slice(0,80));
+                    /* V353_ADD_FALLBACKS â€” compute the full 60-URL fallback
                        list even for PM-directdl path so that if this direct
                        link fails to play, the cascade kicks in. */
                     const _v353_fb_v300 = await buildFallbackUrls();
@@ -2483,7 +2721,7 @@ const nextEpisodeData = nextEpisode ? {
                         contentType: cType,
                         contentId: subtitleContentId,
                         fallbackStreams: JSON.stringify(_v353_fb_v300),
-                        backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+                        backdrop: _v384OverlayUri, ..._v384Pass, /* V384 */
                         poster: content?.poster || '',
                         logo: content?.logo || '',
                         ...currentEpisodeMeta,
@@ -2501,7 +2739,7 @@ const nextEpisodeData = nextEpisode ? {
                 console.log('[v300] directdl threw:', String((_v300_e2 as any)?.message || _v300_e2));
               }
             } else {
-              console.log('[v300] no PM-cached candidate across', _v300_candidates.length, 'streams — title likely not on user PM cache');
+              console.log('[v300] no PM-cached candidate across', _v300_candidates.length, 'streams â€” title likely not on user PM cache');
             }
           }
         }
@@ -2510,11 +2748,11 @@ const nextEpisodeData = nextEpisode ? {
       }
     }
     
-    // V299_INLINE_PM_DIRECT_RESOLVE_BUILD_TAG — last-resort, no-indirection
+    // V299_INLINE_PM_DIRECT_RESOLVE_BUILD_TAG â€” last-resort, no-indirection
     // path to playback.  Skips client.ts short-circuit, backend pre-flight,
     // and player pollRace.  POSTs the magnet directly to PM /transfer/directdl
     // using fetch, picks the best video file, and pushes to /player as
-    // directUrl.  expo-video gets an absolute PM CDN URL — same one we
+    // directUrl.  expo-video gets an absolute PM CDN URL â€” same one we
     // proved works from the staging server (Big Buck Bunny test).
     // Falls through to the existing branches if PM cannot resolve.
     {
@@ -2532,7 +2770,7 @@ const nextEpisodeData = nextEpisode ? {
           const _v299_to = setTimeout(() => _v299_ctrl.abort(), 15000);
           let _v299_link: string | null = null;
           try {
-            console.log('[v299] inline PM resolve →', _v299_hash.slice(0, 12));
+            console.log('[v299] inline PM resolve â†’', _v299_hash.slice(0, 12));
             const _v299_resp = await fetch('https://www.premiumize.me/api/transfer/directdl', {
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -2561,12 +2799,17 @@ const nextEpisodeData = nextEpisode ? {
                 );
               }
               if (!_v299_picked) {
-                _v299_videos.sort((a: any, b: any) => (b.size || 0) - (a.size || 0));
-                _v299_picked = _v299_videos[0];
+                // V441_MOVIE_TITLE_MATCH_PACK_GUARD
+                const _v441_mt2 = ((content as any)?.name || (content as any)?.title || (paramName as any) || '') as string;
+                const _v441_my2 = ((content as any)?.releaseInfo || (content as any)?.year || (content as any)?.releaseYear || '') as any;
+                _v299_picked = _v441_pickMovieFile(_v299_videos, _v441_mt2, _v441_my2);
+                if (!_v299_picked) {
+                  console.log('[v299/V441] pack refused - no title match; falling through');
+                }
               }
               if (_v299_picked && _v299_picked.link) {
                 _v299_link = String(_v299_picked.link);
-                console.log('[v299] PM SUCCESS →', _v299_link.slice(0, 80));
+                console.log('[v299] PM SUCCESS â†’', _v299_link.slice(0, 80));
               } else {
                 console.log('[v299] PM success but no playable file in content[]');
               }
@@ -2578,8 +2821,8 @@ const nextEpisodeData = nextEpisode ? {
             console.log('[v299] PM fetch threw:', String((_v299_e as any)?.message || _v299_e));
           }
           if (_v299_link) {
-            // Got an absolute PM CDN URL — push to player directly.
-            /* V353_ADD_FALLBACKS — see V300 comment above */
+            // Got an absolute PM CDN URL â€” push to player directly.
+            /* V353_ADD_FALLBACKS â€” see V300 comment above */
             const _v353_fb_v299 = await buildFallbackUrls();
             router.push({
               pathname: '/player',
@@ -2590,7 +2833,7 @@ const nextEpisodeData = nextEpisode ? {
                 contentType: cType,
                 contentId: subtitleContentId,
                 fallbackStreams: JSON.stringify(_v353_fb_v299),
-                backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+                backdrop: _v384OverlayUri, ..._v384Pass, /* V384 */
                 poster: content?.poster || '',
                 logo: content?.logo || '',
                 ...currentEpisodeMeta,
@@ -2600,7 +2843,7 @@ const nextEpisodeData = nextEpisode ? {
             });
             return;
           }
-          // PM said uncached / error — fall through to existing logic
+          // PM said uncached / error â€” fall through to existing logic
           // (V295 will strip url, infoHash path will retry via player's
           // own machinery which may pick a cached fallback torrent).
           console.log('[v299] falling through to existing branches');
@@ -2613,7 +2856,7 @@ const nextEpisodeData = nextEpisode ? {
     // Handle external URLs - route them to the internal player
     if (stream.externalUrl || stream.requiresWebView) {
       const streamUrl = stream.externalUrl || stream.url;
-      /* PATCH_V154_LOG_PLAY — content mismatch trace at play time */
+      /* PATCH_V154_LOG_PLAY â€” content mismatch trace at play time */
       try {
         const _v154Req2 = (((content as any)?.name || (content as any)?.title || (name as any) || '') as string);
         const _v154Pick2 = ((stream.title || stream.name || '') as string);
@@ -2629,7 +2872,7 @@ const nextEpisodeData = nextEpisode ? {
           isLive: 'false',
           contentType: cType,
           contentId: subtitleContentId,
-          backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+          backdrop: _v384OverlayUri, ..._v384Pass, /* V384 */
           poster: content?.poster || '',
           logo: content?.logo || '',
           ...currentEpisodeMeta,
@@ -2665,7 +2908,7 @@ const nextEpisodeData = nextEpisode ? {
           contentType: cType,
           contentId: subtitleContentId,
           fallbackStreams: JSON.stringify([absoluteUrl, ...fallbacks, ...directFallbacks]),
-          backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+          backdrop: _v384OverlayUri, ..._v384Pass, /* V384 */
           poster: content?.poster || '',
           logo: content?.logo || '',
           ...currentEpisodeMeta,
@@ -2678,10 +2921,10 @@ const nextEpisodeData = nextEpisode ? {
     
     if (stream.infoHash) {
       // Build fallback torrents from other available torrent streams (sorted by seeders)
-      // V162_WIDER_FALLBACKS — bumped from 5 to 15 so we always have a working
+      // V162_WIDER_FALLBACKS â€” bumped from 5 to 15 so we always have a working
       // option even when the top picks share the same codec / lossless-audio
       // incompatibility that the device can't decode.
-      /* V355_HEALTHY_TORRENT_FALLBACKS — This is the REAL playback fallback
+      /* V355_HEALTHY_TORRENT_FALLBACKS â€” This is the REAL playback fallback
          path for Torrentio streams (with infoHash). Auto-play tries top
          stream first; if that fails, player cascades through this list.
          The old list was capped at 20 AND not sorted by seeders, so if the
@@ -2711,7 +2954,7 @@ const nextEpisodeData = nextEpisode ? {
         }));
       console.log('[V355] torrent fallbacks: healthy=' + _v355_healthy.length + ' unhealthy=' + _v355_unhealthy.length + ' total=' + fallbackTorrents.length);
       
-      // Extract season/episode from content ID (e.g. tt123:1:2 → season=1, episode=2)
+      // Extract season/episode from content ID (e.g. tt123:1:2 â†’ season=1, episode=2)
       const idParts = (id || '').split(':');
       const seasonNum = idParts.length >= 3 ? idParts[idParts.length - 2] : '';
       const episodeNum = idParts.length >= 3 ? idParts[idParts.length - 1] : '';
@@ -2727,14 +2970,14 @@ const nextEpisodeData = nextEpisode ? {
           filename: stream.filename || '',
           season: seasonNum,
           episode: episodeNum,
-          // v238 cache buster — forces Firestick to refetch torrent-video URL
+          // v238 cache buster â€” forces Firestick to refetch torrent-video URL
           // even when infoHash hasn't changed (e.g. retrying same stream).
           cacheBust: String(Date.now()),
           // Prefer loaded content metadata, but fall back to carried-over params
           // from the previous episode's player so the loading screen ALWAYS has
-          // a backdrop/poster/logo — even when navigating fast via auto-play
+          // a backdrop/poster/logo â€” even when navigating fast via auto-play
           // before Cinemeta has populated `content`.
-          backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || nextBackdropParam || '',
+          backdrop: _v384OverlayUri, ..._v384Pass, /* V384 */
           poster: content?.poster || nextPosterParam || '',
           logo: content?.logo || '',
           sources: stream.sources ? JSON.stringify(stream.sources) : '',
@@ -2759,17 +3002,17 @@ const nextEpisodeData = nextEpisode ? {
       
       let streamUrl: string;
       if (isAlreadyProxied) {
-        // Already going through our backend — use as-is
+        // Already going through our backend â€” use as-is
         streamUrl = stream.url;
       } else {
-        // External URL — route through RD privacy proxy
+        // External URL â€” route through RD privacy proxy
         const encodedUrl = encodeURIComponent(stream.url);
         const tokenParam = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
         streamUrl = `${backendUrl}/api/proxy/unrestrict-stream?url=${encodedUrl}${tokenParam}`;
         console.log('[DETAILS] Privacy proxy: routing through RD unrestrict');
       }
       
-      // Build fallback URLs — also route fallbacks through privacy proxy
+      // Build fallback URLs â€” also route fallbacks through privacy proxy
       const allStreamUrls = streams
         .filter(s => s.url && !s.infoHash && s.url !== stream.url)
         .map(s => {
@@ -2804,7 +3047,7 @@ const nextEpisodeData = nextEpisode ? {
           contentType: cType,
           contentId: subtitleContentId,
           fallbackStreams: allStreamUrls.length > 0 ? JSON.stringify(allStreamUrls) : '',
-          backdrop: (type === 'series' && currentEpisode?.thumbnail) || content?.background || '',
+          backdrop: _v384OverlayUri, ..._v384Pass, /* V384 */
           poster: content?.poster || '',
           logo: content?.logo || '',
           ...currentEpisodeMeta,
@@ -2848,12 +3091,12 @@ const nextEpisodeData = nextEpisode ? {
   };
 
   // Use content data for display - available immediately from store
-  // v238 — fall back to params from the caller BEFORE the generic
+  // v238 â€” fall back to params from the caller BEFORE the generic
   // "Loading..." text so the user sees the actual title instantly.
   const displayName = content?.name || (paramName as string) || 'Loading...';
   // For episode pages, prefer the episode thumbnail as backdrop. Otherwise use series backdrop.
   const episodeBackdrop = isEpisodePage && currentEpisode?.thumbnail ? currentEpisode.thumbnail : null;
-  // v238 — backdrop fallback chain: episode thumb -> backend backdrop ->
+  // v238 â€” backdrop fallback chain: episode thumb -> backend backdrop ->
   // param backdrop -> param poster (blurred/dark-overlaid is still better
   // than a black screen) -> empty.  Eliminates the black-flash on Details.
   const displayPoster = episodeBackdrop || content?.background || (paramBackground as string) || (paramPoster as string) || '';
@@ -2903,7 +3146,7 @@ const nextEpisodeData = nextEpisode ? {
     );
   };
 
-  // V186_BACK_INSTANT — render a flat placeholder once the user has pressed
+  // V186_BACK_INSTANT â€” render a flat placeholder once the user has pressed
   // back.  The heavy subtree dismounts on this frame; navigation runs next.
   if (_v186Closing) {
     return <View style={styles.container} />;
@@ -2914,7 +3157,7 @@ const nextEpisodeData = nextEpisode ? {
     <View style={styles.container}>
       {/* V176K_POPOVER_MOUNTED - Stremio-style menu host for this screen. */}
       <V176kPopover />
-      {/* Background Image — lightweight RN Image, no expo-image overhead */}
+      {/* Background Image â€” lightweight RN Image, no expo-image overhead */}
       {displayPoster ? (
         <RNImage
           source={{ uri: displayPoster }}
@@ -2923,29 +3166,29 @@ const nextEpisodeData = nextEpisode ? {
         />
       ) : null}
       
-      {/* Dark overlay — simple View, no LinearGradient overhead */}
+      {/* Dark overlay â€” simple View, no LinearGradient overhead */}
       <View style={styles.gradientOverlay} />
       
-      {/* Auto-play loading — Stremio-style cinematic transition */}
+      {/* Auto-play loading â€” Stremio-style cinematic transition */}
       {/* v121m-play-overlay: also fires on isPlayLoading */}
       {/* v124y-overlay-persists: keep overlay up the WHOLE autoplay so user never sees episode card */}
-      {/* v238b — REMOVED `|| isPlayLoading` branch.  When user taps Play,
+      {/* v238b â€” REMOVED `|| isPlayLoading` branch.  When user taps Play,
           router.push to /player mounts the player INSTANTLY on top with
           its own (visually rich) PATCH_V8 loading screen.  Showing the
           details overlay first with extra "Episode N" + "S1 E1" text
-          made it look like "2 different loading screens" — now Play
+          made it look like "2 different loading screens" â€” now Play
           tap just goes straight to player's single unified loading.
           The overlay still fires for the autoPlayParam path (Continue
-          Watching → details → auto-play to player), where the details
+          Watching â†’ details â†’ auto-play to player), where the details
           overlay IS the entry point. */}
-      {(autoPlayParam === 'true') && (
+      {(autoPlayParam === 'true' || isPlayLoading) && ( /* V384_PLAY_FEEDBACK - Play press shows the SAME overlay the player continues */
         <View style={styles.autoPlayOverlay}>
           {/* Full-screen series backdrop (blurred). Priority: loaded content
-              backdrop (the real series art) → passed-in backdrop param → poster. */}
+              backdrop (the real series art) â†’ passed-in backdrop param â†’ poster. */}
           {/* PATCH v2: prefer EPISODE backdrop so transition into player loading is seamless */}
-          {(currentEpisode?.thumbnail || nextBackdropParam || content?.background || content?.poster || nextPosterParam) && (
+          {(paramPoster /* V387_STABLE_OVERLAY_IMAGE */ || currentEpisode?.thumbnail || nextBackdropParam || content?.background || content?.poster || nextPosterParam) && (
             <RNImage
-              source={{ uri: (currentEpisode?.thumbnail || nextBackdropParam || content?.background || content?.poster || nextPosterParam) as string }}
+              source={{ uri: (paramPoster /* V387_STABLE_OVERLAY_IMAGE */ || currentEpisode?.thumbnail || nextBackdropParam || content?.background || content?.poster || nextPosterParam) as string }}
               style={StyleSheet.absoluteFillObject}
               blurRadius={8}
               resizeMode="cover"
@@ -2984,7 +3227,7 @@ const nextEpisodeData = nextEpisode ? {
               </Text>
             )}
             {type === 'series' && (() => {
-              // v238c — was rendering "Snull Enull" when URL had no episode
+              // v238c â€” was rendering "Snull Enull" when URL had no episode
               // segment (CW navigates to series root + resumeSeason/Episode
               // params).  Fall back to resume params, hide line entirely
               // if neither is a valid number.
@@ -3089,7 +3332,7 @@ const nextEpisodeData = nextEpisode ? {
           style={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContentContainer}
-          // v214b details bounded — stop the Android TV over-scroll past
+          // v214b details bounded â€” stop the Android TV over-scroll past
           // the bottom padding so DOWN at the last section does nothing
           // instead of revealing a blank void (which confused focus search).
           overScrollMode="never"
@@ -3189,11 +3432,11 @@ const nextEpisodeData = nextEpisode ? {
             <View style={styles.streamsSection}>
               {/* Play button on left + stream count */}
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                {/* V169_STREAM_COUNT_USES_SORTED — use filtered list for gating */}
+                {/* V169_STREAM_COUNT_USES_SORTED â€” use filtered list for gating */}
                 {!isLoadingStreams && sortedStreams.length > 0 && (
                   <FocusableButton
                     onPress={async () => {
-                      /* v238b — Play button picks the FIRST resolved stream
+                      /* v238b â€” Play button picks the FIRST resolved stream
                          (one with a real URL: stream.url / externalUrl /
                          direct_url).  Only if no streams are resolved does
                          it fall back to an infoHash-only stream (porn /
@@ -3201,14 +3444,14 @@ const nextEpisodeData = nextEpisode ? {
                          and other Real-Debrid cached content while keeping
                          the OnlyTarts torrent-server path working. */
                       setIsPlayLoading(true);
-                      // V290 — defer heavy work to next tick so React can
+                      // V290 â€” defer heavy work to next tick so React can
                       // paint the loading overlay BEFORE the JS thread is
                       // tied up resolving streams.  Without this the user
                       // sees a frozen UI for several seconds.
                       setTimeout(() => {
                       try {
                         const list = (sortedStreams && sortedStreams.length > 0) ? sortedStreams : streams;
-                        // v241 — for porn (PT/JT) prefer list[0] to match the
+                        // v241 â€” for porn (PT/JT) prefer list[0] to match the
                         // first stream card (correct content mapping). For
                         // mainstream content prefer first URL-resolved stream
                         // (instant cached debrid playback).
@@ -3222,7 +3465,7 @@ const nextEpisodeData = nextEpisode ? {
                           picked = list[0] && _v241Playable(list[0]) ? list[0] : null;
                         }
                         if (!picked) {
-                          /* V356_PLAY_USES_RANKER_TOP — do NOT prefer URL-resolved
+                          /* V356_PLAY_USES_RANKER_TOP â€” do NOT prefer URL-resolved
                              streams over the ranker's top pick. The ranker (V354)
                              already prefers healthy high-seed torrents which are
                              what actually stream successfully. URL-resolved streams
@@ -3237,6 +3480,36 @@ const nextEpisodeData = nextEpisode ? {
                           picked = { ...picked, infoHash: (picked as any).info_hash } as any;
                         }
                         if (picked) {
+                          // V441_PICK_GUARD - reject picks whose filename
+                          // obviously belongs to a different movie (Marvel
+                          // pack containing "Iron Man 2008" served as
+                          // Spider-Man BND).  Only applies to movies.
+                          if (type === 'movie') {
+                            const _v441_reqT = ((content as any)?.name || (content as any)?.title || (paramName as any) || '') as string;
+                            const _v441_reqY = ((content as any)?.releaseInfo || (content as any)?.year || (content as any)?.releaseYear || '') as any;
+                            const _v441_probe = (s: any) => String((s?.filename || s?.title || s?.name || '')).trim();
+                            const _v441_top = _v441_probe(picked);
+                            const _v441_ts = _v441_top ? _v441_movieTitleMatch(_v441_top, _v441_reqT, _v441_reqY) : 1;
+                            if (_v441_reqT && _v441_top && _v441_ts < 0.5) {
+                              console.log('[V441 SKIP]', _v441_ts.toFixed(2), '|', _v441_top.slice(0, 100));
+                              let _v441_alt: any = null;
+                              for (let _v441_i = 0; _v441_i < list.length; _v441_i++) {
+                                if (list[_v441_i] === picked) continue;
+                                const _v441_fn = _v441_probe(list[_v441_i]);
+                                if (!_v441_fn) { _v441_alt = list[_v441_i]; break; }
+                                const _v441_sc = _v441_movieTitleMatch(_v441_fn, _v441_reqT, _v441_reqY);
+                                if (_v441_sc >= 0.5) { _v441_alt = list[_v441_i]; console.log('[V441 USE]', _v441_sc.toFixed(2), '|', _v441_fn.slice(0, 100)); break; }
+                              }
+                              if (_v441_alt) {
+                                picked = _v441_alt;
+                              } else {
+                                console.log('[V441] no title-matching stream in top', list.length, '- aborting play. content=', String(_v441_reqT).slice(0,80));
+                                setIsPlayLoading(false);
+                                try { _V176cAlert.alert('Wrong movie detected', 'Sources for "' + String(_v441_reqT).slice(0, 60) + '" all point at a different title. Try a different quality or refresh.'); } catch (_) {}
+                                return;
+                              }
+                            }
+                          }
                           console.log('[V358 PLAY] picked:', String(picked.name || picked.title || '').slice(0,80),
                                    '| hasUrl=', !!picked.url,
                                    '| infoHash=', String(picked.infoHash || '').slice(0,8),
@@ -3249,7 +3522,7 @@ const nextEpisodeData = nextEpisode ? {
                         console.log('[v241 PLAY] error:', e);
                         setIsPlayLoading(false);
                       }
-                      }, 0); // V290 — close setTimeout from above
+                      }, 0); // V290 â€” close setTimeout from above
                     }}
                     style={styles.playButton}
                     focusedStyle={styles.playButtonFocused}
@@ -3259,7 +3532,7 @@ const nextEpisodeData = nextEpisode ? {
                   </FocusableButton>
                 )}
                 <Text style={styles.sectionTitle}>
-                  {/* V169_STREAM_COUNT_USES_SORTED — display filtered count to match list */}
+                  {/* V169_STREAM_COUNT_USES_SORTED â€” display filtered count to match list */}
                   {isLoadingStreams ? (type === 'tv' ? 'Verifying Live Streams...' : 'Finding Streams...') : `${sortedStreams.length} Stream${sortedStreams.length !== 1 ? 's' : ''}`}
                 </Text>
               </View>
@@ -3271,7 +3544,7 @@ const nextEpisodeData = nextEpisode ? {
                     {type === 'tv' ? 'Checking available channels...' : 'Searching sources...'}
                   </Text>
                 </View>
-              /* V169_STREAM_COUNT_USES_SORTED — empty-state uses filtered list */
+              /* V169_STREAM_COUNT_USES_SORTED â€” empty-state uses filtered list */
               ) : sortedStreams.length === 0 ? (
                 <View style={styles.noStreams}>
                   <Ionicons name="cloud-offline-outline" size={32} color="#666" />
@@ -3290,7 +3563,7 @@ const nextEpisodeData = nextEpisode ? {
             </View>
           )}
           
-          {/* No extra bottom padding — scroll locks at stream cards */}
+          {/* No extra bottom padding â€” scroll locks at stream cards */}
         </ScrollView>
       </View>
     </View>
@@ -3331,11 +3604,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    // v238b — REVERTED back to original 0.95 dark.  Player.tsx's loading
+    // v238b â€” REVERTED back to original 0.95 dark.  Player.tsx's loading
     // screen (PATCH_V8_UNIFIED_LOADING) was designed to visually match
-    // this overlay (blurred backdrop + logo + sliding gold bar + Loading…).
+    // this overlay (blurred backdrop + logo + sliding gold bar + Loadingâ€¦).
     // My earlier change to solid black broke the unification.  Both
-    // overlays now use the same backdrop-aware dark scheme — user sees
+    // overlays now use the same backdrop-aware dark scheme â€” user sees
     // one continuous cinematic transition.
     backgroundColor: 'rgba(15, 15, 17, 0.95)',
     justifyContent: 'center',
@@ -3374,7 +3647,7 @@ const styles = StyleSheet.create({
   },
   scrollContentContainer: {
     paddingHorizontal: 20,
-    // v238 — was paddingBottom: 40 which created a 40px void user could
+    // v238 â€” was paddingBottom: 40 which created a 40px void user could
     // scroll into past the stream cards.  No bottom pad now; ScrollView
     // ends exactly at the last stream card.
     paddingBottom: 0,
@@ -3479,7 +3752,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  // Play button — matches the libraryButton/streamCard focus pattern so users
+  // Play button â€” matches the libraryButton/streamCard focus pattern so users
   // get a familiar gold border + slight scale on focus, instead of a custom
   // setNativeProps trick that doesn't repaint reliably on Android TV.
   playButton: {
@@ -3666,7 +3939,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   streamCard: {
-    // V303_STREAMCARD_WIDTH_BUILD_TAG — width bump from 160→220 so the
+    // V303_STREAMCARD_WIDTH_BUILD_TAG â€” width bump from 160â†’220 so the
     // bottom row [LANG][QUALITY][SIZE] always fits on one line at the
     // larger V302 font sizes.  Card height unchanged.
     width: 220,
@@ -3744,6 +4017,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
+  },
+  v472cTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'stretch',
+    width: '100%',
+    paddingHorizontal: 8,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  v474PlayIcon: {
+    marginHorizontal: 8,
+  },
+  v472cSizeText: {
+    color: '#e0e0e0',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  v472cFlagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    width: '100%',
+    paddingHorizontal: 8,
+    paddingBottom: 8,
   },
   langBadgeEnglish: {
     backgroundColor: 'rgba(76, 175, 80, 0.3)',

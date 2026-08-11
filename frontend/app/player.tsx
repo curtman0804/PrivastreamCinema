@@ -31,7 +31,7 @@ try {
   console.log('[TV] TV event handlers not available');
 }
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/api/client';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -39,7 +39,7 @@ import Constants from 'expo-constants';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Modal, FlatList } from 'react-native';
 import AsyncStorage from '../src/utils/mmkvStorage';
-/* V176C_PLAYER_MARK_WATCHED — keep the in-memory _v172WatchedSet in sync
+/* V176C_PLAYER_MARK_WATCHED â€” keep the in-memory _v172WatchedSet in sync
    so visible posters show the gold check immediately, no app restart. */
 import { v176MarkWatched as _v176cMark } from '../src/components/ContentCard';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -103,7 +103,7 @@ function TVFocusButton({
 // CRITICAL: Uses nextFocusLeft/nextFocusRight pointing to self to TRAP focus,
 // so D-pad left/right doesn't move focus away. Instead, the DeviceEventEmitter
 // handler detects left/right when this bar is focused and seeks the video.
-// V264_DRAG_TO_SEEK — also supports touch drag (tap, drag, release) on mobile
+// V264_DRAG_TO_SEEK â€” also supports touch drag (tap, drag, release) on mobile
 // without interfering with TV D-pad seek.  While dragging, we display a
 // "scrubPosition" preview locally and only fire onSeek when the finger lifts.
 function SeekableProgressBar({
@@ -119,7 +119,7 @@ function SeekableProgressBar({
   duration: number;
   onSeek: (newPosition: number) => void;
   onFocusChange?: (focused: boolean) => void;
-  // V266_STICKY_CONTROLS_DURING_SCRUB — parent listens so it can keep
+  // V266_STICKY_CONTROLS_DURING_SCRUB â€” parent listens so it can keep
   // the chrome on-screen and pause the auto-hide timer while the user
   // is actively dragging the thumb.
   onScrubChange?: (scrubbing: boolean) => void;
@@ -129,8 +129,8 @@ function SeekableProgressBar({
   const [isFocused, setIsFocused] = useState(false);
   const barRef = useRef<View>(null);
   const [selfTag, setSelfTag] = useState<number>(0);
-  // V264_DRAG_TO_SEEK — refs/state for touch-drag scrub.
-  // V266_FIX — track the bar's screen-absolute X+width via measureInWindow so
+  // V264_DRAG_TO_SEEK â€” refs/state for touch-drag scrub.
+  // V266_FIX â€” track the bar's screen-absolute X+width via measureInWindow so
   // touch pageX coordinates can be mapped reliably even when the finger
   // crosses child Views (locationX was relative to whichever child received
   // the touch, causing the thumb to jump around erratically).
@@ -139,7 +139,7 @@ function SeekableProgressBar({
   const isDraggingRef = useRef(false);
   const lastScrubRef = useRef<number>(0);
 
-  // V266_FIX — measure the bar's absolute screen position whenever layout
+  // V266_FIX â€” measure the bar's absolute screen position whenever layout
   // changes.  Called from onLayout via measureInWindow.
   const _measureBar = () => {
     try {
@@ -171,7 +171,7 @@ function SeekableProgressBar({
     return () => clearTimeout(timer);
   }, []);
 
-  // V264_DRAG_TO_SEEK — translate an absolute screen X-coordinate into a
+  // V264_DRAG_TO_SEEK â€” translate an absolute screen X-coordinate into a
   // seconds-position clamped to [0, duration].  V266_FIX uses pageX
   // (absolute) instead of locationX (child-relative) so child Views inside
   // the bar (fill, thumb) don't make the position jitter.
@@ -183,7 +183,7 @@ function SeekableProgressBar({
     return ratio * duration;
   };
 
-  // V264_DRAG_TO_SEEK — PanResponder.  onStartShouldSetPanResponder=true so
+  // V264_DRAG_TO_SEEK â€” PanResponder.  onStartShouldSetPanResponder=true so
   // we own the touch from the first tap.  D-pad navigation is untouched
   // because Android TV remote events never go through PanResponder.
   const panResponder = useMemo(() => PanResponder.create({
@@ -194,10 +194,10 @@ function SeekableProgressBar({
     onPanResponderTerminationRequest: () => false,
     onPanResponderGrant: (evt) => {
       isDraggingRef.current = true;
-      // V266_STICKY_CONTROLS_DURING_SCRUB — tell parent so it pins the
+      // V266_STICKY_CONTROLS_DURING_SCRUB â€” tell parent so it pins the
       // chrome on-screen and stops its auto-hide timer.
       try { onScrubChange?.(true); } catch (_) {}
-      // V266_FIX — re-measure on grant in case layout shifted since mount.
+      // V266_FIX â€” re-measure on grant in case layout shifted since mount.
       _measureBar();
       const p = _v264TouchToPos(evt.nativeEvent.pageX ?? 0);
       lastScrubRef.current = p;
@@ -212,7 +212,7 @@ function SeekableProgressBar({
       const target = lastScrubRef.current;
       isDraggingRef.current = false;
       setScrubPosition(null);
-      // V266_STICKY_CONTROLS_DURING_SCRUB — release: tell parent to
+      // V266_STICKY_CONTROLS_DURING_SCRUB â€” release: tell parent to
       // resume its auto-hide timer.
       try { onScrubChange?.(false); } catch (_) {}
       if (typeof target === 'number' && target >= 0) {
@@ -254,14 +254,14 @@ function SeekableProgressBar({
       <View style={[styles.progressBarThumb, { left: `${percentage}%` }]} />
       {isFocused && scrubPosition === null && (
         <View style={styles.seekHint}>
-          <Text style={styles.seekHintText}>◀ -10s  |  +10s ▶</Text>
+          <Text style={styles.seekHintText}>â—€ -10s  |  +10s â–¶</Text>
         </View>
       )}
       {scrubPosition !== null && duration > 0 && (
         <View style={[styles.seekHint, { left: `${Math.max(0, Math.min(100, percentage))}%` }]}>
           <Text style={styles.seekHintText}>
             {(() => {
-              // V264_DRAG_TO_SEEK fix — duration is in ms in this codebase;
+              // V264_DRAG_TO_SEEK fix â€” duration is in ms in this codebase;
               // convert before formatting.  Otherwise we displayed e.g.
               // "642:53:40" for a ~100min movie at the 37% mark.
               const secs = Math.floor(scrubPosition / 1000);
@@ -286,8 +286,12 @@ const isHEVCContent = (titleStr: string | undefined): boolean => {
   return lowerTitle.includes('hevc') || lowerTitle.includes('x265') || lowerTitle.includes('h.265');
 };
 
-// Subtitle interface
+// Subtitle interface (V407_SUB_META - optional metadata for release matching)
 interface Subtitle {
+  filename?: string | null;
+  downloads?: number | string | null;
+  matchedBy?: string | null;
+  hash?: string | null;
   id: string;
   url: string;
   lang: string;
@@ -328,6 +332,7 @@ export default function PlayerScreen() {
     backdrop,
     poster,
     logo,
+    ovName, ovEp, ovSE, /* V384_ONE_LOADING_SCREEN */
     // Resume position (from continue watching)
     resumePosition,
     // Tracker sources from Torrentio (CRITICAL for peer discovery)
@@ -354,13 +359,14 @@ export default function PlayerScreen() {
     backdrop?: string;
     poster?: string;
     logo?: string;
+    ovName?: string; ovEp?: string; ovSE?: string; /* V384 */
     resumePosition?: string;
     sources?: string;
     fallbackTorrents?: string;
   }>();
   const router = useRouter();
 
-  // V273_NAN_ID_GUARD — some addons (PornTube, JustWatch) return content
+  // V273_NAN_ID_GUARD â€” some addons (PornTube, JustWatch) return content
   // IDs shaped like "pt:NaN:1054329" or "jt:NaN:NaN" because the addon
   // couldn't parse a numeric segment.  Earlier code paths that did
   // parseInt(segment, 10) on these would yield NaN and either crash the
@@ -384,7 +390,7 @@ export default function PlayerScreen() {
   }, [contentId]);
   useEffect(() => {
     if (!_v273ContentIdLooksValid) {
-      console.warn('[V273_NAN_ID_GUARD] malformed contentId=', contentId, '— bailing back to previous screen.');
+      console.warn('[V273_NAN_ID_GUARD] malformed contentId=', contentId, 'â€” bailing back to previous screen.');
       try {
         if ((router as any).canGoBack && (router as any).canGoBack()) {
           router.back();
@@ -396,9 +402,43 @@ export default function PlayerScreen() {
     // intentional: only re-check if validity changes
   }, [_v273ContentIdLooksValid]);
 
+  /* V389_SMART_BACK - the binge fast-path (dismiss(2) + replace) leaves NO
+     details page beneath the player, so a plain router.back() lands on
+     Discover. If a details screen sits directly beneath us, pop normally;
+     otherwise route to the CURRENT episode's info page. */
+  const _v389Nav = useNavigation();
+  const _v389SmartBack = useCallback((): boolean => {
+    try {
+      const _st: any = (_v389Nav as any)?.getState ? (_v389Nav as any).getState() : null;
+      const _routes: any[] = (_st && _st.routes) ? _st.routes : [];
+      const _idx = (typeof _st?.index === 'number') ? _st.index : (_routes.length - 1);
+      const _prev = _idx > 0 ? _routes[_idx - 1] : null;
+      const _prevName = _prev ? String(_prev.name || '') : '';
+      if (_prevName.indexOf('details') !== -1) { router.back(); return true; }
+      let target: string | null = null;
+      if (seriesId && season && episode) {
+        target = `/details/series/${seriesId}:${season}:${episode}`;
+      } else if (contentId) {
+        const cid = String(contentId);
+        const base = cid.includes(':') ? cid.split(':')[0] : cid;
+        target = `/details/${(contentType as string) || 'movie'}/${base}`;
+      }
+      if (target) {
+        console.log('[V389_BACK] no details beneath player - routing to ' + target);
+        router.replace(target as any);
+        return true;
+      }
+      router.back();
+      return true;
+    } catch (_) {
+      try { router.back(); } catch (__) {}
+      return true;
+    }
+  }, [_v389Nav, seriesId, season, episode, contentId, contentType, router]);
+
   // ============================================================
   // BACK_BUTTON_INTERCEPTOR_V2 (Stremio-style binge-stack killer)
-  // ONE hardware-back press from the player → land on the CURRENT
+  // ONE hardware-back press from the player â†’ land on the CURRENT
   // episode's info page. Pops the entire stack of player+details
   // entries that built up while binge-watching.
   // ============================================================
@@ -417,7 +457,7 @@ export default function PlayerScreen() {
         if (target) {
           // Pop any stacked binge-watch screens, then land on episode info
           try { (router as any).dismissAll && (router as any).dismissAll(); } catch (_) {}
-          // PATCH_V35_BACK_POP_PREFER — pop player first; replace only as deep-link fallback
+          // PATCH_V35_BACK_POP_PREFER â€” pop player first; replace only as deep-link fallback
           if (router.canGoBack && router.canGoBack()) {
             router.back();
           } else {
@@ -429,15 +469,15 @@ export default function PlayerScreen() {
       } catch (_) {
         try { router.back(); } catch (__) {}
       }
-      return true; // consume — prevent default OS pop
+      return true; // consume â€” prevent default OS pop
     };
-    // PATCH_V36_PLAYER_NATIVE_BACK — let expo-router's stack navigator pop natively.
+    // PATCH_V36_PLAYER_NATIVE_BACK â€” let expo-router's stack navigator pop natively.
     // Returning false delegates the back press to the navigator's default,
     // which simply pops the player off the stack and reveals details underneath.
     // No custom routing here = no chance to over-pop or duplicate screens.
     // Progress-save on exit lives in a separate useEffect cleanup, so unmount-
     // driven save still happens regardless of how the player closes.
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => false);
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => _v389SmartBack()); /* V389_SMART_BACK */
     return () => { try { sub.remove(); } catch (_) {} };
   }, [seriesId, season, episode, contentId, contentType]);
 
@@ -467,7 +507,7 @@ export default function PlayerScreen() {
   
   // Resume position in seconds (from continue watching)
   const parsedResumePosition = resumePosition ? parseFloat(resumePosition) : null;
-  // PATCH_V143_PERF_NOLOG — removed top-level log (was firing every render)
+  // PATCH_V143_PERF_NOLOG â€” removed top-level log (was firing every render)
   
   const [pendingResumePosition, setPendingResumePosition] = useState<number | null>(parsedResumePosition);
   const hasResumedRef = useRef(false); // Track if we've already attempted resume
@@ -495,15 +535,15 @@ export default function PlayerScreen() {
   const [isLiveTV, setIsLiveTV] = useState(false);
   const [hasAudioError, setHasAudioError] = useState(false);
   const videoRetryCountRef = useRef(0);
-  // V162_RETRIES_LOWERED — torrents used to retry 15× (~45s) on broken
+  // V162_RETRIES_LOWERED â€” torrents used to retry 15Ã— (~45s) on broken
   // streams before falling through to the next fallback.  6 retries with
-  // 1-5s backoff (≤18s) is still enough headroom for buffer warmup but
+  // 1-5s backoff (â‰¤18s) is still enough headroom for buffer warmup but
   // gives "play at all costs" a chance to advance to the next stream.
   const maxVideoRetries = isLive === 'true' ? 10 : directUrl ? 3 : 6;
   
   // Track seek state to prevent URL reset during seeking
   const isSeekingRef = useRef(false);
-  // PATCH_V10_SEEK_GUARDS — track pre-seek position so we can rewind on seek failure,
+  // PATCH_V10_SEEK_GUARDS â€” track pre-seek position so we can rewind on seek failure,
   // plus a cooldown timestamp so onError storms after a failed seek do not reset the stream.
   const preSeekPositionMsRef = useRef<number>(0);
   const seekCooldownUntilRef = useRef<number>(0);
@@ -512,11 +552,11 @@ export default function PlayerScreen() {
   // Stremio-style breathing zoom animation for loading title
   const breatheAnim = useRef(new Animated.Value(1)).current;
 
-  // PATCH_V8_LOADBAR_ANIM — sliding gold bar for unified loading screen
-  // PATCH_V149_SMOOTH_BAR — initial offset derived from wall-clock so the
+  // PATCH_V8_LOADBAR_ANIM â€” sliding gold bar for unified loading screen
+  // PATCH_V149_SMOOTH_BAR â€” initial offset derived from wall-clock so the
   // bar starts where Details' AutoPlayLoadingBar was when user pressed Play.
-  // Details cycle = 1200 ms, range -100 → 260, inOut.ease.
-  // v241 — always start at -100 so loading bar slides fully L→R
+  // Details cycle = 1200 ms, range -100 â†’ 260, inOut.ease.
+  // v241 â€” always start at -100 so loading bar slides fully Lâ†’R
   const loadingBarAnim = useRef(new Animated.Value(-100)).current;
   useEffect(() => {
     if (!isLoading || error) return;
@@ -557,7 +597,7 @@ export default function PlayerScreen() {
   const [playbackStarted, setPlaybackStarted] = useState(false);
   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Fallback torrent streams — used when primary torrent fails (no peers, timeout)
+  // Fallback torrent streams â€” used when primary torrent fails (no peers, timeout)
   interface FallbackTorrent {
     infoHash: string;
     fileIdx?: number;
@@ -568,9 +608,9 @@ export default function PlayerScreen() {
   }
   const [torrentFallbacks, setTorrentFallbacks] = useState<FallbackTorrent[]>([]);
   const torrentFallbackIdxRef = useRef(0);
-  // V163_TORRENT_FALLBACKS_REF — the React STATE `torrentFallbacks` cannot
+  // V163_TORRENT_FALLBACKS_REF â€” the React STATE `torrentFallbacks` cannot
   // be read from closures that were created BEFORE the state update
-  // flushed (see the parseFallbacks → startTorrentStream race in
+  // flushed (see the parseFallbacks â†’ startTorrentStream race in
   // useEffect).  This ref mirrors the state and is read synchronously
   // by tryNextFallbackTorrent so the cascade actually sees the
   // available fallbacks.
@@ -585,10 +625,213 @@ export default function PlayerScreen() {
   // Subtitles state
   const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
   const [selectedSubtitle, setSelectedSubtitle] = useState<string | null>(null);
+  /* V416_CC_MASK - build stamp + CC-region mask flag */
+  const [_v416Stamp, _setV416Stamp] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => _setV416Stamp(false), 6000);
+    return () => clearTimeout(t);
+  }, []);
+  /* V415_DEFENSIVE_RESET - on every player mount, forcibly clear any
+     lingering sub selection AND log the state transition to the backend
+     so we can see what code path (if any) later flips it back to a URL.
+     If a "Matt talking" overlay still shows after this, we'll see the
+     setter call in devlog and know which line to kill. */
+  useEffect(() => {
+    setSelectedSubtitle(null);
+    try {
+      fetch((process.env.EXPO_PUBLIC_BACKEND_URL || '') + '/api/devlog', {
+        method: 'POST', headers: { 'Content-Type': 'text/plain' },
+        body: 'V415_BOOT clear selectedSubtitle=null',
+      }).catch(() => {});
+    } catch (_) {}
+  }, []);
+  useEffect(() => {
+    try {
+      fetch((process.env.EXPO_PUBLIC_BACKEND_URL || '') + '/api/devlog', {
+        method: 'POST', headers: { 'Content-Type': 'text/plain' },
+        body: 'V415_SUB_CHANGE url=' + (selectedSubtitle || 'null'),
+      }).catch(() => {});
+    } catch (_) {}
+  }, [selectedSubtitle]);
   const [showSubtitlePicker, setShowSubtitlePicker] = useState(false);
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
+  const [_v478AutoSubUrl, _setV478AutoSubUrl] = useState<string | null>(null);
+  const [_v478AutoCues, _setV478AutoCues] = useState<SubtitleCue[]>([]);
+  const [_v478AutoCueText, _setV478AutoCueText] = useState<string>('');
+  useEffect(() => {
+    (globalThis as any).__v478_setAutoSub = _setV478AutoSubUrl;
+    return () => { try { (globalThis as any).__v478_setAutoSub = null; } catch (_) {} };
+  }, []);
+  useEffect(() => {
+    (async () => {
+      if (!_v478AutoSubUrl) { _setV478AutoCues([]); return; }
+      try {
+        let u = _v478AutoSubUrl;
+        const _b = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+        if (u && u.startsWith('/')) u = _b + u;
+        try { (globalThis as any).__v484_setHud && (globalThis as any).__v484_setHud('url', String(u).slice(-80)); } catch(_) {}
+        console.log('[v484] auto-CC fetching:', u);
+        const r = await fetch(u);
+        try { (globalThis as any).__v484_setHud && (globalThis as any).__v484_setHud('fetch', 'HTTP ' + r.status + ' ' + (r.ok ? 'OK' : 'FAIL')); } catch(_) {}
+        console.log('[v484] auto-CC HTTP', r.status);
+        const t = await r.text();
+        console.log('[v484] auto-CC body length', t.length, 'first120=', t.slice(0,120));
+        try { (globalThis as any).__v484_setHud && (globalThis as any).__v484_setHud('body', 'bytes=' + t.length + ' head=' + t.slice(0,40).replace(/\s+/g,' ')); } catch(_) {}
+        const ls = t.split('\n');
+        const cues: SubtitleCue[] = [];
+        let i = 0;
+        const _toSec = (ts: string) => { const m = ts.trim().match(/(\d+):(\d+):(\d+)[.,](\d+)/); if (!m) return 0; return parseInt(m[1],10)*3600 + parseInt(m[2],10)*60 + parseInt(m[3],10) + parseInt(m[4],10)/1000; };
+        while (i < ls.length) {
+          const L = ls[i]; i++;
+          if (L && L.includes('-->')) {
+            const [a, b] = L.split('-->');
+            const start = _toSec(a); const end = _toSec(b);
+            let text = '';
+            while (i < ls.length && ls[i].trim() !== '') { text += (text ? '\n' : '') + ls[i].trim(); i++; }
+            if (text) cues.push({ start, end, text });
+          }
+        }
+        _setV478AutoCues(cues); try { (globalThis as any).__v484_setHud && (globalThis as any).__v484_setHud('cues', 'parsed=' + cues.length); } catch(_) {}
+      } catch (e) { console.log('[v478f] auto-CC err', (e as any)?.message || e); }
+    })();
+  }, [_v478AutoSubUrl]);
+  // v485 - poll positionRef every 400ms, convert ms->sec, find current cue.
+  useEffect(() => {
+    if (_v478AutoCues.length === 0) { _setV478AutoCueText(''); return; }
+    const _v485_tick = () => {
+      const posMs = (positionRef && positionRef.current) ? positionRef.current : position;
+      const posSec = posMs / 1000;
+      const offSec = (subtitleOffset || 0) / 1000;
+      const adj = posSec - offSec;
+      const c = _v478AutoCues.find(x => adj >= x.start && adj <= x.end);
+      try { (globalThis as any).__v484_setHud && (globalThis as any).__v484_setHud('tick', 't=' + adj.toFixed(1) + 's cue=' + (c ? c.text.slice(0,50) : 'NONE at ' + adj.toFixed(1) + 's')); } catch(_) {}
+      _setV478AutoCueText(c?.text || '');
+    };
+    _v485_tick();
+    const id = setInterval(_v485_tick, 400);
+    return () => clearInterval(id);
+  }, [_v478AutoCues, subtitleOffset]);
+  // v485 - legacy no-op to preserve anchor structure; original state-driven effect below is disabled.
+  useEffect(() => {
+    if (_v478AutoCues.length === 0) { _setV478AutoCueText(''); return; }
+    const adj = position - subtitleOffset;
+    const c = _v478AutoCues.find(x => adj >= x.start && adj <= x.end);
+    if (false) try { (globalThis as any).__v484_setHud && (globalThis as any).__v484_setHud('tick', 't=' + adj.toFixed(1) + 's cue=' + (c ? c.text.slice(0,50) : 'NONE at this time')); } catch(_) {}
+    // v481b - show auto-CC when the English cue TRANSLATES foreign audio.
+    // Detects: [in Mandarin], (speaking Spanish), <i>...</i> italics, or non-ASCII chars.
+    const _v481Text = c?.text || '';
+    let _v481Show = false;
+    if (_v481Text) {
+      const _t = _v481Text;
+      if (/\[(?:in\s+\w+|speaking\s+\w+|\w+\s+language|foreign\s+language|\w+\s*:\s*)/i.test(_t)) _v481Show = true;
+      else if (/\((?:in\s+\w+|speaking\s+\w+|\w+\s+language|foreign)/i.test(_t)) _v481Show = true;
+      else if (/<i>[\s\S]+<\/i>/i.test(_t)) _v481Show = true;
+      else if (/[^\x00-\x7F]/.test(_t)) _v481Show = true;
+    }
+    _setV478AutoCueText(_v481Show ? _v481Text : '');
+  }, [position, _v478AutoCues, subtitleOffset]);
   const [currentSubtitleText, setCurrentSubtitleText] = useState<string>('');
-  const [subtitleOffset, setSubtitleOffset] = useState<number>(0); // Offset in ms (positive = subtitles appear later)
+  const _v478DisplayedCue = currentSubtitleText || _v478AutoCueText;
+  const [subtitleOffset, setSubtitleOffset] = useState<number>(0);
+  /* v457/v458 ASPECT-RATIO TOGGLE - cycles FIT / FILL / STRETCH. */
+  const [v457AspectMode, v457SetAspectMode] = useState<'contain' | 'cover' | 'stretch'>('contain');
+  const [v457LabelVisible, v457SetLabelVisible] = useState<boolean>(false);
+  const v457CycleAspect = React.useCallback(() => {
+    v457SetAspectMode((prev) => {
+      const next = prev === 'contain' ? 'cover' : prev === 'cover' ? 'stretch' : 'contain';
+      try { console.log('[v457] aspect mode ->', next); } catch (_) {}
+      return next;
+    });
+    v457SetLabelVisible(true);
+    setTimeout(() => v457SetLabelVisible(false), 1200);
+  }, []);
+  const v457ResizeMode = v457AspectMode === 'contain' ? ResizeMode.CONTAIN
+                       : v457AspectMode === 'cover'   ? ResizeMode.COVER
+                       : ResizeMode.STRETCH;
+  const v457ModeLabel = v457AspectMode === 'contain' ? 'FIT'
+                      : v457AspectMode === 'cover'   ? 'FILL' : 'STRETCH';
+  const v457ModeIcon: any = v457AspectMode === 'contain' ? 'resize-outline'
+                          : v457AspectMode === 'cover'   ? 'scan-outline' : 'expand-outline'; // Offset in ms (positive = subtitles appear later)
+  /* V427_AUTOSYNC - short-lived notice to tell the user we auto-synced. */
+  const [autoSyncNotice, setAutoSyncNotice] = useState<string | null>(null);
+
+  /* V429_TOGGLEABLE_SYNC - user-triggered sync bar w/ auto-hide + focus. */
+  const [showSyncBar, setShowSyncBar] = useState<boolean>(false);
+  const [syncFocusKey, setSyncFocusKey] = useState<string | null>(null);
+  const _v429HideTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const _v429ResetHideTimer = () => {
+    if (_v429HideTimer.current) clearTimeout(_v429HideTimer.current);
+    _v429HideTimer.current = setTimeout(() => setShowSyncBar(false), 5000);
+  };
+  const _v429NudgeOffset = (delta: number) => {
+    setSubtitleOffset(prev => prev + delta);
+    _v429ResetHideTimer();
+  };
+  useEffect(() => {
+    if (showSyncBar) {
+      _v429ResetHideTimer();
+      return () => { if (_v429HideTimer.current) clearTimeout(_v429HideTimer.current); };
+    }
+  }, [showSyncBar]);
+  /* V407_SUB_AUTOMATCH - remember the auto-match reason for logging / debug */
+  const _v407AutoMatchRef = useRef<{ url: string; reason: string } | null>(null);
+  /* V408_FOREIGN_ONLY - true until user explicitly picks anything from
+     the CC modal. While true, the auto-matched sub is loaded silently
+     but only cues that look foreign (non-Latin script or bracketed
+     language tag) are rendered. */
+  const [_v408AutoActive, setV408AutoActive] = useState<boolean>(true);
+  /* V410_PRECISE_FOREIGN - tightened classifier. Only fires on cues that
+     look like actual translated foreign DIALOGUE, not the endless
+     SDH italic noise (sound effects, music, character labels).
+     False-positive killers:
+       * cue must be FULLY italic-wrapped (start to end)
+       * >= 3 words of actual content
+       * not a parenthesized sound effect
+       * no music notes
+       * doesn't look like "NAME:" character label
+     Plus all high-precision signals (non-Latin scripts, [in X] tags). */
+  const _v408IsForeignCue = (raw: any) => {
+    try {
+      const text = String(raw || '').trim();
+      if (!text) return false;
+      const plain = text.replace(/<[^>]+>/g, '').replace(/\{\/?[a-z]+\}/gi, '').trim();
+      if (!plain) return false;
+
+      // === HIGH-PRECISION SIGNALS (100% foreign, never false-positive) ===
+      // A) Non-Latin scripts in the plain text
+      if (/[\u0400-\u04FF]/.test(plain)) return true;
+      if (/[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(plain)) return true;
+      if (/[\u0590-\u05FF]/.test(plain)) return true;
+      if (/[\u0600-\u06FF]/.test(plain)) return true;
+      if (/[\u0900-\u097F\u0B80-\u0BFF\u0C00-\u0C7F]/.test(plain)) return true;
+      // B) Descriptor tags:  [speaks Spanish], (in French), [FOREIGN LANGUAGE]
+      if (/[\[\(](?:speaks|speaking|in|foreign)\s+[a-z]+[\]\)]/i.test(plain)) return true;
+      const _langs = 'SPANISH|FRENCH|GERMAN|RUSSIAN|JAPANESE|ITALIAN|CHINESE|MANDARIN|CANTONESE|ARABIC|KOREAN|PORTUGUESE|DUTCH|POLISH|HINDI|TAMIL|TELUGU|SWEDISH|NORWEGIAN|DANISH|FINNISH|HEBREW|GREEK|TURKISH|VIETNAMESE|THAI|INDONESIAN|SWAHILI|LATIN|ALIEN|NATIVE|TRIBAL|KLINGON|ELVISH|DOTHRAKI|VALYRIAN|NAVI|SPEAKING\\s+FOREIGN|FOREIGN\\s+LANGUAGE';
+      if (new RegExp('[\\[\\(](?:' + _langs + ')(?:\\b|[\\]\\)])', 'i').test(plain)) return true;
+      if (new RegExp('[:.]\\s*[\\[\\(]\\s*(?:' + _langs + ')\\s*[\\]\\)]', 'i').test(plain)) return true;
+      if (new RegExp('\\([^)]*\\bin\\s+(?:' + _langs + ')\\)', 'i').test(plain)) return true;
+
+      // === ITALICS SIGNAL (guarded by SDH-noise rejectors) ===
+      // Cue must be FULLY wrapped in <i>...</i> (start and end).
+      const _fullItalic = /^<i\b[^>]*>[\s\S]*?<\/i>\s*$/i.test(text)
+                       || /^\{i\}[\s\S]*?\{\/i\}\s*$/i.test(text);
+      if (!_fullItalic) return false;
+
+      // Reject SDH sound effects:  (door slam), [phone ringing], etc.
+      if (/^\s*[\(\[][\s\S]*[\)\]]\s*$/.test(plain)) return false;
+      // Reject music cues
+      if (/[\u266A\u266B\u266C\u2669]/.test(plain)) return false;
+      if (/^\s*[#*]\s/.test(plain)) return false;
+      // Reject character labels  "KYLE:", "MAN ON TV:", "-KYLE:"
+      if (/^-?\s*[A-Z][A-Z\s'\-]{1,20}:\s*(?:$|\S{0,6}$)/.test(plain)) return false;
+      // Reject onomatopoeia / short exclamations
+      if (/^(?:whispers|whispering|gasps|sighs|groans|laughs|chuckles|screams|shouting|grunts|panting|breathing|footsteps|knocking|beeping|ringing)$/i.test(plain)) return false;
+      // Need at least 3 words of real content to look like a dialogue line
+      const _wc = plain.split(/\s+/).filter((w: string) => w.length > 0).length;
+      if (_wc < 3) return false;
+      return true;
+    } catch (_) { return false; }
+  };
   
   // Google Cast state
   const [isCasting, setIsCasting] = useState(false);
@@ -596,6 +839,228 @@ export default function PlayerScreen() {
   
   // Custom player controls state
   const [showControls, setShowControls] = useState(true);
+  /* V391_SKIP_INTRO - pill shown during the intro window of series eps. */
+  const [_v391SkipVisible, setV391SkipVisible] = useState(false);
+  const _v395CtrlRef = useRef(true); /* V395_SKIP_PRESS */
+  useEffect(() => { _v395CtrlRef.current = showControls; }, [showControls]);
+  /* V396_ADAPTIVE_SKIP - per-series learned intro length. Default 60s;
+     corrections (seeks within 30s of skipping) adjust and persist it. */
+  const _v396LenRef = useRef(60000);
+  const _v396SkipAtRef = useRef(0);
+  const _v396AdjRef = useRef(0);
+  const _v396TimerRef = useRef<any>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!seriesId) return;
+        const raw = await AsyncStorage.getItem('@ps_intro_len');
+        const map = raw ? JSON.parse(raw) : {};
+        const v = map[String(seriesId)];
+        /* V399 - entries upgraded to { s: startMs, l: lengthMs }; legacy
+           plain-number entries (length only) still load. */
+        const _v399L = (v && typeof v === 'object') ? (v as any).l : v;
+        const _v399S = (v && typeof v === 'object') ? (v as any).s : null;
+        if (typeof _v399L === 'number' && _v399L >= 20000 && _v399L <= 180000) {
+          _v396LenRef.current = _v399L;
+          console.log('[V396] intro len for ' + seriesId + ' = ' + Math.round(_v399L / 1000) + 's');
+        }
+        if (typeof _v399S === 'number' && _v399S >= 0 && _v399S <= 300000) {
+          _v399StartRef.current = _v399S;
+          console.log('[V399] intro start for ' + seriesId + ' = ' + Math.round(_v399S / 1000) + 's');
+        }
+      } catch (_) {}
+    })();
+  }, [seriesId]);
+  const _v396NoteSeek = (deltaMs: number) => {
+    /* only seeks shortly after a skip count as corrections */
+    if (!_v396SkipAtRef.current || Date.now() - _v396SkipAtRef.current > 30000) return;
+    _v396AdjRef.current += deltaMs;
+    if (_v396TimerRef.current) clearTimeout(_v396TimerRef.current);
+    _v396TimerRef.current = setTimeout(async () => {
+      const adj = _v396AdjRef.current;
+      _v396SkipAtRef.current = 0;
+      _v396AdjRef.current = 0;
+      if (!adj || !seriesId) return;
+      const newLen = Math.max(20000, Math.min(180000, _v396LenRef.current + adj));
+      if (newLen === _v396LenRef.current) return;
+      _v396LenRef.current = newLen;
+      try {
+        const raw = await AsyncStorage.getItem('@ps_intro_len');
+        const map = raw ? JSON.parse(raw) : {};
+        map[String(seriesId)] = { s: _v399StartRef.current, l: newLen }; /* V399 */
+        await AsyncStorage.setItem('@ps_intro_len', JSON.stringify(map));
+        console.log('[V396] learned intro len for ' + seriesId + ' = ' + Math.round(newLen / 1000) + 's');
+      } catch (_) {}
+    }, 8000);
+  };
+  /* V399_AUTO_SKIP - self-aware skip intro. Refs + persist + auto action. */
+  const _v399StartRef = useRef<number | null>(null);
+  const _v399AutoDoneRef = useRef(false);
+  const [_v399Toast, setV399Toast] = useState(false);
+  useEffect(() => { _v399AutoDoneRef.current = false; }, [contentId]);
+  /* V401_DIAG_OVERLAY - upgraded V400 tag: show what the player actually
+     picked so we can see whether the detector misses this title or the
+     player bypasses `parsed` entirely. Stays 15s. */
+  const [_v400Tag, setV400Tag] = useState(false); /* V403_UI_CLEAN - diag off */
+  useEffect(() => { const _t = setTimeout(() => setV400Tag(false), 15000); return () => clearTimeout(_t); }, []);
+  /* V402_STREAM_HOP - self-contained: parse fallbackStreams from params and
+     swap the video URL directly via setStreamUrl. */
+  const _v402FBList = useMemo(() => {
+    try {
+      const raw = (_v401RawParams && (_v401RawParams.fallbackStreams as any));
+      if (!raw) return [] as any[];
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) { return [] as any[]; }
+  }, [_v401RawParams]);
+  const _v402IdxRef = useRef(-1); /* -1 == still on directUrl (index 0 = first fallback) */
+  const [_v402Toast, setV402Toast] = useState<string | null>(null);
+  const _v402Swap = useCallback(() => {
+    try {
+      if (_v402FBList.length === 0) {
+        setV402Toast('No fallback streams');
+      } else {
+        const next = (_v402IdxRef.current + 1);
+        if (next >= _v402FBList.length) {
+          _v402IdxRef.current = -1;
+          setV402Toast('Wrapped - back to primary');
+          const _du = String((_v401RawParams && _v401RawParams.directUrl) || '');
+          if (_du) { try { (setStreamUrl as any)(_du); } catch (_) {} }
+        } else {
+          _v402IdxRef.current = next;
+          const item: any = _v402FBList[next];
+          const url = typeof item === 'string' ? item : (item && (item.url || item.streamUrl || item.directUrl));
+          if (url && typeof url === 'string') {
+            try { (setStreamUrl as any)(url); } catch (_) {}
+            setV402Toast('Stream ' + (next + 2) + '/' + (_v402FBList.length + 1) + ' | ...' + String(url).slice(-40));
+          } else {
+            setV402Toast('Fallback ' + (next + 1) + ' has no url');
+          }
+        }
+      }
+    } catch (e: any) {
+      setV402Toast('Swap error: ' + String(e && e.message ? e.message : e).slice(0, 60));
+    }
+    setTimeout(() => setV402Toast(null), 4000);
+  }, [_v402FBList, _v401RawParams]);
+  /* V402 - Firestick MENU key via TVEventHandler if available */
+  useEffect(() => {
+    let _sub: any = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const RN: any = require('react-native');
+      const TVEventHandler = RN && RN.TVEventHandler ? RN.TVEventHandler : null;
+      if (false && TVEventHandler) { /* V403_UI_CLEAN - MENU handler off */
+        _sub = new TVEventHandler();
+        _sub.enable(null, (_c: any, evt: any) => {
+          try {
+            const et = String((evt && (evt.eventType || evt.eventKeyAction)) || '').toLowerCase();
+            if (et === 'menu' || et === 'info') _v402Swap();
+          } catch (_) {}
+        });
+      }
+    } catch (_) {}
+    return () => { try { if (_sub && _sub.disable) _sub.disable(); } catch (_) {} };
+  }, [_v402Swap]);
+  const _v401RawParams = useLocalSearchParams() as any;
+  const _v401Title = String((_v401RawParams && (_v401RawParams.streamTitle || _v401RawParams.title || _v401RawParams.name || _v401RawParams.contentTitle)) || '');
+  const _v401UrlSrc = String((typeof streamUrl === 'string' ? streamUrl : '') || (_v401RawParams && (_v401RawParams.url || _v401RawParams.streamUrl)) || '');
+  const _v401IsForeign = (() => {
+    try {
+      const _raw = _v401Title;
+      if (/[\u0400-\u04FF]/.test(_raw)) return true;
+      if (/[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(_raw)) return true;
+      const _fl = _raw.match(/\uD83C[\uDDE6-\uDDFF]\uD83C[\uDDE6-\uDDFF]/g) || [];
+      const _engFl = ['\uD83C\uDDEC\uD83C\uDDE7', '\uD83C\uDDFA\uD83C\uDDF8', '\uD83C\uDDE8\uD83C\uDDE6', '\uD83C\uDDE6\uD83C\uDDFA', '\uD83C\uDDF3\uD83C\uDDFF', '\uD83C\uDDEE\uD83C\uDDEA'];
+      for (let _i = 0; _i < _fl.length; _i++) { if (_engFl.indexOf(_fl[_i]) === -1) return true; }
+      const _u = _raw.toUpperCase().replace(/MULTI[\s.\-]?SUBS?/g, '');
+      if (/\bVOSTFR\b|\bVOSTA\b|\bVFF\b|\bVFQ\b|\bTRUEFRENCH\b|\bFRENCH\b|\bFRA\b/.test(_u)) return true;
+      if (/\bGERMAN\b|\bDEUTSCH\b|\bGER\b|\bDEU\b/.test(_u)) return true;
+      if (/\bITALIAN\b|\bITALIANO\b|\bITA\b/.test(_u)) return true;
+      if (/\bSPANISH\b|\bESPANOL\b|\bCASTELLANO\b|\bLATINO\b/.test(_u)) return true;
+      if (/\bRUSSIAN\b|\bRUS\b|\bUKRAINIAN\b|\bUKR\b/.test(_u)) return true;
+      if (/\bKOREAN\b|\bKOR\b|\bJAPANESE\b|\bJPN\b|\bCHINESE\b|\bCHS\b|\bCHT\b/.test(_u)) return true;
+      if (/\bPOLISH\b|\bLEKTOR\b|\bTURKISH\b|\bHINDI\b|\bTAMIL\b|\bTELUGU\b|\bDUBLADO\b|\bPORTUGUESE\b|\bDUTCH\b/.test(_u)) return true;
+      if (/\bMULTI\b|\bDUAL\b|\bDUBBED\b/.test(_u)) return true;
+      return false;
+    } catch (_) { return false; }
+  })();
+  useEffect(() => {
+    if (!_v401UrlSrc) return;
+    const body = 'V401 T=' + _v401Title.slice(0, 200) + ' | U=' + _v401UrlSrc.slice(-120) + ' | FOREIGN=' + (_v401IsForeign ? 'YES' : 'no') + ' | PARAM_KEYS=' + Object.keys(_v401RawParams || {}).join(',');
+    try {
+      fetch((process.env.EXPO_PUBLIC_BACKEND_URL || '') + '/api/devlog', {
+        method: 'POST', headers: { 'Content-Type': 'text/plain' }, body,
+      }).catch(() => {});
+    } catch (_) {}
+    console.log('[V401 DIAG] ' + body);
+  }, [_v401UrlSrc]);
+  const _v399Persist = () => {
+    (async () => {
+      try {
+        if (!seriesId) return;
+        const raw = await AsyncStorage.getItem('@ps_intro_len');
+        const map = raw ? JSON.parse(raw) : {};
+        map[String(seriesId)] = { s: _v399StartRef.current, l: _v396LenRef.current };
+        await AsyncStorage.setItem('@ps_intro_len', JSON.stringify(map));
+        console.log('[V399] saved intro start=' + String(_v399StartRef.current) + ' len=' + _v396LenRef.current + ' for ' + seriesId);
+      } catch (_) {}
+    })();
+  };
+  const _v399AutoSkip = () => {
+    try {
+      _v391DoneRef.current = true;
+      _v391SkipVisibleRef.current = false;
+      setV391SkipVisible(false);
+      _v396SkipAtRef.current = Date.now(); /* corrections still learn */
+      _v396AdjRef.current = 0;
+      const _end = (_v399StartRef.current || 0) + _v396LenRef.current;
+      const _np = Math.min((durationRef.current || Number.MAX_SAFE_INTEGER) - 1000, _end);
+      if (videoRef.current) videoRef.current.setPositionAsync(Math.max(0, _np));
+      console.log('[V399] AUTO-SKIP intro to ' + Math.round(_np / 1000) + 's');
+      _v393Log('v399 AUTO-SKIP to ' + Math.round(_np / 1000) + 's');
+      setV399Toast(true);
+      setTimeout(() => setV399Toast(false), 3500);
+    } catch (_) {}
+  };
+  const _v391SkipVisibleRef = useRef(false);
+  const _v391DoneRef = useRef(false);
+  /* V393_REMOTE_DEBUG - no-adb diagnostics: reports skip-intro state to the
+     patch server so issues can be debugged without logcat. Remove later. */
+  const _v393LastRef = useRef('');
+  const _v393Log = (msg: string) => {
+    try {
+      fetch('https://expo-android-tv.preview.emergentagent.com/api/devlog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: msg,
+      }).catch(() => {});
+    } catch (_) {}
+  };
+  useEffect(() => {
+    _v393Log('v393 bundle ACTIVE - player mounted id=' + String(contentId || '') + ' type=' + String(contentType || '') + ' resume=' + String(resumePosition || 'none'));
+  }, []);
+
+  /* V392_SKIP_INTRO_BUTTON - shared skip action for the focusable button. */
+  const _v391Skip = useCallback(() => {
+    if (_v391DoneRef.current) return;
+    console.log('[V392] Skip Intro pressed: +85s');
+    _v393Log('skipintro PRESSED'); /* V393_REMOTE_DEBUG */
+    _v391DoneRef.current = true;
+    _v391SkipVisibleRef.current = false;
+    setV391SkipVisible(false);
+    try {
+      _v399StartRef.current = Math.max(0, positionRef.current - 3000); /* V399 - learn intro start (minus press reaction time) */
+      _v399Persist();
+      _v396SkipAtRef.current = Date.now(); /* V396_ADAPTIVE_SKIP */
+      _v396AdjRef.current = 0;
+      const _np = Math.min(
+        (durationRef.current || Number.MAX_SAFE_INTEGER) - 1000,
+        positionRef.current + _v396LenRef.current
+      );
+      if (videoRef.current) videoRef.current.setPositionAsync(Math.max(0, _np));
+    } catch (_) {}
+  }, []);
   const [isPlaying, setIsPlaying] = useState(true);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -613,7 +1078,7 @@ export default function PlayerScreen() {
   durationRef.current = duration;
   const progressBarFocusedRef = useRef(false);
   const showControlsWithTimeoutRef = useRef<(() => void) | null>(null);
-  // V266_STICKY_CONTROLS_DURING_SCRUB — set true while the user is
+  // V266_STICKY_CONTROLS_DURING_SCRUB â€” set true while the user is
   // actively dragging the SeekableProgressBar thumb on mobile.  All
   // auto-hide timers must bail out while this is true.
   const isScrubbingRef = useRef(false);
@@ -646,14 +1111,14 @@ export default function PlayerScreen() {
     if (!force && now - lastProgressSaveRef.current < 5000) return;
     lastProgressSaveRef.current = now;
     
-    /* V176C_PLAYER_MARK_WATCHED — route through v176MarkWatched so the
+    /* V176C_PLAYER_MARK_WATCHED â€” route through v176MarkWatched so the
        in-memory _v172WatchedSet (used by every ContentCard) updates
        immediately and all visible posters re-render with the gold check. */
     const percentWatched = (currentPosition / totalDuration) * 100;
     if (percentWatched >= 90 && contentId) {
       try {
         await _v176cMark(contentId);
-        /* V176L_QUIET_PLAYER — log dropped. */
+        /* V176L_QUIET_PLAYER â€” log dropped. */
       } catch (e) {
         console.log('[PLAYER] Error saving watched status:', e);
       }
@@ -689,16 +1154,16 @@ export default function PlayerScreen() {
     return () => {
       // Save current progress on exit
       if (currentPositionRef.current > 0 && currentDurationRef.current > 0 && contentId && contentType && isLive !== 'true') {
-        /* V176G_EXIT_MARK_WATCHED — supersedes the v173 raw AsyncStorage
+        /* V176G_EXIT_MARK_WATCHED â€” supersedes the v173 raw AsyncStorage
            write.  v176MarkWatched updates the in-memory _v172WatchedSet,
            writes AsyncStorage, AND notifies every subscribed ContentCard
            so the gold check appears the moment the user lands back on
-           Discover — no app restart required. */
+           Discover â€” no app restart required. */
         try {
           const _v176gPct = (currentPositionRef.current / currentDurationRef.current) * 100;
           if (_v176gPct >= 90) {
             _v176cMark(contentId).then(() => {
-              /* V176L_QUIET_PLAYER — log dropped. */
+              /* V176L_QUIET_PLAYER â€” log dropped. */
             }).catch(() => {});
           }
         } catch (_) {}
@@ -849,8 +1314,16 @@ export default function PlayerScreen() {
   // Parse VTT/SRT subtitle file
   const parseSubtitleFile = async (subtitleUrl: string) => {
     try {
-      console.log('[SUBTITLES] Fetching subtitle file:', subtitleUrl);
-      const response = await fetch(subtitleUrl);
+      /* V422_ABS_SUB_URL - if the sub URL is a relative path returned
+         by our own backend (V413 REST), prepend the backend base URL
+         so fetch() gets an absolute URL. */
+      let _v422Url = subtitleUrl;
+      if (_v422Url && _v422Url.startsWith('/api/')) {
+        const _base = (process.env.EXPO_PUBLIC_BACKEND_URL || 'http://5.161.49.99:8001').replace(/\/$/, '');
+        _v422Url = _base + _v422Url;
+      }
+      console.log('[SUBTITLES] Fetching subtitle file:', _v422Url);
+      const response = await fetch(_v422Url);
       const text = await response.text();
       
       const cues: SubtitleCue[] = [];
@@ -915,6 +1388,8 @@ export default function PlayerScreen() {
       
       console.log(`[SUBTITLES] Parsed ${cues.length} subtitle cues`);
       setSubtitleCues(cues);
+
+      
     } catch (err) {
       console.log('[SUBTITLES] Error parsing subtitle file:', err);
     }
@@ -929,11 +1404,15 @@ export default function PlayerScreen() {
       const currentCue = subtitleCues.find(
         cue => adjustedPosition >= cue.start && adjustedPosition <= cue.end
       );
+      /* V408_FOREIGN_ONLY - while user hasn't picked anything, only cues
+         classified as foreign render. Once they interact with the CC
+         picker, full CC applies (autoActive becomes false). */
+      // v478f - picked-sub cues render unconditionally; auto-CC layered separately
       setCurrentSubtitleText(currentCue?.text || '');
     } else {
       setCurrentSubtitleText('');
     }
-  }, [position, subtitleCues, subtitleOffset]);
+  }, [position, subtitleCues, subtitleOffset, _v408AutoActive]);
   
   // Load subtitle when selected
   useEffect(() => {
@@ -1097,7 +1576,7 @@ export default function PlayerScreen() {
     })();
   }, [nextEpisodeId, contentType]);
   
-  // PATCH_V143C_NO_THROTTLE — reverted v143b's setPosition throttle because
+  // PATCH_V143C_NO_THROTTLE â€” reverted v143b's setPosition throttle because
   // it desynced the UI position from the actual playhead, breaking the FF
   // handler (which read state to compute the next seek target) and tripping
   // credits/auto-next-episode logic at the wrong moment.
@@ -1122,10 +1601,15 @@ export default function PlayerScreen() {
         setIsRebuffering(false);
         // Animate progress to 100% then hide loading after a brief delay
         setDownloadProgress(100);
-        // Small delay to show the completed animation before hiding
-        setTimeout(() => {
-          setIsLoading(false);
-        }, 400);
+        /* V387_HOLD_TILL_RESUME - if a Continue-Watching resume seek is
+           still pending, keep the loading screen up until the seek lands
+           so the user never sees the video flash frame 0:00 first.
+           5s failsafe so a failed seek can never hang the screen. */
+        if (pendingResumePosition && pendingResumePosition > 0 && !hasResumedRef.current) {
+          setTimeout(() => { setIsLoading(false); }, 5000);
+        } else {
+          setTimeout(() => { setIsLoading(false); }, 400);
+        }
         // Clear timeout since playback started
         if (playbackTimeoutRef.current) {
           clearTimeout(playbackTimeoutRef.current);
@@ -1168,6 +1652,7 @@ export default function PlayerScreen() {
             console.log(`[PLAYER] Resume position past 95%, not resuming`);
             hasResumedRef.current = true;
             setPendingResumePosition(null);
+            setIsLoading(false); /* V387_HOLD_TILL_RESUME */
           } else {
             const positionDiff = Math.abs(currentPos - resumeMs);
             // If we're more than 3 seconds away from target, seek
@@ -1183,11 +1668,58 @@ export default function PlayerScreen() {
               console.log(`[PLAYER] Resume complete - at position: ${currentPos/1000}s`);
               hasResumedRef.current = true;
               setPendingResumePosition(null);
+              setTimeout(() => { setIsLoading(false); }, 150); /* V387_HOLD_TILL_RESUME */
             }
           }
         }
       }
       
+      /* V391_SKIP_INTRO - visible 0:15-5:00 of series playback, once per
+         episode, never when resuming past 4 minutes. */
+      if (contentType === 'series' && playbackStarted && !_v391DoneRef.current) {
+        const _v391Pos = status.positionMillis || 0;
+        /* V399_AUTO_SKIP - once this series' intro window is learned, skip
+           it automatically the moment playback enters it. Never fires when
+           resuming past the intro start. */
+        /* V400_AUTOSKIP_KILL - auto-skip disabled. v399 refs still load and
+           save so re-enabling later needs no data migration. */
+        if (false && _v399StartRef.current !== null && !_v399AutoDoneRef.current
+            && _v391Pos >= _v399StartRef.current
+            && _v391Pos < _v399StartRef.current + _v396LenRef.current - 2000
+            && !(parsedResumePosition && parsedResumePosition * 1000 > _v399StartRef.current + 5000)) {
+          _v399AutoDoneRef.current = true;
+          _v399AutoSkip();
+        }
+        const _v391Show = false; /* V400B_ORPHAN_FIX - Skip Intro pill fully disabled. */
+        /* was:
+           _v399StartRef.current === null && _v391Pos >= 15000 && _v391Pos <= 120000
+           && !(parsedResumePosition && parsedResumePosition * 1000 >= 240000);
+        */
+        /* V393_REMOTE_DEBUG - report each state bucket once */
+        const _v393B = 'show=' + String(_v391Show) + ' b=' + Math.floor(_v391Pos / 30000);
+        if (_v393B !== _v393LastRef.current) {
+          _v393LastRef.current = _v393B;
+          _v393Log('skipintro type=' + String(contentType) + ' started=' + String(playbackStarted)
+            + ' pos=' + Math.round(_v391Pos / 1000) + 's resume=' + String(parsedResumePosition)
+            + ' done=' + String(_v391DoneRef.current) + ' show=' + String(_v391Show));
+        }
+
+        if (_v391Show !== _v391SkipVisibleRef.current) {
+          _v391SkipVisibleRef.current = _v391Show;
+          setV391SkipVisible(_v391Show);
+        }
+      } else if (_v391SkipVisibleRef.current) {
+        _v391SkipVisibleRef.current = false;
+        setV391SkipVisible(false);
+        _v393Log('skipintro forced-hide started=' + String(playbackStarted) + ' done=' + String(_v391DoneRef.current));
+      } else if (_v393LastRef.current !== 'blocked' && (status.positionMillis || 0) > 20000 && (status.positionMillis || 0) < 300000 && !_v391DoneRef.current) {
+        _v393LastRef.current = 'blocked';
+
+        _v393Log('skipintro BLOCKED type=' + String(contentType) + ' started=' + String(playbackStarted)
+          + ' done=' + String(_v391DoneRef.current) + ' pos=' + Math.round((status.positionMillis || 0) / 1000)
+          + 's resume=' + String(parsedResumePosition));
+      }
+
       // Credits detection - show "Up Next" popup when credits start
       const currentDuration = status.durationMillis || 0;
       const currentPosition = status.positionMillis || 0;
@@ -1214,12 +1746,12 @@ export default function PlayerScreen() {
         setIsEnded(true);
         // If credits popup was never shown and there's a next episode, show it NOW
         if (nextEpisodeId && contentType === 'series' && !creditsShownRef.current && !showNextEpisodeModal) {
-          console.log('[PLAYER] Playback finished without credits popup — showing now');
+          console.log('[PLAYER] Playback finished without credits popup â€” showing now');
           creditsShownRef.current = true;
           showCreditsPopup();
         } else if (!showNextEpisodeModal) {
           // Modal was dismissed or never shown, go back
-          router.back();
+          _v389SmartBack(); /* V389_SMART_BACK */
         }
       }
     }
@@ -1265,6 +1797,61 @@ export default function PlayerScreen() {
           const listData = await listResp.json();
           const list = Array.isArray(listData?.streams) ? listData.streams : [];
           if (list.length === 0) { console.log('[PLAYER v128] no streams for next ep'); return; }
+          /* V397_QUALITY_FIRST - the fast path inherited raw backend (seeder)
+             order; v388 below only demotes foreign releases. Rank by what
+             actually plays best on the Firestick (same rules as the details
+             ranker): cached first, then resolution, HDR/DV and lossless
+             audio demoted. v388's English partition after this is stable,
+             so the final pick = best cached English highest-quality. */
+          const _v397Score = (s: any): number => {
+            try {
+              const t = String((s && (s.title || s.name || s.filename)) || '').toUpperCase();
+              let q = 0;
+              if (/\b(2160P?|4K|UHD)\b/.test(t)) q += 400;
+              else if (/\b1080P?\b/.test(t)) q += 300;
+              else if (/\b720P?\b/.test(t)) q += 200;
+              else if (/\bHD\b/.test(t)) q += 100;
+              if (s && s.url) q += 5000; /* cached/direct = instant start */
+              if (/\bHDR(10\+?)?\b|\bDOLBY[\s.]?VISION\b|\bDV\b/.test(t)) q -= 20000; /* no HDR tone-map on Firestick */
+              if (/\bDTS[\s\-:]?X\b|\bDTSX\b|\bTRUEHD\b|\bTRUE[\s\-]?HD\b|\bATMOS\b|\bDTS[\s\-]?HD(\s*MA)?\b/.test(t)) q -= 20000; /* undecodable audio */
+              else if (/\bDTS\b/.test(t)) q -= 2000;
+              return q;
+            } catch (_) { return 0; }
+          };
+          try {
+            list.sort((a: any, b: any) => _v397Score(b) - _v397Score(a));
+            const _v397Top = list[0];
+            console.log('[PLAYER v397] quality-ranked ' + list.length + ' streams, top: ' + String((_v397Top && (_v397Top.title || _v397Top.name)) || '?').slice(0, 80));
+          } catch (_) {}
+          /* V388_ENGLISH_FIRST - the fast path picked list[0] verbatim, so a
+             foreign release topping the backend ranking auto-played the next
+             episode in Russian/etc. Demote detected-foreign releases to the
+             back of the list (in place, so list[0]/list[1]/fallbacks all
+             inherit the order). */
+          const _v388IsForeign = (s: any): boolean => {
+            try {
+              const t = String((s && (s.title || s.name || s.filename)) || '').toUpperCase();
+              if (/[\u0400-\u04FF]/.test(t)) return true; /* Cyrillic */
+              const hasEngFlag = /\uD83C\uDDEC\uD83C\uDDE7|\uD83C\uDDFA\uD83C\uDDF8/.test(t); /* GB / US */
+              const hasForeignFlag = /\uD83C\uDDF7\uD83C\uDDFA|\uD83C\uDDEB\uD83C\uDDF7|\uD83C\uDDEA\uD83C\uDDF8|\uD83C\uDDF2\uD83C\uDDFD|\uD83C\uDDE9\uD83C\uDDEA|\uD83C\uDDEE\uD83C\uDDF9|\uD83C\uDDEE\uD83C\uDDF3|\uD83C\uDDE7\uD83C\uDDF7|\uD83C\uDDF5\uD83C\uDDF1|\uD83C\uDDFA\uD83C\uDDE6|\uD83C\uDDF0\uD83C\uDDF7|\uD83C\uDDEF\uD83C\uDDF5|\uD83C\uDDE8\uD83C\uDDF3/.test(t);
+              if (hasForeignFlag && !hasEngFlag) return true;
+              /* V398_STRICT_ENGLISH - widened: short lang tags, MULTi/DUAL
+                 (default audio usually not English), CJK characters. */
+              const _v398t = t.replace(/MULTI[\s.\-]?SUBS?/g, '');
+              if (/\b(RUS|RUSSIAN|HINDI|TAMIL|TELUGU|VOSTFR|VOSTA|VFF|VFQ|TRUEFRENCH|FRENCH|FRA|LATINO|CASTELLANO|SPANISH|ESPANOL|GERMAN|DEUTSCH|GER|DEU|ITALIAN|ITALIANO|ITA|DUBLADO|PORTUGUESE|LEKTOR|KOREAN|KOR|JAPANESE|JPN|CHINESE|CHS|CHT|POLISH|UKRAINIAN|UKR|TURKISH|DUTCH|MULTI|DUAL|DUBBED)\b/.test(_v398t)) return true;
+              if (/[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(t)) return true;
+              return false;
+            } catch (_) { return false; }
+          };
+          try {
+            const _v388Eng = list.filter((s: any) => !_v388IsForeign(s));
+            if (_v388Eng.length > 0 && _v388Eng.length < list.length) {
+              const _v388For = list.filter((s: any) => _v388IsForeign(s));
+              list.length = 0;
+              Array.prototype.push.apply(list, _v388Eng.concat(_v388For));
+              console.log('[PLAYER v388] reordered streams: ' + _v388Eng.length + ' ENG-first, ' + _v388For.length + ' foreign demoted');
+            }
+          } catch (_) {}
           const sn = parseInt(_nextSeason, 10);
           const en = parseInt(_nextEpisodeNum, 10);
           const baseTitle = nextEpisodeTitle || `Episode ${_nextEpisodeNum}`;
@@ -1318,9 +1905,9 @@ export default function PlayerScreen() {
             return;
           }
           // PHASE 3: list[0] was uncached/error/buffering past its share
-          // of the budget — fall through to list[1] if available.
+          // of the budget â€” fall through to list[1] if available.
           if (list.length >= 2 && _remaining() > 800) {
-            console.log('[PLAYER v128] list[0] failed (', r0 && r0.status, ') — trying list[1] as fallback');
+            console.log('[PLAYER v128] list[0] failed (', r0 && r0.status, ') â€” trying list[1] as fallback');
             _commitHashOnly(list[1]);
             const r1 = await _tryResolve(list[1], _remaining());
             console.log('[PLAYER v128] list[1] status=', r1 && r1.status);
@@ -1330,7 +1917,7 @@ export default function PlayerScreen() {
               console.log('[PLAYER v128] UPGRADED via list[1] (cached fallback)');
               return;
             }
-            // Both list[0] and list[1] uncached/error — clear ref so we
+            // Both list[0] and list[1] uncached/error â€” clear ref so we
             // fall back to /details/series/{id}?autoPlay=true
             if (r1 && r1.status === 'error') preResolveRef.current = null;
           } else if (r0 && r0.status === 'error') {
@@ -1382,11 +1969,11 @@ export default function PlayerScreen() {
             }
             console.log('[PLAYER v126] BINGE FAST PATH: direct /player nav,', _pre.directUrl ? 'pre-resolved URL' : 'hash-only');
             preResolveRef.current = null;
-            /* V181_BINGE_REPLACE — replace instead of push so the old player
+            /* V181_BINGE_REPLACE â€” replace instead of push so the old player
                unmounts atomically; eliminates the black-frame flash. */
             router.replace({ pathname: '/player', params: _params } as any);
           } else {
-            // V181_BINGE_REPLACE — replace, not push (same reason as B1).
+            // V181_BINGE_REPLACE â€” replace, not push (same reason as B1).
             router.replace({
               pathname: `/details/series/${nextEpisodeId}`,
               params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '', nextPoster: (nextEpisodePoster || poster || '') as string, nextBackdrop: (backdrop || '') as string },
@@ -1406,7 +1993,7 @@ export default function PlayerScreen() {
       showCreditsPopup();
     } else if (!showNextEpisodeModal) {
       // No next episode or popup was dismissed - go back
-      router.back();
+      _v389SmartBack(); /* V389_SMART_BACK */
     }
   }, [nextEpisodeId, contentType, router, showNextEpisodeModal, showCreditsPopup]);
   
@@ -1439,7 +2026,7 @@ export default function PlayerScreen() {
     console.log('[PLAYER] Playing next episode:', nextEpisodeId);
 
     /* v126-manual-nav */
-    // v126 BINGE FAST PATH: same logic as countdown branch — if pre-resolve
+    // v126 BINGE FAST PATH: same logic as countdown branch â€” if pre-resolve
     // populated preResolveRef, go straight to /player and skip details/id.tsx.
     const _preM = preResolveRef.current;
     try { (router as any).dismiss && (router as any).dismiss(2); } catch (_) {}
@@ -1469,10 +2056,10 @@ export default function PlayerScreen() {
       }
       console.log('[PLAYER v126] BINGE FAST PATH (manual): direct /player nav,', _preM.directUrl ? 'pre-resolved URL' : 'hash-only');
       preResolveRef.current = null;
-      /* V181_BINGE_REPLACE — manual next-episode also uses replace. */
+      /* V181_BINGE_REPLACE â€” manual next-episode also uses replace. */
       router.replace({ pathname: '/player', params: _paramsM } as any);
     } else {
-      // V181_BINGE_REPLACE — same.
+      // V181_BINGE_REPLACE â€” same.
       router.replace({
         pathname: `/details/series/${nextEpisodeId}`,
         params: { autoPlay: 'true', nextTitle: nextEpisodeTitle || '' },
@@ -1488,7 +2075,7 @@ export default function PlayerScreen() {
       countdownRef.current = null;
     }
     setShowNextEpisodeModal(false);
-    router.back();
+    _v389SmartBack(); /* V389_SMART_BACK */
   };
   
   // Cleanup countdown on unmount
@@ -1529,7 +2116,7 @@ export default function PlayerScreen() {
   const prefetchAndSeek = async (targetMs: number) => {
     if (!videoRef.current) return;
     
-    // PATCH_V7_SAFE_CLAMP — keep at least 5s away from the very end so a long
+    // PATCH_V7_SAFE_CLAMP â€” keep at least 5s away from the very end so a long
     // drag past the duration doesn't fire ExoPlayer's end-of-video reset.
     const safeMax = duration > 5000 ? duration - 5000 : Math.max(0, duration - 1);
     const clampedPosition = Math.max(0, Math.min(safeMax, targetMs));
@@ -1537,12 +2124,12 @@ export default function PlayerScreen() {
     // Show rebuffering spinner immediately
     isSeekingRef.current = true;
     lastSeekPositionRef.current = clampedPosition;
-    // PATCH_V10_SNAPSHOT — capture pre-seek position so onError can rewind us if the seek fails
+    // PATCH_V10_SNAPSHOT â€” capture pre-seek position so onError can rewind us if the seek fails
     try { preSeekPositionMsRef.current = positionRef.current || 0; } catch (_) { preSeekPositionMsRef.current = 0; }
     setIsRebuffering(true);
     showControlsWithTimeout();
 
-    // PATCH_V7_KILL_TIMEOUT_ON_SEEK — a user-initiated seek must NOT trigger tryNextStream.
+    // PATCH_V7_KILL_TIMEOUT_ON_SEEK â€” a user-initiated seek must NOT trigger tryNextStream.
     // Cancel the 30s 'no playback yet' timeout that may still be armed.
     if (playbackTimeoutRef.current) {
       try { clearTimeout(playbackTimeoutRef.current); } catch (_) {}
@@ -1652,6 +2239,7 @@ export default function PlayerScreen() {
       
       console.log('[TV] Key event:', evt.eventType, 'keyCode:', evt.keyCode);
       
+      const _v395WasHidden = !_v395CtrlRef.current; /* V395_SKIP_PRESS */
       // Show controls on any button press
       showControlsWithTimeoutRef.current?.();
       
@@ -1682,6 +2270,7 @@ export default function PlayerScreen() {
         case 'rewind':
           // Hardware rewind button on Fire Stick remote - skip back 10s
           console.log('[TV] Rewind -10s from', positionRef.current);
+          _v396NoteSeek(-10000); /* V396 */
           if (videoRef.current) {
             const newPos = Math.max(0, positionRef.current - 10000);
             videoRef.current.setPositionAsync(newPos);
@@ -1690,6 +2279,7 @@ export default function PlayerScreen() {
         case 'fastForward':
           // Hardware fast-forward button on Fire Stick remote - skip forward 10s
           console.log('[TV] FastForward +10s from', positionRef.current);
+          _v396NoteSeek(10000); /* V396 */
           if (videoRef.current) {
             const newPos = Math.min(durationRef.current, positionRef.current + 10000);
             videoRef.current.setPositionAsync(newPos);
@@ -1699,6 +2289,7 @@ export default function PlayerScreen() {
           // If progress bar is focused, seek backward 10s
           if (progressBarFocusedRef.current && videoRef.current) {
             console.log('[TV] Seek Left -10s (progress bar focused)');
+            _v396NoteSeek(-10000); /* V396 */
             const newPos = Math.max(0, positionRef.current - 10000);
             videoRef.current.setPositionAsync(newPos);
           }
@@ -1707,11 +2298,21 @@ export default function PlayerScreen() {
           // If progress bar is focused, seek forward 10s
           if (progressBarFocusedRef.current && videoRef.current) {
             console.log('[TV] Seek Right +10s (progress bar focused)');
+            _v396NoteSeek(10000); /* V396 */
             const newPos = Math.min(durationRef.current, positionRef.current + 10000);
             videoRef.current.setPositionAsync(newPos);
           }
           break;
         case 'select':
+          /* V395_SKIP_PRESS - remote SELECT presses the on-screen Skip
+             Intro button (native TV focus never reaches in-tree buttons
+             on this build; only Modals get focus). Controls-hidden guard
+             keeps it from hijacking control navigation. */
+          if (_v395WasHidden && _v391SkipVisibleRef.current) {
+            _v391Skip();
+            try { setShowControls(false); } catch (_) {}
+          }
+          break;
         case 'up':
         case 'down':
           // D-pad events - just show controls (focus navigation handled natively)
@@ -1767,7 +2368,7 @@ export default function PlayerScreen() {
   
   // Fade controls in/out
   const fadeControls = (show: boolean) => {
-    // V266_STICKY_CONTROLS_DURING_SCRUB — refuse to fade out while the
+    // V266_STICKY_CONTROLS_DURING_SCRUB â€” refuse to fade out while the
     // user is actively scrubbing the progress bar.  We still allow
     // fade-IN requests through so anything that wants to ensure the
     // chrome is visible still works.
@@ -1792,7 +2393,7 @@ export default function PlayerScreen() {
       // Auto-hide controls after 8 seconds on TV (longer for D-pad navigation), 3 seconds on mobile
       const hideTimeout = isTV ? 8000 : 3000;
       controlsTimeoutRef.current = setTimeout(() => {
-        // V266_STICKY_CONTROLS_DURING_SCRUB — guard auto-hide.
+        // V266_STICKY_CONTROLS_DURING_SCRUB â€” guard auto-hide.
         if (isScrubbingRef.current) return;
         fadeControls(false);
       }, hideTimeout);
@@ -1817,7 +2418,7 @@ export default function PlayerScreen() {
       }).start();
     }
     
-    // V266_STICKY_CONTROLS_DURING_SCRUB — if a drag is in progress,
+    // V266_STICKY_CONTROLS_DURING_SCRUB â€” if a drag is in progress,
     // do not schedule the auto-hide; the release handler will call
     // showControlsWithTimeout() again to restart the countdown.
     if (isScrubbingRef.current) {
@@ -1869,12 +2470,12 @@ export default function PlayerScreen() {
         }
       }, 30000); // 30 second timeout per stream
     } else {
-      // No more URL fallbacks — try torrent fallbacks
+      // No more URL fallbacks â€” try torrent fallbacks
       tryNextFallbackTorrent();
     }
   };
   
-  // V294_FRESH_PM_URL_BUILD_TAG — internal constant used ONLY for build
+  // V294_FRESH_PM_URL_BUILD_TAG â€” internal constant used ONLY for build
   // verification via `findstr "V294_FRESH_PM_URL_BUILD_TAG" app\player.tsx`
   // and `tar -xOf ota.zip | findstr "V294_FRESH_PM_URL_BUILD_TAG"`.
   // This string is NEVER rendered to the user.  Do not remove.
@@ -1883,7 +2484,7 @@ export default function PlayerScreen() {
 
   // Try next fallback TORRENT (different infoHash) when primary torrent fails
   const tryNextFallbackTorrent = () => {
-    /* V163_TRY_NEXT_USES_REF — read from torrentFallbacksRef.current so
+    /* V163_TRY_NEXT_USES_REF â€” read from torrentFallbacksRef.current so
        the cascade is not held hostage by React's async state update. */
     const _v163_list: any[] = (torrentFallbacksRef.current && torrentFallbacksRef.current.length > 0)
       ? torrentFallbacksRef.current
@@ -1944,7 +2545,7 @@ export default function PlayerScreen() {
         clearTimeout(controlsTimeoutRef.current);
       }
       controlsTimeoutRef.current = setTimeout(() => {
-        // V266_STICKY_CONTROLS_DURING_SCRUB — bail out if user is dragging.
+        // V266_STICKY_CONTROLS_DURING_SCRUB â€” bail out if user is dragging.
         if (isScrubbingRef.current) return;
         if (isPlaying) fadeControls(false);
       }, 4000);
@@ -1971,7 +2572,7 @@ export default function PlayerScreen() {
             console.log('[PLAYER] Playback timeout - trying next stream');
             tryNextStream();
           } else {
-            // V164_PLAYBACK_TIMEOUT_CASCADE — before surfacing a hard
+            // V164_PLAYBACK_TIMEOUT_CASCADE â€” before surfacing a hard
             // "Stream timed out" error, fall through to the torrent
             // fallbacks (which v163 made reachable via ref).  This
             // closes the second "all streams failed" leak: user backs
@@ -2010,7 +2611,13 @@ export default function PlayerScreen() {
     }
     try {
       console.log('[SUBTITLES] Making API call for:', cType, cId);
-      const response = await api.subtitles.get(cType, cId);
+      /* V417_RELEASE_MATCH - forward the current stream's release/filename
+   to the backend so it can rank subs by release-token match instead of
+   just download count (which returns the wrong cut for many series). */
+const _v417_release = (typeof filename === 'string' ? filename : '') || (typeof title === 'string' ? title : '') || '';
+const _v417_streamName = (typeof streamUrl === 'string' ? streamUrl.split('/').pop() || '' : '');
+const _v417_hint = encodeURIComponent(_v417_streamName || _v417_release);
+const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release=' + _v417_hint) : ''));
       /* V366_SUBS_LOG_TRIM_BUILD_TAG - was dumping the full 35-language
          subtitle JSON object to logcat (expensive Hermes serialization). */
       console.log('[SUBTITLES] API response: n=' + (response?.subtitles?.length ?? 0));
@@ -2018,6 +2625,116 @@ export default function PlayerScreen() {
       if (response?.subtitles && response.subtitles.length > 0) {
         console.log(`[SUBTITLES] Setting ${response.subtitles.length} subtitle options`);
         setSubtitles(response.subtitles);
+        // v482 - auto-CC: load ONLY English FORCED / foreign-parts-only sub. Full English CC never auto-loads.
+        try {
+          const _v482Fields = (s: any) => [
+            s?.filename, s?.title, s?.name, s?.label, s?.SubFileName,
+            s?.id, s?.url, s?.href, s?.link
+          ].map(x => String(x || '').toLowerCase()).join(' | ');
+          const _v482IsForced = (s: any) => {
+            const _blob = _v482Fields(s);
+            // match "forced", "foreign parts only", "foreign_parts_only", "forced narrative", "forced sdh"
+            return /(?:^|[^a-z0-9])(forced|foreign[._\-\s]*parts?[._\-\s]*only|foreign[._\-\s]*only|forced[._\-\s]*narrative|forced[._\-\s]*sdh)(?:[^a-z0-9]|$)/i.test(_blob);
+          };
+          const _v482IsEnglish = (s: any) => {
+            const _l = String(s?.lang || s?.language || '').toLowerCase();
+            return _l === 'en' || _l === 'eng' || _l === 'english' || _l.startsWith('en-');
+          };
+          const _v482All = response.subtitles || [];
+          console.log('[v482] scanning', _v482All.length, 'sub tracks for FORCED English…');
+          try {
+            _v482All.slice(0, 20).forEach((s: any, i: number) => {
+              console.log('[v482]  track#' + i + ' lang=' + (s?.lang||'?') + ' file=' + String(s?.filename||s?.id||s?.url||'').slice(0,90));
+            });
+          } catch(_) {}
+          const _v482Forced = _v482All.find((s: any) => _v482IsEnglish(s) && _v482IsForced(s))
+                          || _v482All.find((s: any) => _v482IsForced(s));  // any-lang forced fallback
+          if (_v482Forced && _v482Forced.url) {
+            try { (globalThis as any).__v478_setAutoSub && (globalThis as any).__v478_setAutoSub(_v482Forced.url); } catch (_) {}
+            try { (globalThis as any).__v483_setHud && (globalThis as any).__v483_setHud('tracks=' + _v482All.length + ' FORCED=' + String(_v482Forced.filename || _v482Forced.url).slice(-60)); } catch(_) {} 
+          console.log('[v482] auto-CC FORCED sub loaded:', String(_v482Forced.filename || _v482Forced.url).slice(0, 100));
+          } else {
+            try { (globalThis as any).__v478_setAutoSub && (globalThis as any).__v478_setAutoSub(null); } catch (_) {}
+            try { (globalThis as any).__v483_setHud && (globalThis as any).__v483_setHud('tracks=' + _v482All.length + ' FORCED=NONE (Stremio addon does not expose forced flag)'); } catch(_) {} 
+            console.log('[v482] no FORCED sub track found - auto-CC skipped (foreign scenes will not be translated)');
+          }
+        } catch (_e) { console.log('[v482] forced-detect error:', String(_e)); }
+        /* V407_SUB_AUTOMATCH - pick the sub whose release descriptor best
+           matches the file we are actually playing, then auto-enable it.
+           Score priority: moviehash > release-group > source > resolution
+           > downloads. Runs only if user has not already picked one. */
+        try {
+          const _v407GetRel = (u: string) => {
+            try {
+              const clean = String(u || '').split('?')[0].split('#')[0];
+              const seg = clean.substring(clean.lastIndexOf('/') + 1);
+              return decodeURIComponent(seg).replace(/\.(mkv|mp4|avi|webm|ts|m4v)$/i, '').toUpperCase();
+            } catch (_) { return ''; }
+          };
+          const _v407Score = (sub: any, rel: string) => {
+            if (!rel) return 0;
+            const fn = String(sub.filename || '').toUpperCase();
+            if (!fn) return -1;
+            if (sub.matchedBy === 'moviehash') return 10000;
+            let sc = 0;
+            const grp = rel.match(/-([A-Z0-9]{2,10})$/);
+            if (grp && fn.includes('-' + grp[1])) sc += 80;
+            const resolutions = ['2160P', '1440P', '1080P', '720P', '480P'];
+            for (const r of resolutions) if (rel.includes(r) && fn.includes(r)) { sc += 30; break; }
+            const sources = ['BLURAY', 'BDRIP', 'WEB-DL', 'WEBDL', 'WEBRIP', 'HDTV', 'DVDRIP'];
+            for (const s of sources) if (rel.includes(s) && fn.includes(s)) { sc += 20; break; }
+            const codecs = ['X265', 'HEVC', 'X264', 'AVC'];
+            for (const cd of codecs) if (rel.includes(cd) && fn.includes(cd)) { sc += 10; break; }
+            const dl = Number(sub.downloads || 0);
+            sc += Math.min(20, Math.floor(dl / 1000));
+            return sc;
+          };
+          const _rel = _v407GetRel((streamUrl as any) || '');
+          const _engSubs = (response.subtitles || []).filter((s: any) => (s.lang === 'eng' || s.lang === 'en'));
+          if (_engSubs.length > 0) {
+            let _best = _engSubs[0]; let _bestScore = -2;
+            let _reason = 'first-english';
+            for (const _s of _engSubs) {
+              const _sc = _v407Score(_s, _rel);
+              if (_sc > _bestScore) { _bestScore = _sc; _best = _s; }
+            }
+            if (_bestScore >= 10000) _reason = 'moviehash';
+            else if (_bestScore >= 80) _reason = 'group+more';
+            else if (_bestScore >= 30) _reason = 'resolution+source';
+            else if (_bestScore >= 0) _reason = 'downloads-fallback';
+            console.log('[V407 SUB AUTOMATCH] score=' + _bestScore + ' reason=' + _reason + ' file=' + String(_best.filename || 'n/a').slice(-50));
+            _v407AutoMatchRef.current = { url: _best.url, reason: _reason };
+            /* V411_FORCED_PREFERRED - only auto-load subs that contain
+               ONLY foreign-scene translations (filename tagged "forced"
+               or "foreign parts"). Loaded forced subs display every cue
+               as-is - no classifier, since they're already pre-filtered.
+               If no forced sub is in the list, we DO NOT auto-load; CC
+               stays off until user opens the picker manually. */
+            /* V413_FLAG_BASED - use the REST API's authoritative
+               foreign_parts_only boolean instead of filename regex.
+               Falls back to filename regex if the flag is absent
+               (e.g. Stremio fallback path). */
+            const _v411_isForced = (fn: any) => {
+              const _f = String(fn || '');
+              return /(?:^|[._\-\s])(?:forced|foreign[._\-\s]*parts?[._\-\s]*only|foreign[._\-\s]*only)/i.test(_f);
+            };
+            const _v411_forced = (response.subtitles || []).find((s: any) => {
+              const _langOk = (s.lang === 'eng' || s.lang === 'en');
+              if (!_langOk) return false;
+              if ((s as any).foreign_parts_only === true) return true;
+              return _v411_isForced((s as any).filename);
+            });
+            if (_v411_forced && !selectedSubtitle) {
+              console.log('[V478f] forced sub -> auto-CC layer:', (_v411_forced as any).filename || _v411_forced.url);
+              try { (globalThis as any).__v478_setAutoSub && (globalThis as any).__v478_setAutoSub(_v411_forced.url); } catch (_) {}
+              setV408AutoActive(false);
+            } else if (!_v411_forced) {
+              console.log('[V411] no forced sub in list - CC stays off');
+            }
+          }
+        } catch (_e) {
+          console.log('[V407 SUB AUTOMATCH] error, skipping:', _e);
+        }
       } else {
         console.log('[SUBTITLES] No subtitles found in response');
       }
@@ -2147,7 +2864,7 @@ export default function PlayerScreen() {
         const parsed = JSON.parse(fallbackTorrents);
         if (Array.isArray(parsed)) {
           setTorrentFallbacks(parsed);
-          torrentFallbacksRef.current = parsed; // V163_MIRROR_REF — read-now-safe
+          torrentFallbacksRef.current = parsed; // V163_MIRROR_REF â€” read-now-safe
           torrentFallbackIdxRef.current = 0;
           console.log('[PLAYER] Loaded', parsed.length, 'fallback torrents (ref synced)');
         }
@@ -2204,7 +2921,7 @@ export default function PlayerScreen() {
       setLoadingStatus('Searching for streams...');
       
       // === PARALLEL RACE: Start primary + all fallbacks simultaneously ===
-      // This way the FIRST torrent to become ready wins — instant playback
+      // This way the FIRST torrent to become ready wins â€” instant playback
       
       interface RaceCandidate {
         hash: string;
@@ -2224,13 +2941,13 @@ export default function PlayerScreen() {
 
       // NOTE: we intentionally do NOT seed fallback torrents into the race here.
       // They're held in torrentFallbacks and tried sequentially via
-      // tryNextFallbackTorrent() if the primary errors — this matches Stremio's
+      // tryNextFallbackTorrent() if the primary errors â€” this matches Stremio's
       // behaviour and avoids RD rate-limit spam.
       
       console.log(`[PLAYER] RACE: Starting primary (${candidates.length - 1} fallbacks held in reserve)`);
 
       // Fire the PRIMARY ONLY on first attempt. Starting all candidates in
-      // parallel triggers 6×RD addMagnet spam which:
+      // parallel triggers 6Ã—RD addMagnet spam which:
       //   - hits Real-Debrid rate limits
       //   - creates duplicate torrents in the account
       //   - made "all streams failed" happen when any one errored
@@ -2327,7 +3044,7 @@ export default function PlayerScreen() {
         setDownloadProgress(100);
         if (info.videoSize) videoFileSizeRef.current = info.videoSize;
         videoRetryCountRef.current = 0;
-        // V294_FRESH_PM_URL — re-call getVideoUrl() at commit time so we get
+        // V294_FRESH_PM_URL â€” re-call getVideoUrl() at commit time so we get
         // the freshly-resolved absolute Premiumize URL from the client-side
         // resolver cache (it's empty when the candidate was first built).
         // Also removes the hardcoded 71.9.152.146 ghost from the legacy
@@ -2362,7 +3079,7 @@ export default function PlayerScreen() {
             if (result.status !== 'fulfilled') continue;
             const status = result.value;
             
-            // Real-Debrid — instant win, best possible
+            // Real-Debrid â€” instant win, best possible
             if (status.debrid_url && !readyMap[i]) {
               readyMap[i] = { videoUrl: candidates[i].videoUrl, videoSize: status.video_size || 0, debridUrl: status.debrid_url, peers: status.peers || 0 };
               commitWinner();
@@ -2384,12 +3101,12 @@ export default function PlayerScreen() {
               
               if (!firstReadyTime) firstReadyTime = Date.now();
               
-              // Primary stream (user's pick, q=99) — play immediately
+              // Primary stream (user's pick, q=99) â€” play immediately
               if (i === 0) { commitWinner(); return; }
             }
           }
           
-          // Grace period: 2s after first fallback ready → commit best quality
+          // Grace period: 2s after first fallback ready â†’ commit best quality
           if (firstReadyTime > 0 && Date.now() - firstReadyTime >= GRACE_MS) {
             commitWinner();
             return;
@@ -2417,10 +3134,10 @@ export default function PlayerScreen() {
           setPeers(bestPeers);
           setDownloadProgress(smoothProgress);
           
-          // Check if ALL candidates failed → cascade to sequential fallback torrents
+          // Check if ALL candidates failed â†’ cascade to sequential fallback torrents
           const allFailed = candidates.every((c: any) => c.failed === true);
           if (allFailed && Object.keys(readyMap).length === 0) {
-            console.log('[PLAYER] Primary failed — cascading to fallback torrents sequentially');
+            console.log('[PLAYER] Primary failed â€” cascading to fallback torrents sequentially');
             continuePollingRef.current = false;
             if (pollIntervalRef.current) {
               clearTimeout(pollIntervalRef.current);
@@ -2432,12 +3149,12 @@ export default function PlayerScreen() {
             return;
           }
           
-          // Timeout: 60s total — cold-cache torrents need extra time for RD
+          // Timeout: 60s total â€” cold-cache torrents need extra time for RD
           // to fetch metadata before file selection becomes possible.
           if (elapsedSec > 60) {
             if (Object.keys(readyMap).length > 0) { commitWinner(); return; }
             // Auto-retry ONCE on timeout. This matches the user's manual
-            // "back out and click Play again" workaround — a fresh start with
+            // "back out and click Play again" workaround â€” a fresh start with
             // the same params often resolves because the backend has now
             // warmed caches / Torrentio has stabilised / Premiumize began
             // caching. We only retry ONCE so a permanently-uncached torrent
@@ -2448,7 +3165,7 @@ export default function PlayerScreen() {
               clearInterval(pollIntervalRef.current);
             }
             if (retryCount < 1) {
-              console.log('[PLAYER] Timeout after 60s — auto-retrying fresh (attempt 2)');
+              console.log('[PLAYER] Timeout after 60s â€” auto-retrying fresh (attempt 2)');
               setLoadingStatus('Retrying stream...');
               setDownloadProgress(5);
               setTimeout(() => {
@@ -2457,7 +3174,7 @@ export default function PlayerScreen() {
               }, 800);
               return;
             }
-            console.log('[PLAYER] Timeout after 60s on retry — cascading to fallback torrents');
+            console.log('[PLAYER] Timeout after 60s on retry â€” cascading to fallback torrents');
             tryNextFallbackTorrent();
             return;
           }
@@ -2533,7 +3250,7 @@ export default function PlayerScreen() {
           if (status.debrid_url && !videoUrlSet) {
             videoUrlSet = true;
             setDownloadProgress(100);
-            // V294_FRESH_PM_URL — kill the hardcoded 71.9.152.146 ghost.
+            // V294_FRESH_PM_URL â€” kill the hardcoded 71.9.152.146 ghost.
             // Use getVideoUrl which returns the absolute PM URL when
             // resolved on-device, or a (live) backend URL otherwise.
             const debridVideoUrl = api.stream.getVideoUrl(hash, fIdx);
@@ -2549,7 +3266,7 @@ export default function PlayerScreen() {
             videoUrlSet = true;
             setDownloadProgress(100);
             if (status.video_size) videoFileSizeRef.current = status.video_size;
-            // V294_FRESH_PM_URL — re-call getVideoUrl at commit time so we
+            // V294_FRESH_PM_URL â€” re-call getVideoUrl at commit time so we
             // pick up the freshly-resolved PM URL from the client-side
             // resolver cache (the videoUrl computed at start was the dead
             // backend route before PM had a chance to populate).
@@ -2610,17 +3327,18 @@ export default function PlayerScreen() {
 
   // Handle back button
   const handleBack = () => {
-    router.back();
+    _v389SmartBack(); /* V389_SMART_BACK */
   };
 
   return (
     <View style={styles.container}>
+      
       <StatusBar hidden />
 
-            {/* PATCH_V8_UNIFIED_LOADING — unified loading screen (matches autoplay overlay) */}
+            {/* PATCH_V8_UNIFIED_LOADING â€” unified loading screen (matches autoplay overlay) */}
       {isLoading && !error && (
         <View style={styles.stremioLoadingContainer}>
-          {/* Backdrop with blur — same image the autoplay overlay used */}
+          {/* Backdrop with blur â€” same image the autoplay overlay used */}
           {(backdrop || poster) ? (
             <Image
               source={{ uri: backdrop || poster }}
@@ -2632,39 +3350,52 @@ export default function PlayerScreen() {
           {/* Dark overlay for legibility */}
           <View style={styles.loadingDarkOverlay} />
 
-          {/* Centered content — series logo + episode title + thin gold bar */}
+          {/* Centered content â€” series logo + episode title + thin gold bar */}
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
             {logo ? (
               <Image
                 source={{ uri: logo }}
-                style={{ width: 280, height: 90, marginBottom: 18 }}
-                resizeMode="contain"
+                style={{ width: 280, height: 90, marginBottom: 20 }}
+                resizeMode={v457ResizeMode} /* v457 */
               />
             ) : null}
 
-            {/* V273_LOADING_TITLE_FALLBACK_ONLY — the gold-bordered logo
+            {/* V273_LOADING_TITLE_FALLBACK_ONLY â€” the gold-bordered logo
                 already names the title for series/movies that ship a logo.
                 Only show the plain-text title when NO logo is present,
                 so we don't double up on names with a generic-font header. */}
-            {!logo && title ? (
+            {!logo && (ovName || title) ? (
               <Text
                 style={{
-                  color: '#FFFFFF',
-                  fontSize: 22,
-                  fontWeight: '700',
+                  color: '#FFF',
+                  fontSize: 32,
+                  fontWeight: '800',
                   textAlign: 'center',
-                  marginBottom: 28,
+                  marginBottom: 16,
                   paddingHorizontal: 16,
-                  letterSpacing: 0.3,
+                  letterSpacing: 0.5,
                 }}
                 numberOfLines={2}
               >
-                {title}
+                {String(ovName || title)}
               </Text>
             ) : null}
 
-            {/* Indeterminate sliding gold bar — PATCH_V149_SMOOTH_TRACK
-                exact-match Details' AutoPlayLoadingBar (260×4 track, 100×4 slider, 0.12 alpha) */}
+            {/* V384_ONE_LOADING_SCREEN - identical episode lines to the
+                details overlay so the handoff is pixel-perfect. */}
+            {ovEp ? (
+              <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '600', textAlign: 'center', marginBottom: 6 }}>
+                {String(ovEp)}
+              </Text>
+            ) : null}
+            {ovSE ? (
+              <Text style={{ color: '#B8A05C', fontSize: 14, fontWeight: '600', marginBottom: 36, letterSpacing: 1 }}>
+                {String(ovSE)}
+              </Text>
+            ) : null}
+
+            {/* Indeterminate sliding gold bar â€” PATCH_V149_SMOOTH_TRACK
+                exact-match Details' AutoPlayLoadingBar (260Ã—4 track, 100Ã—4 slider, 0.12 alpha) */}
             <View
               style={{
                 width: 260,
@@ -2697,7 +3428,7 @@ export default function PlayerScreen() {
                 letterSpacing: 0.5,
               }}
             >
-              Starting playback
+              Loading...
             </Text>
           </View>
         </View>
@@ -2784,9 +3515,9 @@ export default function PlayerScreen() {
               } as any}
             />
             {/* Subtitle Overlay for Web */}
-            {currentSubtitleText && (
+            {_v478DisplayedCue && (
               <View style={styles.subtitleContainer}>
-                <Text style={styles.subtitleText}>{currentSubtitleText}</Text>
+                <Text style={styles.subtitleText}>{_v478DisplayedCue}</Text>
               </View>
             )}
             {/* Web Controls Overlay - fades in/out */}
@@ -2809,11 +3540,12 @@ export default function PlayerScreen() {
                   />
                 </TouchableOpacity>
                 
+
                 <TouchableOpacity 
-                  style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
+                  style={styles.controlButton} /* V411_UI - no active ring */
                   onPress={() => setShowSubtitlePicker(true)}
                 >
-                  <Ionicons name="chatbubble-ellipses-outline" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
+                  <Ionicons name="chatbubble-ellipses-outline" size={24} color={'#FFFFFF'} /* V411_UI - no gold indicator */ />
                 </TouchableOpacity>
                 
                 {nextEpisodeId && (
@@ -2837,18 +3569,23 @@ export default function PlayerScreen() {
                   uri: streamUrl,
                   // Help ExoPlayer detect format - important for MKV/x265 streams
                   overrideFileExtensionAndroid: (isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true') ? 'm3u8' : 'mp4',
-                  /* PATCH_V152_NO_UA_OVERRIDE — removed desktop Chrome UA override.
+                  /* PATCH_V152_NO_UA_OVERRIDE â€” removed desktop Chrome UA override.
                      PM CDN refuses to send bytes when the redemption UA differs
                      from what was used to obtain the URL.  ExoPlayer's default UA
                      (ExoPlayerLib/2.x) is what Stremio uses and PM accepts. */
                 }}
-                style={styles.videoPlayer}
-                resizeMode={ResizeMode.CONTAIN}
+                style={[
+                  styles.videoPlayer,
+                  // v476b: enforce visible aspect change even on native-16:9 content
+                  v457AspectMode === 'cover' && { transform: [{ scale: 1.18 }] },
+                  v457AspectMode === 'stretch' && { transform: [{ scaleY: 1.18 }] },
+                ]}
+                resizeMode={v457ResizeMode} /* v467 - was V397_FULLSCREEN COVER */
                 shouldPlay
                 isLooping={false}
                 volume={1.0}
                 isMuted={false}
-                /* PATCH_V143C2_STRIPPED — reverted v143's interval cadence so FF math + auto-next read accurate playhead values */
+                /* PATCH_V143C2_STRIPPED â€” reverted v143's interval cadence so FF math + auto-next read accurate playhead values */
                 onPlaybackStatusUpdate={handlePlaybackStatus}
                 onError={(error) => {
                   console.log(`[PLAYER] Video error (attempt ${videoRetryCountRef.current + 1}/${maxVideoRetries}):`, error);
@@ -2870,7 +3607,7 @@ export default function PlayerScreen() {
                         // After 3 retries during seek, give up and let it play from wherever it is
                         videoRetryCountRef.current += 1;
                         if (videoRetryCountRef.current > 3) {
-                          // PATCH_V10_REWIND_ON_GIVEUP — rewind to pre-seek position and arm
+                          // PATCH_V10_REWIND_ON_GIVEUP â€” rewind to pre-seek position and arm
                           // cooldown so subsequent onError events do not trigger tryNextStream.
                           isSeekingRef.current = false;
                           videoRetryCountRef.current = 0;
@@ -2879,7 +3616,7 @@ export default function PlayerScreen() {
                           if (videoRef.current && preSeekPositionMsRef.current > 0) {
                             try {
                               await videoRef.current.setPositionAsync(preSeekPositionMsRef.current);
-                              console.log('[PLAYER] Seek failed — rewound to pre-seek position', preSeekPositionMsRef.current);
+                              console.log('[PLAYER] Seek failed â€” rewound to pre-seek position', preSeekPositionMsRef.current);
                             } catch (_) {}
                           }
                         }
@@ -2888,14 +3625,14 @@ export default function PlayerScreen() {
                     return;
                   }
                   
-                  // PATCH_V10_COOLDOWN_GUARD — if a seek just failed, ignore the onError storm.
+                  // PATCH_V10_COOLDOWN_GUARD â€” if a seek just failed, ignore the onError storm.
                   // ExoPlayer keeps emitting errors at the bad position; we already rewound.
                   if (Date.now() < seekCooldownUntilRef.current) {
                     console.log('[PLAYER] post-seek cooldown active, ignoring onError');
                     return;
                   }
 
-                  // V162_CODEC_FAST_FAIL — detect codec / decode errors that no
+                  // V162_CODEC_FAST_FAIL â€” detect codec / decode errors that no
                   // amount of retrying will fix (DTS-HD MA on a Firestick, etc.).
                   // Skip the retry loop and jump straight to the next fallback
                   // torrent so the user actually gets playback.
@@ -2905,7 +3642,7 @@ export default function PlayerScreen() {
                         ? (error as any).message
                         : error
                     ).toLowerCase();
-                    // V162B_TIGHT_CODEC — match ONLY clear, permanent codec
+                    // V162B_TIGHT_CODEC â€” match ONLY clear, permanent codec
                     // problems.  Removed overly-broad patterns ("audiotrack"
                     // without "init failed", bare "codec", bare "decoder",
                     // "mediacodec", "exoplaybackexception") which matched
@@ -2922,7 +3659,7 @@ export default function PlayerScreen() {
                       || _v162_errMsg.includes('decoder failed:')
                     );
                     if (_v162_isCodecErr) {
-                      console.log('[v162] Codec/decode error — skipping retries, advancing to next stream:', _v162_errMsg.slice(0, 200));
+                      console.log('[v162] Codec/decode error â€” skipping retries, advancing to next stream:', _v162_errMsg.slice(0, 200));
                       videoRetryCountRef.current = 0;
                       // Prefer URL fallbacks if available (cached debrid links),
                       // otherwise fall through to the next torrent.
@@ -2933,7 +3670,7 @@ export default function PlayerScreen() {
                       }
                       return;
                     }
-                  } catch (_v162_e) { /* ignore — fall through to normal retry */ }
+                  } catch (_v162_e) { /* ignore â€” fall through to normal retry */ }
 
                   // V357_FAST_CASCADE - directUrl errors skip retry loop
                     if (directUrl && !infoHash) {
@@ -2963,7 +3700,7 @@ export default function PlayerScreen() {
                     videoRetryCountRef.current = 0; // Reset for next stream
                     tryNextStream();
                   } else {
-                    // No URL fallbacks left — try torrent fallbacks
+                    // No URL fallbacks left â€” try torrent fallbacks
                     videoRetryCountRef.current = 0;
                     tryNextFallbackTorrent();
                   }
@@ -2983,14 +3720,236 @@ export default function PlayerScreen() {
                 </View>
               )}
             </Pressable>
-            
-            {/* Subtitle Overlay */}
-            {currentSubtitleText && (
-              <View style={styles.subtitleContainer} pointerEvents="none">
-                <Text style={styles.subtitleText}>{currentSubtitleText}</Text>
+
+
+            {/* V427_AUTOSYNC - toast telling the user we auto-adjusted subs */}
+            {autoSyncNotice && (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  top: 80, alignSelf: 'center',
+                  paddingHorizontal: 14, paddingVertical: 8,
+                  backgroundColor: 'rgba(0,120,0,0.85)',
+                  borderRadius: 8,
+                  zIndex: 998,
+                }}
+              >
+                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 14 }}>
+                  Auto-synced subtitles {autoSyncNotice}s
+                </Text>
               </View>
             )}
+
+                        
+
+
+
+                                    {/* V437_SINGLE_BAR - single toggleable sync bar, no Done button,
+                auto-hides 5s after last interaction. */}
+            {showSyncBar && selectedSubtitle && subtitleCues.length > 0 && (() => {
+              const _btn = (key: string, label: string, delta: number, accent?: boolean) => (
+                <Pressable
+                  key={key}
+                  focusable={true}
+                  hasTVPreferredFocus={key === 'm1'}
+                  onPress={() => _v429NudgeOffset(delta)}
+                  onFocus={() => { setSyncFocusKey(key); _v429ResetHideTimer(); }}
+                  onBlur={() => { _v429ResetHideTimer(); setSyncFocusKey(prev => prev === key ? null : prev); }}
+                  style={({ focused }: any) => {
+                    const isF = focused || syncFocusKey === key;
+                    return {
+                      paddingHorizontal: 14, paddingVertical: 10,
+                      marginHorizontal: 3,
+                      borderRadius: 6,
+                      borderWidth: 2,
+                      borderColor: isF ? '#B8A05C' : 'transparent',
+                      backgroundColor: isF ? 'rgba(184,160,92,0.20)' : 'transparent',
+                      minWidth: 52, alignItems: 'center',
+                    };
+                  }}
+                >
+                  <Text style={{ color: accent ? '#B8A05C' : '#FFFFFF', fontWeight: 'bold', fontSize: 14 }}>
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+              return (
+                <View
+                  pointerEvents="box-none"
+                  style={{
+                    position: 'absolute', top: 50, alignSelf: 'center',
+                    flexDirection: 'row', alignItems: 'center',
+                    paddingHorizontal: 12, paddingVertical: 10,
+                    backgroundColor: 'rgba(15,15,15,0.96)',
+                    borderRadius: 28, zIndex: 40,
+                    borderWidth: 1, borderColor: '#333',
+                  }}
+                >
+                  {_btn('m5', '-5s', -5000, true)}
+                  {_btn('m1', '-1s', -1000)}
+                  {_btn('m01', '-0.1s', -100)}
+                  <View focusable={false} pointerEvents="none" style={{ minWidth: 78, alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, marginHorizontal: 4, borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#333' }}>
+                    <Text style={{ color: '#B8A05C', fontWeight: 'bold', fontSize: 15 }}>
+                      {subtitleOffset >= 0 ? '+' : ''}{(subtitleOffset / 1000).toFixed(1)}s
+                    </Text>
+                    <Text style={{ color: '#777', fontSize: 10, marginTop: 1 }}>CURRENT</Text>
+                  </View>
+                  {_btn('p01', '+0.1s', 100)}
+                  {_btn('p1', '+1s', 1000)}
+                  {_btn('p5', '+5s', 5000, true)}
+                  <Pressable
+                    focusable={true}
+                    onPress={() => { setSubtitleOffset(0); _v429ResetHideTimer(); }}
+                    onFocus={() => { setSyncFocusKey('reset'); _v429ResetHideTimer(); }}
+                    onBlur={() => { _v429ResetHideTimer(); setSyncFocusKey(prev => prev === 'reset' ? null : prev); }}
+                    style={({ focused }: any) => {
+                      const isF = focused || syncFocusKey === 'reset';
+                      return {
+                        paddingHorizontal: 14, paddingVertical: 10,
+                        marginLeft: 10,
+                        borderRadius: 6, borderWidth: 2,
+                        borderColor: isF ? '#B8A05C' : 'transparent',
+                        backgroundColor: isF ? 'rgba(184,160,92,0.20)' : 'transparent',
+                      };
+                    }}
+                  >
+                    <Text style={{ color: '#AAA', fontSize: 13 }}>Reset</Text>
+                  </Pressable>
+                </View>
+              );
+            })()}
+
+                        {/* V416_STAMP - visible boot pill so we can confirm the OTA
+                bundle actually reached the Firestick. Auto-hides after 6s. */}
+                        {/* v461/v462: red debug pill fully removed */}
             
+            
+            {/* Subtitle Overlay */}
+            {_v478DisplayedCue && (
+              <View style={styles.subtitleContainer} pointerEvents="none">
+                <Text style={styles.subtitleText}>{_v478DisplayedCue}</Text>
+              </View>
+            )}
+
+
+            {/* V399_AUTO_SKIP - transient confirmation toast */}
+            {_v399Toast && (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  bottom: 96,
+                  right: 48,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: 'rgba(15,15,15,0.92)',
+                  borderColor: '#B8A05C',
+                  borderWidth: 1.5,
+                  borderRadius: 8,
+                  paddingHorizontal: 20,
+                  paddingVertical: 12,
+                  zIndex: 60,
+                }}
+              >
+                <Ionicons name="play-skip-forward" size={16} color="#B8A05C" />
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.4, marginLeft: 10 }}>
+                  Intro Skipped
+                </Text>
+              </View>
+            )}
+            {/* V400_BUILD_TAG - transient build stamp */}
+            {_v400Tag && (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  top: 24,
+                  right: 24,
+                  maxWidth: 620,
+                  backgroundColor: 'rgba(15,15,15,0.92)',
+                  borderColor: '#4CAF50',
+                  borderWidth: 1,
+                  borderRadius: 6,
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  zIndex: 60,
+                }}
+              >
+                <Text style={{ color: '#4CAF50', fontSize: 12, fontWeight: '700', letterSpacing: 0.6 }}>
+                  BUILD V401  {_v401IsForeign ? 'FOREIGN:YES' : 'FOREIGN:no'}
+                </Text>
+                <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600', marginTop: 4 }}>
+                  T: {(_v401Title || '(empty title)').slice(0, 68)}
+                </Text>
+                <Text style={{ color: '#B8A05C', fontSize: 10, fontWeight: '500', marginTop: 2 }}>
+                  U: {(_v401UrlSrc ? ('...' + _v401UrlSrc.slice(-44)) : '(no url yet)')}
+                </Text>
+                <Text style={{ color: '#888', fontSize: 9, marginTop: 2 }}>
+                  keys: {Object.keys(_v401RawParams || {}).slice(0, 8).join(',')}
+                </Text>
+                <Text style={{ color: '#B8A05C', fontSize: 10, marginTop: 2 }}>
+                  fbCount: {_v402FBList.length}
+                </Text>
+              </View>
+            )}
+            {/* V403_UI_CLEAN - SWAP pill removed */}
+            {false && _v402Toast && ( /* V403_UI_CLEAN - toast off */
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  bottom: 96,
+                  right: 48,
+                  maxWidth: 640,
+                  backgroundColor: 'rgba(15,15,15,0.92)',
+                  borderColor: '#B8A05C',
+                  borderWidth: 1.5,
+                  borderRadius: 8,
+                  paddingHorizontal: 20,
+                  paddingVertical: 12,
+                  zIndex: 62,
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', letterSpacing: 0.4 }}>
+                  {_v402Toast}
+                </Text>
+              </View>
+            )}
+            {/* V392_SKIP_INTRO_BUTTON - focusable card like the Up Next
+                popup: grabs focus while controls are hidden so a single
+                SELECT press activates it; lights up gold when focused. */}
+            {_v391SkipVisible && (
+              <TVFocusButton
+                onPress={_v391Skip}
+                hasTVPreferredFocus={!showControls}
+                style={{
+                  position: 'absolute',
+                  bottom: 96,
+                  right: 48,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: 'rgba(15,15,15,0.92)',
+                  borderColor: '#B8A05C',
+                  borderWidth: 1.5,
+                  borderRadius: 8,
+                  paddingHorizontal: 20,
+                  paddingVertical: 12,
+                  zIndex: 60,
+                }}
+                focusedStyle={{
+                  borderColor: '#B8A05C',
+                  backgroundColor: 'rgba(32,29,20,0.98)',
+                  transform: [{ scale: 1.05 }],
+                }}
+              >
+                <Ionicons name="play-skip-forward" size={16} color="#B8A05C" />
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.4, marginLeft: 10 }}>
+                  Skip Intro
+                </Text>
+              </TVFocusButton>
+            )}
+
             {/* Custom Controls Overlay - fades in/out */}
             {showControls && (
               <Animated.View style={[styles.controlsOverlay, { opacity: controlsOpacity }]} pointerEvents="box-none">
@@ -3007,12 +3966,30 @@ export default function PlayerScreen() {
                   <Text style={styles.titleText} numberOfLines={1}>{title || 'Playing'}</Text>
                   
                   <View style={styles.topRightControls}>
+                    {/* v464 ASPECT_RATIO_TOGGLE - next to real CC */}
+                    <TVFocusButton
+                      style={styles.controlButton}
+                      focusedStyle={styles.controlButtonFocused}
+                      onPress={() => {
+                        try { console.log('[v468] aspect tap current=' + v457AspectMode); } catch (_) {}
+                        v457CycleAspect();
+                        // v476b: reset overlay auto-hide to 5s on aspect tap
+                        try {
+                          if (controlsTimeoutRef.current) { clearTimeout(controlsTimeoutRef.current); controlsTimeoutRef.current = null; }
+                          setShowControls(true);
+                          Animated.timing(controlsOpacity, { toValue: 1, duration: 120, useNativeDriver: true }).start();
+                          controlsTimeoutRef.current = setTimeout(() => { try { fadeControls(false); } catch (_) {} }, 5000);
+                        } catch (_) {}
+                      }}
+                    >
+                      <Ionicons name={v457ModeIcon} size={24} color={'#FFFFFF'} />
+                    </TVFocusButton>
                     <TVFocusButton 
-                      style={[styles.controlButton, selectedSubtitle && styles.ccActive]}
+                      style={styles.controlButton} /* V411_UI - no active ring */
                       focusedStyle={styles.controlButtonFocused}
                       onPress={() => setShowSubtitlePicker(true)}
                     >
-                      <Ionicons name="chatbubble-ellipses-outline" size={24} color={selectedSubtitle ? '#B8A05C' : '#FFFFFF'} />
+                      <Ionicons name="chatbubble-ellipses-outline" size={24} color={'#FFFFFF'} /* V411_UI - no gold indicator */ />
                     </TVFocusButton>
                   </View>
                 </View>
@@ -3056,7 +4033,7 @@ export default function PlayerScreen() {
                     onSeek={seekToMs}
                     onFocusChange={(focused: boolean) => { progressBarFocusedRef.current = focused; }}
                     onScrubChange={(scrubbing: boolean) => {
-                      // V266_STICKY_CONTROLS_DURING_SCRUB — pin controls while
+                      // V266_STICKY_CONTROLS_DURING_SCRUB â€” pin controls while
                       // user is dragging the thumb; on release, restart the
                       // auto-hide countdown by calling showControlsWithTimeout.
                       isScrubbingRef.current = scrubbing;
@@ -3098,57 +4075,43 @@ export default function PlayerScreen() {
           <View style={styles.subtitleModal}>
             <View style={styles.subtitleModalHeader}>
               <Text style={styles.subtitleModalTitle}>Subtitles</Text>
+
+              {/* V431_TV_FOCUS_SYNC - Adjust Sync button, TVFocusButton for
+                  proper Android-TV focus events; theme gold. */}
+              {selectedSubtitle && subtitleCues.length > 0 && (
+                <TVFocusButton
+                  onPress={() => {
+                    if (typeof setShowSubtitlePicker === 'function') setShowSubtitlePicker(false);
+                    if (typeof setShowSubtitles === 'function') setShowSubtitles(false);
+                    setShowSyncBar(true);
+                  }}
+                  style={{
+                    marginLeft: 16,
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                    backgroundColor: '#1a1a1a',
+                    borderRadius: 6,
+                    borderWidth: 2,
+                    borderColor: '#333',
+                  }}
+                  focusedStyle={{
+                    borderColor: '#B8A05C',
+                    backgroundColor: 'rgba(184,160,92,0.15)',
+                  }}
+                >
+                  <Text style={{ color: '#B8A05C', fontWeight: 'bold', fontSize: 13 }}>
+                    Adjust Sync ({subtitleOffset >= 0 ? '+' : ''}{(subtitleOffset / 1000).toFixed(1)}s)
+                  </Text>
+                </TVFocusButton>
+              )}
+
+              {/* V411_UI - no auto note */}
               <TouchableOpacity onPress={() => setShowSubtitlePicker(false)}>
                 <Ionicons name="close" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
             
-            {/* Subtitle Sync Controls */}
-            {selectedSubtitle && (
-              <View style={styles.syncControlsContainer}>
-                <Text style={styles.syncLabel}>Sync Adjustment</Text>
-                <View style={styles.syncControls}>
-                  <TouchableOpacity 
-                    style={styles.syncButton}
-                    onPress={() => setSubtitleOffset(prev => prev - 500)}
-                  >
-                    <Text style={styles.syncButtonText}>-0.5s</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.syncButton}
-                    onPress={() => setSubtitleOffset(prev => prev - 100)}
-                  >
-                    <Text style={styles.syncButtonText}>-0.1s</Text>
-                  </TouchableOpacity>
-                  <View style={styles.syncValueContainer}>
-                    <Text style={styles.syncValue}>
-                      {subtitleOffset >= 0 ? '+' : ''}{(subtitleOffset / 1000).toFixed(1)}s
-                    </Text>
-                  </View>
-                  <TouchableOpacity 
-                    style={styles.syncButton}
-                    onPress={() => setSubtitleOffset(prev => prev + 100)}
-                  >
-                    <Text style={styles.syncButtonText}>+0.1s</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.syncButton}
-                    onPress={() => setSubtitleOffset(prev => prev + 500)}
-                  >
-                    <Text style={styles.syncButtonText}>+0.5s</Text>
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity 
-                  style={styles.resetSyncButton}
-                  onPress={() => setSubtitleOffset(0)}
-                >
-                  <Text style={styles.resetSyncText}>Reset to 0</Text>
-                </TouchableOpacity>
-                <Text style={styles.syncHint}>
-                  Subtitles too early? Use + | Too late? Use -
-                </Text>
-              </View>
-            )}
+
             
             {subtitles.length === 0 ? (
               <View style={styles.noSubtitlesContainer}>
@@ -3158,10 +4121,30 @@ export default function PlayerScreen() {
               </View>
             ) : (
               <FlatList
-                data={[{ id: 'off', url: '', lang: 'off', langName: 'Off' }, ...subtitles]}
+                /* V412_PICKER_DEDUPE - collapse to one row per language and
+                   drop Forced/HI variants (those are only for auto-load). */
+                data={(() => {
+                  const _seen = new Set<string>();
+                  const _rows: any[] = [{ id: 'off', url: '', lang: 'off', langName: 'Off' }];
+                  const _hide = /(?:^|[._\-\s])(?:forced|foreign[._\-\s]*parts?[._\-\s]*only|foreign[._\-\s]*only|hi|hearing[._\-\s]*impaired|sdh)(?:[._\-\s]|\.srt$|$)/i;
+                  for (const _s of (subtitles as any[])) {
+                    const _fn = String((_s as any).filename || '');
+                    if (_fn && _hide.test(_fn)) continue;
+                    const _l = String(_s.lang || 'unknown');
+                    if (_seen.has(_l)) continue;
+                    _seen.add(_l);
+                    _rows.push(_s);
+                  }
+                  return _rows;
+                })()}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                   <TVFocusButton
+                    hasTVPreferredFocus={
+                      /* V433_POLISHED - autofocus currently-selected sub */
+                      (item.url === selectedSubtitle) ||
+                      (item.lang === 'off' && !selectedSubtitle)
+                    }
                     style={[
                       styles.subtitleItem,
                       (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemActive
@@ -3169,14 +4152,16 @@ export default function PlayerScreen() {
                     focusedStyle={styles.subtitleItemFocused}
                     onPress={() => {
                       setSelectedSubtitle(item.lang === 'off' ? null : item.url);
+                      setV408AutoActive(false); /* V408 - user is now in control */
                       setShowSubtitlePicker(false);
                     }}
                   >
                     <Text style={[
                       styles.subtitleItemText,
                       (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemTextActive
-                    ]}>
-                      {item.langName}
+                    ]}
+                    numberOfLines={2}>
+                      {item.langName}{/* V414_CLEAN_PICKER - no filename suffix, no (auto) tag */}
                     </Text>
                     {(item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && (
                       <Ionicons name="checkmark" size={20} color="#B8A05C" />
@@ -3297,7 +4282,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    // V276_MATCH_DETAILS_OVERLAY — was `opacity: 0.4`, which dimmed the
+    // V276_MATCH_DETAILS_OVERLAY â€” was `opacity: 0.4`, which dimmed the
     // backdrop way more than the details auto-play overlay (which uses
     // full-opacity backdrop + 65% dark layer).  Removed so the two
     // loading screens look visually identical.
@@ -3308,7 +4293,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    // V276_MATCH_DETAILS_OVERLAY — bump 0.6 → 0.65 to match details.
+    // V276_MATCH_DETAILS_OVERLAY â€” bump 0.6 â†’ 0.65 to match details.
     backgroundColor: 'rgba(0, 0, 0, 0.65)',
   },
   loadingContent: {

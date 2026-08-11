@@ -203,8 +203,27 @@ export const setMetaCache = (key: string, data: ContentItem) => {
   // v244 — fire-and-forget disk persistence with current user scope
   saveMetaToDisk(key, data);
 };
-export const getStreamsCache = (key: string) => _streamsCache[key] || null;
-export const setStreamsCache = (key: string, data: Stream[]) => { _streamsCache[key] = data; };
+export const getStreamsCache = (key: string) => {
+  /* V434_MIN_CACHE_GUARD - discard tiny memory-cached entries so a fresh
+     fetch is triggered. */
+  const _cached = _streamsCache[key];
+  if (!_cached || _cached.length < 3) {
+    if (_cached && _cached.length < 3) {
+      try { console.log('[V434] discarding tiny in-mem cache n=', _cached.length, 'key=', key); } catch (_) {}
+      delete _streamsCache[key];
+    }
+    return null;
+  }
+  return _cached;
+};
+export const setStreamsCache = (key: string, data: Stream[]) => {
+  /* V434_MIN_CACHE_GUARD - reject tiny lists in memory cache too. */
+  if (!Array.isArray(data) || data.length < 3) {
+    try { console.log('[V434] rejecting tiny in-memory cache set n=', data?.length, 'key=', key); } catch (_) {}
+    return;
+  }
+  _streamsCache[key] = data;
+};
 
 // PATCH_V19B_DISK_HELPERS — AsyncStorage-backed persistent cache (6h TTL).
 const STREAMS_DISK_TTL_MS = 6 * 60 * 60 * 1000;
@@ -232,6 +251,14 @@ async function loadStreamsFromDisk(key: string): Promise<Stream[] | null> {
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.time || !Array.isArray(parsed.streams)) return null;
     if (Date.now() - parsed.time > STREAMS_DISK_TTL_MS) return null;
+    /* V434_MIN_CACHE_GUARD - reject suspiciously-small cached snapshots
+       (e.g. a single stream persisted from a bad fetch window). Force a
+       fresh addon call by returning null. */
+    const _v434Min = 3;
+    if (!Array.isArray(parsed.streams) || parsed.streams.length < _v434Min) {
+      try { console.log('[V434] discarding tiny stream cache n=', parsed.streams?.length, 'key=', key); } catch (_) {}
+      return null;
+    }
     return parsed.streams as Stream[];
   } catch { return null; }
 }
@@ -239,6 +266,14 @@ async function loadStreamsFromDisk(key: string): Promise<Stream[] | null> {
 async function saveStreamsToDisk(key: string, streams: Stream[]): Promise<void> {
   try {
     if (!streams || streams.length === 0) return;
+    /* V434_MIN_CACHE_GUARD - never persist tiny snapshots. Prevents a bad
+       fetch window (network glitch, addon timeout) from poisoning the disk
+       cache with 1-2 streams that then lock users into that state until
+       manual app-data clear. */
+    if (streams.length < 3) {
+      try { console.log('[V434] refusing to persist tiny stream list n=', streams.length, 'key=', key); } catch (_) {}
+      return;
+    }
     // V348: write to filesystem blob cache (unlimited size)
     await _blobCache.setBlob(STREAMS_DISK_KEY(key), JSON.stringify({ time: Date.now(), streams }));
   } catch (e: any) {
@@ -694,16 +729,27 @@ export const useContentStore = create<ContentState>((set, get) => ({
 
       if ((!allStreams || allStreams.length === 0) && _myToken === _v190AbortToken) {
         console.log('[ContentStore v190] 0 streams on first try — retrying once in 3s');
-        await new Promise((r) => setTimeout(r, 3000));
-        if (_myToken !== _v190AbortToken) return [];
-        try {
-          const retry = await api.addons.getAllStreams(type, id);
-          if (retry && retry.streams && retry.streams.length > 0) {
-            allStreams = retry.streams;
-            console.log('[ContentStore v190] retry succeeded:', allStreams.length);
+        /* V406_RESILIENT_RETRY - 3 attempts with exponential backoff.
+           Reuses _v194_onProgress so any partial results from Torrentio
+           or TPB+ during the retries still paint the UI immediately. */
+        const _v406Delays = [500, 1500, 3500];
+        for (let _v406i = 0; _v406i < _v406Delays.length; _v406i++) {
+          if (_myToken !== _v190AbortToken) return [];
+          if (allStreams && allStreams.length > 0) break;
+          await new Promise((r) => setTimeout(r, _v406Delays[_v406i]));
+          if (_myToken !== _v190AbortToken) return [];
+          try {
+            const _v406R = await api.addons.getAllStreams(type, id, _v194_onProgress);
+            if (_v406R && _v406R.streams && _v406R.streams.length > 0) {
+              allStreams = _v406R.streams;
+              console.log('[V406] retry ' + (_v406i + 1) + '/3 succeeded, streams=' + allStreams.length);
+              break;
+            } else {
+              console.log('[V406] retry ' + (_v406i + 1) + '/3 returned 0');
+            }
+          } catch (_e) {
+            console.log('[V406] retry ' + (_v406i + 1) + '/3 threw', _e);
           }
-        } catch (e) {
-          console.log('[ContentStore v190] retry threw:', e);
         }
       }
 
@@ -720,6 +766,18 @@ export const useContentStore = create<ContentState>((set, get) => ({
           _setIf({ isLoadingStreams: false });
           return _cur.streams;
         }
+        /* V406_DISK_RESCUE - a parallel prefetch (Discover / CW) may have
+           written to disk while our fetch was retrying. Try one last read
+           before returning []. */
+        try {
+          const _v406Disk = await loadStreamsFromDisk(cacheKey);
+          if (_v406Disk && _v406Disk.length > 0) {
+            console.log('[V406] disk rescue found', _v406Disk.length, 'streams');
+            setStreamsCache(cacheKey, _v406Disk);
+            _setIf({ streams: _v406Disk, isLoadingStreams: false });
+            return _v406Disk;
+          }
+        } catch (_) {}
       }
       _setIf({ streams: allStreams, isLoadingStreams: false });
       return allStreams;
@@ -730,6 +788,16 @@ export const useContentStore = create<ContentState>((set, get) => ({
         _setIf({ isLoadingStreams: false });
         return _cur.streams;
       }
+      /* V406_DISK_RESCUE_CATCH - error path also gets a last-chance disk read. */
+      try {
+        const _v406Disk = await loadStreamsFromDisk(cacheKey);
+        if (_v406Disk && _v406Disk.length > 0) {
+          console.log('[V406] catch-path disk rescue found', _v406Disk.length, 'streams');
+          setStreamsCache(cacheKey, _v406Disk);
+          _setIf({ streams: _v406Disk, isLoadingStreams: false, error: null });
+          return _v406Disk;
+        }
+      } catch (_) {}
       _setIf({ streams: [], isLoadingStreams: false });
       return [];
     }

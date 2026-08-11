@@ -1,0 +1,27 @@
+--------- beginning of main
+08-10 14:44:03.772 I/ReactNativeJS( 4854): '[API] Request:', 'POST', 'http://5.161.49.99:8001/api/watch-progress'
+08-10 14:44:03.871 I/ReactNativeJS( 4854): '[API] Response OK:', '/api/watch-progress'
+08-10 14:44:03.872 I/ReactNativeJS( 4854): '[PLAYER] Watch progress saved:', 36.062, '/', 1319.744
+08-10 14:44:08.373 I/ReactNativeJS( 4854): '[TV] Key event:', 'select', 'keyCode:', 23
+08-10 14:44:09.167 I/ReactNativeJS( 4854): '[API] Request:', 'POST', 'http://5.161.49.99:8001/api/watch-progress'
+08-10 14:44:09.231 I/ReactNativeJS( 4854): '[API] Response OK:', '/api/watch-progress'
+08-10 14:44:09.232 I/ReactNativeJS( 4854): '[PLAYER] Watch progress saved:', 41.444, '/', 1319.744
+08-10 14:44:09.248 I/ReactNativeJS( 4854): '[TV] Key event:', 'select', 'keyCode:', 23
+08-10 14:44:10.071 I/ReactNativeJS( 4854): '[TV] Key event:', 'select', 'keyCode:', 23
+08-10 14:44:10.615 I/ReactNativeJS( 4854): '[TV] Key event:', 'up', 'keyCode:', 19
+08-10 14:44:11.175 I/ReactNativeJS( 4854): '[TV] Key event:', 'right', 'keyCode:', 22
+08-10 14:44:11.664 I/ReactNativeJS( 4854): '[TV] Key event:', 'left', 'keyCode:', 21
+08-10 14:44:12.229 I/ReactNativeJS( 4854): '[TV] Key event:', 'select', 'keyCode:', 23
+08-10 14:44:12.375 I/ReactNativeJS( 4854): '[v457] aspect mode ->', 'stretch'
+08-10 14:44:13.187 I/ReactNativeJS( 4854): '[TV] Key event:', 'select', 'keyCode:', 23
+08-10 14:44:13.311 I/ReactNativeJS( 4854): '[v457] aspect mode ->', 'contain'
+08-10 14:44:13.980 I/ReactNativeJS( 4854): '[TV] Key event:', 'select', 'keyCode:', 23
+08-10 14:44:14.111 I/ReactNativeJS( 4854): '[v457] aspect mode ->', 'cover'
+08-10 14:44:14.173 I/ReactNativeJS( 4854): '[API] Request:', 'POST', 'http://5.161.49.99:8001/api/watch-progress'
+08-10 14:44:14.237 I/ReactNativeJS( 4854): '[API] Response OK:', '/api/watch-progress'
+08-10 14:44:14.237 I/ReactNativeJS( 4854): '[PLAYER] Watch progress saved:', 45.62, '/', 1319.744
+08-10 14:44:16.270 I/ReactNativeJS( 4854): '[TV] Key event:', 'select', 'keyCode:', 23
+08-10 14:44:16.397 I/ReactNativeJS( 4854): '[v457] aspect mode ->', 'stretch'
+08-10 14:44:19.312 I/ReactNativeJS( 4854): '[API] Request:', 'POST', 'http://5.161.49.99:8001/api/watch-progress'
+08-10 14:44:19.388 I/ReactNativeJS( 4854): '[API] Response OK:', '/api/watch-progress'
+08-10 14:44:19.388 I/ReactNativeJS( 4854): '[PLAYER] Watch progress saved:', 50.745, '/', 1319.744

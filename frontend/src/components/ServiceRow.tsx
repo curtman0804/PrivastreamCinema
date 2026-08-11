@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   memo,
   useState,
   useCallback,
@@ -30,30 +30,61 @@ const MOBILE_PADDING = 16;
 
 const TV_SCROLL_ANCHOR = 4;
 
-// PATCH_V250_BACK_NAV_FOCUS â€” module-level map of rowKey -> last-focused content_id.
+// PATCH_V250_BACK_NAV_FOCUS Ã¢â‚¬â€ module-level map of rowKey -> last-focused content_id.
 // When user backs out of Details, ServiceRow re-mounts and gives the previously
 // focused poster hasTVPreferredFocus=true, so the highlight appears in the same
 // frame as the row renders (no D-pad-poll latency, no scroll glitch).
 const _v250_lastFocusedByRow = new Map<string, string>();
 
-// PATCH_V250_VIEWPORT_PREFETCH â€” track which ids we've already kicked
+// PATCH_V250_VIEWPORT_PREFETCH Ã¢â‚¬â€ track which ids we've already kicked
 // off a /meta prefetch for (per app session). Avoids duplicate hits.
 const _v250_prefetched = new Set<string>();
 
-// v238 â€” eager-mount top 3 rows so user sees a "full" Discover screen
+// V445_META_QUEUE - global bounded meta-fetch queue.  Prior code fired an
+// uncoordinated getMeta() per viewable poster; with 6 rows lazy-mounting
+// this produced 30+ concurrent XHRs at boot, choking the JS thread and
+// making the D-pad feel sluggish.  Max 3 in flight; the rest queue.
+const _V445_MAX_INFLIGHT = 3;
+let _v445Inflight = 0;
+const _v445Queue: Array<{ t: string; cid: string }> = [];
+function _v445Drain() {
+  while (_v445Inflight < _V445_MAX_INFLIGHT && _v445Queue.length > 0) {
+    const job = _v445Queue.shift();
+    if (!job) break;
+    _v445Inflight++;
+    (api as any)?.content?.getMeta?.(job.t, job.cid)
+      .then((d: any) => { if (d) setMetaCache(job.cid, d); })
+      .catch(() => { /* best-effort */ })
+      .finally(() => { _v445Inflight = Math.max(0, _v445Inflight - 1); _v445Drain(); });
+  }
+}
+function _v445QueueMeta(t: string, cid: string) {
+  _v445Queue.push({ t, cid });
+  _v445Drain();
+}
+
+// V444_BOOT_SERVICE_ROW - visible startup marker.  If this line appears in
+// logcat, v443+v444 patches are ACTIVE in the bundle.
+try { console.log('[V444_BOOT] ServiceRow module loaded; v443 map-read=DISABLED'); } catch (_) {}
+
+// V443_STOP_FOCUS_HOP marker.  See patch_v443.ps1 for rationale.  The map
+// _v250_lastFocusedByRow is still written on every card focus (harmless
+// tracking) but is NEVER read by hasTVPreferredFocus.
+
+// v238 Ã¢â‚¬â€ eager-mount top 3 rows so user sees a "full" Discover screen
 // in the first frame instead of 1 row + empty space.  Rows 3+ paint at
-// 20ms steps (cap 400ms total) â€” fast enough to feel simultaneous.
+// 20ms steps (cap 400ms total) Ã¢â‚¬â€ fast enough to feel simultaneous.
 const LazyMount: React.FC<{
   height: number;
   rowIndex: number;
   children: React.ReactNode;
 }> = memo(({ height, rowIndex, children }) => {
-  const [shouldRender, setShouldRender] = useState(rowIndex <= 2);
+  const [shouldRender, setShouldRender] = useState(rowIndex <= 4); /* V449_LAG_TUNE: eager 5 rows */
 
   useEffect(() => {
     if (shouldRender) return;
 
-    const delayMs = Math.min((rowIndex - 2) * 20, 400);
+    const delayMs = Math.min((rowIndex - 4) * 10, 250); /* V449_LAG_TUNE: tighter stagger */
 
     const t = setTimeout(() => {
       setShouldRender(true);
@@ -132,7 +163,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
     itemCountRef.current = validItems.length;
 
-    // v238 â€” DO NOT early-return here.  Hooks below this point MUST run
+    // v238 Ã¢â‚¬â€ DO NOT early-return here.  Hooks below this point MUST run
     // every render or React throws "Rendered more/fewer hooks than during
     // the previous render".  The empty-state guard is moved AFTER all
     // hooks (see further down).
@@ -198,7 +229,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
         const focusedItem = validItems[index];
 
-        // PATCH_V250_BACK_NAV_FOCUS â€” remember which poster was focused
+        // PATCH_V250_BACK_NAV_FOCUS Ã¢â‚¬â€ remember which poster was focused
         // in this row, so the highlight returns to it on Back nav.
         if (focusedItem) {
           const cid = focusedItem.imdb_id || focusedItem.id;
@@ -282,17 +313,18 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
             showTitle={true}
             hasTVPreferredFocus={
               (isFirstRow && index === 0) ||
-              // PATCH_V250_BACK_NAV_FOCUS â€” restore last-focused poster
+              // PATCH_V250_BACK_NAV_FOCUS Ã¢â‚¬â€ restore last-focused poster
               // in this row when user returns from Details.
-              (_v250_lastFocusedByRow.get(
-                `${rowIndex}:${serviceName || title || ''}`
-              ) === (item.imdb_id || item.id))
+              (false /* V443_STOP_FOCUS_HOP - map-driven focus disabled */)
             }
             isFirstInRow={isFirst}
             isLastInRow={isLast}
             /* V316c_FOCUS_UP - only row 0 supplies a real tag; deeper
                rows pass null and fall back to default spatial nav. */
             nextFocusUpTag={nextFocusUpTag}
+            /* v475: pass rowIndex so ContentCard's v443:navBack listener
+               can scope focus restore by row (fixes cross-row focus race). */
+            rowIndex={rowIndex}
           />
         );
       },
@@ -314,7 +346,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
       []
     );
 
-    // PATCH_V250_VIEWPORT_PREFETCH â€” when posters scroll into view, fire
+    // PATCH_V250_VIEWPORT_PREFETCH Ã¢â‚¬â€ when posters scroll into view, fire
     // their meta prefetch immediately (no dwell needed).  This is the real
     // fix for "spotty" hover-to-instant: by the time the user's D-pad
     // lands on ANY visible poster, /meta has already been warmed.
@@ -330,9 +362,9 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         if (_v250_prefetched.has(cid)) continue;
         if (getMetaCache(cid)) { _v250_prefetched.add(cid); continue; }
         _v250_prefetched.add(cid);
-        (api as any)?.content?.getMeta?.(t, cid)
-          .then((d: any) => { if (d) setMetaCache(cid, d); })
-          .catch(() => { /* best-effort */ });
+        // V445_META_QUEUE - bounded 3-slot queue.  Kills the 30-request
+        // burst at boot that was starving the JS thread.
+        _v445QueueMeta(t, cid);
       }
     }).current;
 
@@ -341,7 +373,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
       minimumViewTime: 150,             // 150ms in-viewport before counting (debounces fast scrolls)
     }).current;
 
-    // v238 â€” SAFE empty-state guard: every hook above has already been
+    // v238 Ã¢â‚¬â€ SAFE empty-state guard: every hook above has already been
     // called this render, so React's hook order is stable across renders
     // regardless of whether validItems is empty.
     if (validItems.length === 0) {
@@ -381,11 +413,12 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
                 : styles.scrollContent
             }
             estimatedItemSize={itemTotalWidth}
-            drawDistance={itemTotalWidth * 3} // V250 â€” was 1.5x; gives more pre-rendered cards = smoother D-pad
+            drawDistance={itemTotalWidth * 8} /* V438_ROW_HYDRATION - more pre-rendered tiles = D-pad stays in-row */ // V250 Ã¢â‚¬â€ was 1.5x; gives more pre-rendered cards = smoother D-pad
             onEndReached={handleEndReached}
             onEndReachedThreshold={3}
             onViewableItemsChanged={onViewableItemsChanged} // PATCH_V250_VIEWPORT_PREFETCH
             viewabilityConfig={viewabilityConfig}
+            removeClippedSubviews={false} /* V438 - keep native tags alive for spatial nav */
           />
         </View>
       </LazyMount>

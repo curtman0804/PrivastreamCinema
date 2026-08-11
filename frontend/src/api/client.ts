@@ -709,7 +709,19 @@ export const api = {
   },
   subtitles: {
     get: async (contentType: string, contentId: string): Promise<{
-      subtitles: Array<{ id: string; url: string; lang: string; langName: string; }>;
+      /* V407_SUB_META - backend now returns multiple subs per language plus
+         OpenSubtitles metadata (filename / downloads / matchedBy / hash).
+         All new fields are optional so older backends still work. */
+      subtitles: Array<{
+        id: string;
+        url: string;
+        lang: string;
+        langName: string;
+        filename?: string | null;
+        downloads?: number | string | null;
+        matchedBy?: string | null;
+        hash?: string | null;
+      }>;
     }> => {
       try {
         const response = await apiClient.get(`/api/subtitles/${contentType}/${contentId}`);

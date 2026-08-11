@@ -1,4 +1,4 @@
-// PATCH_V53_STREMIO_PATTERN — clean SearchBar matching Stremio's Android TV
+﻿// PATCH_V53_STREMIO_PATTERN â€” clean SearchBar matching Stremio's Android TV
 // search pattern: bare TextInput is directly D-pad-focusable. No Pressable
 // wrapper, no on-screen keyboard. The system Gboard for TV pops up natively
 // when the TextInput is focused.
@@ -10,6 +10,7 @@ import {
   Pressable,
   Platform,
   Keyboard, /* V165_IMPORT_KEYBOARD */
+  DeviceEventEmitter, /* V450_SEARCH_UX */
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -21,7 +22,7 @@ interface SearchBarProps {
 
 export const SearchBar: React.FC<SearchBarProps> = ({
   onSearch,
-  placeholder = 'You can search for anything...', // v241 — copy update
+  placeholder = 'You can search for anything...', // v241 â€” copy update
   initialValue = '',
 }) => {
   const [query, setQuery] = useState(initialValue);
@@ -36,7 +37,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   }, [initialValue]);
 
   // On Android TV, programmatic focus after mount reliably pops the system IME.
-  // Stremio does the same — they don't rely on autoFocus alone.
+  // Stremio does the same â€” they don't rely on autoFocus alone.
   useEffect(() => {
     if (Platform.OS !== 'android' || initialValue) return;
     const t = setTimeout(() => {
@@ -47,7 +48,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
   const handleSubmit = () => {
     if (query.trim()) onSearch(query.trim());
-    /* V165_DISMISS_ON_SUBMIT — close the IME and blur the input so
+    /* V165_DISMISS_ON_SUBMIT â€” close the IME and blur the input so
        the D-pad reaches the result posters below. */
     try { Keyboard.dismiss(); } catch (_) {}
     try { inputRef.current?.blur && (inputRef.current as any).blur(); } catch (_) {}
@@ -78,7 +79,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           autoFocus={!initialValue}
           showSoftInputOnFocus={true}
           hasTVPreferredFocus={!initialValue}
-          blurOnSubmit={true} /* V165_BLUR_ON_SUBMIT — was false, kept the IME glued open on TV */
+          blurOnSubmit={true} /* V165_BLUR_ON_SUBMIT â€” was false, kept the IME glued open on TV */
         />
         {query.length > 0 && (
           <Pressable
@@ -91,7 +92,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           </Pressable>
         )}
       </View>
-      {/* Explicit search button — focusable on Android TV/Firestick */}
+      {/* Explicit search button â€” focusable on Android TV/Firestick */}
       <Pressable
         onPress={handleSubmit}
         onFocus={() => setIsSearchFocused(true)}

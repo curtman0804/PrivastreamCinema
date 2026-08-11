@@ -1,29 +1,15 @@
 @echo off
-REM v251_deploy_ota.bat (v253-patched: uses `tar` instead of Compress-Archive)
-REM
-REM PowerShell's Compress-Archive mangles deeply nested paths (it breaks
-REM `_expo\static\js\android\entry-*.hbc` on Linux extraction).  Using the
-REM `tar` shipped with Windows 10/11 produces a clean cross-platform zip.
-REM
-REM One-command OTA deploy for Privastream Cinema.
-REM Run this from C:\Users\Curtm\PrivastreamCinema\frontend whenever you want
-REM to push a JS/asset change to every installed Firestick app within seconds.
-
+REM deploy_ota.bat ? merges v253 tar-based zip with v416 Expect-header curl fix
 setlocal enabledelayedexpansion
 set "FRONTEND_DIR=%~dp0"
 cd /d "%FRONTEND_DIR%"
 
-REM ---- Token check ------------------------------------------------------------
 if "%PRIVASTREAM_OTA_TOKEN%"=="" (
   echo [ERROR] PRIVASTREAM_OTA_TOKEN env var not set.
-  echo Set it with:  setx PRIVASTREAM_OTA_TOKEN your-token-here
-  echo Then open a NEW Command Prompt and re-run this script.
   exit /b 1
 )
 
-REM ---- 1. Export --------------------------------------------------------------
-echo.
-echo === [1/3] Exporting JS bundle (expo export --platform android) ===
+echo === [1/3] Exporting JS bundle ===
 if exist dist rmdir /s /q dist
 call npx expo export --platform android --output-dir dist
 if errorlevel 1 (
@@ -31,9 +17,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
-REM ---- 2. Zip with `tar` (preserves forward slashes) ---------------------------
 echo.
-echo === [2/3] Zipping dist -^> ota.zip (using tar for safe paths) ===
+echo === [2/3] Zipping dist -^> ota.zip (tar, forward-slash paths) ===
 if exist ota.zip del /q ota.zip
 pushd dist
 tar -a -c -f "..\ota.zip" *
@@ -45,20 +30,51 @@ if errorlevel 1 (
 popd
 for %%I in (ota.zip) do echo Built ota.zip = %%~zI bytes
 
-REM ---- 3. Upload --------------------------------------------------------------
 echo.
-echo === [3/3] Uploading to api.privastreamsolutions.com ===
-curl --show-error -X POST "https://api.privastreamsolutions.com/api/expo-updates/upload" -H "Authorization: Bearer %PRIVASTREAM_OTA_TOKEN%" -H "x-runtime-version: 1.1.0" -H "x-platform: android" -F "file=@ota.zip"
-if errorlevel 1 (
+echo === [3/3] Uploading (curl, primary) ===
+curl --show-error --http1.1 --tlsv1.2 -H "Expect:" --max-time 180 -X POST ^
+  -H "Authorization: Bearer %PRIVASTREAM_OTA_TOKEN%" ^
+  -H "x-runtime-version: 1.1.0" ^
+  -H "x-platform: android" ^
+  -F "file=@ota.zip" ^
+  "https://api.privastreamsolutions.com/api/expo-updates/upload"
+if not errorlevel 1 (
   echo.
-  echo [ERROR] Upload failed.  Check token + network.
-  exit /b 1
+  echo [OK] Upload via curl succeeded
+  goto :done
 )
 
 echo.
+echo [WARN] curl failed, retrying with PowerShell HttpClient fallback...
+powershell -NoProfile -Command ^
+  "$ErrorActionPreference='Stop';" ^
+  "try {" ^
+  "  Add-Type -AssemblyName System.Net.Http;" ^
+  "  $client = New-Object System.Net.Http.HttpClient;" ^
+  "  $client.Timeout = [TimeSpan]::FromSeconds(180);" ^
+  "  $client.DefaultRequestHeaders.ExpectContinue = $false;" ^
+  "  $client.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue('Bearer', $env:PRIVASTREAM_OTA_TOKEN);" ^
+  "  $client.DefaultRequestHeaders.Add('x-runtime-version','1.1.0');" ^
+  "  $client.DefaultRequestHeaders.Add('x-platform','android');" ^
+  "  $content = New-Object System.Net.Http.MultipartFormDataContent;" ^
+  "  $fs = [System.IO.File]::OpenRead((Resolve-Path 'ota.zip'));" ^
+  "  $fc = New-Object System.Net.Http.StreamContent($fs);" ^
+  "  $fc.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('application/zip');" ^
+  "  $content.Add($fc,'file','ota.zip');" ^
+  "  $resp = $client.PostAsync('https://api.privastreamsolutions.com/api/expo-updates/upload',$content).GetAwaiter().GetResult();" ^
+  "  $body = $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();" ^
+  "  Write-Host ('[PS] ' + [int]$resp.StatusCode + ' ' + $body);" ^
+  "  $fs.Close();" ^
+  "  if (-not $resp.IsSuccessStatusCode) { exit 1 }" ^
+  "} catch { Write-Host ('[FAIL] ' + $_.Exception.Message); exit 1 }"
+
+if errorlevel 1 (
+  echo [FAIL] Both curl and PowerShell upload failed
+  exit /b 1
+)
+
+:done
 echo.
 echo === DONE ===
 echo Force-close + reopen the app on the Firestick.
-echo It will silently download + apply this update on cold start.
-echo.
 endlocal

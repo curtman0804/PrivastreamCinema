@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+﻿import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   ActivityIndicator,
   InteractionManager, /* V119B_FIX_IMPORT */
+  DeviceEventEmitter, /* V450_SEARCH_UX */
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -59,7 +60,7 @@ export default function SearchScreen() {
 
   // V119_TRANSITION_LAG: defer auto-paging until AFTER nav transition completes
   // so the Discover->Search animation doesn't stutter on the JS thread.
-  // v238 — also IGNORE backend's `searchHasMore=false` after the first
+  // v238 â€” also IGNORE backend's `searchHasMore=false` after the first
   // page if we got a full page of results.  The backend's hasMore flag
   // mis-fires on genre + multi-word queries and was capping results at
   // 30.  We keep paginating until we get a partial/empty page back.
@@ -85,7 +86,7 @@ export default function SearchScreen() {
     lastFocusedSection.current = '';
   }, [currentQuery]);
 
-  // V112: row-snap — scroll parent ScrollView to bring focused row's title into view
+  // V112: row-snap â€” scroll parent ScrollView to bring focused row's title into view
   const handleSectionFocus = useCallback((sectionKey: string) => {
     if (lastFocusedSection.current === sectionKey) return;
     lastFocusedSection.current = sectionKey;
@@ -105,9 +106,9 @@ export default function SearchScreen() {
     setCurrentQuery(query);
     setHasSearched(true);
     await search(query);
-    // v238 — if a multi-word query returned ZERO movies AND ZERO series,
+    // v238 â€” if a multi-word query returned ZERO movies AND ZERO series,
     // retry once with a more lenient form (drop short stop-words like
-    // "of", "the", "a", "an" — addons that index titles literally will
+    // "of", "the", "a", "an" â€” addons that index titles literally will
     // miss "pirates of the caribbean" but match "pirates caribbean").
     const { searchMovies: m2, searchSeries: s2 } = useContentStore.getState();
     if (m2.length === 0 && s2.length === 0 && /\s/.test(query.trim())) {
@@ -121,6 +122,19 @@ export default function SearchScreen() {
         await search(lean);
       }
     }
+    // V450_SEARCH_UX - jump the selector to the first result poster so the
+    // user does NOT have to D-pad DOWN through the SearchBar chain.  Reuses
+    // the v443:navBack event that every ContentCard already listens for.
+    try {
+      const { searchMovies: mFinal, searchSeries: sFinal } = useContentStore.getState();
+      const firstItem = (mFinal && mFinal[0]) || (sFinal && sFinal[0]);
+      const firstId = firstItem ? String((firstItem as any).imdb_id || (firstItem as any).id || '') : '';
+      if (firstId) {
+        setTimeout(() => { try { DeviceEventEmitter.emit('v443:navBack', firstId); } catch (_) {} }, 250);
+        setTimeout(() => { try { DeviceEventEmitter.emit('v443:navBack', firstId); } catch (_) {} }, 500);
+        console.log('[V450_SEARCH_UX] auto-focus target:', firstId);
+      }
+    } catch (_) {}
   }, [search, clearSearch]);
 
   const handleItemPress = (item: SearchResult) => {
@@ -170,8 +184,12 @@ export default function SearchScreen() {
           bounces={false}
           overScrollMode="never"
           alwaysBounceVertical={false}
-          /* V119_TRANSITION_LAG: drop offscreen rows from native view tree */
-          removeClippedSubviews={true}
+          /* V451_SEARCH_1CLICK_DOWN - was true (from V119_TRANSITION_LAG);
+             clipping off-screen rows from the native tree hid the next
+             ServiceRow's cards from Android TV's spatial-focus engine,
+             so DOWN required two presses (one to scroll, one to focus).
+             Discover uses false for exactly this reason. */
+          removeClippedSubviews={false}
         >
           {/* Movies Row */}
           {searchMovies.length > 0 && (
@@ -197,14 +215,7 @@ export default function SearchScreen() {
             </View>
           )}
 
-          {/* Show summary at bottom if both exist */}
-          {searchMovies.length > 0 && searchSeries.length > 0 && (
-            <View style={styles.resultsSummary}>
-              <Text style={styles.resultsSummaryText}>
-                {searchMovies.length} Movies  •  {searchSeries.length} Series
-              </Text>
-            </View>
-          )}
+          {/* V450_SEARCH_UX - removed redundant "Movies / Series" summary block */}
           
           <View style={styles.bottomPadding} />
         </ScrollView>
