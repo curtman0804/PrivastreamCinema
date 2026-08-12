@@ -37,6 +37,8 @@ import { api } from '../src/api/client';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import Constants from 'expo-constants';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { useEvent, useEventListener } from 'expo';
 import { Modal, FlatList } from 'react-native';
 import AsyncStorage from '../src/utils/mmkvStorage';
 /* V176C_PLAYER_MARK_WATCHED — keep the in-memory _v172WatchedSet in sync
@@ -1065,7 +1067,220 @@ export default function PlayerScreen() {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isEnded, setIsEnded] = useState(false);
-  const videoRef = useRef<Video>(null);
+  // v488 - error handler extracted from legacy <Video onError>. Called from expo-video statusChange.
+  const _v488_handleVideoError = (error: any) => {
+
+                  console.log(`[PLAYER] Video error (attempt ${videoRetryCountRef.current + 1}/${maxVideoRetries}):`, error);
+                  
+                  // If we're seeking and get an error, DON'T reset the URL
+                  // Just retry the seek - the data might not be available yet
+                  if (isSeekingRef.current && lastSeekPositionRef.current > 0) {
+                    console.log(`[PLAYER] Error during seek - retrying seek to ${lastSeekPositionRef.current}ms instead of resetting`);
+                    setIsRebuffering(true);
+                    // Wait a bit for data to arrive, then retry the seek
+                    setTimeout(async () => {
+                      try {
+                        if (videoRef.current) {
+                          await videoRef.current.setPositionAsync(lastSeekPositionRef.current);
+                          console.log(`[PLAYER] Seek retry successful to ${lastSeekPositionRef.current}ms`);
+                        }
+                      } catch (e) {
+                        console.log(`[PLAYER] Seek retry failed:`, e);
+                        // After 3 retries during seek, give up and let it play from wherever it is
+                        videoRetryCountRef.current += 1;
+                        if (videoRetryCountRef.current > 3) {
+                          // PATCH_V10_REWIND_ON_GIVEUP — rewind to pre-seek position and arm
+                          // cooldown so subsequent onError events do not trigger tryNextStream.
+                          isSeekingRef.current = false;
+                          videoRetryCountRef.current = 0;
+                          setIsRebuffering(false);
+                          seekCooldownUntilRef.current = Date.now() + 10000;
+                          if (videoRef.current && preSeekPositionMsRef.current > 0) {
+                            try {
+                              await videoRef.current.setPositionAsync(preSeekPositionMsRef.current);
+                              console.log('[PLAYER] Seek failed — rewound to pre-seek position', preSeekPositionMsRef.current);
+                            } catch (_) {}
+                          }
+                        }
+                      }
+                    }, 2000);
+                    return;
+                  }
+                  
+                  // PATCH_V10_COOLDOWN_GUARD — if a seek just failed, ignore the onError storm.
+                  // ExoPlayer keeps emitting errors at the bad position; we already rewound.
+                  if (Date.now() < seekCooldownUntilRef.current) {
+                    console.log('[PLAYER] post-seek cooldown active, ignoring onError');
+                    return;
+                  }
+
+                  // V162_CODEC_FAST_FAIL — detect codec / decode errors that no
+                  // amount of retrying will fix (DTS-HD MA on a Firestick, etc.).
+                  // Skip the retry loop and jump straight to the next fallback
+                  // torrent so the user actually gets playback.
+                  try {
+                    const _v162_errMsg = String(
+                      (error && typeof error === 'object' && (error as any).message)
+                        ? (error as any).message
+                        : error
+                    ).toLowerCase();
+                    // V162B_TIGHT_CODEC — match ONLY clear, permanent codec
+                    // problems.  Removed overly-broad patterns ("audiotrack"
+                    // without "init failed", bare "codec", bare "decoder",
+                    // "mediacodec", "exoplaybackexception") which matched
+                    // normal buffering errors and fast-failed every stream.
+                    const _v162_isCodecErr = (
+                      _v162_errMsg.includes('audiotrack init failed')
+                      || _v162_errMsg.includes('format not supported')
+                      || _v162_errMsg.includes('unsupported format')
+                      || _v162_errMsg.includes('no suitable decoder')
+                      || _v162_errMsg.includes('decoder init failed')
+                      || _v162_errMsg.includes('decoder failed to initialize')
+                      || _v162_errMsg.includes('not playable')
+                      || _v162_errMsg.includes('mediacodecvideodecoderexception')
+                      || _v162_errMsg.includes('decoder failed:')
+                    );
+                    if (_v162_isCodecErr) {
+                      console.log('[v162] Codec/decode error — skipping retries, advancing to next stream:', _v162_errMsg.slice(0, 200));
+                      videoRetryCountRef.current = 0;
+                      // Prefer URL fallbacks if available (cached debrid links),
+                      // otherwise fall through to the next torrent.
+                      if (fallbackUrls.length > currentStreamIndex + 1) {
+                        tryNextStream();
+                      } else {
+                        tryNextFallbackTorrent();
+                      }
+                      return;
+                    }
+                  } catch (_v162_e) { /* ignore — fall through to normal retry */ }
+
+                  // V357_FAST_CASCADE - directUrl errors skip retry loop
+                    if (directUrl && !infoHash) {
+                      const _v357_fbLeft = Math.max(0, (fallbackUrls?.length || 0) - (currentStreamIndex + 1));
+                      const _v357_torLeft = (torrentFallbacksRef.current?.length || 0) + (torrentFallbacks?.length || 0);
+                      console.log('[V357 CASCADE] directUrl failed - fbUrlsLeft=' + _v357_fbLeft + ' torrentsLeft=' + _v357_torLeft);
+                      videoRetryCountRef.current = 0;
+                      if (_v357_fbLeft > 0) tryNextStream();
+                      else if (_v357_torLeft > 0) tryNextFallbackTorrent();
+                      else { setError('Stream unavailable. Try a different source.'); setIsLoading(false); }
+                      return;
+                    }
+                    // Retry aggressively
+                    if (videoRetryCountRef.current < maxVideoRetries) {
+                    videoRetryCountRef.current += 1;
+                    // Fast retries: 1s, 1s, 2s, 2s, 3s, 3s, 4s, 4s, 5s, 5s, 5s, 5s, 5s, 5s, 5s
+                    const delay = Math.min(5000, Math.ceil(videoRetryCountRef.current / 2) * 1000);
+                    console.log(`[PLAYER] Retrying video load in ${delay}ms...`);
+                    
+                    // Reset the streamUrl to force re-render of Video component
+                    const currentUrl = streamUrl;
+                    setStreamUrl(null);
+                    setTimeout(() => {
+                      setStreamUrl(currentUrl);
+                    }, delay);
+                  } else if (fallbackUrls.length > currentStreamIndex + 1) {
+                    videoRetryCountRef.current = 0; // Reset for next stream
+                    tryNextStream();
+                  } else {
+                    // No URL fallbacks left — try torrent fallbacks
+                    videoRetryCountRef.current = 0;
+                    tryNextFallbackTorrent();
+                  }
+                
+  };
+  // ============ v488: expo-video migration ============
+  const _v488_source = React.useMemo(() => {
+    if (!streamUrl) return null;
+    return { uri: streamUrl } as any;
+  }, [streamUrl]);
+  const _v488_player = useVideoPlayer(_v488_source, (p: any) => {
+    try {
+      p.loop = false;
+      p.volume = 1.0;
+      p.muted = false;
+      if (streamUrl) p.play();
+    } catch (_) {}
+  });
+
+  const [_v488_audioTracks, _v488_setAudioTracks] = useState<any[]>([]);
+  const [_v488_selectedAudioId, _v488_setSelectedAudioId] = useState<string | null>(null);
+  const [_v488_showAudioPicker, _v488_setShowAudioPicker] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      if (streamUrl) {
+        _v488_player.replace({ uri: streamUrl });
+        _v488_player.play();
+      } else {
+        _v488_player.replace(null);
+      }
+      _v488_setAudioTracks([]);
+      _v488_setSelectedAudioId(null);
+    } catch (e) { console.log('[v488] source swap err', e); }
+  }, [streamUrl]);
+
+  useEventListener(_v488_player, 'statusChange', (payload: any) => {
+    try {
+      if (payload?.status === 'readyToPlay') {
+        const tracks = (_v488_player as any).availableAudioTracks || [];
+        _v488_setAudioTracks(tracks);
+        const cur = (_v488_player as any).audioTrack;
+        _v488_setSelectedAudioId(cur?.id != null ? String(cur.id) : null);
+        console.log('[v488] audio tracks =', tracks.length, tracks.map((t: any) => (t?.language || '?') + '/' + (t?.label || '?')).join(', '));
+      } else if (payload?.status === 'error') {
+        try { _v488_handleVideoError(payload?.error || new Error('expo-video error')); } catch (_) {}
+      }
+    } catch (e) { console.log('[v488] statusChange err', e); }
+  });
+
+  useEventListener(_v488_player, 'timeUpdate', (payload: any) => {
+    try {
+      if (typeof handlePlaybackStatus === 'function') {
+        handlePlaybackStatus({
+          isLoaded: true,
+          positionMillis: Math.round(((payload?.currentTime ?? (_v488_player as any).currentTime) || 0) * 1000),
+          durationMillis: Math.round((((_v488_player as any).duration) || 0) * 1000),
+          isPlaying: (_v488_player as any).playing,
+          isBuffering: (_v488_player as any).status === 'loading',
+          didJustFinish: false,
+          shouldPlay: true,
+        } as any);
+      }
+    } catch (_) {}
+  });
+
+  useEventListener(_v488_player, 'playToEnd', () => {
+    try {
+      if (typeof handlePlaybackStatus === 'function') {
+        const d = Math.round((((_v488_player as any).duration) || 0) * 1000);
+        handlePlaybackStatus({ isLoaded: true, positionMillis: d, durationMillis: d, isPlaying: false, didJustFinish: true } as any);
+      }
+    } catch (_) {}
+  });
+
+  const videoRef = useRef<any>({
+    setPositionAsync: async (ms: number) => { try { (_v488_player as any).currentTime = (ms || 0) / 1000; } catch (_) {} },
+    pauseAsync:       async () => { try { _v488_player.pause(); } catch (_) {} },
+    playAsync:        async () => { try { _v488_player.play();  } catch (_) {} },
+    getStatusAsync:   async () => ({
+      isLoaded: (_v488_player as any).status === 'readyToPlay',
+      positionMillis: Math.round((((_v488_player as any).currentTime) || 0) * 1000),
+      durationMillis: Math.round((((_v488_player as any).duration) || 0) * 1000),
+      isPlaying: (_v488_player as any).playing,
+    }),
+    setStatusAsync: async (opts: any) => {
+      try {
+        if (opts?.shouldPlay === true)  _v488_player.play();
+        if (opts?.shouldPlay === false) _v488_player.pause();
+        if (typeof opts?.positionMillis === 'number') (_v488_player as any).currentTime = opts.positionMillis / 1000;
+        if (typeof opts?.volume === 'number') (_v488_player as any).volume = opts.volume;
+        if (typeof opts?.isMuted === 'boolean') (_v488_player as any).muted = opts.isMuted;
+      } catch (_) {}
+    },
+    unloadAsync: async () => { try { _v488_player.pause(); _v488_player.replace(null); } catch (_) {} },
+    loadAsync:   async (source: any) => { try { _v488_player.replace(source); } catch (_) {} },
+  });
+  // ============ end v488 ============
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   
@@ -3563,148 +3778,17 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
               style={StyleSheet.absoluteFill}
               onPress={handleVideoTap}
             >
-              <Video
-                ref={videoRef}
-                source={{ 
-                  uri: streamUrl,
-                  // Help ExoPlayer detect format - important for MKV/x265 streams
-                  overrideFileExtensionAndroid: (isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true') ? 'm3u8' : 'mp4',
-                  /* PATCH_V152_NO_UA_OVERRIDE — removed desktop Chrome UA override.
-                     PM CDN refuses to send bytes when the redemption UA differs
-                     from what was used to obtain the URL.  ExoPlayer's default UA
-                     (ExoPlayerLib/2.x) is what Stremio uses and PM accepts. */
-                }}
+              <VideoView
+                player={_v488_player}
                 style={[
                   styles.videoPlayer,
-                  // v476b: enforce visible aspect change even on native-16:9 content
                   v457AspectMode === 'cover' && { transform: [{ scale: 1.18 }] },
                   v457AspectMode === 'stretch' && { transform: [{ scaleY: 1.18 }] },
                 ]}
-                resizeMode={v457ResizeMode} /* v467 - was V397_FULLSCREEN COVER */
-                shouldPlay
-                isLooping={false}
-                volume={1.0}
-                isMuted={false}
-                /* PATCH_V143C2_STRIPPED — reverted v143's interval cadence so FF math + auto-next read accurate playhead values */
-                onPlaybackStatusUpdate={handlePlaybackStatus}
-                onError={(error) => {
-                  console.log(`[PLAYER] Video error (attempt ${videoRetryCountRef.current + 1}/${maxVideoRetries}):`, error);
-                  
-                  // If we're seeking and get an error, DON'T reset the URL
-                  // Just retry the seek - the data might not be available yet
-                  if (isSeekingRef.current && lastSeekPositionRef.current > 0) {
-                    console.log(`[PLAYER] Error during seek - retrying seek to ${lastSeekPositionRef.current}ms instead of resetting`);
-                    setIsRebuffering(true);
-                    // Wait a bit for data to arrive, then retry the seek
-                    setTimeout(async () => {
-                      try {
-                        if (videoRef.current) {
-                          await videoRef.current.setPositionAsync(lastSeekPositionRef.current);
-                          console.log(`[PLAYER] Seek retry successful to ${lastSeekPositionRef.current}ms`);
-                        }
-                      } catch (e) {
-                        console.log(`[PLAYER] Seek retry failed:`, e);
-                        // After 3 retries during seek, give up and let it play from wherever it is
-                        videoRetryCountRef.current += 1;
-                        if (videoRetryCountRef.current > 3) {
-                          // PATCH_V10_REWIND_ON_GIVEUP — rewind to pre-seek position and arm
-                          // cooldown so subsequent onError events do not trigger tryNextStream.
-                          isSeekingRef.current = false;
-                          videoRetryCountRef.current = 0;
-                          setIsRebuffering(false);
-                          seekCooldownUntilRef.current = Date.now() + 10000;
-                          if (videoRef.current && preSeekPositionMsRef.current > 0) {
-                            try {
-                              await videoRef.current.setPositionAsync(preSeekPositionMsRef.current);
-                              console.log('[PLAYER] Seek failed — rewound to pre-seek position', preSeekPositionMsRef.current);
-                            } catch (_) {}
-                          }
-                        }
-                      }
-                    }, 2000);
-                    return;
-                  }
-                  
-                  // PATCH_V10_COOLDOWN_GUARD — if a seek just failed, ignore the onError storm.
-                  // ExoPlayer keeps emitting errors at the bad position; we already rewound.
-                  if (Date.now() < seekCooldownUntilRef.current) {
-                    console.log('[PLAYER] post-seek cooldown active, ignoring onError');
-                    return;
-                  }
-
-                  // V162_CODEC_FAST_FAIL — detect codec / decode errors that no
-                  // amount of retrying will fix (DTS-HD MA on a Firestick, etc.).
-                  // Skip the retry loop and jump straight to the next fallback
-                  // torrent so the user actually gets playback.
-                  try {
-                    const _v162_errMsg = String(
-                      (error && typeof error === 'object' && (error as any).message)
-                        ? (error as any).message
-                        : error
-                    ).toLowerCase();
-                    // V162B_TIGHT_CODEC — match ONLY clear, permanent codec
-                    // problems.  Removed overly-broad patterns ("audiotrack"
-                    // without "init failed", bare "codec", bare "decoder",
-                    // "mediacodec", "exoplaybackexception") which matched
-                    // normal buffering errors and fast-failed every stream.
-                    const _v162_isCodecErr = (
-                      _v162_errMsg.includes('audiotrack init failed')
-                      || _v162_errMsg.includes('format not supported')
-                      || _v162_errMsg.includes('unsupported format')
-                      || _v162_errMsg.includes('no suitable decoder')
-                      || _v162_errMsg.includes('decoder init failed')
-                      || _v162_errMsg.includes('decoder failed to initialize')
-                      || _v162_errMsg.includes('not playable')
-                      || _v162_errMsg.includes('mediacodecvideodecoderexception')
-                      || _v162_errMsg.includes('decoder failed:')
-                    );
-                    if (_v162_isCodecErr) {
-                      console.log('[v162] Codec/decode error — skipping retries, advancing to next stream:', _v162_errMsg.slice(0, 200));
-                      videoRetryCountRef.current = 0;
-                      // Prefer URL fallbacks if available (cached debrid links),
-                      // otherwise fall through to the next torrent.
-                      if (fallbackUrls.length > currentStreamIndex + 1) {
-                        tryNextStream();
-                      } else {
-                        tryNextFallbackTorrent();
-                      }
-                      return;
-                    }
-                  } catch (_v162_e) { /* ignore — fall through to normal retry */ }
-
-                  // V357_FAST_CASCADE - directUrl errors skip retry loop
-                    if (directUrl && !infoHash) {
-                      const _v357_fbLeft = Math.max(0, (fallbackUrls?.length || 0) - (currentStreamIndex + 1));
-                      const _v357_torLeft = (torrentFallbacksRef.current?.length || 0) + (torrentFallbacks?.length || 0);
-                      console.log('[V357 CASCADE] directUrl failed - fbUrlsLeft=' + _v357_fbLeft + ' torrentsLeft=' + _v357_torLeft);
-                      videoRetryCountRef.current = 0;
-                      if (_v357_fbLeft > 0) tryNextStream();
-                      else if (_v357_torLeft > 0) tryNextFallbackTorrent();
-                      else { setError('Stream unavailable. Try a different source.'); setIsLoading(false); }
-                      return;
-                    }
-                    // Retry aggressively
-                    if (videoRetryCountRef.current < maxVideoRetries) {
-                    videoRetryCountRef.current += 1;
-                    // Fast retries: 1s, 1s, 2s, 2s, 3s, 3s, 4s, 4s, 5s, 5s, 5s, 5s, 5s, 5s, 5s
-                    const delay = Math.min(5000, Math.ceil(videoRetryCountRef.current / 2) * 1000);
-                    console.log(`[PLAYER] Retrying video load in ${delay}ms...`);
-                    
-                    // Reset the streamUrl to force re-render of Video component
-                    const currentUrl = streamUrl;
-                    setStreamUrl(null);
-                    setTimeout(() => {
-                      setStreamUrl(currentUrl);
-                    }, delay);
-                  } else if (fallbackUrls.length > currentStreamIndex + 1) {
-                    videoRetryCountRef.current = 0; // Reset for next stream
-                    tryNextStream();
-                  } else {
-                    // No URL fallbacks left — try torrent fallbacks
-                    videoRetryCountRef.current = 0;
-                    tryNextFallbackTorrent();
-                  }
-                }}
+                contentFit={v457AspectMode === 'contain' ? 'contain' : v457AspectMode === 'cover' ? 'cover' : 'fill'}
+                nativeControls={false}
+                allowsFullscreen={false}
+                allowsPictureInPicture={false}
               />
               
               {/* Rebuffering spinner - shown when seeking to unbuffered position */}
@@ -3984,6 +4068,14 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                     >
                       <Ionicons name={v457ModeIcon} size={24} color={'#FFFFFF'} />
                     </TVFocusButton>
+                    {/* v488 AUDIO_TRACK_PICKER */}
+                    <TVFocusButton
+                      style={styles.controlButton}
+                      focusedStyle={styles.controlButtonFocused}
+                      onPress={() => _v488_setShowAudioPicker(true)}
+                    >
+                      <Ionicons name="volume-high-outline" size={24} color={'#FFFFFF'} />
+                    </TVFocusButton>
                     <TVFocusButton 
                       style={styles.controlButton} /* V411_UI - no active ring */
                       focusedStyle={styles.controlButtonFocused}
@@ -4173,6 +4265,50 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
             )}
           </View>
         </View>
+      </Modal>
+      {/* v488 AUDIO PICKER MODAL */}
+      <Modal
+        transparent
+        visible={_v488_showAudioPicker}
+        animationType="fade"
+        onRequestClose={() => _v488_setShowAudioPicker(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => _v488_setShowAudioPicker(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center' }}
+        >
+          <View style={{ backgroundColor: '#111', borderRadius: 12, padding: 24, minWidth: 480, maxWidth: 700, maxHeight: '80%' }}>
+            <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 16 }}>Audio Track</Text>
+            {_v488_audioTracks.length === 0 ? (
+              <Text style={{ color: '#888', fontSize: 15, paddingVertical: 12 }}>No alternate audio tracks in this stream.</Text>
+            ) : (
+              _v488_audioTracks.map((t: any, idx: number) => {
+                const id = t?.id != null ? String(t.id) : String(idx);
+                const isSel = _v488_selectedAudioId === id || (_v488_selectedAudioId == null && idx === 0);
+                const label = (t?.label && String(t.label)) || (t?.language && String(t.language)) || ('Track ' + (idx + 1));
+                const langTag = t?.language ? (' [' + t.language + ']') : '';
+                return (
+                  <TVFocusButton
+                    key={id + '_' + idx}
+                    style={{ paddingVertical: 12, paddingHorizontal: 14, borderRadius: 8, marginVertical: 3, backgroundColor: isSel ? '#1e5f3a' : '#1a1a1a', borderWidth: 1, borderColor: isSel ? '#4ade80' : 'transparent' }}
+                    focusedStyle={{ backgroundColor: '#2a2a2a', borderColor: '#f1c40f', borderWidth: 2 }}
+                    onPress={() => {
+                      try {
+                        (_v488_player as any).audioTrack = t;
+                        _v488_setSelectedAudioId(id);
+                        console.log('[v488] audioTrack set:', label, langTag);
+                      } catch (e) { console.log('[v488] audioTrack set err', e); }
+                      _v488_setShowAudioPicker(false);
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 16 }}>{(isSel ? '\u2713  ' : '   ') + label + langTag}</Text>
+                  </TVFocusButton>
+                );
+              })
+            )}
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* Next Episode - Stremio-style bottom-right card (Modal for TV focus) */}

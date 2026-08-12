@@ -2106,44 +2106,7 @@ export default function DetailsScreen() {
 
       /* v125b-no-flash */
       const sorted = sortStreamsByLanguage(streams);
-      // v498 AUTOPLAY FILTER - best 4K English non-HDR non-BluRay, ranked by audio codec
-      const _v498_isBluRayLike = (t: string): boolean => {
-        const u = String(t || '').toUpperCase();
-        return u.includes('BLURAY') || u.includes('BLU-RAY') || u.includes('BDRIP') || u.includes('BD-RIP') || u.includes('BRRIP') || u.includes('BR-RIP') || u.includes('REMUX');
-      };
-      const _v498_audioRank = (t: string): number => {
-        const u = String(t || '').toUpperCase();
-        if (/\bATMOS\b/.test(u)) return 100;
-        if (/\bDTS[-. ]?X\b/.test(u)) return 90;
-        if (/\bTRUE ?HD\b/.test(u)) return 80;
-        if (/\bDTS[-. ]?HD[-. ]?MA\b/.test(u)) return 70;
-        if (/\bDTS[-. ]?HD\b/.test(u)) return 60;
-        if (/\bE-?AC-?3\b|\bDDP\b|\bDD\+/.test(u)) return 50;
-        if (/\bDTS\b/.test(u)) return 40;
-        if (/\bAC-?3\b|\bDD ?5\b/.test(u)) return 30;
-        if (/\bAAC\b/.test(u)) return 20;
-        return 0;
-      };
-      const _v498_pickBest = (list: any[], predicate: (info: any, blob: string) => boolean): any => {
-        const cand = list
-          .map((s: any) => {
-            const info = parseStreamInfo(s) as any;
-            const blob = ((s?.name || '') + ' ' + (s?.title || ''));
-            return { s, info, blob, aScore: _v498_audioRank(blob) };
-          })
-          .filter((x: any) => predicate(x.info, x.blob));
-        cand.sort((a: any, b: any) => (b.aScore - a.aScore));
-        return cand.length ? cand[0].s : null;
-      };
-      const _v498_t1 = _v498_pickBest(sorted, (i, b) => i.quality === '4K'    && !i.isForeign && !i.isHDR && !_v498_isBluRayLike(b) && !i.isCommentary);
-      const _v498_t2 = _v498_pickBest(sorted, (i, b) => i.quality === '4K'    && !i.isForeign && !i.isHDR                          && !i.isCommentary);
-      const _v498_t3 = _v498_pickBest(sorted, (i, b) => i.quality === '1080p' && !i.isForeign            && !_v498_isBluRayLike(b) && !i.isCommentary);
-      const _v498_t4 = _v498_pickBest(sorted, (i, _b) => i.quality === '1080p' && !i.isForeign                                     && !i.isCommentary);
-      const bestStream = _v498_t1 || _v498_t2 || _v498_t3 || _v498_t4 || sorted[0];
-      try {
-        const _tier = _v498_t1 ? '4K_ENG_noHDR_noBluRay' : _v498_t2 ? '4K_ENG_noHDR' : _v498_t3 ? '1080p_ENG_noBluRay' : _v498_t4 ? '1080p_ENG' : 'RAW_TOP';
-        console.log('[v498] auto-play tier=' + _tier + ' | ' + String((bestStream && (bestStream as any).title) || '').slice(0, 110));
-      } catch (_) {}
+      const bestStream = sorted[0];
       if (bestStream) {
         console.log('[AUTOPLAY] Content ready:', contentReady, '- selecting best stream for', id, '->', bestStream.title || bestStream.name);
         // V274_SEAMLESS_CW_LOADING â€” was clearing autoPlay param + waiting
