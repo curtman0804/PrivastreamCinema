@@ -32,12 +32,6 @@ let _v170PrefetchInflight = 0;
 const _V170_PREFETCH_CAP = 2;
 import { colors, posterShapes } from '../styles/colors';
 import Constants from 'expo-constants';
-/* TVNAV_JS_FOCUS — Stremio-style JS focus engine (see src/nav/tvFocus.ts). */
-import {
-  useTvFocus as _tvUseFocus,
-  registerCardActions as _tvRegisterCardActions,
-  unregisterCardActions as _tvUnregisterCardActions,
-} from '../nav/tvFocus';
 /* V176_LONGPRESS_MENU â€” v172 referenced AsyncStorage but forgot to import it,
    so hydration silently failed and gold check never appeared.  Restored here. */
 import AsyncStorage from '../utils/mmkvStorage';
@@ -1156,15 +1150,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const cardHeight = cardWidth * aspectRatio;
 
   const [isFocused, setIsFocused] = useState(false);
-  /* TVNAV_JS_FOCUS — is THIS cell the JS-selected one?  Selector only
-     re-renders the two cards whose selected boolean flips per keypress. */
-  const _tvSelected = _tvUseFocus(
-    (s) =>
-      tvEngine === true &&
-      s.enabled &&
-      s.row === engineRow &&
-      s.col === colIndex
-  );
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
 
   /* V176L_PERF_CLEANUP â€” O(1) lookup via librarySet (built once per
@@ -1411,26 +1396,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
      (not a stale closure frozen at the last onFocus). */
   const _v176iLpRef = useRef<(() => void) | null>(null);
   _v176iLpRef.current = handleLongPress;
-
-  /* TVNAV_JS_FOCUS — register this cell's press / long-press handlers so
-     the engine's SELECT / long-SELECT can invoke them by {row,col}.  Refs
-     keep the handlers fresh without re-registering on every render. */
-  const _tvOnPressRef = useRef<(() => void) | null>(null);
-  _tvOnPressRef.current = () => {
-    try {
-      onPress && onPress();
-    } catch (_) {}
-  };
-  useEffect(() => {
-    if (!tvEngine || typeof engineRow !== 'number' || typeof colIndex !== 'number') {
-      return;
-    }
-    _tvRegisterCardActions(engineRow, colIndex, {
-      onPress: () => _tvOnPressRef.current && _tvOnPressRef.current(),
-      onLongPress: () => _v176iLpRef.current && _v176iLpRef.current(),
-    });
-    return () => _tvUnregisterCardActions(engineRow, colIndex);
-  }, [tvEngine, engineRow, colIndex]);
 
   /* V176B_PRESS_TIMING â€” Pressable.onLongPress is unreliable on
      Firestick / Android TV OK buttons.  Do our own timing via

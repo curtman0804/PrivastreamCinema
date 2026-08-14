@@ -22,7 +22,6 @@ import { ContentItem } from '../api/client';
 import apiClient, { api } from '../api/client';
 import { getMetaCache, setMetaCache } from '../store/contentStore'; // PATCH_V250_VIEWPORT_PREFETCH
 import { colors } from '../styles/colors';
-import { tvRegisterRow, tvUnregisterRow, tvSubscribe, tvSubscribeRow, tvState } from '../nav/tvSelect';
 
 const ITEM_GAP = 16;
 const TV_PADDING_LEFT = 48;
@@ -114,7 +113,6 @@ interface ServiceRowProps {
   /* V316c_FOCUS_UP - forwarded to every ContentCard in this row.
      Only the Discover row 0 (Popular Movies) supplies a non-null value. */
   nextFocusUpTag?: number | null;
-  tvRowIndex?: number;
 }
 
 export const ServiceRow: React.FC<ServiceRowProps> = memo(
@@ -129,7 +127,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
     isFirstRow = false,
     rowIndex = 0,
     nextFocusUpTag = null,
-    tvRowIndex,
   }) => {
     const { width: screenWidth, height } = useWindowDimensions();
 
@@ -165,21 +162,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
     );
 
     itemCountRef.current = validItems.length;
-    const validItemsRef = useRef(validItems); validItemsRef.current = validItems;
-    const isTVNav = isTV;
-    const [tvSelCol, setTvSelCol] = useState(-1);
-    const _tvScrollToCol = useCallback((c: number) => { const off = Math.max(0, (c - TV_SCROLL_ANCHOR) * itemTotalWidth); try { (flatListRef.current as any)?.scrollToOffset({ offset: off, animated: false }); } catch (_) {} }, [itemTotalWidth]);
-    useEffect(() => {
-      if (!isTVNav || typeof tvRowIndex !== 'number') return;
-      tvRegisterRow(tvRowIndex, { getCount: () => validItemsRef.current.length, scrollToCol: _tvScrollToCol, press: (c: number) => { const it = validItemsRef.current[c]; if (it) onItemPress(it); }, focus: (c: number) => { const it = validItemsRef.current[c]; if (it && onItemFocus) onItemFocus(it); } });
-      return () => tvUnregisterRow(tvRowIndex);
-    }, [isTVNav, tvRowIndex, _tvScrollToCol, onItemPress, onItemFocus]);
-    useEffect(() => {
-      if (!isTVNav || typeof tvRowIndex !== 'number') { setTvSelCol(-1); return; }
-      const compute = () => { const st = tvState(); if (st.active && st.row === tvRowIndex) { const n = validItemsRef.current.length; setTvSelCol(n > 0 ? Math.min(Math.max(0, st.col), n - 1) : 0); } else { setTvSelCol(-1); } };
-      compute(); const u1 = tvSubscribe(compute); const u2 = tvSubscribeRow(tvRowIndex, compute);
-      return () => { u1(); u2(); };
-    }, [isTVNav, tvRowIndex]);
 
     // v238 Ã¢â‚¬â€ DO NOT early-return here.  Hooks below this point MUST run
     // every render or React throws "Rendered more/fewer hooks than during
@@ -343,8 +325,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
             /* v475: pass rowIndex so ContentCard's v443:navBack listener
                can scope focus restore by row (fixes cross-row focus race). */
             rowIndex={rowIndex}
-            selected={isTVNav && tvSelCol === index}
-            tvNav={isTVNav}
+            itemIndex={index} /* v513 */
           />
         );
       },
@@ -357,8 +338,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         serviceName,
         title,
         nextFocusUpTag,
-        tvSelCol,
-        isTVNav,
       ]
     );
 
@@ -425,22 +404,22 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
             ref={flatListRef as any}
             horizontal
             data={validItems}
-            extraData={`${validItems.length}:${tvSelCol}`}
+            extraData={validItems.length}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={
               isTV
-                ? { paddingLeft: TV_PADDING_LEFT, paddingRight: screenWidth, paddingVertical: 4 }
+                ? styles.scrollContentTV
                 : styles.scrollContent
             }
             estimatedItemSize={itemTotalWidth}
-            drawDistance={itemTotalWidth * 2} /* V438_ROW_HYDRATION - more pre-rendered tiles = D-pad stays in-row */ // V250 Ã¢â‚¬â€ was 1.5x; gives more pre-rendered cards = smoother D-pad
+            drawDistance={itemTotalWidth * 8} /* V438_ROW_HYDRATION - more pre-rendered tiles = D-pad stays in-row */ // V250 Ã¢â‚¬â€ was 1.5x; gives more pre-rendered cards = smoother D-pad
             onEndReached={handleEndReached}
             onEndReachedThreshold={3}
             onViewableItemsChanged={onViewableItemsChanged} // PATCH_V250_VIEWPORT_PREFETCH
             viewabilityConfig={viewabilityConfig}
-            removeClippedSubviews={true} /* V438 - keep native tags alive for spatial nav */
+            removeClippedSubviews={false} /* V438 - keep native tags alive for spatial nav */
           />
         </View>
       </LazyMount>

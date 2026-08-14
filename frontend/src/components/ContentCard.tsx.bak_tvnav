@@ -31,13 +31,9 @@ import { useContentStore as _v169UseContentStore /* V169_FOCUS_STREAM_PREWARM */
 let _v170PrefetchInflight = 0;
 const _V170_PREFETCH_CAP = 2;
 import { colors, posterShapes } from '../styles/colors';
+/* V601_STREMIO_FOCUS */
+import { focusUpsert, focusRemove, focusResolveNeighbors } from '../nav/focusManager';
 import Constants from 'expo-constants';
-/* TVNAV_JS_FOCUS — Stremio-style JS focus engine (see src/nav/tvFocus.ts). */
-import {
-  useTvFocus as _tvUseFocus,
-  registerCardActions as _tvRegisterCardActions,
-  unregisterCardActions as _tvUnregisterCardActions,
-} from '../nav/tvFocus';
 /* V176_LONGPRESS_MENU â€” v172 referenced AsyncStorage but forgot to import it,
    so hydration silently failed and gold check never appeared.  Restored here. */
 import AsyncStorage from '../utils/mmkvStorage';
@@ -57,8 +53,9 @@ const _v160PosterRegistry: Record<string, string> = {};
    which tile last had focus and imperatively re-focus it on mount so
    D-pad navigation resumes exactly where the user left off. */
 let _v435LastFocusedId: string | null = null;
+let _v435LastFocusedAt: number = 0;
 export function v435GetLastFocused(): string | null { return _v435LastFocusedId; }
-export function v435SetLastFocused(id: string | null): void { _v435LastFocusedId = id || null; }
+export function v435SetLastFocused(id: string | null): void { _v435LastFocusedId = id || null; _v435LastFocusedAt = Date.now(); }
 
 /* V436_TAG_MEMORY */
 let _v436LastFocusedTag: number = 0;
@@ -1039,8 +1036,6 @@ interface ContentCardProps {
   nextFocusUpTag?: number | null;
   /* v475: rowIndex passed by ServiceRow so v443:navBack listener can scope by row */
   rowIndex?: number;
-  selected?: boolean;
-  tvNav?: boolean;
 }
 
 export const getCardWidth = (
@@ -1142,8 +1137,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   onCardBlur,
   nextFocusUpTag,
   rowIndex,
-  selected = false,
-  tvNav = false,
 }) => {
   const { width, height } = useWindowDimensions();
 
@@ -1156,16 +1149,10 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const cardHeight = cardWidth * aspectRatio;
 
   const [isFocused, setIsFocused] = useState(false);
-  /* TVNAV_JS_FOCUS — is THIS cell the JS-selected one?  Selector only
-     re-renders the two cards whose selected boolean flips per keypress. */
-  const _tvSelected = _tvUseFocus(
-    (s) =>
-      tvEngine === true &&
-      s.enabled &&
-      s.row === engineRow &&
-      s.col === colIndex
-  );
   const [isInLibrary, setIsInLibrary] = useState(inLibrary);
+  /* V601_STREMIO_FOCUS */
+  const _v600Id = useRef('c' + Math.random().toString(36).slice(2)).current;
+  useEffect(() => { return () => { focusRemove(_v600Id); }; }, [_v600Id]);
 
   /* V176L_PERF_CLEANUP â€” O(1) lookup via librarySet (built once per
      library change in contentStore).  The previous v176g version
@@ -1253,12 +1240,21 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     return () => { try { _sub.remove(); } catch (_) {} };
   }, [item]);
 
-  /* V435_FOCUS_MEMORY - on mount, if this tile matches the last-focused
-     id, imperatively focus it. Delayed to next paint so layout is ready. */
+  /* v502 - V435 focus-restore gated by a mount-time snapshot.
+     Only restore if _v435LastFocusedId is UNCHANGED since this card mounted
+     AND the last-set timestamp is stale (>800ms).  This kills the ping-pong
+     where a freshly-mounted rail's card grabs focus from where the user
+     just D-padded to. */
   useEffect(() => {
+    const _v502_snapshot = _v435LastFocusedId;
+    const _v502_snapshotAt = Date.now();
     const _v435MyId = String((item as any)?.imdb_id || (item as any)?.id || '');
-    if (!_v435MyId || _v435MyId !== _v435LastFocusedId) return;
+    if (!_v435MyId || _v435MyId !== _v502_snapshot) return;
     const _t = setTimeout(() => {
+      // Bail if another focus event overwrote _v435LastFocusedId between mount and now.
+      if (_v435LastFocusedId !== _v502_snapshot) return;
+      // Bail if the id is FRESH (active nav) - restore only when stale (cold boot / nav-back).
+      if (Date.now() - _v502_snapshotAt < 0 || Date.now() - (_v435LastFocusedAt as any) < 800) return;
       try {
         const _r: any = pressableRef.current;
         if (_r) {
@@ -1343,29 +1339,54 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         }
       }, 900);
     }
-    /* V173_TV_LONGPRESS_REGISTRY â€” register this card's long-press
-       handler so the global 'longSelect' listener can fire it. */
-    /* V176I_REF_DISPATCH â€” register a getter, not the closure itself. */
+    /* V176I_REF_DISPATCH - lightweight ref update (cheap, keep immediate). */
     try { v176iRegisterGetter(() => _v176iLpRef.current); } catch (_) {}
-    try { v173RegisterLongPress(handleLongPress); } catch (_) {}
-    /* V176M_DIAG â€” confirm registration happened on this focus. */
-    /* V452_DEFER_LOG */ setTimeout(() => { try { console.log('[V176M] focus reg id=' + String((item as any)?.imdb_id || (item as any)?.id || '?')); } catch (_) {} }, 0);
-    /* V435_FOCUS_MEMORY - save id so next Discover mount can restore focus. */
-    try {
-      const _v435Id = String((item as any)?.imdb_id || (item as any)?.id || '');
-      if (_v435Id) v435SetLastFocused(_v435Id);
-    } catch (_) {}
-    /* V436_TAG_MEMORY - capture native tag for tab bar nextFocusUp. */
-    try {
-      const _r: any = pressableRef.current;
-      if (_r) {
-        let _tag = 0;
-        try { const _t = require('react-native').findNodeHandle(_r); if (_t && _t > 0) _tag = _t; } catch (_) {}
-        if (!_tag && _r._nativeTag && _r._nativeTag > 0) _tag = _r._nativeTag;
-        if (!_tag && _r.__nativeTag && _r.__nativeTag > 0) _tag = _r.__nativeTag;
-        if (_tag) v436SetLastFocusedTag(_tag);
-      }
-    } catch (_) {}
+    /* v501 - debounce heavy focus work (MMKV writes, findNodeHandle, longpress registry) to fire only after focus settles 100ms.
+       Prevents 40+ MMKV writes/sec during D-pad bursts that starved the JS thread and made the selector hop. */
+    if (_v501_settleTimer.current) { clearTimeout(_v501_settleTimer.current); _v501_settleTimer.current = null; }
+    _v501_settleTimer.current = setTimeout(() => {
+      _v501_settleTimer.current = null;
+      try { v173RegisterLongPress(handleLongPress); } catch (_) {}
+      try {
+        const _v435Id = String((item as any)?.imdb_id || (item as any)?.id || '');
+        if (_v435Id) v435SetLastFocused(_v435Id);
+      } catch (_) {}
+      try {
+        const _r: any = pressableRef.current;
+        if (_r) {
+          let _tag = 0;
+          if (_r._nativeTag && _r._nativeTag > 0) _tag = _r._nativeTag;
+          else if (_r.__nativeTag && _r.__nativeTag > 0) _tag = _r.__nativeTag;
+          else { try { const _t = require('react-native').findNodeHandle(_r); if (_t && _t > 0) _tag = _t; } catch (_) {} }
+          if (_tag) {
+            v436SetLastFocusedTag(_tag);
+            /* V601_STREMIO_FOCUS - resolve Stremio-weighted neighbours and apply
+               them imperatively via setNativeProps (no React re-render -> no lag). */
+            try {
+              if (typeof _r.measureInWindow === 'function') {
+                _r.measureInWindow((x: number, y: number, w: number, h: number) => {
+                  if (!w || !h) return;
+                  focusUpsert(_v600Id, _tag, { x, y, w, h });
+                  const nb = focusResolveNeighbors(_v600Id);
+                  const upT = (nb.up && nb.up > 0) ? nb.up : ((nextFocusUpTag != null && nextFocusUpTag > 0) ? nextFocusUpTag : undefined);
+                  const downT = (nb.down && nb.down > 0) ? nb.down : undefined;
+                  const leftT = (nb.left && nb.left > 0) ? nb.left : ((isFirstInRow && selfNode) ? selfNode : undefined);
+                  const rightT = (nb.right && nb.right > 0) ? nb.right : ((isLastInRow && selfNode) ? selfNode : undefined);
+                  const np: any = {};
+                  if (upT != null) np.nextFocusUp = upT;
+                  if (downT != null) np.nextFocusDown = downT;
+                  if (leftT != null) np.nextFocusLeft = leftT;
+                  if (rightT != null) np.nextFocusRight = rightT;
+                  /* V605_DISABLE_V601 */ // try { _r.setNativeProps(np); } catch (_) {}
+                });
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+      /* V176M_DIAG - log only on settle so it does not fire per-frame during bursts */
+      try { console.log('[V176M] focus reg id=' + String((item as any)?.imdb_id || (item as any)?.id || '?')); } catch (_) {}
+    }, 110);
   }, [onCardFocus, item, handleLongPress]);
 
   const handleBlur = useCallback(() => {
@@ -1385,6 +1406,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     /* V173_TV_LONGPRESS_REGISTRY â€” clear long-press registration on blur. */
     try { v176iRegisterGetter(null); } catch (_) {}
     try { v173RegisterLongPress(null); } catch (_) {}
+    /* v501 - cancel pending settle when focus leaves before 110ms */
+    if (_v501_settleTimer.current) { clearTimeout(_v501_settleTimer.current); _v501_settleTimer.current = null; }
   }, [onCardBlur]);
 
   const handleLongPress = useCallback(async () => {
@@ -1410,27 +1433,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
      handleLongPress so the global dispatcher reads the current one
      (not a stale closure frozen at the last onFocus). */
   const _v176iLpRef = useRef<(() => void) | null>(null);
+  const _v501_settleTimer = useRef<any>(null); // v501 - focus-settle debounce
   _v176iLpRef.current = handleLongPress;
-
-  /* TVNAV_JS_FOCUS — register this cell's press / long-press handlers so
-     the engine's SELECT / long-SELECT can invoke them by {row,col}.  Refs
-     keep the handlers fresh without re-registering on every render. */
-  const _tvOnPressRef = useRef<(() => void) | null>(null);
-  _tvOnPressRef.current = () => {
-    try {
-      onPress && onPress();
-    } catch (_) {}
-  };
-  useEffect(() => {
-    if (!tvEngine || typeof engineRow !== 'number' || typeof colIndex !== 'number') {
-      return;
-    }
-    _tvRegisterCardActions(engineRow, colIndex, {
-      onPress: () => _tvOnPressRef.current && _tvOnPressRef.current(),
-      onLongPress: () => _v176iLpRef.current && _v176iLpRef.current(),
-    });
-    return () => _tvUnregisterCardActions(engineRow, colIndex);
-  }, [tvEngine, engineRow, colIndex]);
 
   /* V176B_PRESS_TIMING â€” Pressable.onLongPress is unreliable on
      Firestick / Android TV OK buttons.  Do our own timing via
@@ -1525,7 +1529,13 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     <V176kPopoverHost />
     <Pressable
       ref={pressableRef}
-      focusable={!tvNav}
+      onLayout={() => {
+        const _r600: any = pressableRef.current; if (!_r600) return;
+        let _n600 = 0; try { const _t600 = require('react-native').findNodeHandle(_r600); if (_t600 && _t600 > 0) _n600 = _t600; } catch (_) {}
+        if (!_n600 || typeof _r600.measureInWindow !== 'function') return;
+        try { _r600.measureInWindow((x: number, y: number, w: number, h: number) => { if (w && h) focusUpsert(_v600Id, _n600, { x, y, w, h }); }); } catch (_) {}
+      }}
+      focusable={true}
       onPress={_v176bOnPress}
       onPressIn={_v176bPressIn}
       onPressOut={_v176bPressOut}
@@ -1534,7 +1544,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
       onFocus={handleFocus}
       onBlur={handleBlur}
       android_ripple={null}
-      hasTVPreferredFocus={tvNav ? false : (hasTVPreferredFocus || _v443SelfFocus)}
+      hasTVPreferredFocus={hasTVPreferredFocus || _v443SelfFocus}
 
       nextFocusRight={
         isLastInRow && selfNode
@@ -1573,7 +1583,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         style={[
           styles.posterContainer,
           { height: cardHeight },
-          (isFocused || selected) && styles.posterFocused,
+          isFocused && styles.posterFocused,
         ]}
       >
         <View style={styles.imageWrapper}>
@@ -1608,10 +1618,11 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
                 { backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center' },
               ]}
             >
-              <RNImage
+              {/* V604_PLACEHOLDER_DOWNSCALE - expo-image downsamples the 1024px logo to display size */}
+              <Image
                 source={require('../../assets/images/logo_header.png')}
                 style={{ width: '60%', height: '35%', opacity: 0.55 }}
-                resizeMode="contain"
+                contentFit="contain"
               />
             </View>
           )}

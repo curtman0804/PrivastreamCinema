@@ -1,5 +1,6 @@
 // v212 loading isolation
 // v241 â€” useDeferredValue: deprioritise flatRows mapping to keep JS thread free
+import { init as _v514_initNorigin } from '@noriginmedia/norigin-spatial-navigation-react-native';
 import React, { useEffect, useCallback, useState, useMemo, useRef, startTransition, useDeferredValue } from 'react';
 import {
   View,
@@ -32,7 +33,6 @@ import { useContentStore, useDiscoverData } from '../../src/store/contentStore';
 import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
 import { FlashList } from '@shopify/flash-list'; // PATCH_V54_VIRTUALIZE
 import { ServiceRow } from '../../src/components/ServiceRow';
-import { tvMove, tvPress, tvLongSelect, tvSetActive, tvSetOnRowChange, tvSubscribe, tvSubscribeRow, tvState, tvRegisterRow, tvUnregisterRow, tvEffCol } from '../../src/nav/tvSelect';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 /* V176_LONGPRESS_MENU â€” extend the ContentCard import with the
    watched/progress helpers + unified menu opener. */
@@ -207,6 +207,15 @@ function LazyMount({ delay, children, placeholder }: { delay: number; children: 
 let _v181_lastDiscoverFetch: number = 0;
 
 
+// v514 - Norigin spatial navigation.  Init once, before component tree mounts.
+let _v514_norigin_inited = false;
+if (!_v514_norigin_inited) {
+  try {
+    _v514_initNorigin({ debug: false, visualDebug: false, throttle: 0 });
+    _v514_norigin_inited = true;
+  } catch (e) { console.log('[v514] norigin init err', e); }
+}
+
 export default function DiscoverScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
@@ -247,9 +256,6 @@ export default function DiscoverScreen() {
   const sectionPositions = useRef<Record<string, number>>({});
   const lastFocusedSection = useRef<string>('');
   const lastCWFetchTime = useRef<number>(0);
-  const cwListRef = useRef<FlatList>(null);
-  const cwDataRef = useRef<any[]>([]);
-  const [tvCwSel, setTvCwSel] = useState<number>(-1);
 
   // V316c_FOCUS_UP - first-mounted Continue-Watching poster's native
   // view tag.  ContinueWatchingItem broadcasts the tag via
@@ -712,15 +718,11 @@ export default function DiscoverScreen() {
   // V316_CW_SHORT_SCROLL_RESCUE - debounce timer for the post-settle check
   const v316CwRescueTimer = useRef<any>(null);
   const handleSectionFocus = useCallback((sectionKey: string) => {
-    /* V363_SECTION_FOCUS_DEBOUNCE - coalesce rapid D-pad focus hops into
-       a single scrollTo per animation frame. Prevents the "focus cascade"
-       where arrowing past 3-4 rails fired 3-4 scrollTos back-to-back. */
+    /* v508 - simple 60ms debounce.  Fire ONE scrollTo per section, only after focus stops moving. */
     (globalThis as any).__v363_pendingSection = sectionKey;
-    if ((globalThis as any).__v363_pendingRAF) {
-      cancelAnimationFrame((globalThis as any).__v363_pendingRAF);
-    }
-    (globalThis as any).__v363_pendingRAF = requestAnimationFrame(() => {
-      (globalThis as any).__v363_pendingRAF = null;
+    if ((globalThis as any).__v506_debounce) clearTimeout((globalThis as any).__v506_debounce);
+    (globalThis as any).__v506_debounce = setTimeout(() => {
+      (globalThis as any).__v506_debounce = null;
       const key = (globalThis as any).__v363_pendingSection;
       if (key !== sectionKey) return;  /* newer focus took over */
       // V442_BACK_FOCUS_RESTORE - don't hijack the ScrollView while we're
@@ -746,6 +748,11 @@ export default function DiscoverScreen() {
        snap-back lock NOW so this row-snap scroll isn't fought to y=0
        ("selector moves but the page doesn't"). */
     if (sectionKey !== '__cw__') { cwFocusLockUntilRef.current = 0; }
+    /* v504 - restore row-snap for ALL rows.  Ping-pong is now prevented by the
+       programmatic-scroll gate below: onScroll flags a 400ms window where the
+       rail-swap bump is suppressed, so our scrollTo doesn't re-enter the render
+       loop that let a freshly-mounted card steal focus. */
+    (globalThis as any).__v504ProgScrollUntil = Date.now() + 400;
     scrollViewRef.current.scrollTo({ y: target, animated: false });
     false && console.log('[V279_DIAG]   scrollTo(' + target + ')');
     // V277_CW_SNAP_HARDER â€” v238g only retried ONCE at 50ms which left the
@@ -772,7 +779,7 @@ export default function DiscoverScreen() {
       setTimeout(_snap, 320);
     }
     lastFocusedSection.current = sectionKey;
-  });
+    }, 60);
   }, []);
 
   // Row sync: keep all rows scrolled to the same horizontal offset
@@ -972,6 +979,11 @@ const _v371LastSwapY = useRef(0);
 const [, _v371Bump] = useState(0);
 const _v371OnScrollY = (y: number) => {
   _v371ScrollYRef.current = y;
+  /* v504 - suppress rail-swap re-renders during our own programmatic snap window.
+     Android's onScroll fires during the snap; without this gate the swap re-renders
+     newly-mounted cards, and their focus-restore hooks fought our scroll target. */
+  const _v504Until = (globalThis as any).__v504ProgScrollUntil || 0;
+  if (Date.now() < _v504Until) { _v371LastSwapY.current = y; return; }
   if (Math.abs(y - _v371LastSwapY.current) > 150) { /* V449_LAG_TUNE: more responsive rail swap */
     _v371LastSwapY.current = y;
     _v371Bump((x) => (x + 1) & 0xff);
@@ -1014,10 +1026,14 @@ const _v371IsRealRef = useRef<Record<string, boolean>>({});
 const _v371MountedRails = useRef<Record<string, boolean>>({});
 const _v371NearViewport = (row: any): boolean => {
   if (typeof row.rowIdx === 'number') _v371RowIdxByKey.current[row.key] = row.rowIdx;
+  if (_v371MountedRails.current[row.key]) {
+    _v371IsRealRef.current[row.key] = true;
+    return true;
+  }
   let near: boolean;
   if (row.rowIdx === 0) {
     near = true;
-  } else if (Math.abs(row.rowIdx - _v371FocusedRowIdx.current) <= 3) { /* V449_LAG_TUNE: broader focused-row safety net */
+  } else if (Math.abs(row.rowIdx - _v371FocusedRowIdx.current) <= 5) { /* V449_LAG_TUNE: broader focused-row safety net */
     near = true;
   } else {
     const y = sectionPositions.current[row.key] ?? (row.rowIdx * _V371_RAIL_H);
@@ -1114,17 +1130,6 @@ const handleItemPress = useCallback((item: ContentItem) => {
   };
 
   // Handle removing item from continue watching
-  cwDataRef.current = (continueWatching && continueWatching.length > 0) ? continueWatching : cachedCW;
-  useEffect(() => {
-    if (!isTV) return;
-    tvRegisterRow(0, { getCount: () => (cwDataRef.current ? cwDataRef.current.length : 0), scrollToCol: (c) => { const stride = isTV ? 320 : 220; const off = Math.max(0, (c - 2) * stride); try { (cwListRef.current as any)?.scrollToOffset({ offset: off, animated: false }); } catch (_) {} }, press: (c) => { const it = cwDataRef.current ? cwDataRef.current[c] : null; if (it) { try { handleContinueWatchingPress(it); } catch (_) {} } } });
-    const cwCompute = () => { const st = tvState(); if (st.active && st.row === 0) { const n = cwDataRef.current ? cwDataRef.current.length : 0; setTvCwSel(n > 0 ? tvEffCol(n) : 0); } else { setTvCwSel(-1); } };
-    cwCompute(); const cu1 = tvSubscribe(cwCompute); const cu2 = tvSubscribeRow(0, cwCompute);
-    tvSetOnRowChange((row) => { try { let y = 0; if (row === 0) { y = sectionPositions.current['__cw__'] || 0; } else { const ti = row - 1; let key = ''; const map = _v371RowIdxByKey.current; for (const k in map) { if (map[k] === ti) { key = k; break; } } y = key ? (sectionPositions.current[key] || (ti * _V371_RAIL_H)) : (ti * _V371_RAIL_H); _v371FocusedRowIdx.current = ti; _v371Bump((x) => (x + 1) & 0xff); } (scrollViewRef.current as any)?.scrollTo({ y: Math.max(0, y - 40), animated: false }); } catch (_) {} });
-    const keySub = DeviceEventEmitter.addListener('onTVKeyEvent', (evt) => { if (!evt || !evt.eventType) return; const t = evt.eventType; if (t === 'up' || t === 'down' || t === 'left' || t === 'right') tvMove(t); else if (t === 'select') tvPress(); else if (t === 'longSelect') tvLongSelect(); });
-    return () => { try { keySub.remove(); } catch (_) {} tvSetOnRowChange(null); tvUnregisterRow(0); try { cu1(); cu2(); } catch (_) {} };
-  }, [isTV]);
-
   const handleRemoveFromContinueWatching = async (item: WatchProgress) => {
     // V275_CW_INSTANT_REMOVE_FIX â€” was using stale closure values
     // of continueWatching/cachedCW captured by the memoized
@@ -1188,14 +1193,12 @@ const renderContinueWatchingItem = useCallback(
       isTV={isTV}
       isFirst={index === 0} /* V446_CW_LEFT_EDGE */
       isLast={index === Math.max(0, (_v342CwLenRef.current - 1))}
-      selected={isTV && tvCwSel === index}
-      tvNav={isTV}
       onPress={() => handleContinueWatchingPress(item)}
       onRemove={() => handleRemoveFromContinueWatching(item)}
       onSectionFocus={() => handleSectionFocus('__cw__')}
     />
   ),
-  [isTV, tvCwSel]
+  [isTV]
 );
 
 // Show loading only on initial load
@@ -1290,7 +1293,6 @@ return (
         {/* Scrollable Content */}
         <ScrollView
           ref={scrollViewRef}
-          scrollEnabled={!isTV}
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
@@ -1370,7 +1372,6 @@ return (
         >
           {/* PATCH_V241_USE_DEFERRED â€” render from deferredFlatRows so heavy
               row map is non-blocking */}
-          {isTV ? (<View focusable={true} onFocus={() => tvSetActive(true)} onBlur={() => tvSetActive(false)} style={{ width: 1, height: 1 }} />) : null}
           {deferredFlatRows.map((item: any) => {
             // V274_CW_INSTANT_REMOVE â€” bypass useDeferredValue lag: when
             // the user just cleared the last CW item, hide the row in
@@ -1414,8 +1415,6 @@ return (
 
                   <FlatList
                     /* PATCH_V144_CACHE_CWDATA â€” fall back to cached CW for cold-start paint */
-                    ref={cwListRef}
-                    extraData={tvCwSel}
                     data={(continueWatching && continueWatching.length > 0) ? continueWatching : cachedCW}
                     renderItem={renderContinueWatchingItem}
                     keyExtractor={(cwItem) =>
@@ -1474,7 +1473,6 @@ return (
                   onItemPress={handleItemPress}
                   onItemFocus={_v369RowFocusHandler(item.key, item.contentType) /* V369_STABLE_ROW_PROPS */}
                   rowIndex={item.rowIdx}
-                  tvRowIndex={item.rowIdx + 1}
                   /* V316c_FOCUS_UP - only row 0 (Popular Movies) gets the
                      CW poster tag; deeper rows pass null and fall back to
                      default spatial navigation. */
@@ -1530,8 +1528,6 @@ function ContinueWatchingItem({
   isTV, 
   isFirst,  /* V446_CW_LEFT_EDGE */
   isLast,
-  selected,
-  tvNav,
   onPress, 
   onRemove,
   onSectionFocus,
@@ -1542,8 +1538,6 @@ function ContinueWatchingItem({
   isTV: boolean;
   isFirst?: boolean;  /* V446_CW_LEFT_EDGE */
   isLast?: boolean;
-  selected?: boolean;
-  tvNav?: boolean;
   onPress: () => void;
   onRemove: () => void;
   onSectionFocus?: () => void;
@@ -1699,7 +1693,6 @@ function ContinueWatchingItem({
       {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
         ref={posterRef}
-        focusable={!tvNav}
         // V342_CW_RIGHT_EDGE - when this is the last CW card, block RIGHT
         // navigation from falling through into the row below by pointing
         // nextFocusRight at our own native handle (self-loop).
@@ -1720,7 +1713,7 @@ function ContinueWatchingItem({
         style={[
           styles.continueImageWrapper,
           /* V176P_X_REMOVED â€” no more X row to overlap. */
-          (isFocused || selected) && styles.continueImageWrapperFocused,
+          isFocused && styles.continueImageWrapperFocused,
         ]}
       >
         <View style={[styles.continueImageContainer, { height: posterHeight }]}>
