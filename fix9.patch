@@ -1,0 +1,27 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -1307,3 +1307,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'V532 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
++            {'V533 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
+           </Text>
+@@ -1340,3 +1340,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'V532 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
++            {'V533 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
+           </Text>
+@@ -1757,3 +1757,13 @@
+         ref={posterRef}
+-        focusable={!tvNav}
++        /* V533_CW_FOCUSABLE - on TV tvNav is true, so this evaluated to
++           focusable=false and Android's focus search could not land on a
++           Continue Watching poster at all. The only focusable thing at the
++           top was the invisible 1x1 sentinel, so moving up put focus on a
++           1x1 view, flipped the JS engine on, and the highlight only
++           appeared after a re-render: the snag at the top. Every other row
++           on this screen is focusable and steps correctly, so make this
++           row behave the same. isFocused already drives the highlight
++           alongside selected, and the V342/V446 self-loop guards on the
++           first and last poster now actually take effect. */
++        focusable={true}
+         // V342_CW_RIGHT_EDGE - when this is the last CW card, block RIGHT

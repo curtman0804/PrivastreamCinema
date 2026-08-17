@@ -1,0 +1,16 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -1428,3 +1428,12 @@
+               row map is non-blocking */}
+-          {isTV ? (<View focusable={true} onFocus={() => tvSetActive(true)} onBlur={() => tvSetActive(false)} style={{ width: 1, height: 1 }} />) : null}
++          {/* V535_NO_STRAY_TARGET - this invisible 1x1 sits directly above the
++              first row. Before V533 it was the only focusable thing at the top,
++              so it was the intended landing spot. Now that the Continue Watching
++              posters are focusable it is a stray candidate: coming back DOWN from
++              the top, Android could pick this 1x1 instead of the next row, which
++              hid the selector and flipped the JS engine on mid-navigation. Nothing
++              else writes tvSetActive, and the CW highlight now comes from
++              isFocused, so tvCwSel is already redundant. Non-focusable leaves one
++              owner for focus: Android. accessibilityLabel is the build marker. */}
++          {isTV ? (<View accessibilityLabel="V535" focusable={false} style={{ width: 1, height: 1 }} />) : null}
+           {deferredFlatRows.map((item: any) => {

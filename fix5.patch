@@ -1,0 +1,37 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -965,6 +965,16 @@
+          is, so it stops at the top row correctly. Let it own the scrolling;
+          drop ours. Rail windowing and prefetch below are unaffected. */
+       (globalThis as any).__dF = (((globalThis as any).__dF)||0)+1;
++      /* V529_RESTORE_ANCHOR - V528 removed this and Android's own
++         scrollToChild took over. But RN does not override
++         computeScrollDeltaToGetChildRectOnScreen, so Android scrolls the
++         MINIMUM to make the card visible: the focused row settles at the
++         bottom edge with the previous row still on screen. There is no
++         native knob for this (snapToAlignment is fling-only), so the
++         anchor has to come from here. Safe to restore now: V526 put both
++         scroll paths on ONE target and V527 removed the 0/80/180/320ms
++         re-snaps, so this is a single settle, not the old jump. */
++      handleSectionFocus(rowKey);
+       _v371OnRowFocus(rowKey); /* V373_FOCUS_ANCHORED_RAILS */
+       if (contentType !== 'channels') handleItemFocus(ci);
+     };
+@@ -1271,7 +1281,7 @@
+           />
+ 
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'V528 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
++            {'V529 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
+           </Text>
+         </View>
+ 
+@@ -1304,7 +1314,7 @@
+           />
+ 
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'V528 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
++            {'V529 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
+           </Text>
+         </View>
+ 

@@ -1,0 +1,12 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -1307,3 +1307,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'V533 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
++            Privastream Cinema
+           </Text>
+@@ -1340,3 +1340,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'V533 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
++            Privastream Cinema
+           </Text>

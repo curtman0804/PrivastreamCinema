@@ -1,0 +1,23 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -1249,3 +1249,14 @@
+       onRemove={() => handleRemoveFromContinueWatching(item)}
+-      onSectionFocus={() => handleSectionFocus('__cw__')}
++      /* V536_CW_REVEAL - handleSectionFocus reads sectionPositions[key] and
++         returns early when it is undefined. Only the content-row map ever
++         writes that map, so sectionPositions['__cw__'] is never set and the
++         CW branch has always been a no-op. It went unnoticed because three
++         other things forced the page to y=0: the onScroll snap-back (V530),
++         setTimeout(_snap, 0) which only fired for target 0 (V532), and the
++         sentinel that used to hold focus at the top (V535). With all three
++         gone, focus lands on a CW poster above the viewport and nothing
++         scrolls up to reveal it. CW is the top section, so y=0 is always
++         the right target: scroll there directly and record the position so
++         the shared handler works for CW from here on. */
++      onSectionFocus={() => { try { sectionPositions.current['__cw__'] = 0; (scrollViewRef.current as any)?.scrollTo({ y: 0, animated: false }); } catch (_) {} handleSectionFocus('__cw__'); }}
+     />
+@@ -1437,3 +1448,3 @@
+               owner for focus: Android. accessibilityLabel is the build marker. */}
+-          {isTV ? (<View accessibilityLabel="V535" focusable={false} style={{ width: 1, height: 1 }} />) : null}
++          {isTV ? (<View accessibilityLabel="V536" focusable={false} style={{ width: 1, height: 1 }} />) : null}
+           {deferredFlatRows.map((item: any) => {

@@ -1,0 +1,20 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -1263,7 +1263,7 @@
+           />
+ 
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            Privastream Cinema
++            Privastream Cinema  V525
+           </Text>
+         </View>
+ 
+@@ -1296,7 +1296,7 @@
+           />
+ 
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            Privastream Cinema
++            Privastream Cinema  V525
+           </Text>
+         </View>
+ 

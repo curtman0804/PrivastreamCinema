@@ -1,0 +1,58 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -716,13 +716,19 @@
+        a single scrollTo per animation frame. Prevents the "focus cascade"
+        where arrowing past 3-4 rails fired 3-4 scrollTos back-to-back. */
+     (globalThis as any).__v363_pendingSection = sectionKey;
+-    if ((globalThis as any).__v363_pendingRAF) {
+-      cancelAnimationFrame((globalThis as any).__v363_pendingRAF);
+-    }
++    /* V521_LOCK_SYNC - release the top-row snap-back lock and record the
++       focused section synchronously; the frame below is starved while the
++       D-pad repeats, so doing it there left the lock engaged. */
++    if (sectionKey !== '__cw__') { cwFocusLockUntilRef.current = 0; }
++    lastFocusedSection.current = sectionKey;
++    /* V524_HOLD_SCROLL - this cancelled the queued scroll on every key repeat,
++       so while the D-pad was held it never ran and the page only caught up on
++       release. Let the queued frame run; it reads the latest row. */
++    if ((globalThis as any).__v363_pendingRAF) { return; }
+     (globalThis as any).__v363_pendingRAF = requestAnimationFrame(() => {
+       (globalThis as any).__v363_pendingRAF = null;
+       const key = (globalThis as any).__v363_pendingSection;
+-      if (key !== sectionKey) return;  /* newer focus took over */
++      /* V524: the queued frame acts on the latest row, not the one that queued it. */
+       // V442_BACK_FOCUS_RESTORE - don't hijack the ScrollView while we're
+       // restoring focus position after nav-back.
+       try {
+@@ -738,7 +744,7 @@
+       cancelAnimationFrame(_v211PendingFrame.current);
+       _v211PendingFrame.current = null;
+     }
+-    const sectionY = sectionPositions.current[sectionKey];
++    const sectionY = sectionPositions.current[key];
+     false && console.log('[V279_DIAG]   sectionY=' + sectionY + ' lastFocusedSection=' + lastFocusedSection.current);
+     if (sectionY === undefined || !scrollViewRef.current) return;
+     const target = Math.max(0, sectionY - 12);
+@@ -771,7 +777,7 @@
+       setTimeout(_snap, 180);
+       setTimeout(_snap, 320);
+     }
+-    lastFocusedSection.current = sectionKey;
++    lastFocusedSection.current = key;
+   });
+   }, []);
+ 
+@@ -1013,6 +1019,13 @@
+    mounts only the top rails. */
+ const _v371MountedRails = useRef<Record<string, boolean>>({});
+ const _v371NearViewport = (row: any): boolean => {
++  /* V523_DRAW_ALL_ROWS - an undrawn row was a non-focusable spacer, and
++     Android focus search passes straight over those, so holding the D-pad
++     jumped to the top row or the tab bar instead of stepping through. */
++  if (typeof row.rowIdx === 'number') _v371RowIdxByKey.current[row.key] = row.rowIdx;
++  _v371MountedRails.current[row.key] = true;
++  _v371IsRealRef.current[row.key] = true;
++  return true;
+   if (typeof row.rowIdx === 'number') _v371RowIdxByKey.current[row.key] = row.rowIdx;
+   let near: boolean;
+   if (row.rowIdx === 0) {

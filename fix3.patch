@@ -1,0 +1,64 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -955,7 +955,16 @@
+   let h = _v369FocusHandlers[hk];
+   if (!h) {
+     h = (ci: any) => {
+-      handleSectionFocus(rowKey);
++      /* V528_ONE_SCROLL_OWNER - a D-pad press produced TWO vertical scrolls.
++         Android moves native focus onto the card, and ReactScrollView's
++         requestChildFocus calls scrollToChild(focused) on its own - that path
++         is NOT gated by scrollEnabled={false}, so it cannot be turned off
++         from JS. handleSectionFocus(rowKey) then scrolled a second time to
++         (sectionY - 12), which is the small-move-then-big-jump. Android's
++         scroll is also the one that knows where the topmost focusable view
++         is, so it stops at the top row correctly. Let it own the scrolling;
++         drop ours. Rail windowing and prefetch below are unaffected. */
++      (globalThis as any).__dF = (((globalThis as any).__dF)||0)+1;
+       _v371OnRowFocus(rowKey); /* V373_FOCUS_ANCHORED_RAILS */
+       if (contentType !== 'channels') handleItemFocus(ci);
+     };
+@@ -1133,7 +1142,7 @@
+     const cwCompute = () => { const st = tvState(); if (st.active && st.row === 0) { const n = cwDataRef.current ? cwDataRef.current.length : 0; setTvCwSel(n > 0 ? tvEffCol(n) : 0); } else { setTvCwSel(-1); } };
+     cwCompute(); const cu1 = tvSubscribe(cwCompute); const cu2 = tvSubscribeRow(0, cwCompute);
+     tvSetOnRowChange((row) => { try { /* V526_ONE_SCROLL - this used to scroll directly to (y - 40) while handleSectionFocus scrolls to (sectionY - 12), so a single D-pad press produced two scrolls 28px apart - the two-step jump. Route it through handleSectionFocus so there is one target, coalesced to one scroll per frame. */ let key = '__cw__'; if (row !== 0) { const ti = row - 1; let k = ''; const map = _v371RowIdxByKey.current; for (const kk in map) { if (map[kk] === ti) { k = kk; break; } } key = k; _v371FocusedRowIdx.current = ti; _v371Bump((x) => (x + 1) & 0xff); } if (key) { handleSectionFocus(key); } } catch (_) {} });
+-    const keySub = DeviceEventEmitter.addListener('onTVKeyEvent', (evt) => { if (!evt || !evt.eventType) return; const t = evt.eventType; if (t === 'up' || t === 'down' || t === 'left' || t === 'right') tvMove(t); else if (t === 'select') tvPress(); else if (t === 'longSelect') tvLongSelect(); });
++    const keySub = DeviceEventEmitter.addListener('onTVKeyEvent', (evt) => { if (!evt || !evt.eventType) return; const t = evt.eventType; if (t === 'up' || t === 'down') { (globalThis as any).__dK = (((globalThis as any).__dK)||0)+1; } if (t === 'up' || t === 'down' || t === 'left' || t === 'right') tvMove(t); else if (t === 'select') tvPress(); else if (t === 'longSelect') tvLongSelect(); _v371Bump((x) => (x + 1) & 0xff); });
+     return () => { try { keySub.remove(); } catch (_) {} tvSetOnRowChange(null); tvUnregisterRow(0); try { cu1(); cu2(); } catch (_) {} };
+   }, [isTV]);
+ 
+@@ -1262,7 +1271,7 @@
+           />
+ 
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            Privastream Cinema  V525
++            {'V528 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' T:' + (((globalThis as any).__dT)||0) + ' B:' + (((globalThis as any).__dB)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
+           </Text>
+         </View>
+ 
+@@ -1295,7 +1304,7 @@
+           />
+ 
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            Privastream Cinema  V525
++            {'V528 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' T:' + (((globalThis as any).__dT)||0) + ' B:' + (((globalThis as any).__dB)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
+           </Text>
+         </View>
+ 
+@@ -1326,6 +1335,7 @@
+           // back to y=0 if the system tries to push it down.
+           onScroll={(e) => {
+             const y = e.nativeEvent?.contentOffset?.y ?? 0;
++            (globalThis as any).__dS = (((globalThis as any).__dS)||0)+1; (globalThis as any).__dY = Math.round(y);
+             /* V371_VIEWPORT_RAILS - track offset + swap far rails. */
+             _v371OnScrollY(y);
+             const lockUntil = cwFocusLockUntilRef.current || 0;
+@@ -1382,7 +1392,7 @@
+         >
+           {/* PATCH_V241_USE_DEFERRED â€” render from deferredFlatRows so heavy
+               row map is non-blocking */}
+-          {isTV ? (<View focusable={true} onFocus={() => tvSetActive(true)} onBlur={() => tvSetActive(false)} style={{ width: 1, height: 1 }} />) : null}
++          {isTV ? (<View focusable={true} onFocus={() => { (globalThis as any).__dT = (((globalThis as any).__dT)||0)+1; tvSetActive(true); }} onBlur={() => { (globalThis as any).__dB = (((globalThis as any).__dB)||0)+1; tvSetActive(false); }} style={{ width: 1, height: 1 }} />) : null}
+           {deferredFlatRows.map((item: any) => {
+             // V274_CW_INSTANT_REMOVE â€” bypass useDeferredValue lag: when
+             // the user just cleared the last CW item, hide the row in

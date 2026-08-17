@@ -1,0 +1,37 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -765,3 +765,11 @@
+       // re-scroll during this window is force-snapped back to y=0.
+-      cwFocusLockUntilRef.current = Date.now() + 500;
++      /* V530_NO_SNAP_LOOP - this armed a 500ms window in which EVERY
++         onScroll with y>0 forced scrollTo(y:0). Android's focus scroll
++         moves the list, onScroll fires, we slam it back, that fires
++         onScroll again: a feedback loop for half a second, which is the
++         selector jittering at the very top. Written when JS owned the
++         scrolling and Android re-positioned after; that is now inverted,
++         and the anchor below already makes ONE deterministic snap to the
++         section top. Zero disarms the window; the ref itself stays. */
++      cwFocusLockUntilRef.current = Date.now() + 0;
+       const _snap = () => {
+@@ -976,2 +984,11 @@
+          re-snaps, so this is a single settle, not the old jump. */
++      /* V531_NO_HESITATE - handleSectionFocus defers its scroll to the next
++         animation frame, so Android's minimum scroll lands first and ours
++         corrects it a frame or more later. That gap is the hesitation. Do
++         the same-target scroll synchronously here so the row is already in
++         place when the frame is drawn; the deferred call then re-affirms
++         the identical offset, so there is nothing left to move. Same
++         target as handleSectionFocus (sectionY - 12), so no second jump. */
++      const _v531y = sectionPositions.current[rowKey];
++      if (typeof _v531y === 'number' && scrollViewRef.current) { (scrollViewRef.current as any).scrollTo({ y: Math.max(0, _v531y - 12), animated: false }); }
+       handleSectionFocus(rowKey);
+@@ -1283,3 +1300,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'V529 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
++            {'V531 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
+           </Text>
+@@ -1316,3 +1333,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'V529 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
++            {'V531 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
+           </Text>

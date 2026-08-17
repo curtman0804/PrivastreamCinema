@@ -1,0 +1,24 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -772,10 +772,9 @@
+           scrollViewRef.current.scrollTo({ y: 0, animated: false });
+         }
+       };
++      /* V527_NO_SNAP_STORM - these four re-snaps fought the top row and are
++         superseded by the synchronous lock release in V521. */
+       setTimeout(_snap, 0);
+-      setTimeout(_snap, 80);
+-      setTimeout(_snap, 180);
+-      setTimeout(_snap, 320);
+     }
+     lastFocusedSection.current = key;
+   });
+@@ -1133,7 +1132,7 @@
+     tvRegisterRow(0, { getCount: () => (cwDataRef.current ? cwDataRef.current.length : 0), scrollToCol: (c) => { const stride = isTV ? 320 : 220; const off = Math.max(0, (c - 2) * stride); try { (cwListRef.current as any)?.scrollToOffset({ offset: off, animated: false }); } catch (_) {} }, press: (c) => { const it = cwDataRef.current ? cwDataRef.current[c] : null; if (it) { try { handleContinueWatchingPress(it); } catch (_) {} } } });
+     const cwCompute = () => { const st = tvState(); if (st.active && st.row === 0) { const n = cwDataRef.current ? cwDataRef.current.length : 0; setTvCwSel(n > 0 ? tvEffCol(n) : 0); } else { setTvCwSel(-1); } };
+     cwCompute(); const cu1 = tvSubscribe(cwCompute); const cu2 = tvSubscribeRow(0, cwCompute);
+-    tvSetOnRowChange((row) => { try { let y = 0; if (row === 0) { y = sectionPositions.current['__cw__'] || 0; } else { const ti = row - 1; let key = ''; const map = _v371RowIdxByKey.current; for (const k in map) { if (map[k] === ti) { key = k; break; } } y = key ? (sectionPositions.current[key] || (ti * _V371_RAIL_H)) : (ti * _V371_RAIL_H); _v371FocusedRowIdx.current = ti; _v371Bump((x) => (x + 1) & 0xff); } (scrollViewRef.current as any)?.scrollTo({ y: Math.max(0, y - 40), animated: false }); } catch (_) {} });
++    tvSetOnRowChange((row) => { try { /* V526_ONE_SCROLL - this used to scroll directly to (y - 40) while handleSectionFocus scrolls to (sectionY - 12), so a single D-pad press produced two scrolls 28px apart - the two-step jump. Route it through handleSectionFocus so there is one target, coalesced to one scroll per frame. */ let key = '__cw__'; if (row !== 0) { const ti = row - 1; let k = ''; const map = _v371RowIdxByKey.current; for (const kk in map) { if (map[kk] === ti) { k = kk; break; } } key = k; _v371FocusedRowIdx.current = ti; _v371Bump((x) => (x + 1) & 0xff); } if (key) { handleSectionFocus(key); } } catch (_) {} });
+     const keySub = DeviceEventEmitter.addListener('onTVKeyEvent', (evt) => { if (!evt || !evt.eventType) return; const t = evt.eventType; if (t === 'up' || t === 'down' || t === 'left' || t === 'right') tvMove(t); else if (t === 'select') tvPress(); else if (t === 'longSelect') tvLongSelect(); });
+     return () => { try { keySub.remove(); } catch (_) {} tvSetOnRowChange(null); tvUnregisterRow(0); try { cu1(); cu2(); } catch (_) {} };
+   }, [isTV]);

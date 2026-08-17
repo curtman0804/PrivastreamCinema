@@ -1,0 +1,24 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -784,3 +784,10 @@
+          superseded by the synchronous lock release in V521. */
+-      setTimeout(_snap, 0);
++      /* V532_NO_TOP_RESNAP - V527 removed three of the four re-snaps; this
++         last one still fired a separate scrollTo(y:0) on the next tick,
++         AFTER V531's synchronous anchor had already positioned the row. So
++         the top row alone still got two scrolls, which is the selector
++         going haywire at the very top. The anchor is deterministic and
++         targets 0 for this row anyway, so this is redundant. _snap is left
++         defined and unused rather than removed, to keep the diff minimal. */
++      if (false) { setTimeout(_snap, 0); }
+     }
+@@ -1300,3 +1307,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'V531 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
++            {'V532 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
+           </Text>
+@@ -1333,3 +1340,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'V531 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
++            {'V532 K:' + (((globalThis as any).__dK)||0) + ' S:' + (((globalThis as any).__dS)||0) + ' F:' + (((globalThis as any).__dF)||0) + ' A:' + (tvState().active ? 1 : 0) + ' R:' + tvState().row + ' Y:' + (((globalThis as any).__dY)||0)}
+           </Text>
