@@ -1,0 +1,25 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -1178,2 +1178,12 @@
+     tvSetOnRowChange((row) => { try { /* V526_ONE_SCROLL - this used to scroll directly to (y - 40) while handleSectionFocus scrolls to (sectionY - 12), so a single D-pad press produced two scrolls 28px apart - the two-step jump. Route it through handleSectionFocus so there is one target, coalesced to one scroll per frame. */ let key = '__cw__'; if (row !== 0) { const ti = row - 1; let k = ''; const map = _v371RowIdxByKey.current; for (const kk in map) { if (map[kk] === ti) { k = kk; break; } } key = k; _v371FocusedRowIdx.current = ti; _v371Bump((x) => (x + 1) & 0xff); } if (key) { handleSectionFocus(key); } } catch (_) {} });
++    /* V540_POWER_ENGINE - content posters and CW posters are both
++       focusable={!tvNav} i.e. NOT natively focusable on TV, and ServiceRow
++       routes press AND focus through the JS engine. tvPress()/tvMove() both
++       early-return unless _active, and the only writer was a 1x1 sentinel
++       that merely HOPES Android hands it focus. If focus goes to the tab bar
++       instead, the engine never powers up and OK does nothing. Set it here so
++       it does not depend on where focus happens to land. Safe now that V533
++       is reverted: no poster is natively focusable, so nothing competes for
++       OK and the wrong-title behaviour cannot recur. */
++    tvSetActive(true);
+     const keySub = DeviceEventEmitter.addListener('onTVKeyEvent', (evt) => { if (!evt || !evt.eventType) return; const t = evt.eventType; if (t === 'up' || t === 'down') { (globalThis as any).__dK = (((globalThis as any).__dK)||0)+1; } if (t === 'up' || t === 'down' || t === 'left' || t === 'right') tvMove(t); else if (t === 'select') tvPress(); else if (t === 'longSelect') tvLongSelect(); _v371Bump((x) => (x + 1) & 0xff); });
+@@ -1307,3 +1317,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            Privastream Cinema
++            {'Privastream Cinema' + (isTV ? ('  V540 A' + (tvState().active ? 1 : 0) + 'R' + tvState().row + 'C' + tvState().col) : '')}
+           </Text>
+@@ -1340,3 +1350,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            Privastream Cinema
++            {'Privastream Cinema' + (isTV ? ('  V540 A' + (tvState().active ? 1 : 0) + 'R' + tvState().row + 'C' + tvState().col) : '')}
+           </Text>

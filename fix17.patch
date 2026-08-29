@@ -1,0 +1,26 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -1317,3 +1317,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'Privastream Cinema' + (isTV ? ('  V540 A' + (tvState().active ? 1 : 0) + 'R' + tvState().row + 'C' + tvState().col) : '')}
++            {'Privastream Cinema' + (isTV ? ('  V541 A' + (tvState().active ? 1 : 0) + 'R' + tvState().row + 'C' + tvState().col) : '')}
+           </Text>
+@@ -1350,3 +1350,3 @@
+           <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
+-            {'Privastream Cinema' + (isTV ? ('  V540 A' + (tvState().active ? 1 : 0) + 'R' + tvState().row + 'C' + tvState().col) : '')}
++            {'Privastream Cinema' + (isTV ? ('  V541 A' + (tvState().active ? 1 : 0) + 'R' + tvState().row + 'C' + tvState().col) : '')}
+           </Text>
+@@ -1438,3 +1438,12 @@
+               row map is non-blocking */}
+-          {isTV ? (<View focusable={true} onFocus={() => tvSetActive(true)} onBlur={() => tvSetActive(false)} style={{ width: 1, height: 1 }} />) : null}
++          {/* V541_NO_OFF_SWITCH - device readout showed A0R1C0: the row had
++             advanced, so the engine HAD been active, yet active read false.
++             The only code that could clear it was this view's blur handler.
++             V540 switches the engine on at mount, then this sentinel loses
++             focus and its blur handler switches it straight back off, so
++             tvPress() early-returns and OK does nothing. V538 had no sentinel
++             and pressing worked; its wrong-title fault came from V533, which
++             is already reverted. Keep the unconditional activation, drop the
++             blur handler, and leave no stray focus target. */}
++          {isTV ? (<View focusable={false} style={{ width: 1, height: 1 }} />) : null}
+           {deferredFlatRows.map((item: any) => {

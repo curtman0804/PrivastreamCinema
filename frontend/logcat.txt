@@ -1,0 +1,345 @@
+--------- beginning of main
+08-20 13:19:21.398  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-48, tx_ok=26196, tx_failed=588, cca_idle_pct=85
+08-20 13:19:21.398  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=9, ss=2, bw=1
+08-20 13:19:22.189   311  3407 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 0; audio level: 0.000
+08-20 13:19:22.190   311  3407 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 1; audio level: 0.000
+08-20 13:19:25.425  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-47, tx_ok=26197, tx_failed=588, cca_idle_pct=85
+08-20 13:19:25.426  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=9, ss=2, bw=1
+08-20 13:19:25.426  1518  1518 I main.wifi_score: cca_idle 80%, bcn_rssi -46, data_rssi -47, per 0% (ok=1, failed=0), AC MCS 9, BW 1 SS 2  360mbps, AMPDU length 64, dur 2356us UDP tput 255mbps.
+08-20 13:19:25.426  1518  1518 I main.wifi_score: Score 5, mcs 90 (phyrate cur/min/avg/max= 360/42/360/396 mbps), expected  UDP throughput cur/min/avg/max= 255/26/241/309 mbps.
+08-20 13:19:28.185   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:28.186   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:28.187  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:28.187  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-20 13:19:28.189   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:28.198   340   340 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:28.200   311   560 I DolbyAudioStreamOut: write, new playback through Dolby proxy. Format=0x1, ChannelMask=0x3, SamplingRate=48000Hz isDirect 0
+08-20 13:19:28.201 10472 10522 I ReactNativeJS: [DIAG] y=524 t=1787246368201
+08-20 13:19:28.202 10472 10522 I ReactNativeJS: [DIAG] focus tt9288030 t=1787246368202
+08-20 13:19:28.202 10472 10522 I ReactNativeJS: [DIAG] hSF Popular Series|s t=1787246368202
+08-20 13:19:28.202 10472 10522 I ReactNativeJS: [DIAG] scroll 602.5 t=1787246368202
+08-20 13:19:28.204   311   560 I DolbyAudioHwDeviceProxy: resumeDownstream() for device:0x400
+08-20 13:19:28.209   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:28.209   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:28.212  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:28.212  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-20 13:19:28.230   311   560 I DolbyAudioStreamOut: getLatency() Total latency:193ms (Downstream(slider adjusted):85ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-20 13:19:28.340   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:28.430   340   390 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:29.240   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:29.241   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:29.241  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:29.242  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-20 13:19:29.243   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:29.251   340   340 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:29.386  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-42, tx_ok=26197, tx_failed=588, cca_idle_pct=85
+08-20 13:19:29.386  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=9, ss=2, bw=1
+08-20 13:19:29.394   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:29.420   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:29.421   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:29.421  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:29.421  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-20 13:19:29.422   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:29.527   340   390 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:29.560 10472 10522 I ReactNativeJS: [DIAG] y=816 t=1787246369560
+08-20 13:19:29.561 10472 10522 I ReactNativeJS: [DIAG] focus tt36590417 t=1787246369561
+08-20 13:19:29.561 10472 10522 I ReactNativeJS: [DIAG] hSF Featured Movies|m t=1787246369561
+08-20 13:19:29.561 10472 10522 I ReactNativeJS: [DIAG] scroll 894 t=1787246369561
+08-20 13:19:29.573   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:30.188   311  3407 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 0; audio level: 0.136
+08-20 13:19:30.188   311  3407 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 1; audio level: 0.137
+08-20 13:19:30.188   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 0; audio level: 0.020
+08-20 13:19:30.188   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 1; audio level: 0.027
+08-20 13:19:30.188   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 2; audio level: 0.000
+08-20 13:19:30.188   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 3; audio level: 0.000
+08-20 13:19:30.188   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 4; audio level: 0.000
+08-20 13:19:30.188   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 5; audio level: 0.000
+08-20 13:19:30.560   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:30.562  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:30.562  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-20 13:19:30.562   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:30.563   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:30.572   340   340 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:30.662   311   560 I DolbyAudioStreamOut: getLatency() Total latency:193ms (Downstream(slider adjusted):85ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-20 13:19:30.700   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:30.701   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:30.702  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:30.702  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-20 13:19:30.854   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:30.870   340   390 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:30.906 10472 10522 I ReactNativeJS: [DIAG] y=1107 t=1787246370906
+08-20 13:19:30.907 10472 10522 I ReactNativeJS: [DIAG] focus tt10986410 t=1787246370907
+08-20 13:19:30.907 10472 10522 I ReactNativeJS: [DIAG] hSF Featured Series|s t=1787246370907
+08-20 13:19:30.907 10472 10522 I ReactNativeJS: [DIAG] scroll 1185.5 t=1787246370907
+08-20 13:19:31.583 10472 10522 I ReactNativeJS: [DIAG] y=1186 t=1787246371583
+08-20 13:19:32.061   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:32.062   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:32.062  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:32.062  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-20 13:19:32.063   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:32.073   340   340 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:32.100   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:32.101   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:32.101  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:32.101  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-20 13:19:32.134   311   560 I DolbyAudioStreamOut: getLatency() Total latency:187ms (Downstream(slider adjusted):79ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-20 13:19:32.194   311  3407 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 0; audio level: 0.000
+08-20 13:19:32.194   311  3407 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 1; audio level: 0.000
+08-20 13:19:32.214   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:32.281 10472 10522 I ReactNativeJS: [DIAG] y=1399 t=1787246372281
+08-20 13:19:32.281 10472 10522 I ReactNativeJS: [DIAG] focus tt36590417 t=1787246372281
+08-20 13:19:32.282 10472 10522 I ReactNativeJS: [DIAG] hSF Netflix Movies|m t=1787246372282
+08-20 13:19:32.282 10472 10522 I ReactNativeJS: [DIAG] scroll 1477 t=1787246372282
+08-20 13:19:32.334   340   390 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:33.280   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:33.281   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:33.281  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:33.281  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-20 13:19:33.282   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:33.293   340   340 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:33.350   311   560 I DolbyAudioStreamOut: getLatency() Total latency:193ms (Downstream(slider adjusted):85ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-20 13:19:33.388  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-42, tx_ok=26246, tx_failed=593, cca_idle_pct=85
+08-20 13:19:33.388  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=9, ss=2, bw=1
+08-20 13:19:33.420   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:33.421   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:33.421  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:33.421  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-20 13:19:33.559   340   390 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:33.573   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:33.930 10472 10522 I ReactNativeJS: [DIAG] y=1690 t=1787246373930
+08-20 13:19:33.931 10472 10522 I ReactNativeJS: [DIAG] focus tt0813715 t=1787246373931
+08-20 13:19:33.931 10472 10522 I ReactNativeJS: [DIAG] hSF Netflix Series|s t=1787246373931
+08-20 13:19:33.932 10472 10522 I ReactNativeJS: [DIAG] scroll 1768.5 t=1787246373932
+08-20 13:19:34.294 10472 10482 I vastream.cinem: NativeAlloc concurrent copying GC freed 58857(2MB) AllocSpace objects, 30(1624KB) LOS objects, 30% free, 13MB/19MB, paused 249us total 226.626ms
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH03
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH04
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH05
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH06
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH07
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH08
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH09
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH0a
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH0b
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH0c
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH0d
+08-20 13:19:34.711   453  3164 E CHIP DIS: TXT record buffer full, dropping record: key=SH0e
+08-20 13:19:34.718   453  3164 I CHIP DIS: Service discovery resolved
+08-20 13:19:35.011 10472 10522 I ReactNativeJS: [DIAG] y=1769 t=1787246375011
+08-20 13:19:35.016 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt5114356'
+08-20 13:19:35.017 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt2149175'
+08-20 13:19:35.017 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt14452776'
+08-20 13:19:35.477 10472 10482 I vastream.cinem: NativeAlloc concurrent copying GC freed 43654(1743KB) AllocSpace objects, 40(1860KB) LOS objects, 27% free, 15MB/21MB, paused 133us total 306.197ms
+08-20 13:19:35.632   453  3164 I CHIP DIS: Service discovery resolved
+08-20 13:19:35.635   453  3164 I chatty  : uid=5108(oem_5108) /system/bin/SmartHomed identical 2 lines
+08-20 13:19:35.636   453  3164 I CHIP DIS: Service discovery resolved
+08-20 13:19:35.761   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:35.762   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:35.762  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:35.762  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-20 13:19:35.763   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:35.774   340   340 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:35.800   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:35.802   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:35.802  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:35.802  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-20 13:19:35.846   311   560 I DolbyAudioStreamOut: getLatency() Total latency:193ms (Downstream(slider adjusted):85ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-20 13:19:35.916   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:35.977 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt14452776'
+08-20 13:19:35.980 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt1844624'
+08-20 13:19:35.995 10472 10522 I ReactNativeJS: [DIAG] y=1982 t=1787246375995
+08-20 13:19:35.995 10472 10522 I ReactNativeJS: [DIAG] focus tt0107290 t=1787246375995
+08-20 13:19:35.995 10472 10522 I ReactNativeJS: [DIAG] hSF Disney+ Movies|m t=1787246375995
+08-20 13:19:35.995 10472 10522 I ReactNativeJS: [DIAG] scroll 2060 t=1787246375995
+08-20 13:19:36.055   340   390 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:36.062 10472 10482 I vastream.cinem: NativeAlloc concurrent copying GC freed 13711(726KB) AllocSpace objects, 32(1568KB) LOS objects, 29% free, 14MB/20MB, paused 128us total 224.424ms
+08-20 13:19:36.855 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt5114356'
+08-20 13:19:36.859 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt22207786'
+08-20 13:19:36.864 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt2149175'
+08-20 13:19:36.869 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt32565993'
+08-20 13:19:36.878 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt1844624'
+08-20 13:19:36.885 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt7798632'
+08-20 13:19:36.892 10472 10522 I ReactNativeJS: [DIAG] y=2060 t=1787246376892
+08-20 13:19:38.038 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt22207786'
+08-20 13:19:38.041 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt37605896'
+08-20 13:19:38.044 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt32565993'
+08-20 13:19:38.047 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt7798632'
+08-20 13:19:38.220   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:38.222  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:38.222  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-20 13:19:38.221   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:38.223   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:38.237   340   340 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:38.294   311   560 I DolbyAudioStreamOut: getLatency() Total latency:176ms (Downstream(slider adjusted):68ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-20 13:19:38.375   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:38.375 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt37605896'
+08-20 13:19:38.382   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:38.383   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:38.384  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:38.384  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-20 13:19:38.385   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:38.394 10472 10522 I ReactNativeJS: [DIAG] y=2273 t=1787246378394
+08-20 13:19:38.395 10472 10522 I ReactNativeJS: [DIAG] focus tt36303968 t=1787246378395
+08-20 13:19:38.395 10472 10522 I ReactNativeJS: [DIAG] hSF Disney+ Series|s t=1787246378395
+08-20 13:19:38.395 10472 10522 I ReactNativeJS: [DIAG] scroll 2351.5 t=1787246378395
+08-20 13:19:38.487   340   390 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:38.489  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-46, tx_ok=26283, tx_failed=597, cca_idle_pct=83
+08-20 13:19:38.489  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=9, ss=2, bw=1
+08-20 13:19:38.535   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:38.753 10472 10482 I vastream.cinem: NativeAlloc concurrent copying GC freed 62573(2MB) AllocSpace objects, 40(2MB) LOS objects, 26% free, 17MB/23MB, paused 166us total 268.732ms
+08-20 13:19:39.063 10472 10482 I vastream.cinem: NativeAlloc concurrent copying GC freed 10926(563KB) AllocSpace objects, 32(1696KB) LOS objects, 26% free, 16MB/22MB, paused 156us total 286.312ms
+08-20 13:19:39.505 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt1375666'
+08-20 13:19:39.505 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0468569'
+08-20 13:19:39.505 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0482571'
+08-20 13:19:39.524 10472 10522 I ReactNativeJS: [DIAG] y=2352 t=1787246379524
+08-20 13:19:40.194   311  3407 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 0; audio level: 0.136
+08-20 13:19:40.194   311  3407 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 1; audio level: 0.137
+08-20 13:19:40.194   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 0; audio level: 0.020
+08-20 13:19:40.194   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 1; audio level: 0.027
+08-20 13:19:40.194   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 2; audio level: 0.000
+08-20 13:19:40.194   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 3; audio level: 0.000
+08-20 13:19:40.194   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 4; audio level: 0.000
+08-20 13:19:40.194   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 5; audio level: 0.000
+08-20 13:19:40.642 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt1375666'
+08-20 13:19:40.644 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt6723592'
+08-20 13:19:40.647 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt0468569'
+08-20 13:19:40.649 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt5013056'
+08-20 13:19:40.653 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt0482571'
+08-20 13:19:40.655 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0372784'
+08-20 13:19:40.873 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt6723592'
+08-20 13:19:40.875 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt30494226'
+08-20 13:19:40.881 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt5013056'
+08-20 13:19:40.884 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt3148266'
+08-20 13:19:40.887 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt0372784'
+08-20 13:19:41.108 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt30494226'
+08-20 13:19:41.112 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt3148266'
+08-20 13:19:41.119 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt8772296'
+08-20 13:19:41.119 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt1196946'
+08-20 13:19:41.119 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0460681'
+08-20 13:19:41.140   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:41.141   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:41.142   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:41.142  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:41.142  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-20 13:19:41.160   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:41.161   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:41.163  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:41.163  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-20 13:19:41.172 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt8772296'
+08-20 13:19:41.176 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0898266'
+08-20 13:19:41.202   340   340 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:41.206 10472 10522 I ReactNativeJS: [DIAG] y=2565 t=1787246381206
+08-20 13:19:41.207 10472 10522 I ReactNativeJS: [DIAG] focus tt12042730 t=1787246381207
+08-20 13:19:41.207 10472 10522 I ReactNativeJS: [DIAG] hSF Prime Video Movies|m t=1787246381207
+08-20 13:19:41.207 10472 10522 I ReactNativeJS: [DIAG] scroll 2643 t=1787246381207
+08-20 13:19:41.254   545   648 W BestClock: java.time.DateTimeException: Missing NTP fix
+08-20 13:19:41.285   311   560 I DolbyAudioStreamOut: getLatency() Total latency:187ms (Downstream(slider adjusted):79ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-20 13:19:41.293   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:41.332   545   648 W BestClock: java.time.DateTimeException: Missing NTP fix
+08-20 13:19:41.335   545   649 W BestClock: java.time.DateTimeException: Missing NTP fix
+08-20 13:19:41.387  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-47, tx_ok=26382, tx_failed=597, cca_idle_pct=83
+08-20 13:19:41.387  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=9, ss=2, bw=1
+08-20 13:19:41.486   340   390 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 161, caller pid: 545, uid: 1000
+08-20 13:19:41.496 10472 10482 I vastream.cinem: NativeAlloc concurrent copying GC freed 46939(2MB) AllocSpace objects, 36(1776KB) LOS objects, 22% free, 20MB/26MB, paused 162us total 368.750ms
+08-20 13:19:42.220   311  3407 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 0; audio level: 0.000
+08-20 13:19:42.220   311  3407 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 1; audio level: 0.000
+08-20 13:19:42.497 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt1196946'
+08-20 13:19:42.504 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt0995832'
+08-20 13:19:42.521 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt0460681'
+08-20 13:19:42.534 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/series/tt2861424'
+08-20 13:19:42.544 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt0898266'
+08-20 13:19:42.560 10472 10522 I ReactNativeJS: [DIAG] y=2643 t=1787246382560
+08-20 13:19:42.750 10472 10482 I vastream.cinem: NativeAlloc concurrent copying GC freed 16557(1203KB) AllocSpace objects, 49(4MB) LOS objects, 25% free, 17MB/23MB, paused 129us total 247.310ms
+08-20 13:19:43.733 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt0995832'
+08-20 13:19:43.740 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/series/tt2861424'
+08-20 13:19:44.254   311   395 I DolbyAudioStreamOut: standby()
+08-20 13:19:44.441   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:44.442   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:44.442  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:44.442  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 0
+08-20 13:19:44.443   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:44.456   340   340 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 153, caller pid: 545, uid: 1000
+08-20 13:19:44.460   311   560 I DolbyAudioHwDeviceProxy: resumeDownstream() for device:0x400
+08-20 13:19:44.477   311   560 I DolbyAudioStreamOut: getLatency() Total latency:180ms (Downstream(slider adjusted):72ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-20 13:19:44.540   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:44.541   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:44.543  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:44.543  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 1
+08-20 13:19:44.595   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:44.686   340   390 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 153, caller pid: 545, uid: 1000
+08-20 13:19:45.109 10472 10522 I ReactNativeJS: [DIAG] y=2403 t=1787246385109
+08-20 13:19:45.109 10472 10522 I ReactNativeJS: [DIAG] focus tt36303968 t=1787246385109
+08-20 13:19:45.109 10472 10522 I ReactNativeJS: [DIAG] hSF Disney+ Series|s t=1787246385109
+08-20 13:19:45.110 10472 10522 I ReactNativeJS: [DIAG] scroll 2351.5 t=1787246385110
+08-20 13:19:45.401  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-42, tx_ok=26487, tx_failed=606, cca_idle_pct=83
+08-20 13:19:45.401  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=1, pream=2, mcs=0, ss=3, bw=2
+08-20 13:19:46.001  1815 10590 E whad    : Http1Client:sendRemoteCommand:curl_easy_perform failed, err=28
+08-20 13:19:46.001  1815 10590 W whad    : Http1Client:sendRemoteCommand:curlDebug=[0] Found bundle for host xxx: 0xa483ac50 [serially]
+08-20 13:19:46.001  1815 10590 W whad    : Http1Client:sendRemoteCommand:curlDebug=[0] Server doesn't support multiplex (yet)
+08-20 13:19:46.001  1815 10590 W whad    : Http1Client:sendRemoteCommand:curlDebug=[0] Connection #205 is still name resolving, can't reuse
+08-20 13:19:46.001  1815 10590 W whad    : Http1Client:sendRemoteCommand:curlDebug=[0]   Trying xxx:55443...
+08-20 13:19:46.001  1815 10590 W whad    : Http1Client:sendRemoteCommand:curlDebug=[0] TCP_NODELAY set
+08-20 13:19:46.001  1815 10590 W whad    : Http1Client:sendRemoteCommand:curlDebug=[6000] Connection timed out after 6000 milliseconds
+08-20 13:19:46.001  1815 10590 W whad    : Http1Client:sendRemoteCommand:curlDebug=[6000] Closing connection 206
+08-20 13:19:46.001  1815 10590 W whad    : Device:sendHeartBeat:seq=292,error=Timeout,remote=XX0KP5
+08-20 13:19:46.449 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt1341338'
+08-20 13:19:46.450 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt0210945'
+08-20 13:19:46.450 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt27676959'
+08-20 13:19:46.877 10472 10482 I vastream.cinem: NativeAlloc concurrent copying GC freed 43570(1894KB) AllocSpace objects, 40(3MB) LOS objects, 26% free, 16MB/22MB, paused 132us total 266.460ms
+08-20 13:19:46.921   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:46.921   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:46.922  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:46.922  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 0
+08-20 13:19:46.922   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:46.936   340   340 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 153, caller pid: 545, uid: 1000
+08-20 13:19:46.990   311   560 I DolbyAudioStreamOut: getLatency() Total latency:184ms (Downstream(slider adjusted):76ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-20 13:19:47.060   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:47.061   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:47.061  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:47.061  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 1
+08-20 13:19:47.191   340   390 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 153, caller pid: 545, uid: 1000
+08-20 13:19:47.215   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:47.701 10472 10522 I ReactNativeJS: [DIAG] y=2112 t=1787246387700
+08-20 13:19:47.706 10472 10522 I ReactNativeJS: [DIAG] focus tt0107290 t=1787246387706
+08-20 13:19:47.706 10472 10522 I ReactNativeJS: [DIAG] hSF Disney+ Movies|m t=1787246387706
+08-20 13:19:47.706 10472 10522 I ReactNativeJS: [DIAG] scroll 2060 t=1787246387706
+08-20 13:19:48.907 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt27676959'
+08-20 13:19:48.909 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt34705112'
+08-20 13:19:48.913 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt0210945'
+08-20 13:19:48.915 10472 10522 I ReactNativeJS: '[API] Request:', 'GET', 'http://5.161.49.99:8001/api/content/meta/movie/tt35522483'
+08-20 13:19:48.918 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt1341338'
+08-20 13:19:48.926 10472 10522 I ReactNativeJS: [DIAG] y=2060 t=1787246388926
+08-20 13:19:49.361   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:49.361   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:49.361  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:49.361  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 0
+08-20 13:19:49.363   337   354 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-20 13:19:49.376   340   340 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 153, caller pid: 545, uid: 1000
+08-20 13:19:49.384  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-46, tx_ok=26513, tx_failed=616, cca_idle_pct=83
+08-20 13:19:49.384  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=9, ss=2, bw=1
+08-20 13:19:49.404   821  1422 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-20 13:19:49.405   545   642 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-20 13:19:49.405  1605  4190 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-20 13:19:49.405  1605  4190 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 1
+08-20 13:19:49.430   311   560 I DolbyAudioStreamOut: getLatency() Total latency:176ms (Downstream(slider adjusted):68ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-20 13:19:49.514   337   354 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-20 13:19:49.632   340   390 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 153, caller pid: 545, uid: 1000
+08-20 13:19:50.131 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt34705112'
+08-20 13:19:50.133 10472 10522 I ReactNativeJS: '[API] Response OK:', '/api/content/meta/movie/tt35522483'
+08-20 13:19:50.140 10472 10522 I ReactNativeJS: [DIAG] y=1820 t=1787246390140
+08-20 13:19:50.140 10472 10522 I ReactNativeJS: [DIAG] focus tt0813715 t=1787246390140
+08-20 13:19:50.140 10472 10522 I ReactNativeJS: [DIAG] hSF Netflix Series|s t=1787246390140
+08-20 13:19:50.140 10472 10522 I ReactNativeJS: [DIAG] scroll 1768.5 t=1787246390140
+08-20 13:19:50.220   311  3407 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 0; audio level: 0.136
+08-20 13:19:50.220   311  3407 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 1; audio level: 0.137
+08-20 13:19:50.220   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 0; audio level: 0.113
+08-20 13:19:50.220   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 1; audio level: 0.117
+08-20 13:19:50.220   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 2; audio level: 0.000
+08-20 13:19:50.220   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 3; audio level: 0.000
+08-20 13:19:50.220   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 4; audio level: 0.000
+08-20 13:19:50.220   311  3407 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 5; audio level: 0.000
+08-20 13:19:52.225   311  3407 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 0; audio level: 0.000
+08-20 13:19:52.226   311  3407 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 1; audio level: 0.000
+08-20 13:19:52.430   311   395 I DolbyAudioStreamOut: standby()
+08-20 13:19:52.539 10472 10522 I ReactNativeJS: [DIAG] y=1769 t=1787246392539
+08-20 13:19:53.423  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-43, tx_ok=26550, tx_failed=621, cca_idle_pct=83
+08-20 13:19:53.423  1518  1518 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=1, ss=3, bw=2

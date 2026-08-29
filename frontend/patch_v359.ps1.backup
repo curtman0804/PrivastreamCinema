@@ -1,4 +1,4 @@
-﻿# patch_v359.ps1 - Regex-flexible anchors + auto-deploy + OTA verify
+# patch_v359.ps1 - Regex-flexible anchors + auto-deploy + OTA verify
 $ErrorActionPreference = 'Stop'
 Set-Location "C:\Users\Curtm\PrivastreamCinema\frontend"
 
@@ -161,8 +161,8 @@ if ($deployOut -match 'DONE') {
 Write-Host ""
 Write-Host "----- Querying OTA manifest server -----" -ForegroundColor Cyan
 try {
-  $manifest = curl.exe -sS -H "expo-runtime-version: 1.1.0" -H "expo-platform: android" `
-    "https://api.privastreamsolutions.com/api/expo-updates/manifest?runtimeVersion=1.1.0&platform=android" 2>&1
+  $manifest = curl.exe -sS -H "expo-runtime-version: 1.0.0" -H "expo-platform: android" `
+    "https://api.privastreamsolutions.com/api/expo-updates/manifest?runtimeVersion=1.0.0&platform=android" 2>&1
   Write-Host $manifest
   if ($manifest -match '"id"\s*:\s*"([^"]+)"') {
     $mfId = $Matches[1]
@@ -191,4 +191,3 @@ try {
 } catch {
   Write-Host "  [WARN] adb not available - restart the app manually on Firestick" -ForegroundColor Yellow
 }
-

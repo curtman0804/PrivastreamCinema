@@ -1,0 +1,15 @@
+diff --git a/frontend/app/(tabs)/discover.tsx b/frontend/app/(tabs)/discover.tsx
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -753 +753 @@
+-    if (target === 0) {
++    if (true) {
+@@ -756 +756 @@
+-      cwFocusLockUntilRef.current = Date.now() + 500;
++      if (target === 0) { cwFocusLockUntilRef.current = Date.now() + 500; }
+@@ -760 +760 @@
+-        if (lastFocusedSection.current !== '__cw__') return;
++        if (lastFocusedSection.current !== sectionKey) return;
+@@ -762 +762 @@
+-          scrollViewRef.current.scrollTo({ y: 0, animated: false });
++          scrollViewRef.current.scrollTo({ y: target, animated: false });

@@ -1,0 +1,23 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -1178,4 +1178,14 @@
+     tvSetOnRowChange((row) => { try { /* V526_ONE_SCROLL - this used to scroll directly to (y - 40) while handleSectionFocus scrolls to (sectionY - 12), so a single D-pad press produced two scrolls 28px apart - the two-step jump. Route it through handleSectionFocus so there is one target, coalesced to one scroll per frame. */ let key = '__cw__'; if (row !== 0) { const ti = row - 1; let k = ''; const map = _v371RowIdxByKey.current; for (const kk in map) { if (map[kk] === ti) { k = kk; break; } } key = k; _v371FocusedRowIdx.current = ti; _v371Bump((x) => (x + 1) & 0xff); } if (key) { handleSectionFocus(key); } } catch (_) {} });
++    /* V538_REACTIVATE_ENGINE - on TV the content posters are focusable={!tvNav}
++       i.e. NOT natively focusable, and ServiceRow routes BOTH press and focus
++       through the JS engine (tvRegisterRow press/focus). tvPress() and tvMove()
++       both start with if(!_active)return, and _active is only ever set by
++       tvSetActive(true). V535 removed the 1x1 sentinel that was carrying that
++       call, so the engine lost power and OK on a poster became a no-op. His
++       earlier code activated it from an effect instead of a focusable view
++       (see discover.tsx.bak_20260815_072315), which is what this restores -
++       so the sentinel stays non-focusable and V535's fix is kept. */
++    tvSetActive(true);
+     const keySub = DeviceEventEmitter.addListener('onTVKeyEvent', (evt) => { if (!evt || !evt.eventType) return; const t = evt.eventType; if (t === 'up' || t === 'down') { (globalThis as any).__dK = (((globalThis as any).__dK)||0)+1; } if (t === 'up' || t === 'down' || t === 'left' || t === 'right') tvMove(t); else if (t === 'select') tvPress(); else if (t === 'longSelect') tvLongSelect(); _v371Bump((x) => (x + 1) & 0xff); });
+-    return () => { try { keySub.remove(); } catch (_) {} tvSetOnRowChange(null); tvUnregisterRow(0); try { cu1(); cu2(); } catch (_) {} };
++    return () => { try { keySub.remove(); } catch (_) {} tvSetActive(false); tvSetOnRowChange(null); tvUnregisterRow(0); try { cu1(); cu2(); } catch (_) {} };
+   }, [isTV]);
+@@ -1448,3 +1458,3 @@
+               owner for focus: Android. accessibilityLabel is the build marker. */}
+-          {isTV ? (<View accessibilityLabel="V536" focusable={false} style={{ width: 1, height: 1 }} />) : null}
++          {isTV ? (<View accessibilityLabel="V538" focusable={false} style={{ width: 1, height: 1 }} />) : null}
+           {deferredFlatRows.map((item: any) => {

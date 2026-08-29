@@ -1,0 +1,48 @@
+--- a/frontend/app/(tabs)/discover.tsx
++++ b/frontend/app/(tabs)/discover.tsx
+@@ -1178,14 +1178,4 @@
+     tvSetOnRowChange((row) => { try { /* V526_ONE_SCROLL - this used to scroll directly to (y - 40) while handleSectionFocus scrolls to (sectionY - 12), so a single D-pad press produced two scrolls 28px apart - the two-step jump. Route it through handleSectionFocus so there is one target, coalesced to one scroll per frame. */ let key = '__cw__'; if (row !== 0) { const ti = row - 1; let k = ''; const map = _v371RowIdxByKey.current; for (const kk in map) { if (map[kk] === ti) { k = kk; break; } } key = k; _v371FocusedRowIdx.current = ti; _v371Bump((x) => (x + 1) & 0xff); } if (key) { handleSectionFocus(key); } } catch (_) {} });
+-    /* V538_REACTIVATE_ENGINE - on TV the content posters are focusable={!tvNav}
+-       i.e. NOT natively focusable, and ServiceRow routes BOTH press and focus
+-       through the JS engine (tvRegisterRow press/focus). tvPress() and tvMove()
+-       both start with if(!_active)return, and _active is only ever set by
+-       tvSetActive(true). V535 removed the 1x1 sentinel that was carrying that
+-       call, so the engine lost power and OK on a poster became a no-op. His
+-       earlier code activated it from an effect instead of a focusable view
+-       (see discover.tsx.bak_20260815_072315), which is what this restores -
+-       so the sentinel stays non-focusable and V535's fix is kept. */
+-    tvSetActive(true);
+     const keySub = DeviceEventEmitter.addListener('onTVKeyEvent', (evt) => { if (!evt || !evt.eventType) return; const t = evt.eventType; if (t === 'up' || t === 'down') { (globalThis as any).__dK = (((globalThis as any).__dK)||0)+1; } if (t === 'up' || t === 'down' || t === 'left' || t === 'right') tvMove(t); else if (t === 'select') tvPress(); else if (t === 'longSelect') tvLongSelect(); _v371Bump((x) => (x + 1) & 0xff); });
+-    return () => { try { keySub.remove(); } catch (_) {} tvSetActive(false); tvSetOnRowChange(null); tvUnregisterRow(0); try { cu1(); cu2(); } catch (_) {} };
++    return () => { try { keySub.remove(); } catch (_) {} tvSetOnRowChange(null); tvUnregisterRow(0); try { cu1(); cu2(); } catch (_) {} };
+   }, [isTV]);
+@@ -1259,14 +1249,3 @@
+       onRemove={() => handleRemoveFromContinueWatching(item)}
+-      /* V536_CW_REVEAL - handleSectionFocus reads sectionPositions[key] and
+-         returns early when it is undefined. Only the content-row map ever
+-         writes that map, so sectionPositions['__cw__'] is never set and the
+-         CW branch has always been a no-op. It went unnoticed because three
+-         other things forced the page to y=0: the onScroll snap-back (V530),
+-         setTimeout(_snap, 0) which only fired for target 0 (V532), and the
+-         sentinel that used to hold focus at the top (V535). With all three
+-         gone, focus lands on a CW poster above the viewport and nothing
+-         scrolls up to reveal it. CW is the top section, so y=0 is always
+-         the right target: scroll there directly and record the position so
+-         the shared handler works for CW from here on. */
+-      onSectionFocus={() => { try { sectionPositions.current['__cw__'] = 0; (scrollViewRef.current as any)?.scrollTo({ y: 0, animated: false }); } catch (_) {} handleSectionFocus('__cw__'); }}
++      onSectionFocus={() => handleSectionFocus('__cw__')}
+     />
+@@ -1449,12 +1428,3 @@
+               row map is non-blocking */}
+-          {/* V535_NO_STRAY_TARGET - this invisible 1x1 sits directly above the
+-              first row. Before V533 it was the only focusable thing at the top,
+-              so it was the intended landing spot. Now that the Continue Watching
+-              posters are focusable it is a stray candidate: coming back DOWN from
+-              the top, Android could pick this 1x1 instead of the next row, which
+-              hid the selector and flipped the JS engine on mid-navigation. Nothing
+-              else writes tvSetActive, and the CW highlight now comes from
+-              isFocused, so tvCwSel is already redundant. Non-focusable leaves one
+-              owner for focus: Android. accessibilityLabel is the build marker. */}
+-          {isTV ? (<View accessibilityLabel="V538" focusable={false} style={{ width: 1, height: 1 }} />) : null}
++          {isTV ? (<View focusable={true} onFocus={() => tvSetActive(true)} onBlur={() => tvSetActive(false)} style={{ width: 1, height: 1 }} />) : null}
+           {deferredFlatRows.map((item: any) => {

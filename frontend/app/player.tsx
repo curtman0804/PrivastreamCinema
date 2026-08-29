@@ -3683,6 +3683,17 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                       else { setError('Stream unavailable. Try a different source.'); setIsLoading(false); }
                       return;
                     }
+                    // V357_FAST_CASCADE - directUrl errors skip retry loop
+                    if (directUrl && !infoHash) {
+                      const _v357_fbLeft = Math.max(0, (fallbackUrls?.length || 0) - (currentStreamIndex + 1));
+                      const _v357_torLeft = (torrentFallbacksRef.current?.length || 0) + (torrentFallbacks?.length || 0);
+                      console.log('[V357 CASCADE] directUrl failed - fbUrlsLeft=' + _v357_fbLeft + ' torrentsLeft=' + _v357_torLeft);
+                      videoRetryCountRef.current = 0;
+                      if (_v357_fbLeft > 0) tryNextStream();
+                      else if (_v357_torLeft > 0) tryNextFallbackTorrent();
+                      else { setError('Stream unavailable. Try a different source.'); setIsLoading(false); }
+                      return;
+                    }
                     // Retry aggressively
                     if (videoRetryCountRef.current < maxVideoRetries) {
                     videoRetryCountRef.current += 1;

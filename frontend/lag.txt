@@ -1,0 +1,588 @@
+--------- beginning of main
+08-21 08:59:00.307  9793  9841 I ReactNativeJS: '[API] Response OK:', '/api/content/discover-organized'
+08-21 08:59:00.443  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-43, tx_ok=13876, tx_failed=822, cca_idle_pct=90
+08-21 08:59:00.443  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=1, pream=2, mcs=9, ss=2, bw=1
+08-21 08:59:02.833  1609  3807 I NEO_DIAL_SVC: Received HTTP method GET
+08-21 08:59:02.853  1609  1618 I NEO_DIAL_SVC: Received HTTP method GET
+08-21 08:59:02.853  1609  1618 I NEO_DIAL_SVC: Received request /apps/YouTube
+08-21 08:59:02.957  1609  1618 I NEO_DIAL_SVC: handle_app_status, App Id = YouTube:
+08-21 08:59:03.059  1609  1618 I NEO_DIAL_SVC: Received request /apps/YouTube
+08-21 08:59:03.059  1609  1618 I NEO_DIAL_SVC: MG: Error 404: Not Found
+08-21 08:59:03.494   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+--------- beginning of system
+08-21 08:59:03.495   541   644 I AmazonProfileService: Event is not filtered because it is not in filter key list.
+08-21 08:59:03.496  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:03.496  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 0
+08-21 08:59:03.496   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:03.498   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:03.503   338  6896 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 233, caller pid: 541, uid: 1000
+08-21 08:59:03.504   310   560 I DolbyAudioStreamOut: write, new playback through Dolby proxy. Format=0x1, ChannelMask=0x3, SamplingRate=48000Hz isDirect 0
+08-21 08:59:03.517   310   560 I DolbyAudioHwDeviceProxy: resumeDownstream() for device:0x400
+08-21 08:59:03.534   310   560 I DolbyAudioStreamOut: getLatency() Total latency:180ms (Downstream(slider adjusted):72ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-21 08:59:03.571   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:03.572   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:03.572  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:03.572  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 1
+08-21 08:59:03.648   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:03.725   338   384 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 233, caller pid: 541, uid: 1000
+08-21 08:59:04.032   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:04.034   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:04.035  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:04.035  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:04.037   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:04.046  9793  9841 I ReactNativeJS: [DIAG] focus tt37287335 t=1787317144046
+08-21 08:59:04.046  9793  9841 I ReactNativeJS: [V569] enter row=0 landed=0 remembered=null -> keep
+08-21 08:59:04.172   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:04.172   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:04.173  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:04.173  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:04.324   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:04.532   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:04.532   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:04.534  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:04.534  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:04.534   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:04.589  9793  9841 I ReactNativeJS: [DIAG] focus tt9288030 t=1787317144589
+08-21 08:59:04.589  9793  9841 I ReactNativeJS: [V569] enter row=1 landed=0 remembered=null -> keep
+08-21 08:59:04.685   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:04.692   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:04.692   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:04.693  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:04.694  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:04.695   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:04.794  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 18524(2MB) AllocSpace objects, 26(36MB) LOS objects, 37% free, 10MB/16MB, paused 193us total 270.738ms
+08-21 08:59:04.846   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:05.092   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:05.092   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:05.092  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:05.092  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:05.094   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:05.123   898   898 I wpa_supplicant: TDLS: Invalid frame - payloadtype=1 category=240 action=26
+08-21 08:59:05.245   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:05.258   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:05.258   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:05.259  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:05.259  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:05.259   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:05.392  9793  9841 I ReactNativeJS: [DIAG] focus tt35519455 t=1787317145392
+08-21 08:59:05.392  9793  9841 I ReactNativeJS: [V569] enter row=2 landed=0 remembered=null -> keep
+08-21 08:59:05.410   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:05.549  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-47, tx_ok=14186, tx_failed=825, cca_idle_pct=95
+08-21 08:59:05.549  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=1, pream=2, mcs=9, ss=2, bw=1
+08-21 08:59:05.644  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 24999(1104KB) AllocSpace objects, 42(2MB) LOS objects, 38% free, 9MB/15MB, paused 174us total 196.095ms
+08-21 08:59:06.016  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 9055(491KB) AllocSpace objects, 28(1352KB) LOS objects, 38% free, 9MB/15MB, paused 265us total 195.923ms
+08-21 08:59:06.052   898   898 I wpa_supplicant: TDLS: Invalid frame - payloadtype=1 category=240 action=26
+08-21 08:59:06.131   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:06.132   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:06.132  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:06.132  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:06.133   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:06.285   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:06.291   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:06.292   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:06.293  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:06.293  9793  9841 I ReactNativeJS: [DIAG] focus tt3444938 t=1787317146293
+08-21 08:59:06.293  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:06.293  9793  9841 I ReactNativeJS: [V569] enter row=3 landed=0 remembered=null -> keep
+08-21 08:59:06.294   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:06.446   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:06.132   541   644 I chatty  : uid=1000(system) InputReader identical 8 lines
+08-21 08:59:06.292   541   644 I AmazonProfileService: Event is not filtered because it is not in filter key list.
+08-21 08:59:06.515   432   432 I perfmonitord:StatUtil: CPUUtilization is at 55%
+08-21 08:59:06.515   432   432 I perfmonitord:StatUtil: MemoryUtilization is at 52%
+08-21 08:59:06.550   310  1369 I DolbyAudioStreamOut: standby()
+08-21 08:59:06.865  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 16985(768KB) AllocSpace objects, 26(1264KB) LOS objects, 36% free, 10MB/16MB, paused 180us total 202.130ms
+08-21 08:59:07.091   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:07.092   541   644 I AmazonProfileService: Event is not filtered because it is not in filter key list.
+08-21 08:59:07.092   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:07.092  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:07.092  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:07.093   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:07.231   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:07.232   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:07.234  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:07.234  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:07.287  9793  9841 I ReactNativeJS: [DIAG] focus tt36590417 t=1787317147287
+08-21 08:59:07.288  9793  9841 I ReactNativeJS: [V569] enter row=4 landed=0 remembered=null -> keep
+08-21 08:59:07.384   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:07.826   310  3248 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 0; audio level: 0.113
+08-21 08:59:07.827   310  3248 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 1; audio level: 0.117
+08-21 08:59:07.827   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 0; audio level: 0.113
+08-21 08:59:07.827   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 1; audio level: 0.117
+08-21 08:59:07.827   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 2; audio level: 0.000
+08-21 08:59:07.827   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 3; audio level: 0.000
+08-21 08:59:07.827   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 4; audio level: 0.000
+08-21 08:59:07.827   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 5; audio level: 0.000
+08-21 08:59:07.904  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 22578(978KB) AllocSpace objects, 36(1696KB) LOS objects, 36% free, 10MB/16MB, paused 176us total 201.092ms
+08-21 08:59:08.092   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:08.093   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:08.093  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:08.093  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:08.094   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:08.245   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:08.251   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:08.252   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:08.252  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:08.252  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:08.253   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:08.404   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:08.408  9793  9841 I ReactNativeJS: [DIAG] focus tt0813715 t=1787317148408
+08-21 08:59:08.408  9793  9841 I ReactNativeJS: [V569] enter row=5 landed=0 remembered=null -> keep
+08-21 08:59:08.458  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=0, tx_ok=14203, tx_failed=835, cca_idle_pct=95
+08-21 08:59:08.458  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=1, pream=2, mcs=1, ss=3, bw=2
+08-21 08:59:08.458  1542  1542 I main.wifi_score: rate correction orig per/mcs/bw 37/1/2, new per/mcs/bw 7/1/1
+08-21 08:59:08.458  1542  1542 I main.wifi_score: cca_idle 91%, bcn_rssi -46, data_rssi 0, per 7% (ok=17, failed=10), AC MCS 1, BW 1 SS 3 SGI 81mbps, AMPDU length 26, dur 4441us UDP tput 61mbps.
+08-21 08:59:08.458  1542  1542 I main.wifi_score: Score 5, mcs 22 (phyrate cur/min/avg/max= 89/42/164/396 mbps), expected  UDP throughput cur/min/avg/max= 61/29/116/291 mbps.
+08-21 08:59:09.102  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 21769(953KB) AllocSpace objects, 36(1888KB) LOS objects, 35% free, 11MB/17MB, paused 1.377ms total 205.671ms
+08-21 08:59:09.212   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:09.212   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:09.213  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:09.213  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:09.215   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:09.366   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:09.371   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:09.372   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:09.372  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:09.372  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:09.374   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:09.525   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:09.597   310  3248 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 0; audio level: 0.000
+08-21 08:59:09.597   310  3248 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 1; audio level: 0.000
+08-21 08:59:09.687  9793  9841 I ReactNativeJS: [DIAG] focus tt0107290 t=1787317149687
+08-21 08:59:09.687  9793  9841 I ReactNativeJS: [V569] enter row=6 landed=0 remembered=null -> keep
+08-21 08:59:10.249   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-1704kB, cache=804196kB, limit=184320kB)
+08-21 08:59:10.253   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-192kB, cache=802996kB, limit=184320kB)
+08-21 08:59:10.263   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=2328kB, cache=800396kB, limit=184320kB)
+08-21 08:59:10.276   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=7960kB, cache=795576kB, limit=184320kB)
+08-21 08:59:10.378   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=1884kB, cache=794920kB, limit=184320kB)
+08-21 08:59:10.379   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=1884kB, cache=794920kB, limit=184320kB)
+08-21 08:59:10.381   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=3396kB, cache=793620kB, limit=184320kB)
+08-21 08:59:10.392   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=5108kB, cache=791960kB, limit=184320kB)
+08-21 08:59:10.393   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=5108kB, cache=791960kB, limit=184320kB)
+08-21 08:59:10.457  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 22237(936KB) AllocSpace objects, 34(1800KB) LOS objects, 34% free, 11MB/17MB, paused 251us total 225.248ms
+08-21 08:59:10.692   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:10.693   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:10.693  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:10.693  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:10.695   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:10.812   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:10.812   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:10.812  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:10.813  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:10.963   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:11.035  9793  9841 I ReactNativeJS: [DIAG] focus tt36303968 t=1787317151035
+08-21 08:59:11.035  9793  9841 I ReactNativeJS: [V569] enter row=7 landed=0 remembered=null -> keep
+08-21 08:59:11.642   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=-1704kB, cache=791336kB, limit=184320kB)
+08-21 08:59:11.643   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-1704kB, cache=791336kB, limit=184320kB)
+08-21 08:59:11.645   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=-1200kB, cache=790736kB, limit=184320kB)
+08-21 08:59:11.645   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-1200kB, cache=790736kB, limit=184320kB)
+08-21 08:59:11.649   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=816kB, cache=787836kB, limit=184320kB)
+08-21 08:59:11.657   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=4344kB, cache=784148kB, limit=184320kB)
+08-21 08:59:11.657   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=4876kB, cache=784128kB, limit=184320kB)
+08-21 08:59:11.759   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=280kB, cache=782936kB, limit=184320kB)
+08-21 08:59:11.762   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=1288kB, cache=781736kB, limit=184320kB)
+08-21 08:59:11.767   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=4312kB, cache=778688kB, limit=184320kB)
+08-21 08:59:11.851  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 23227(971KB) AllocSpace objects, 34(1720KB) LOS objects, 33% free, 11MB/17MB, paused 185us total 233.045ms
+08-21 08:59:12.012   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:12.012   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:12.013  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:12.013  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:12.014   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:12.164   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:12.191   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:12.192   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:12.193  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:12.193  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:12.195   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:12.346   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:12.475  1542  1542 E wlan_stats: Incorrect VHT Rate string received: NSS3_MCS1_N/A_SGI
+08-21 08:59:12.475  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=0, tx_ok=14203, tx_failed=835, cca_idle_pct=95
+08-21 08:59:12.475  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=1, pream=2, mcs=1, ss=3, bw=2
+08-21 08:59:12.505  9793  9841 I ReactNativeJS: [DIAG] focus tt12042730 t=1787317152505
+08-21 08:59:12.506  9793  9841 I ReactNativeJS: [V569] enter row=8 landed=0 remembered=null -> keep
+08-21 08:59:12.836  1609  3805 I NEO_DIAL_SVC: Received HTTP method GET
+08-21 08:59:12.861  1609  1617 I NEO_DIAL_SVC: Received HTTP method GET
+08-21 08:59:12.861  1609  1617 I NEO_DIAL_SVC: Received request /apps/YouTube
+08-21 08:59:12.910  1609  1617 I NEO_DIAL_SVC: handle_app_status, App Id = YouTube:
+08-21 08:59:12.952  1609  1617 I NEO_DIAL_SVC: Received request /apps/YouTube
+08-21 08:59:12.952  1609  1617 I NEO_DIAL_SVC: MG: Error 404: Not Found
+08-21 08:59:13.049   541   550 I system_server: Background concurrent copying GC freed 149556(6MB) AllocSpace objects, 0(0B) LOS objects, 27% free, 15MB/21MB, paused 249us total 185.552ms
+08-21 08:59:13.335  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 22767(994KB) AllocSpace objects, 38(1904KB) LOS objects, 33% free, 11MB/17MB, paused 160us total 218.043ms
+08-21 08:59:13.592   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:13.593   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:13.593  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:13.593  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:13.594   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:13.672   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:13.673   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:13.673  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:13.673  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:13.749   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:13.889  1609  3804 I NEO_DIAL_SVC: Received HTTP method GET
+08-21 08:59:14.020  9793  9841 I ReactNativeJS: [DIAG] focus tt9288030 t=1787317154020
+08-21 08:59:14.020  9793  9841 I ReactNativeJS: [V569] enter row=9 landed=0 remembered=null -> keep
+08-21 08:59:14.893  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 24155(1054KB) AllocSpace objects, 32(1568KB) LOS objects, 33% free, 11MB/17MB, paused 169us total 222.260ms
+08-21 08:59:15.072   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:15.072   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:15.073  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:15.073  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:15.073   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:15.225   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:15.231   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:15.233   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:15.233  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:15.233  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:15.235   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:15.386   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:15.599  9793  9841 I ReactNativeJS: [DIAG] focus tt1375666 t=1787317155599
+08-21 08:59:15.600  9793  9841 I ReactNativeJS: [V569] enter row=10 landed=0 remembered=null -> keep
+08-21 08:59:16.448  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-43, tx_ok=14222, tx_failed=836, cca_idle_pct=95
+08-21 08:59:16.448  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=7, ss=2, bw=1
+08-21 08:59:16.617  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 26444(1047KB) AllocSpace objects, 26(1368KB) LOS objects, 33% free, 11MB/17MB, paused 149us total 237.363ms
+08-21 08:59:16.752   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:16.753   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:16.753  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:16.753  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:16.754   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:16.791   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:16.792   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:16.792  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:16.792  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:16.905   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:17.263  9793  9841 I ReactNativeJS: [DIAG] focus tt8772296 t=1787317157263
+08-21 08:59:17.263  9793  9841 I ReactNativeJS: [V569] enter row=11 landed=0 remembered=null -> keep
+08-21 08:59:17.853   310  3248 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 0; audio level: 0.000
+08-21 08:59:17.853   310  3248 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 1; audio level: 0.000
+08-21 08:59:17.853   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 0; audio level: 0.000
+08-21 08:59:17.853   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 1; audio level: 0.000
+08-21 08:59:17.853   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 2; audio level: 0.000
+08-21 08:59:17.853   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 3; audio level: 0.000
+08-21 08:59:17.853   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 4; audio level: 0.000
+08-21 08:59:17.853   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 5; audio level: 0.000
+08-21 08:59:18.206  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 17647(765KB) AllocSpace objects, 24(1176KB) LOS objects, 31% free, 12MB/18MB, paused 298us total 232.833ms
+08-21 08:59:18.391   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:18.392   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:18.392  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:18.392  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:18.393   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:18.532   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:18.532   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:18.533  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:18.533  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:18.684   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:19.010  9793  9841 I ReactNativeJS: [DIAG] focus tt1341338 t=1787317159010
+08-21 08:59:19.010  9793  9841 I ReactNativeJS: [V569] enter row=12 landed=0 remembered=null -> keep
+08-21 08:59:19.089   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-1704kB, cache=779168kB, limit=184320kB)
+08-21 08:59:19.097   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-192kB, cache=777780kB, limit=184320kB)
+08-21 08:59:19.102   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=584kB, cache=774780kB, limit=184320kB)
+08-21 08:59:19.114   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=6632kB, cache=768680kB, limit=184320kB)
+08-21 08:59:19.603   310  3248 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 0; audio level: 0.000
+08-21 08:59:19.603   310  3248 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 1; audio level: 0.000
+08-21 08:59:19.909   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-1944kB, cache=767540kB, limit=184320kB)
+08-21 08:59:19.917   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-432kB, cache=765840kB, limit=184320kB)
+08-21 08:59:19.922   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=2592kB, cache=762940kB, limit=184320kB)
+08-21 08:59:19.978   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=7348kB, cache=757344kB, limit=184320kB)
+08-21 08:59:20.014  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 23790(1021KB) AllocSpace objects, 36(1568KB) LOS objects, 31% free, 13MB/19MB, paused 210us total 245.375ms
+08-21 08:59:20.292   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:20.293   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:20.294  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:20.294  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:20.296   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:20.351   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:20.352   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:20.353  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:20.353  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:20.447   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:20.466  1542  1542 E wlan_stats: Incorrect VHT Rate string received: NSS3_MCS1_N/A_SGI
+08-21 08:59:20.466  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=0, tx_ok=14223, tx_failed=836, cca_idle_pct=95
+08-21 08:59:20.466  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=7, ss=2, bw=1
+08-21 08:59:20.856  9793  9841 I ReactNativeJS: [DIAG] focus tt36303968 t=1787317160856
+08-21 08:59:20.856  9793  9841 I ReactNativeJS: [V569] enter row=13 landed=0 remembered=null -> keep
+08-21 08:59:21.272   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:21.272   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:21.273  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:21.273  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:21.273   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:21.411   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:21.412   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:21.414  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:21.414  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:21.566   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:21.684   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-1480kB, cache=756212kB, limit=184320kB)
+08-21 08:59:21.688   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=32kB, cache=754812kB, limit=184320kB)
+08-21 08:59:21.706   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=2700kB, cache=752364kB, limit=184320kB)
+08-21 08:59:21.747   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=5784kB, cache=747940kB, limit=184320kB)
+08-21 08:59:21.748   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=5784kB, cache=747956kB, limit=184320kB)
+08-21 08:59:21.783  9793  9841 I ReactNativeJS: [DIAG] focus tt2543164 t=1787317161783
+08-21 08:59:21.783  9793  9841 I ReactNativeJS: [V569] enter row=14 landed=0 remembered=null -> keep
+08-21 08:59:21.907   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=16020kB, cache=734976kB, limit=184320kB)
+08-21 08:59:21.971  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 28474(1162KB) AllocSpace objects, 34(1584KB) LOS objects, 30% free, 13MB/19MB, paused 164us total 278.989ms
+08-21 08:59:22.391   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:22.392   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:22.393  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:22.393  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:22.394   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:22.512   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:22.513   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:22.514  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:22.514  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:22.665   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:22.839  1609  3806 I NEO_DIAL_SVC: Received HTTP method GET
+08-21 08:59:22.855  1609  1616 I NEO_DIAL_SVC: Received HTTP method GET
+08-21 08:59:22.855  1609  1616 I NEO_DIAL_SVC: Received request /apps/YouTube
+08-21 08:59:22.893  1609  1616 I NEO_DIAL_SVC: handle_app_status, App Id = YouTube:
+08-21 08:59:22.929  1609  1616 I NEO_DIAL_SVC: Received request /apps/YouTube
+08-21 08:59:22.930  1609  1616 I NEO_DIAL_SVC: MG: Error 404: Not Found
+08-21 08:59:23.232   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:23.232   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:23.232  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:23.232  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:23.233   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:23.351   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:23.352   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a19 srv_handle=64 is_bl_svc_primary=1 rpt_id=3 len=1
+08-21 08:59:23.352   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:23.353  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:23.353  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:23.365  2810  2810 I ConnectivityCtrlService: handle intent action:com.amazon.device.action.BATTERY_LEVEL
+08-21 08:59:23.232   541   644 I chatty  : uid=1000(system) InputReader identical 24 lines
+08-21 08:59:23.352   541   644 I AmazonProfileService: Event is not filtered because it is not in filter key list.
+08-21 08:59:23.365   541  1172 W BroadcastQueue: Background execution not allowed: receiving Intent { act=amazon.bluetooth.input.profile.action.BATTERY_LEVEL_UPDATE flg=0x4000010 (has extras) } to com.amazon.device.rdmapplication/.services.RemoteBatteryLevelReceiver
+08-21 08:59:23.365  2810  3599 I ConnectivityCtrlService: handleRemoteBatteryEvent...device address [xx:xx:A2:xx:xx:19],newLevel:[71]
+08-21 08:59:23.365  2810  3599 E ConnectivityCtrlService: Ignoring  battery level as it is same as current battery level
+08-21 08:59:23.506   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:23.813  9793  9841 I ReactNativeJS: [DIAG] focus tt13111078 t=1787317163813
+08-21 08:59:23.813  9793  9841 I ReactNativeJS: [V569] enter row=15 landed=0 remembered=null -> keep
+08-21 08:59:24.005   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-1704kB, cache=733656kB, limit=184320kB)
+08-21 08:59:24.018   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-1432kB, cache=732376kB, limit=184320kB)
+08-21 08:59:24.027   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=80kB, cache=730876kB, limit=184320kB)
+08-21 08:59:24.027   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=80kB, cache=730872kB, limit=184320kB)
+08-21 08:59:24.043   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=6472kB, cache=725096kB, limit=184320kB)
+08-21 08:59:24.119  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 25455(1054KB) AllocSpace objects, 34(1528KB) LOS objects, 30% free, 13MB/19MB, paused 143us total 262.653ms
+08-21 08:59:24.818  1803  9110 I SPCH-Cont_HealthLogger: Current State = {"AlexaCaptionsEnabled":"false","Account":"valid","ProfileValidated":"true","ProfileType":"ADULT","AlexaCaptionsSupported":"true","memoryTotalPss":"23653","DeviceFamily":"SMP","memoryTotalSharedDirty":"3424","ActiveSpeechUI":"Classic","ReleaseVersion":"660.0.0","AlexaLegalTermsAccepted":"true","AppVersion":"3.0.21044.0","AlexaExperience":"FULL","SupportsFarField":"false","short_press_overlay_state":"{\"enabled\": true, \"hintsEnabled\": true, \"isChild\": false, \"override\": 0}","memoryAvailable":"729067520","Gateway":"avs-alexa-18-na.amazon.com:443","RemoteSettingsStrategy":"VizArcus","memoryLow":"false","ConnectionState":"CONNECTED","OOBECompleted":"true","memoryTotalPrivateDirty":"11583","str.auto_wake_up_always":"0"}
+08-21 08:59:25.300  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 19804(840KB) AllocSpace objects, 28(1384KB) LOS objects, 30% free, 13MB/19MB, paused 229us total 265.614ms
+08-21 08:59:25.431   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:25.432   541   644 I AmazonProfileService: Event is not filtered because it is not in filter key list.
+08-21 08:59:25.432   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:25.432  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:25.432  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:25.433   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:25.491   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:25.492   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:25.492  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:25.492  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:25.563  1542  1542 E wlan_stats: Incorrect VHT Rate string received: NSS3_MCS1_N/A_LGI
+08-21 08:59:25.563  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=0, tx_ok=14223, tx_failed=836, cca_idle_pct=94
+08-21 08:59:25.563  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=7, ss=2, bw=1
+08-21 08:59:25.584   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:26.002  1847  9914 E whad    : Http1Client:sendRemoteCommand:curl_easy_perform failed, err=28
+08-21 08:59:26.002  1847  9914 W whad    : Http1Client:sendRemoteCommand:curlDebug=[0]   Trying xxx:55443...
+08-21 08:59:26.002  1847  9914 W whad    : Http1Client:sendRemoteCommand:curlDebug=[0] TCP_NODELAY set
+08-21 08:59:26.002  1847  9914 W whad    : Http1Client:sendRemoteCommand:curlDebug=[6001] Connection timed out after 6000 milliseconds
+08-21 08:59:26.002  1847  9914 W whad    : Http1Client:sendRemoteCommand:curlDebug=[6001] Closing connection 101
+08-21 08:59:26.002  1847  9914 W whad    : Device:sendHeartBeat:seq=132,error=Timeout,remote=XX0KP5
+08-21 08:59:26.239  9793  9841 I ReactNativeJS: [DIAG] focus tt0107290 t=1787317166238
+08-21 08:59:26.239  9793  9841 I ReactNativeJS: [V569] enter row=16 landed=0 remembered=null -> keep
+08-21 08:59:26.321   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-1448kB, cache=724100kB, limit=184320kB)
+08-21 08:59:26.329   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=64kB, cache=722400kB, limit=184320kB)
+08-21 08:59:26.334   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=1964kB, cache=719236kB, limit=184320kB)
+08-21 08:59:26.354   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=6772kB, cache=713664kB, limit=184320kB)
+08-21 08:59:27.397   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-3724kB, cache=713184kB, limit=184320kB)
+08-21 08:59:27.407   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=-5584kB, cache=712888kB, limit=184320kB)
+08-21 08:59:27.407   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-5584kB, cache=712888kB, limit=184320kB)
+08-21 08:59:27.416   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=-4072kB, cache=710576kB, limit=184320kB)
+08-21 08:59:27.416   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-4072kB, cache=710576kB, limit=184320kB)
+08-21 08:59:27.459   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=-544kB, cache=707500kB, limit=184320kB)
+08-21 08:59:27.459   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-544kB, cache=707520kB, limit=184320kB)
+08-21 08:59:27.493  9793  9803 I vastream.cinem: NativeAlloc concurrent copying GC freed 26378(1107KB) AllocSpace objects, 40(1944KB) LOS objects, 29% free, 14MB/20MB, paused 148us total 268.078ms
+08-21 08:59:27.534  1893  2274 I DiebusMetrics: Starting reporting metrics
+08-21 08:59:27.537  1893  2274 I DiebusMetrics: End reporting metrics
+08-21 08:59:27.564  1893  2210 I DiebusMetrics: Starting reporting metrics
+08-21 08:59:27.570  1893  2210 I DiebusMetrics: End reporting metrics
+08-21 08:59:27.592   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=6092kB, cache=704456kB, limit=184320kB)
+08-21 08:59:27.592   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=6092kB, cache=704456kB, limit=184320kB)
+08-21 08:59:27.667   221   221 I lowmemorykiller: Ignore medium memory pressure event (free memory=14660kB, cache=696272kB, limit=184320kB)
+08-21 08:59:27.668   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=15124kB, cache=696240kB, limit=184320kB)
+08-21 08:59:27.671   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:27.672   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:27.672  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:27.672  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:27.673   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:27.824   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:27.832   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:27.832   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:27.833  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:27.833  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:27.834   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:27.858   310  3248 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 0; audio level: 0.000
+08-21 08:59:27.859   310  3248 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 1; audio level: 0.000
+08-21 08:59:27.859   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 0; audio level: 0.000
+08-21 08:59:27.859   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 1; audio level: 0.000
+08-21 08:59:27.859   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 2; audio level: 0.000
+08-21 08:59:27.859   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 3; audio level: 0.000
+08-21 08:59:27.859   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 4; audio level: 0.000
+08-21 08:59:27.859   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 5; audio level: 0.000
+08-21 08:59:27.985   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:28.421  9793  9841 I ReactNativeJS: [DIAG] focus tt10986410 t=1787317168421
+08-21 08:59:28.421  9793  9841 I ReactNativeJS: [V569] enter row=17 landed=0 remembered=null -> keep
+08-21 08:59:28.474  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=0, tx_ok=14242, tx_failed=842, cca_idle_pct=94
+08-21 08:59:28.474  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=1, ss=3, bw=3
+08-21 08:59:29.629   310  3248 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 0; audio level: 0.000
+08-21 08:59:29.629   310  3248 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 1; audio level: 0.000
+08-21 08:59:30.052   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:30.052   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:30.052  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:30.052  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:30.053   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:30.131   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:30.132   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:30.132  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:30.132  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:30.205   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:30.763  9793  9841 I ReactNativeJS: [DIAG] focus tt37287335 t=1787317170763
+08-21 08:59:30.763  9793  9841 I ReactNativeJS: [V569] enter row=18 landed=0 remembered=null -> keep
+08-21 08:59:32.132   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:32.132   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:32.132  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:32.132  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:32.133   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:32.271   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:32.272  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:32.272  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:32.273   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:32.424   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:32.443  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-43, tx_ok=14243, tx_failed=842, cca_idle_pct=94
+08-21 08:59:32.443  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=9, ss=2, bw=1
+08-21 08:59:32.841  1609  3807 I NEO_DIAL_SVC: Received HTTP method GET
+08-21 08:59:32.858  1609  1615 I NEO_DIAL_SVC: Received HTTP method GET
+08-21 08:59:32.858  1609  1615 I NEO_DIAL_SVC: Received request /apps/YouTube
+08-21 08:59:32.895  1609  1615 I NEO_DIAL_SVC: handle_app_status, App Id = YouTube:
+08-21 08:59:32.931  1609  1615 I NEO_DIAL_SVC: Received request /apps/YouTube
+08-21 08:59:32.931  1609  1615 I NEO_DIAL_SVC: MG: Error 404: Not Found
+08-21 08:59:32.994  9793  9841 I ReactNativeJS: [DIAG] focus tt0460681 t=1787317172994
+08-21 08:59:32.994  9793  9841 I ReactNativeJS: [V569] enter row=19 landed=0 remembered=null -> keep
+08-21 08:59:34.491   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:34.492   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:34.492  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:34.492  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:34.493   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:34.571   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:34.572   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:34.572  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:34.572  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:34.644   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:35.215  9793  9841 I ReactNativeJS: [DIAG] focus tt0898266 t=1787317175215
+08-21 08:59:35.215  9793  9841 I ReactNativeJS: [V569] enter row=20 landed=0 remembered=null -> keep
+08-21 08:59:35.231   898   898 I wpa_supplicant: TDLS: Invalid frame - payloadtype=1 category=240 action=26
+08-21 08:59:36.462  1542  1542 E wlan_stats: Incorrect VHT Rate string received: NSS3_MCS1_N/A_LGI
+08-21 08:59:36.462  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-47, tx_ok=14243, tx_failed=842, cca_idle_pct=94
+08-21 08:59:36.462  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=0, pream=2, mcs=9, ss=2, bw=1
+08-21 08:59:36.632   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:36.632   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:36.633  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:36.633  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 0
+08-21 08:59:36.633   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:36.665   338  6896 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 241, caller pid: 541, uid: 1000
+08-21 08:59:36.667   310   560 I DolbyAudioStreamOut: write, new playback through Dolby proxy. Format=0x1, ChannelMask=0x3, SamplingRate=48000Hz isDirect 0
+08-21 08:59:36.669   310   560 I DolbyAudioHwDeviceProxy: resumeDownstream() for device:0x400
+08-21 08:59:36.695   310   560 I DolbyAudioStreamOut: getLatency() Total latency:187ms (Downstream(slider adjusted):79ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-21 08:59:36.785   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:36.791   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:36.792   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:36.793   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:36.795  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:36.795  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_DOWN, code: 20, action: 1
+08-21 08:59:36.895   338   384 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 241, caller pid: 541, uid: 1000
+08-21 08:59:36.944   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:37.885   310  3248 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 0; audio level: 0.136
+08-21 08:59:37.886   310  3248 I Node    : dolby-audio-meter, AdapterPcmSystem adapter audio meter: channel 1; audio level: 0.137
+08-21 08:59:37.886   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 0; audio level: 0.020
+08-21 08:59:37.886   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 1; audio level: 0.027
+08-21 08:59:37.886   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 2; audio level: 0.000
+08-21 08:59:37.886   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 3; audio level: 0.000
+08-21 08:59:37.886   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 4; audio level: 0.000
+08-21 08:59:37.886   310  3248 I RendererNode: dolby-audio-meter, Renderer renderer audio meter: channel 5; audio level: 0.000
+08-21 08:59:38.554   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:38.556   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:38.556  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:38.556  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 0
+08-21 08:59:38.559   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:38.566   338  6896 I APM_AudioPolicyManager: startOutput() output 13, stream 1, session 233, caller pid: 541, uid: 1000
+08-21 08:59:38.567  9793  9841 I ReactNativeJS: [DIAG] focus tt0898266 t=1787317178567
+08-21 08:59:38.615   310   560 I DolbyAudioStreamOut: getLatency() Total latency:193ms (Downstream(slider adjusted):85ms, DMA:158ms, tuning:-50ms, tuningBT:0ms), input format:0x1, sink:0x400, UxOutSetting:0, CurOutFormat:0xa000000
+08-21 08:59:38.631   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:38.632   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:38.632  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:38.632  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 1
+08-21 08:59:38.710   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:38.833   338   384 I APM_AudioPolicyManager: stopOutput() output 13, stream 1, session 233, caller pid: 541, uid: 1000
+08-21 08:59:38.994   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:38.995   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:38.996  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:38.996  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 0
+08-21 08:59:38.996   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:39.016  9793  9841 I ReactNativeJS: [DIAG] focus tt0460681 t=1787317179016
+08-21 08:59:39.016  9793  9841 I ReactNativeJS: [V569] enter row=19 landed=0 remembered=0 -> keep
+08-21 08:59:39.147   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:39.496   332   350 I libPowerHal: 2: cpu_ctrl set freq: 1794000 -1
+08-21 08:59:39.635   310  3248 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 0; audio level: 0.000
+08-21 08:59:39.635   310  3248 I Node    : dolby-audio-meter, AdapterPcmOut adapter audio meter: channel 1; audio level: 0.000
+08-21 08:59:40.158  9793  9841 I ReactNativeJS: [DIAG] focus tt37287335 t=1787317180158
+08-21 08:59:40.159  9793  9841 I ReactNativeJS: [V569] enter row=18 landed=0 remembered=0 -> keep
+08-21 08:59:40.159  9793  9841 I ReactNativeJS: [DIAG] focus tt10986410 t=1787317180159
+08-21 08:59:40.160  9793  9841 I ReactNativeJS: [V569] enter row=17 landed=0 remembered=0 -> keep
+08-21 08:59:40.160  9793  9841 I ReactNativeJS: [DIAG] focus tt0107290 t=1787317180160
+08-21 08:59:40.160  9793  9841 I ReactNativeJS: [V569] enter row=16 landed=0 remembered=0 -> keep
+08-21 08:59:40.161  9793  9841 I ReactNativeJS: [DIAG] focus tt13111078 t=1787317180161
+08-21 08:59:40.161  9793  9841 I ReactNativeJS: [V569] enter row=15 landed=0 remembered=0 -> keep
+08-21 08:59:40.162  9793  9841 I ReactNativeJS: [DIAG] focus tt2543164 t=1787317180162
+08-21 08:59:40.162  9793  9841 I ReactNativeJS: [V569] enter row=14 landed=0 remembered=0 -> keep
+08-21 08:59:40.163  9793  9841 I ReactNativeJS: [DIAG] focus tt36303968 t=1787317180163
+08-21 08:59:40.163  9793  9841 I ReactNativeJS: [V569] enter row=13 landed=0 remembered=0 -> keep
+08-21 08:59:40.164  9793  9841 I ReactNativeJS: [DIAG] focus tt1341338 t=1787317180164
+08-21 08:59:40.164  9793  9841 I ReactNativeJS: [V569] enter row=12 landed=0 remembered=0 -> keep
+08-21 08:59:40.165  9793  9841 I ReactNativeJS: [DIAG] focus tt8772296 t=1787317180165
+08-21 08:59:40.165  9793  9841 I ReactNativeJS: [V569] enter row=11 landed=0 remembered=0 -> keep
+08-21 08:59:40.166  9793  9841 I ReactNativeJS: [DIAG] focus tt1375666 t=1787317180166
+08-21 08:59:40.166  9793  9841 I ReactNativeJS: [V569] enter row=10 landed=0 remembered=0 -> keep
+08-21 08:59:40.167  9793  9841 I ReactNativeJS: [DIAG] focus tt9288030 t=1787317180167
+08-21 08:59:40.167  9793  9841 I ReactNativeJS: [V569] enter row=9 landed=0 remembered=0 -> keep
+08-21 08:59:40.168  9793  9841 I ReactNativeJS: [DIAG] focus tt12042730 t=1787317180168
+08-21 08:59:40.168  9793  9841 I ReactNativeJS: [V569] enter row=8 landed=0 remembered=0 -> keep
+08-21 08:59:40.169  9793  9841 I ReactNativeJS: [DIAG] focus tt36303968 t=1787317180169
+08-21 08:59:40.169  9793  9841 I ReactNativeJS: [V569] enter row=7 landed=0 remembered=0 -> keep
+08-21 08:59:40.170  9793  9841 I ReactNativeJS: [DIAG] focus tt0107290 t=1787317180170
+08-21 08:59:40.170  9793  9841 I ReactNativeJS: [V569] enter row=6 landed=0 remembered=0 -> keep
+08-21 08:59:40.467  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=0, tx_ok=14259, tx_failed=843, cca_idle_pct=94
+08-21 08:59:40.468  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=1, pream=2, mcs=0, ss=3, bw=2
+08-21 08:59:40.468  1542  1542 I main.wifi_score: cca_idle 90%, bcn_rssi -46, data_rssi 0, per 5% (ok=16, failed=1), AC MCS 0, BW 2 SS 3 SGI 87mbps, AMPDU length 28, dur 4391us UDP tput 67mbps.
+08-21 08:59:40.468  1542  1542 I main.wifi_score: Score 5, mcs 23 (phyrate cur/min/avg/max= 95/42/159/396 mbps), expected  UDP throughput cur/min/avg/max= 67/29/117/291 mbps.
+08-21 08:59:40.931   822  1409 W bt_btif : bta_hh_le_input_rpt_notify uuid=0x2a4d srv_handle=79 is_bl_svc_primary=1 rpt_id=1 len=3
+08-21 08:59:40.932   541   644 I KeyMapManagerUtil: Unknown remote sku id 0. Fetch remote sku id from system property
+08-21 08:59:40.933  1608  2301 E amzn_neo_service_api:..: handle_key_event_callback: Got empty key-event
+08-21 08:59:40.933  1608  2301 I com_amazon_devicecont..: Received Key name: DPAD_UP, code: 19, action: 1
+08-21 08:59:41.063   332   350 I libPowerHal: 2: cpu_ctrl set freq: -1 -1
+08-21 08:59:41.259  9793  9841 I ReactNativeJS: [DIAG] focus tt0813715 t=1787317181259
+08-21 08:59:41.259  9793  9841 I ReactNativeJS: [V569] enter row=5 landed=0 remembered=0 -> keep
+08-21 08:59:41.260  9793  9841 I ReactNativeJS: [DIAG] focus tt36590417 t=1787317181260
+08-21 08:59:41.260  9793  9841 I ReactNativeJS: [V569] enter row=4 landed=0 remembered=0 -> keep
+08-21 08:59:41.261  9793  9841 I ReactNativeJS: [DIAG] focus tt3444938 t=1787317181261
+08-21 08:59:41.261  9793  9841 I ReactNativeJS: [V569] enter row=3 landed=0 remembered=0 -> keep
+08-21 08:59:41.262  9793  9841 I ReactNativeJS: [DIAG] focus tt35519455 t=1787317181262
+08-21 08:59:41.262  9793  9841 I ReactNativeJS: [V569] enter row=2 landed=0 remembered=0 -> keep
+08-21 08:59:41.262  9793  9841 I ReactNativeJS: [DIAG] focus tt9288030 t=1787317181262
+08-21 08:59:41.263  9793  9841 I ReactNativeJS: [V569] enter row=1 landed=0 remembered=0 -> keep
+08-21 08:59:41.263  9793  9841 I ReactNativeJS: [DIAG] focus tt37287335 t=1787317181263
+08-21 08:59:41.264  9793  9841 I ReactNativeJS: [V569] enter row=0 landed=0 remembered=0 -> keep
+08-21 08:59:41.583   310  1369 I DolbyAudioStreamOut: standby()
+08-21 08:59:42.929  1609  3805 I NEO_DIAL_SVC: Received HTTP method GET
+08-21 08:59:42.946  1609  1618 I NEO_DIAL_SVC: Received HTTP method GET
+08-21 08:59:42.946  1609  1618 I NEO_DIAL_SVC: Received request /apps/YouTube
+08-21 08:59:42.983  1609  1618 I NEO_DIAL_SVC: handle_app_status, App Id = YouTube:
+08-21 08:59:42.984   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=-1256kB, cache=695584kB, limit=184320kB)
+08-21 08:59:42.993   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=464kB, cache=693940kB, limit=184320kB)
+08-21 08:59:43.015   221   221 I lowmemorykiller: Ignore low memory pressure event (free memory=3564kB, cache=690688kB, limit=184320kB)
+08-21 08:59:43.024  1609  1618 I NEO_DIAL_SVC: Received request /apps/YouTube
+08-21 08:59:43.024  1609  1618 I NEO_DIAL_SVC: MG: Error 404: Not Found
+08-21 08:59:45.571  1542  1542 E wlan_stats: Incorrect VHT Rate string received: NSS3_MCS1_N/A_SGI
+08-21 08:59:45.572  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): is2g=0, is11ac=1, is11ax=0, chan_bw=40, nss=2, bcn_rssi=-46, data_rssi=-43, tx_ok=14260, tx_failed=843, cca_idle_pct=90
+08-21 08:59:45.572  1542  1542 I main.wifi_score: dump_wifi_score_ctxt(): last_tx_stats: sgi=1, pream=2, mcs=0, ss=3, bw=2
