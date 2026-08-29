@@ -12,6 +12,7 @@ function _eff(r:number){const n=_cnt(r);if(n<=0)return 0;return Math.min(Math.ma
 const _sc=()=>Math.max(0,_col);
 export function tvRegisterRow(r:number,a:RowApi){_rows.set(r,a);try{a.scrollToCol(_sc())}catch(_){}_emit()}
 export function tvUnregisterRow(r:number){_rows.delete(r)}
+export function tvHasRow(r:number){return _rows.has(r)}
 export function tvSetOnRowChange(f:((r:number,c:number)=>void)|null){_orc=f}
 export function tvSetActive(a:boolean){if(_active===a)return;_active=a;_emit();_er(_row)}
 function _sr(){return Array.from(_rows.keys()).sort((a,b)=>a-b)}

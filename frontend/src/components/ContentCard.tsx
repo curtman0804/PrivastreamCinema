@@ -1556,6 +1556,9 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
               }}
               style={styles.posterImage}
               contentFit="cover"
+              /* V575_DECOUPLE - deprioritize poster decode so a fast D-pad
+                 hold never queues high-priority decodes ahead of focus. */
+              priority="low"
               recyclingKey={`${
                 item.id || item.imdb_id
               }${useProxy ? '-proxy' : ''}`}

@@ -64,6 +64,33 @@ function _v445QueueMeta(t: string, cid: string) {
   _v445Drain();
 }
 
+// V575_DECOUPLE - decouple D-pad focus from image/meta readiness.  While the
+// user is actively holding the D-pad (focus moving faster than the settle
+// window) we PAUSE meta prefetch so poster decode + network never competes
+// with focus movement.  Candidate ids collect in _v575PendingMeta and only
+// flush through the bounded queue once navigation SETTLES (no focus change
+// for _v575SettleMs).  Net effect: focus tracks the D-pad column instantly,
+// regardless of network/render state.
+let _v575LastNavAt = 0;
+const _v575SettleMs = 350;
+const _v575PendingMeta = new Map<string, string>(); // cid -> type
+let _v575DrainTimer: any = null;
+function _v575Tick() {
+  _v575DrainTimer = null;
+  // Still holding the D-pad?  Wait out another settle window.
+  if (Date.now() - _v575LastNavAt < _v575SettleMs) {
+    _v575DrainTimer = setTimeout(_v575Tick, _v575SettleMs);
+    return;
+  }
+  // Settled - flush pending metas through the existing bounded 3-slot queue.
+  _v575PendingMeta.forEach((t, cid) => { _v445QueueMeta(t, cid); });
+  _v575PendingMeta.clear();
+}
+function _v575QueueMetaWhenIdle(t: string, cid: string) {
+  _v575PendingMeta.set(cid, t);
+  if (!_v575DrainTimer) _v575DrainTimer = setTimeout(_v575Tick, _v575SettleMs);
+}
+
 // V444_BOOT_SERVICE_ROW - visible startup marker.  If this line appears in
 // logcat, v443+v444 patches are ACTIVE in the bundle.
 try { console.log('[V444_BOOT] ServiceRow module loaded; v443 map-read=DISABLED'); } catch (_) {}
@@ -243,6 +270,10 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
           blurTimerRef.current = null;
         }
 
+        // V575_DECOUPLE - mark that the D-pad just moved so any in-flight
+        // viewport prefetch pauses until navigation settles.
+        _v575LastNavAt = Date.now();
+
         onSectionFocus?.();
 
         const focusedItem = validItems[index];
@@ -384,9 +415,10 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         if (_v250_prefetched.has(cid)) continue;
         if (getMetaCache(cid)) { _v250_prefetched.add(cid); continue; }
         _v250_prefetched.add(cid);
-        // V445_META_QUEUE - bounded 3-slot queue.  Kills the 30-request
-        // burst at boot that was starving the JS thread.
-        _v445QueueMeta(t, cid);
+        // V575_DECOUPLE - do NOT fetch mid-hold.  Stash the candidate and let
+        // it drain through the bounded 3-slot queue once the D-pad settles,
+        // so focus movement is never blocked by meta/decode work.
+        _v575QueueMetaWhenIdle(t, cid);
       }
     }).current;
 

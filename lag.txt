@@ -1,0 +1,1231 @@
+--------- beginning of system
+08-29 08:36:36.251   689   689 V HotPlugDetectionAction: Poll all devices.
+--------- beginning of main
+08-29 08:36:36.251   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 80
+08-29 08:36:36.555   743   787 I libPowerHal: [perfLockAcq] idx:0 hdl:8523 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8523
+08-29 08:36:36.555   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:36.555   743   787 I libPowerHal: [setClusterFreq]  set cpu_ctrl cpufreq: 2000000 -1 
+08-29 08:36:36.556   743   787 I libPowerHal: [PE] INTERACTION update cmd:1408300, param:100
+08-29 08:36:36.556   743   787 I libPowerHal: [perfLockAcq] idx:1 hdl:8524 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8524
+08-29 08:36:36.556   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:36.557 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=0
+08-29 08:36:36.565   540  8556 D audioserver: FGS Logger Transaction failed
+08-29 08:36:36.565   540  8556 D audioserver: -129
+08-29 08:36:36.566  1686  1686 I GoogleInputMethodService: GoogleInputMethodService.onFinishInput():2084 
+08-29 08:36:36.566  1686  1686 I Module  : DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatus():101 repeatCheckTimes = 0, locked = false
+08-29 08:36:36.566   504  4620 D StreamOutMSDHAL: StreamOut::write() this:0xe8a00c90,buffer:0xf15c6130, bytes:4096 mStandby:1 mIsValid:1 mFlags:0x8 mWriteCount:1
+08-29 08:36:36.566   504  4620 D StreamOutMSDHAL: StreamOut::write() mFramer:0xf25d0b40, mWorkerThread:0xf2541990 this:0xe8a00c90
+08-29 08:36:36.566   504  4620 D StreamOutMSDHAL: StreamOut::write() inter_conf.last_ns:738258407586925
+08-29 08:36:36.567  1686  1686 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1345 onStartInput(EditorInfo{EditorInfo{packageName=com.privastream.cinema, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=0, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+08-29 08:36:36.568 31108 31155 I ReactNativeJS: [DIAG] focus tt37287335 t=1788006996568
+08-29 08:36:36.568 31108 31155 I ReactNativeJS: [V569] enter row=0 landed=0 remembered=null -> keep
+08-29 08:36:36.572  1686  1686 I Module  : DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatus():101 repeatCheckTimes = 1, locked = false
+08-29 08:36:36.573   689  1957 W PackageConfigPersister: App-specific configuration not found for packageName: com.privastream.cinema and userId: 0
+08-29 08:36:36.595   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(10)
+08-29 08:36:36.627   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(10)
+08-29 08:36:36.716   743   787 I libPowerHal: [perfLockAcq] idx:2 hdl:8525 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8525
+08-29 08:36:36.716   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:36.716   743   787 I libPowerHal: [perfLockAcq] idx:3 hdl:8526 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8526
+08-29 08:36:36.716   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:36.717 31108 31108 D PSTV    : key action=1 code=19 isLong=false repeat=0
+08-29 08:36:36.840   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 81
+08-29 08:36:36.916   540  3880 D audioserver: FGS Logger Transaction failed
+08-29 08:36:36.916   540  3880 D audioserver: -129
+08-29 08:36:37.450   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 82
+08-29 08:36:37.600   504  4620 D StreamOutMSDHAL: StreamOut::write() this:0xe8a00c90,buffer:0xf15c6130, bytes:4096 mStandby:0 mIsValid:1 mFlags:0x8 mWriteCount:51
+08-29 08:36:38.336   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 83
+08-29 08:36:38.376   743   787 I libPowerHal: [perfLockAcq] idx:4 hdl:8527 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8527
+08-29 08:36:38.376   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:38.377   743   787 I libPowerHal: [perfLockAcq] idx:5 hdl:8528 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8528
+08-29 08:36:38.377   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:38.377 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=0
+08-29 08:36:38.386 31108 31155 I ReactNativeJS: [DIAG] focus tt26545992 t=1788006998386
+08-29 08:36:38.386 31108 31155 I ReactNativeJS: [V569] enter row=1 landed=0 remembered=null -> keep
+08-29 08:36:38.556   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8523
+08-29 08:36:38.556   743   787 I libPowerHal: [perfLockRel] hdl:8523, idx:0
+08-29 08:36:38.557   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8524
+08-29 08:36:38.557   743   787 I libPowerHal: [perfLockRel] hdl:8524, idx:1
+08-29 08:36:38.665   504  4620 D StreamOutMSDHAL: StreamOut::write() this:0xe8a00c90,buffer:0xf15c6130, bytes:4096 mStandby:0 mIsValid:1 mFlags:0x8 mWriteCount:101
+08-29 08:36:38.716   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8525
+08-29 08:36:38.716   743   787 I libPowerHal: [perfLockRel] hdl:8525, idx:2
+08-29 08:36:38.717   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8526
+08-29 08:36:38.717   743   787 I libPowerHal: [perfLockRel] hdl:8526, idx:3
+08-29 08:36:38.777 31108 31108 D PSTV    : key action=0 code=20 isLong=true repeat=1
+08-29 08:36:38.788   743   787 I libPowerHal: [perfLockAcq] idx:0 hdl:8529 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8529
+08-29 08:36:38.788   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:38.789   743   787 I libPowerHal: [perfLockAcq] idx:1 hdl:8530 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8530
+08-29 08:36:38.789   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:38.828 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=2
+08-29 08:36:38.831 31108 31155 I ReactNativeJS: [DIAG] focus tt35519455 t=1788006998831
+08-29 08:36:38.831 31108 31155 I ReactNativeJS: [V569] enter row=2 landed=0 remembered=null -> keep
+08-29 08:36:38.850 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/109005818/s332/img with size [255x388] in 0.297384 ms
+08-29 08:36:38.857 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/337280462/s332/img with size [255x388] in 0.262769 ms
+08-29 08:36:38.883 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/348297009/s332/img with size [255x388] in 35.777077 ms
+08-29 08:36:38.885 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/348348273/s332/img with size [255x388] in 31.836153999999997 ms
+08-29 08:36:38.892   743   787 I libPowerHal: [perfLockAcq] idx:2 hdl:8531 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8531
+08-29 08:36:38.892   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:38.893   743   787 I libPowerHal: [perfLockAcq] idx:3 hdl:8532 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8532
+08-29 08:36:38.893   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:38.898 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/347382936/s332/img with size [255x388] in 42.887847 ms
+08-29 08:36:38.901 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=3
+08-29 08:36:38.912 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/347616145/s332/img with size [255x388] in 52.269847 ms
+08-29 08:36:38.927 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/342097814/s332/img with size [255x388] in 64.810846 ms
+08-29 08:36:38.943 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=4
+08-29 08:36:38.952   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 84
+08-29 08:36:38.980 31108 31155 I ReactNativeJS: [DIAG] focus tt0437741 t=1788006998980
+08-29 08:36:38.980 31108 31155 I ReactNativeJS: [V569] enter row=3 landed=0 remembered=null -> keep
+08-29 08:36:38.984 31108 31155 I ReactNativeJS: [DIAG] focus tt0120791 t=1788006998984
+08-29 08:36:38.984 31108 31155 I ReactNativeJS: [V569] enter row=4 landed=0 remembered=null -> keep
+08-29 08:36:38.995   743   787 I libPowerHal: [perfLockAcq] idx:6 hdl:8533 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8533
+08-29 08:36:38.998   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.000 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/346669806/s332/img with size [255x388] in 20.095923 ms
+08-29 08:36:39.003 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=5
+08-29 08:36:39.009   743   787 I libPowerHal: [perfLockAcq] idx:7 hdl:8534 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8534
+08-29 08:36:39.009   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.020 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/143350045/s332/img with size [255x388] in 37.322769 ms
+08-29 08:36:39.029 31108 31155 I ReactNativeJS: [DIAG] focus tt13111078 t=1788006999029
+08-29 08:36:39.029 31108 31155 I ReactNativeJS: [V569] enter row=5 landed=0 remembered=null -> keep
+08-29 08:36:39.040 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/342085271/s332/img with size [255x388] in 55.572230999999995 ms
+08-29 08:36:39.042 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/327733935/s332/img with size [255x388] in 55.015229999999995 ms
+08-29 08:36:39.045 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=6
+08-29 08:36:39.082   743   787 I libPowerHal: [perfLockAcq] idx:8 hdl:8535 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8535
+08-29 08:36:39.082   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.082   743   787 I libPowerHal: [perfLockAcq] idx:9 hdl:8536 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8536
+08-29 08:36:39.082   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.091 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=7
+08-29 08:36:39.102 31108 31155 I ReactNativeJS: [DIAG] focus tt0080319 t=1788006999102
+08-29 08:36:39.102 31108 31155 I ReactNativeJS: [V569] enter row=6 landed=0 remembered=null -> keep
+08-29 08:36:39.138 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=8
+08-29 08:36:39.190 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=9
+08-29 08:36:39.193   743   787 I libPowerHal: [perfLockAcq] idx:10 hdl:8537 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8537
+08-29 08:36:39.193   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.194   743   787 I libPowerHal: [perfLockAcq] idx:11 hdl:8538 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8538
+08-29 08:36:39.194   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.238 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=10
+08-29 08:36:39.285 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=11
+08-29 08:36:39.286   743   787 I libPowerHal: [perfLockAcq] idx:12 hdl:8539 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8539
+08-29 08:36:39.286   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.287   743   787 I libPowerHal: [perfLockAcq] idx:13 hdl:8540 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8540
+08-29 08:36:39.287   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.338 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=12
+08-29 08:36:39.356 31108 31155 I ReactNativeJS: [DIAG] focus tt36303968 t=1788006999356
+08-29 08:36:39.357 31108 31155 I ReactNativeJS: [V569] enter row=7 landed=0 remembered=null -> keep
+08-29 08:36:39.378 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/247946480/s332/img with size [255x388] in 0.294769 ms
+08-29 08:36:39.404   743   787 I libPowerHal: [perfLockAcq] idx:14 hdl:8541 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8541
+08-29 08:36:39.405   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.405   743   787 I libPowerHal: [perfLockAcq] idx:15 hdl:8542 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8542
+08-29 08:36:39.405   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.415 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=13
+08-29 08:36:39.427 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/342918190/s332/img with size [255x388] in 46.777693 ms
+08-29 08:36:39.429 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/338549301/s332/img with size [255x388] in 45.844923 ms
+08-29 08:36:39.444 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/321128387/s332/img with size [255x388] in 59.11523 ms
+08-29 08:36:39.448 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=14
+08-29 08:36:39.461 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/335931038/s332/img with size [255x388] in 73.134692 ms
+08-29 08:36:39.478 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/78479877/s332/img with size [255x388] in 88.35784699999999 ms
+08-29 08:36:39.490   743   787 I libPowerHal: [perfLockAcq] idx:16 hdl:8543 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8543
+08-29 08:36:39.490   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.491   743   787 I libPowerHal: [perfLockAcq] idx:17 hdl:8544 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8544
+08-29 08:36:39.491   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.494 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/349932896/s332/img with size [255x388] in 102.21315399999999 ms
+08-29 08:36:39.509 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=15
+08-29 08:36:39.539 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=16
+08-29 08:36:39.572   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 85
+08-29 08:36:39.588   743   787 I libPowerHal: [perfLockAcq] idx:18 hdl:8545 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8545
+08-29 08:36:39.588   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.589   743   787 I libPowerHal: [perfLockAcq] idx:19 hdl:8546 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8546
+08-29 08:36:39.589   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.590 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=17
+08-29 08:36:39.615   504   561 I StreamOutMSDHAL: standby(), halRequest:0 this:0xe8a00c90 
+08-29 08:36:39.636 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/348495804/s332/img with size [255x388] in 0.338308 ms
+08-29 08:36:39.678 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=18
+08-29 08:36:39.685 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320936342/s332/img with size [255x388] in 46.718692 ms
+08-29 08:36:39.687 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/348320182/s332/img with size [255x388] in 46.080692 ms
+08-29 08:36:39.691   743   787 I libPowerHal: [perfLockAcq] idx:20 hdl:8547 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8547
+08-29 08:36:39.691   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.692   743   787 I libPowerHal: [perfLockAcq] idx:21 hdl:8548 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8548
+08-29 08:36:39.692   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.697 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/315312146/s332/img with size [255x388] in 54.192077 ms
+08-29 08:36:39.710 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=19
+08-29 08:36:39.717 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/347373626/s332/img with size [255x388] in 72.05077 ms
+08-29 08:36:39.727 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/348955607/s332/img with size [255x388] in 79.517847 ms
+08-29 08:36:39.740 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=20
+08-29 08:36:39.759 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/324781766/s332/img with size [255x388] in 109.78376999999999 ms
+08-29 08:36:39.792 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=21
+08-29 08:36:39.792   743   787 I libPowerHal: [perfLockAcq] idx:22 hdl:8549 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8549
+08-29 08:36:39.792   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.793   743   787 I libPowerHal: [perfLockAcq] idx:23 hdl:8550 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8550
+08-29 08:36:39.793   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.817  3364  4708 D BluetoothGatt: setCharacteristicNotification() - uuid: 00002a4d-0000-1000-8000-00805f9b34fb enable: true
+08-29 08:36:39.820  1245  1729 W bt_stack: [WARNING:bta_gattc_api.cc(689)] notification already registered
+08-29 08:36:39.823  3364  4708 D BluetoothGatt: setCharacteristicNotification() - uuid: 00002a4d-0000-1000-8000-00805f9b34fb enable: true
+08-29 08:36:39.825  1245  1729 W bt_stack: [WARNING:bta_gattc_api.cc(689)] notification already registered
+08-29 08:36:39.826  3364  4708 D BluetoothGatt: setCharacteristicNotification() - uuid: ab5e0004-5a21-4f05-bc7d-af01f617b664 enable: true
+08-29 08:36:39.830  1245  1729 W bt_stack: [WARNING:bta_gattc_api.cc(689)] notification already registered
+08-29 08:36:39.830  3364  4708 D BluetoothGatt: setCharacteristicNotification() - uuid: d343bfc5-5a21-4f05-bc7d-af01f617b664 enable: true
+08-29 08:36:39.832  1245  1729 W bt_stack: [WARNING:bta_gattc_api.cc(689)] notification already registered
+08-29 08:36:39.842 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=22
+08-29 08:36:39.895   743   787 I libPowerHal: [perfLockAcq] idx:24 hdl:8551 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8551
+08-29 08:36:39.895   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.895   743   787 I libPowerHal: [perfLockAcq] idx:25 hdl:8552 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8552
+08-29 08:36:39.895   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.896 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=23
+08-29 08:36:39.926 31108 31117 I vastream.cinema: Background concurrent mark compact GC freed 144820(5016KB) AllocSpace objects, 139(5888KB) LOS objects, 49% free, 12MB/24MB, paused 3.667ms,4.882ms total 308.817ms
+08-29 08:36:39.942 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=24
+08-29 08:36:39.993   743   787 I libPowerHal: [perfLockAcq] idx:26 hdl:8553 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8553
+08-29 08:36:39.993   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:39.993 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=25
+08-29 08:36:39.998   743   787 I libPowerHal: [perfLockAcq] idx:27 hdl:8554 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8554
+08-29 08:36:39.998   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.044 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=26
+08-29 08:36:40.094   743   787 I libPowerHal: [perfLockAcq] idx:28 hdl:8555 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8555
+08-29 08:36:40.095 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=27
+08-29 08:36:40.106   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.107   743   787 I libPowerHal: [perfLockAcq] idx:29 hdl:8556 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8556
+08-29 08:36:40.107   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.145 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=28
+08-29 08:36:40.162 31108 31155 I ReactNativeJS: [DIAG] focus tt36303968 t=1788007000162
+08-29 08:36:40.164 31108 31155 I ReactNativeJS: [DIAG] focus tt0080319 t=1788007000164
+08-29 08:36:40.165 31108 31155 I ReactNativeJS: [V569] enter row=8 landed=0 remembered=null -> keep
+08-29 08:36:40.166 31108 31155 I ReactNativeJS: [DIAG] focus tt13111078 t=1788007000166
+08-29 08:36:40.166 31108 31155 I ReactNativeJS: [V569] enter row=9 landed=0 remembered=null -> keep
+08-29 08:36:40.200   743   787 I libPowerHal: [perfLockAcq] idx:30 hdl:8557 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8557
+08-29 08:36:40.200   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.200   743   787 I libPowerHal: [perfLockAcq] idx:31 hdl:8558 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8558
+08-29 08:36:40.200   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.235 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/319959112/s332/img with size [255x388] in 0.371538 ms
+08-29 08:36:40.302 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=29
+08-29 08:36:40.308 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/349989642/s332/img with size [255x388] in 112.716077 ms
+08-29 08:36:40.310 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/248566968/s332/img with size [255x388] in 112.364846 ms
+08-29 08:36:40.311   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 86
+08-29 08:36:40.313 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/347453342/s332/img with size [255x388] in 113.468616 ms
+08-29 08:36:40.314 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320955086/s332/img with size [255x388] in 112.68799999999999 ms
+08-29 08:36:40.316 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/344697539/s332/img with size [255x388] in 112.204769 ms
+08-29 08:36:40.318 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=30
+08-29 08:36:40.319   743   787 I libPowerHal: [perfLockAcq] idx:32 hdl:8559 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8559
+08-29 08:36:40.319   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.319   743   787 I libPowerHal: [perfLockAcq] idx:33 hdl:8560 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8560
+08-29 08:36:40.319   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.323 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320955622/s332/img with size [255x388] in 117.614615 ms
+08-29 08:36:40.333 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=31
+08-29 08:36:40.342 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320935951/s332/img with size [255x388] in 134.200538 ms
+08-29 08:36:40.346 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/267121713/s332/img with size [255x388] in 136.893231 ms
+08-29 08:36:40.366 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/142045154/s332/img with size [255x388] in 154.153616 ms
+08-29 08:36:40.367 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=32
+08-29 08:36:40.377   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8527
+08-29 08:36:40.377   743   787 I libPowerHal: [perfLockRel] hdl:8527, idx:4
+08-29 08:36:40.378   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8528
+08-29 08:36:40.378   743   787 I libPowerHal: [perfLockRel] hdl:8528, idx:5
+08-29 08:36:40.381 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/302449148/s332/img with size [255x388] in 167.019923 ms
+08-29 08:36:40.397 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/178032707/s332/img with size [255x388] in 181.171231 ms
+08-29 08:36:40.412   743   787 I libPowerHal: [perfLockAcq] idx:4 hdl:8561 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8561
+08-29 08:36:40.412   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.413   743   787 I libPowerHal: [perfLockAcq] idx:5 hdl:8562 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8562
+08-29 08:36:40.413   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.415 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/309783298/s332/img with size [255x388] in 197.158693 ms
+08-29 08:36:40.417 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=33
+08-29 08:36:40.432 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/87608067/s332/img with size [255x388] in 211.41107699999998 ms
+08-29 08:36:40.446 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/181568587/s332/img with size [255x388] in 223.697846 ms
+08-29 08:36:40.462 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/330116016/s332/img with size [255x388] in 237.910847 ms
+08-29 08:36:40.479 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/256859232/s332/img with size [255x388] in 252.105154 ms
+08-29 08:36:40.482 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=34
+08-29 08:36:40.496 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/166839313/s332/img with size [255x388] in 266.868692 ms
+08-29 08:36:40.514 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/139019419/s332/img with size [255x388] in 283.085307 ms
+08-29 08:36:40.527   743   787 I libPowerHal: [perfLockAcq] idx:34 hdl:8563 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8563
+08-29 08:36:40.527   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.528   743   787 I libPowerHal: [perfLockAcq] idx:35 hdl:8564 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8564
+08-29 08:36:40.528   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.532 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320955145/s332/img with size [255x388] in 299.052077 ms
+08-29 08:36:40.534 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=35
+08-29 08:36:40.547 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/309786652/s332/img with size [255x388] in 309.25953899999996 ms
+08-29 08:36:40.566 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/175475823/s332/img with size [255x388] in 325.69477 ms
+08-29 08:36:40.589 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=36
+08-29 08:36:40.628   743   787 I libPowerHal: [perfLockAcq] idx:36 hdl:8565 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8565
+08-29 08:36:40.628   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.629   743   787 I libPowerHal: [perfLockAcq] idx:37 hdl:8566 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8566
+08-29 08:36:40.629   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.629 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=37
+08-29 08:36:40.679 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=38
+08-29 08:36:40.730   743   787 I libPowerHal: [perfLockAcq] idx:38 hdl:8567 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8567
+08-29 08:36:40.730   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.731   743   787 I libPowerHal: [perfLockAcq] idx:39 hdl:8568 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8568
+08-29 08:36:40.731   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.739 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=39
+08-29 08:36:40.789   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8529
+08-29 08:36:40.789   743   787 I libPowerHal: [perfLockRel] hdl:8529, idx:0
+08-29 08:36:40.790   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8530
+08-29 08:36:40.790   743   787 I libPowerHal: [perfLockRel] hdl:8530, idx:1
+08-29 08:36:40.790 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=40
+08-29 08:36:40.839 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=41
+08-29 08:36:40.843   743   787 I libPowerHal: [perfLockAcq] idx:0 hdl:8569 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8569
+08-29 08:36:40.843   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.844   743   787 I libPowerHal: [perfLockAcq] idx:1 hdl:8570 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8570
+08-29 08:36:40.844   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.889 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=42
+08-29 08:36:40.892   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8531
+08-29 08:36:40.892   743   787 I libPowerHal: [perfLockRel] hdl:8531, idx:2
+08-29 08:36:40.894   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8532
+08-29 08:36:40.894   743   787 I libPowerHal: [perfLockRel] hdl:8532, idx:3
+08-29 08:36:40.928   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 87
+08-29 08:36:40.939 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=43
+08-29 08:36:40.944   743   787 I libPowerHal: [perfLockAcq] idx:2 hdl:8571 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8571
+08-29 08:36:40.944   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.945   743   787 I libPowerHal: [perfLockAcq] idx:3 hdl:8572 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8572
+08-29 08:36:40.945   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:40.991 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=44
+08-29 08:36:41.009   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8533
+08-29 08:36:41.009   743   787 I libPowerHal: [perfLockRel] hdl:8533, idx:6
+08-29 08:36:41.010   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8534
+08-29 08:36:41.010   743   787 I libPowerHal: [perfLockRel] hdl:8534, idx:7
+08-29 08:36:41.035   743   787 I libPowerHal: [perfLockAcq] idx:6 hdl:8573 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8573
+08-29 08:36:41.035   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.036   743   787 I libPowerHal: [perfLockAcq] idx:7 hdl:8574 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8574
+08-29 08:36:41.036 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=45
+08-29 08:36:41.036   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.045   540  8556 D audioserver: FGS Logger Transaction failed
+08-29 08:36:41.045   540  8556 D audioserver: -129
+08-29 08:36:41.049   504  4620 D StreamOutMSDHAL: StreamOut::write() this:0xe8a00c90,buffer:0xf15c6130, bytes:4096 mStandby:1 mIsValid:1 mFlags:0x8 mWriteCount:1
+08-29 08:36:41.049   504  4620 D StreamOutMSDHAL: StreamOut::write() mFramer:0xf25d0b40, mWorkerThread:0xf2541990 this:0xe8a00c90
+08-29 08:36:41.049   504  4620 D StreamOutMSDHAL: StreamOut::write() inter_conf.last_ns:738262889907463
+08-29 08:36:41.075   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(10)
+08-29 08:36:41.081   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8535
+08-29 08:36:41.081   743   787 I libPowerHal: [perfLockRel] hdl:8535, idx:8
+08-29 08:36:41.082   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8536
+08-29 08:36:41.082   743   787 I libPowerHal: [perfLockRel] hdl:8536, idx:9
+08-29 08:36:41.084 31108 31155 I ReactNativeJS: [DIAG] focus tt13111078 t=1788007001084
+08-29 08:36:41.088 31108 31155 I ReactNativeJS: [DIAG] focus tt5013056 t=1788007001087
+08-29 08:36:41.088 31108 31155 I ReactNativeJS: [V569] enter row=10 landed=0 remembered=null -> keep
+08-29 08:36:41.089 31108 31155 I ReactNativeJS: [DIAG] focus tt1586680 t=1788007001089
+08-29 08:36:41.089 31108 31155 I ReactNativeJS: [V569] enter row=11 landed=0 remembered=null -> keep
+08-29 08:36:41.110   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(10)
+08-29 08:36:41.137   743   787 I libPowerHal: [perfLockAcq] idx:8 hdl:8575 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8575
+08-29 08:36:41.137   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.137   743   787 I libPowerHal: [perfLockAcq] idx:9 hdl:8576 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8576
+08-29 08:36:41.137   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.152 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/324781766/s332/img with size [255x388] in 0.275615 ms
+08-29 08:36:41.161 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/247946480/s332/img with size [255x388] in 0.237308 ms
+08-29 08:36:41.166 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/348297009/s332/img with size [255x388] in 0.24584699999999998 ms
+08-29 08:36:41.174 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/348495804/s332/img with size [255x388] in 0.299154 ms
+08-29 08:36:41.188 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/348348273/s332/img with size [255x388] in 0.262 ms
+08-29 08:36:41.190 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/337819821/s332/img with size [255x388] in 0.248308 ms
+08-29 08:36:41.194   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8537
+08-29 08:36:41.194   743   787 I libPowerHal: [perfLockRel] hdl:8537, idx:10
+08-29 08:36:41.195   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8538
+08-29 08:36:41.195   743   787 I libPowerHal: [perfLockRel] hdl:8538, idx:11
+08-29 08:36:41.207 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/320955086/s332/img with size [255x388] in 0.270769 ms
+08-29 08:36:41.210 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/320935951/s332/img with size [255x388] in 0.246462 ms
+08-29 08:36:41.212 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/346669806/s332/img with size [255x388] in 0.236615 ms
+08-29 08:36:41.215 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/320955086/s332/img with size [255x388] in 0.234231 ms
+08-29 08:36:41.229 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/342097814/s332/img with size [255x388] in 0.315615 ms
+08-29 08:36:41.286   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8539
+08-29 08:36:41.286   743   787 I libPowerHal: [perfLockRel] hdl:8539, idx:12
+08-29 08:36:41.288   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8540
+08-29 08:36:41.288   743   787 I libPowerHal: [perfLockRel] hdl:8540, idx:13
+08-29 08:36:41.384 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=46
+08-29 08:36:41.393 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/8731868/s332/img with size [255x388] in 248.96884599999998 ms
+08-29 08:36:41.396   540  3880 D audioserver: FGS Logger Transaction failed
+08-29 08:36:41.396   540  3880 D audioserver: -129
+08-29 08:36:41.397 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/126401284/s332/img with size [255x388] in 250.82399999999998 ms
+08-29 08:36:41.400 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/312362420/s332/img with size [255x388] in 251.560385 ms
+08-29 08:36:41.404 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/249473713/s332/img with size [255x388] in 253.967077 ms
+08-29 08:36:41.405   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8541
+08-29 08:36:41.405   743   787 I libPowerHal: [perfLockRel] hdl:8541, idx:14
+08-29 08:36:41.406   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8542
+08-29 08:36:41.406   743   787 I libPowerHal: [perfLockRel] hdl:8542, idx:15
+08-29 08:36:41.409 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/130849429/s332/img with size [255x388] in 254.03246099999998 ms
+08-29 08:36:41.411 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/243933920/s332/img with size [255x388] in 254.51307699999998 ms
+08-29 08:36:41.413 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/301981224/s332/img with size [255x388] in 255.02023 ms
+08-29 08:36:41.415 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/338364856/s332/img with size [255x388] in 251.56522999999999 ms
+08-29 08:36:41.416 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/348265344/s332/img with size [255x388] in 248.33453899999998 ms
+08-29 08:36:41.418 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320935511/s332/img with size [255x388] in 247.868077 ms
+08-29 08:36:41.419 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/177783631/s332/img with size [255x388] in 247.460615 ms
+08-29 08:36:41.421 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/331177114/s332/img with size [255x388] in 244.10623099999998 ms
+08-29 08:36:41.425   743   787 I libPowerHal: [perfLockAcq] idx:10 hdl:8577 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8577
+08-29 08:36:41.425   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.426   743   787 I libPowerHal: [perfLockAcq] idx:11 hdl:8578 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8578
+08-29 08:36:41.426   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.435 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=47
+08-29 08:36:41.442 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/333789777/s332/img with size [255x388] in 263.664462 ms
+08-29 08:36:41.444 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320921033/s332/img with size [255x388] in 263.643538 ms
+08-29 08:36:41.446 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/340762916/s332/img with size [255x388] in 263.02338499999996 ms
+08-29 08:36:41.448 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/345646160/s332/img with size [255x388] in 262.699308 ms
+08-29 08:36:41.449 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/344361135/s332/img with size [255x388] in 256.541923 ms
+08-29 08:36:41.454 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320892476/s332/img with size [255x388] in 260.012538 ms
+08-29 08:36:41.455   540  8556 D audioserver: FGS Logger Transaction failed
+08-29 08:36:41.455   540  8556 D audioserver: -129
+08-29 08:36:41.461 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/346889710/s332/img with size [255x388] in 264.84630799999996 ms
+08-29 08:36:41.482 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=48
+08-29 08:36:41.487 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/333032813/s332/img with size [255x388] in 288.571077 ms
+08-29 08:36:41.490   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8543
+08-29 08:36:41.490   743   787 I libPowerHal: [perfLockRel] hdl:8543, idx:16
+08-29 08:36:41.491   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(15)
+08-29 08:36:41.492 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/246982332/s332/img with size [255x388] in 291.394769 ms
+08-29 08:36:41.495   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8544
+08-29 08:36:41.495   743   787 I libPowerHal: [perfLockRel] hdl:8544, idx:17
+08-29 08:36:41.498 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/292931003/s332/img with size [255x388] in 295.679077 ms
+08-29 08:36:41.500 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=49
+08-29 08:36:41.507   743   787 I libPowerHal: [perfLockAcq] idx:12 hdl:8579 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8579
+08-29 08:36:41.507   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.508   743   787 I libPowerHal: [perfLockAcq] idx:13 hdl:8580 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8580
+08-29 08:36:41.508   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.522 31108 31155 I ReactNativeJS: [DIAG] focus tt33049767 t=1788007001522
+08-29 08:36:41.522 31108 31155 I ReactNativeJS: [V569] enter row=13 landed=2 remembered=null -> keep
+08-29 08:36:41.532 31108 31155 I ReactNativeJS: [DIAG] focus tt33763941 t=1788007001532
+08-29 08:36:41.532 31108 31155 I ReactNativeJS: [V569] enter row=14 landed=2 remembered=null -> keep
+08-29 08:36:41.540 31108 31155 I ReactNativeJS: [DIAG] focus tt26656917 t=1788007001540
+08-29 08:36:41.540 31108 31155 I ReactNativeJS: [V569] enter row=15 landed=2 remembered=null -> keep
+08-29 08:36:41.541   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 89
+08-29 08:36:41.590   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8545
+08-29 08:36:41.590   743   787 I libPowerHal: [perfLockRel] hdl:8545, idx:18
+08-29 08:36:41.593   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8546
+08-29 08:36:41.593   743   787 I libPowerHal: [perfLockRel] hdl:8546, idx:19
+08-29 08:36:41.595 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/338811810/s332/img with size [255x388] in 0.33799999999999997 ms
+08-29 08:36:41.602 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/267121713/s332/img with size [255x388] in 0.260384 ms
+08-29 08:36:41.604 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/347382936/s332/img with size [255x388] in 0.239231 ms
+08-29 08:36:41.607 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/347616145/s332/img with size [255x388] in 0.268615 ms
+08-29 08:36:41.670 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/315833369/s332/img with size [255x388] in 464.924462 ms
+08-29 08:36:41.675 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/312321733/s332/img with size [255x388] in 457.831615 ms
+08-29 08:36:41.677 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/311015335/s332/img with size [255x388] in 457.425769 ms
+08-29 08:36:41.678 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/347881777/s332/img with size [255x388] in 457.065923 ms
+08-29 08:36:41.680 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/336298604/s332/img with size [255x388] in 456.82507699999996 ms
+08-29 08:36:41.681 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/138654476/s332/img with size [255x388] in 456.01823099999996 ms
+08-29 08:36:41.682 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/301580957/s332/img with size [255x388] in 455.206693 ms
+08-29 08:36:41.684 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/292690468/s332/img with size [255x388] in 452.39138499999996 ms
+08-29 08:36:41.688 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=50
+08-29 08:36:41.697 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/322832479/s332/img with size [255x388] in 463.257231 ms
+08-29 08:36:41.698 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/346606105/s332/img with size [255x388] in 462.897 ms
+08-29 08:36:41.700 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=51
+08-29 08:36:41.701   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8547
+08-29 08:36:41.701   743   787 I libPowerHal: [perfLockRel] hdl:8547, idx:20
+08-29 08:36:41.702   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8548
+08-29 08:36:41.702   743   787 I libPowerHal: [perfLockRel] hdl:8548, idx:21
+08-29 08:36:41.703   743   787 I libPowerHal: [perfLockAcq] idx:14 hdl:8581 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8581
+08-29 08:36:41.703   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.704   743   787 I libPowerHal: [perfLockAcq] idx:15 hdl:8582 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8582
+08-29 08:36:41.704   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.705 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/338804546/s332/img with size [255x388] in 112.57615299999999 ms
+08-29 08:36:41.738 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=52
+08-29 08:36:41.743 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/348689631/s332/img with size [255x388] in 145.633385 ms
+08-29 08:36:41.751 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=53
+08-29 08:36:41.760 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/312105114/s332/img with size [255x388] in 160.30092299999998 ms
+08-29 08:36:41.763 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/279050194/s332/img with size [255x388] in 154.06476899999998 ms
+08-29 08:36:41.765 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/336729532/s332/img with size [255x388] in 154.24092299999998 ms
+08-29 08:36:41.782 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/302218887/s332/img with size [255x388] in 168.43092299999998 ms
+08-29 08:36:41.785 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/301019966/s332/img with size [255x388] in 169.83477 ms
+08-29 08:36:41.789 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/338171849/s332/img with size [255x388] in 172.230923 ms
+08-29 08:36:41.793   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8549
+08-29 08:36:41.793   743   787 I libPowerHal: [perfLockRel] hdl:8549, idx:22
+08-29 08:36:41.794   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8550
+08-29 08:36:41.794   743   787 I libPowerHal: [perfLockRel] hdl:8550, idx:23
+08-29 08:36:41.805 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/338958119/s332/img with size [255x388] in 186.296846 ms
+08-29 08:36:41.810   743   787 I libPowerHal: [perfLockAcq] idx:16 hdl:8583 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8583
+08-29 08:36:41.810   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.811   743   787 I libPowerHal: [perfLockAcq] idx:17 hdl:8584 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8584
+08-29 08:36:41.811   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.812   540  3880 D audioserver: FGS Logger Transaction failed
+08-29 08:36:41.812   540  3880 D audioserver: -129
+08-29 08:36:41.818 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=54
+08-29 08:36:41.823 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320179985/s332/img with size [255x388] in 202.70315399999998 ms
+08-29 08:36:41.836 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/345823915/s332/img with size [255x388] in 213.562769 ms
+08-29 08:36:41.863 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=55
+08-29 08:36:41.891 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/71839228/s332/img with size [255x388] in 266.657077 ms
+08-29 08:36:41.895   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8551
+08-29 08:36:41.895   743   787 I libPowerHal: [perfLockRel] hdl:8551, idx:24
+08-29 08:36:41.896   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8552
+08-29 08:36:41.897   743   787 I libPowerHal: [perfLockRel] hdl:8552, idx:25
+08-29 08:36:41.904   743   787 I libPowerHal: [perfLockAcq] idx:18 hdl:8585 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8585
+08-29 08:36:41.904   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.905   743   787 I libPowerHal: [perfLockAcq] idx:19 hdl:8586 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8586
+08-29 08:36:41.905   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:41.937 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320958257/s332/img with size [255x388] in 310.875615 ms
+08-29 08:36:41.939 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=56
+08-29 08:36:41.946 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/322729101/s332/img with size [255x388] in 317.634924 ms
+08-29 08:36:41.966 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/131381363/s332/img with size [255x388] in 335.408077 ms
+08-29 08:36:41.970 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/295619501/s332/img with size [255x388] in 337.176 ms
+08-29 08:36:41.979 31108 31117 I vastream.cinema: Background concurrent mark compact GC freed 198023(6356KB) AllocSpace objects, 131(6524KB) LOS objects, 49% free, 14MB/29MB, paused 5.703ms,5.476ms total 430.696ms
+08-29 08:36:41.980 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=57
+08-29 08:36:41.992   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8553
+08-29 08:36:41.992   743   787 I libPowerHal: [perfLockRel] hdl:8553, idx:26
+08-29 08:36:41.998   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8554
+08-29 08:36:41.998   743   787 I libPowerHal: [perfLockRel] hdl:8554, idx:27
+08-29 08:36:42.007   743   787 I libPowerHal: [perfLockAcq] idx:20 hdl:8587 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8587
+08-29 08:36:42.007   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.008 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=58
+08-29 08:36:42.011   743   787 I libPowerHal: [perfLockAcq] idx:21 hdl:8588 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8588
+08-29 08:36:42.011   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.021 22389 22462 W cast_shell: [0829/083642.021102:WARNING:time_sync_responder.cc(61)] Invalid time sync packet
+08-29 08:36:42.021   540  8556 D audioserver: FGS Logger Transaction failed
+08-29 08:36:42.021   540  8556 D audioserver: -129
+08-29 08:36:42.057 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=59
+08-29 08:36:42.068   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(19)
+08-29 08:36:42.068   504  4620 D StreamOutMSDHAL: StreamOut::write() this:0xe8a00c90,buffer:0xf15c6130, bytes:4096 mStandby:0 mIsValid:1 mFlags:0x8 mWriteCount:51
+08-29 08:36:42.107   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8555
+08-29 08:36:42.107   743   787 I libPowerHal: [perfLockRel] hdl:8555, idx:28
+08-29 08:36:42.108   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8556
+08-29 08:36:42.108   743   787 I libPowerHal: [perfLockRel] hdl:8556, idx:29
+08-29 08:36:42.109 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=60
+08-29 08:36:42.109   743   787 I libPowerHal: [perfLockAcq] idx:22 hdl:8589 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8589
+08-29 08:36:42.109   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.110   743   787 I libPowerHal: [perfLockAcq] idx:23 hdl:8590 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8590
+08-29 08:36:42.110   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.131   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(10)
+08-29 08:36:42.159 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=61
+08-29 08:36:42.199   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8557
+08-29 08:36:42.200   743   787 I libPowerHal: [perfLockRel] hdl:8557, idx:30
+08-29 08:36:42.200   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8558
+08-29 08:36:42.200   743   787 I libPowerHal: [perfLockRel] hdl:8558, idx:31
+08-29 08:36:42.209   743   787 I libPowerHal: [perfLockAcq] idx:24 hdl:8591 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8591
+08-29 08:36:42.210 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=62
+08-29 08:36:42.224   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.224   743   787 I libPowerHal: [perfLockAcq] idx:25 hdl:8592 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8592
+08-29 08:36:42.224   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.263 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=63
+08-29 08:36:42.311 31108 31155 I ReactNativeJS: [DIAG] focus tt10366460 t=1788007002311
+08-29 08:36:42.311 31108 31155 I ReactNativeJS: [V569] enter row=16 landed=2 remembered=null -> keep
+08-29 08:36:42.314   743   787 I libPowerHal: [perfLockAcq] idx:26 hdl:8593 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8593
+08-29 08:36:42.314   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.314   743   787 I libPowerHal: [perfLockAcq] idx:27 hdl:8594 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8594
+08-29 08:36:42.314   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.319   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8559
+08-29 08:36:42.319   743   787 I libPowerHal: [perfLockRel] hdl:8559, idx:32
+08-29 08:36:42.320   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8560
+08-29 08:36:42.320   743   787 I libPowerHal: [perfLockRel] hdl:8560, idx:33
+08-29 08:36:42.348   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 8a
+08-29 08:36:42.354 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/320936342/s332/img with size [255x388] in 0.32953899999999997 ms
+08-29 08:36:42.363 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/348955607/s332/img with size [255x388] in 0.251615 ms
+08-29 08:36:42.365 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/267121713/s332/img with size [255x388] in 0.23230699999999999 ms
+08-29 08:36:42.367 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/320955145/s332/img with size [255x388] in 0.248692 ms
+08-29 08:36:42.372 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/315312146/s332/img with size [255x388] in 0.250231 ms
+08-29 08:36:42.405 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/126401284/s332/img with size [255x388] in 0.254461 ms
+08-29 08:36:42.413   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8561
+08-29 08:36:42.413   743   787 I libPowerHal: [perfLockRel] hdl:8561, idx:4
+08-29 08:36:42.414   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8562
+08-29 08:36:42.414   743   787 I libPowerHal: [perfLockRel] hdl:8562, idx:5
+08-29 08:36:42.420   540  3880 D audioserver: FGS Logger Transaction failed
+08-29 08:36:42.420   540  3880 D audioserver: -129
+08-29 08:36:42.496 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=64
+08-29 08:36:42.507   743   787 I libPowerHal: [perfLockAcq] idx:4 hdl:8595 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8595
+08-29 08:36:42.507   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.508   743   787 I libPowerHal: [perfLockAcq] idx:5 hdl:8596 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8596
+08-29 08:36:42.508 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/346669772/s332/img with size [255x388] in 151.580154 ms
+08-29 08:36:42.510   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.511 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/342979246/s332/img with size [255x388] in 152.294231 ms
+08-29 08:36:42.513 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/346211269/s332/img with size [255x388] in 152.174692 ms
+08-29 08:36:42.514 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/321593477/s332/img with size [255x388] in 144.725615 ms
+08-29 08:36:42.514   540  8556 D audioserver: FGS Logger Transaction failed
+08-29 08:36:42.514   540  8556 D audioserver: -129
+08-29 08:36:42.517 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=65
+08-29 08:36:42.524 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/345823300/s332/img with size [255x388] in 149.784538 ms
+08-29 08:36:42.526 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/139015897/s332/img with size [255x388] in 149.45907699999998 ms
+08-29 08:36:42.527 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/322019391/s332/img with size [255x388] in 149.168308 ms
+08-29 08:36:42.528   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8563
+08-29 08:36:42.528   743   787 I libPowerHal: [perfLockRel] hdl:8563, idx:34
+08-29 08:36:42.528 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/318713117/s332/img with size [255x388] in 148.558539 ms
+08-29 08:36:42.529   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8564
+08-29 08:36:42.529   743   787 I libPowerHal: [perfLockRel] hdl:8564, idx:35
+08-29 08:36:42.530 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/288387510/s332/img with size [255x388] in 148.299307 ms
+08-29 08:36:42.552 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=66
+08-29 08:36:42.558 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/245159370/s332/img with size [255x388] in 174.468077 ms
+08-29 08:36:42.561 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/316305144/s332/img with size [255x388] in 175.642154 ms
+08-29 08:36:42.568 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=67
+08-29 08:36:42.576 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/337328350/s332/img with size [255x388] in 188.34238399999998 ms
+08-29 08:36:42.579 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/341456365/s332/img with size [255x388] in 189.460692 ms
+08-29 08:36:42.592   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(10)
+08-29 08:36:42.602 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320955349/s332/img with size [255x388] in 211.043924 ms
+08-29 08:36:42.606 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/313489951/s332/img with size [255x388] in 213.113308 ms
+08-29 08:36:42.614   743   787 I libPowerHal: [perfLockAcq] idx:28 hdl:8597 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8597
+08-29 08:36:42.614   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.615   743   787 I libPowerHal: [perfLockAcq] idx:29 hdl:8598 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8598
+08-29 08:36:42.615   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.621 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/305242125/s332/img with size [255x388] in 226.16715399999998 ms
+08-29 08:36:42.629   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8565
+08-29 08:36:42.629   743   787 I libPowerHal: [perfLockRel] hdl:8565, idx:36
+08-29 08:36:42.630   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8566
+08-29 08:36:42.630   743   787 I libPowerHal: [perfLockRel] hdl:8566, idx:37
+08-29 08:36:42.641 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=68
+08-29 08:36:42.647 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/34883387/s332/img with size [255x388] in 250.11630799999998 ms
+08-29 08:36:42.666 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/18641530/s332/img with size [255x388] in 266.973769 ms
+08-29 08:36:42.667 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=69
+08-29 08:36:42.692 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/324976215/s332/img with size [255x388] in 291.020769 ms
+08-29 08:36:42.695 31108 31155 I ReactNativeJS: [DIAG] focus tt1591095 t=1788007002695
+08-29 08:36:42.695 31108 31155 I ReactNativeJS: [V569] enter row=18 landed=2 remembered=null -> keep
+08-29 08:36:42.700 31108 31155 I ReactNativeJS: [DIAG] focus tt0460681 t=1788007002700
+08-29 08:36:42.700 31108 31155 I ReactNativeJS: [V569] enter row=19 landed=2 remembered=null -> keep
+08-29 08:36:42.702 31108 31155 I ReactNativeJS: [DIAG] focus tt1442464 t=1788007002702
+08-29 08:36:42.702 31108 31155 I ReactNativeJS: [V569] enter row=20 landed=2 remembered=null -> keep
+08-29 08:36:42.707   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(10)
+08-29 08:36:42.712   743   787 I libPowerHal: [perfLockAcq] idx:30 hdl:8599 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8599
+08-29 08:36:42.713   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.713   743   787 I libPowerHal: [perfLockAcq] idx:31 hdl:8600 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8600
+08-29 08:36:42.713   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.730   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8567
+08-29 08:36:42.730   743   787 I libPowerHal: [perfLockRel] hdl:8567, idx:38
+08-29 08:36:42.731   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8568
+08-29 08:36:42.731   743   787 I libPowerHal: [perfLockRel] hdl:8568, idx:39
+08-29 08:36:42.771   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(10)
+08-29 08:36:42.772 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/311254337/s332/img with size [255x388] in 0.268231 ms
+08-29 08:36:42.777 31108 31108 D Glide   : Finished loading BitmapDrawable from MEMORY_CACHE for https://images.justwatch.com/poster/337280462/s332/img with size [255x388] in 0.235846 ms
+08-29 08:36:42.818 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/348215563/s332/img with size [255x388] in 415.496 ms
+08-29 08:36:42.820 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/335023297/s332/img with size [255x388] in 412.07361499999996 ms
+08-29 08:36:42.822 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/204095638/s332/img with size [255x388] in 412.442462 ms
+08-29 08:36:42.823 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/342690106/s332/img with size [255x388] in 66.100462 ms
+08-29 08:36:42.827 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/316549769/s332/img with size [255x388] in 67.64146099999999 ms
+08-29 08:36:42.829 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/302486779/s332/img with size [255x388] in 67.62299999999999 ms
+08-29 08:36:42.843   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8569
+08-29 08:36:42.844   743   787 I libPowerHal: [perfLockRel] hdl:8569, idx:0
+08-29 08:36:42.844 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=70
+08-29 08:36:42.844   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8570
+08-29 08:36:42.844   743   787 I libPowerHal: [perfLockRel] hdl:8570, idx:1
+08-29 08:36:42.850 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/336692513/s332/img with size [255x388] in 87.254769 ms
+08-29 08:36:42.853   743   787 I libPowerHal: [perfLockAcq] idx:0 hdl:8601 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8601
+08-29 08:36:42.853   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.853   743   787 I libPowerHal: [perfLockAcq] idx:1 hdl:8602 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8602
+08-29 08:36:42.853   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.855 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/139187563/s332/img with size [255x388] in 90.083923 ms
+08-29 08:36:42.859 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/347343784/s332/img with size [255x388] in 92.599539 ms
+08-29 08:36:42.872 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=71
+08-29 08:36:42.878 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/320955401/s332/img with size [255x388] in 110.125923 ms
+08-29 08:36:42.892 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/45089359/s332/img with size [255x388] in 122.29899999999999 ms
+08-29 08:36:42.895 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/348769251/s332/img with size [255x388] in 120.05592299999999 ms
+08-29 08:36:42.895 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=72
+08-29 08:36:42.916 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=73
+08-29 08:36:42.922 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/188972837/s332/img with size [255x388] in 142.681231 ms
+08-29 08:36:42.937 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/344308589/s332/img with size [255x388] in 155.826154 ms
+08-29 08:36:42.945   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8571
+08-29 08:36:42.945   743   787 I libPowerHal: [perfLockRel] hdl:8571, idx:2
+08-29 08:36:42.946   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8572
+08-29 08:36:42.946   743   787 I libPowerHal: [perfLockRel] hdl:8572, idx:3
+08-29 08:36:42.956 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/322852625/s332/img with size [255x388] in 173.325462 ms
+08-29 08:36:42.959   743   787 I libPowerHal: [perfLockAcq] idx:2 hdl:8603 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8603
+08-29 08:36:42.959   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.960   743   787 I libPowerHal: [perfLockAcq] idx:3 hdl:8604 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8604
+08-29 08:36:42.960   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:42.965   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 8b
+08-29 08:36:42.973 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=74
+08-29 08:36:42.980 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/174629717/s332/img with size [255x388] in 194.808615 ms
+08-29 08:36:42.993 31108 31108 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.justwatch.com/poster/346694678/s332/img with size [255x388] in 206.164538 ms
+08-29 08:36:43.012 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=75
+08-29 08:36:43.030   540  3880 D audioserver: FGS Logger Transaction failed
+08-29 08:36:43.030   540  3880 D audioserver: -129
+08-29 08:36:43.035   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8573
+08-29 08:36:43.035   743   787 I libPowerHal: [perfLockRel] hdl:8573, idx:6
+08-29 08:36:43.036   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8574
+08-29 08:36:43.036   743   787 I libPowerHal: [perfLockRel] hdl:8574, idx:7
+08-29 08:36:43.056   743   787 I libPowerHal: [perfLockAcq] idx:6 hdl:8605 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8605
+08-29 08:36:43.056   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.057   743   787 I libPowerHal: [perfLockAcq] idx:7 hdl:8606 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8606
+08-29 08:36:43.057   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.057 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=76
+08-29 08:36:43.107 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=77
+08-29 08:36:43.138   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8575
+08-29 08:36:43.138   743   787 I libPowerHal: [perfLockRel] hdl:8575, idx:8
+08-29 08:36:43.139   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8576
+08-29 08:36:43.139   743   787 I libPowerHal: [perfLockRel] hdl:8576, idx:9
+08-29 08:36:43.145   504  4620 D StreamOutMSDHAL: StreamOut::write() this:0xe8a00c90,buffer:0xf15c6130, bytes:4096 mStandby:0 mIsValid:1 mFlags:0x8 mWriteCount:101
+08-29 08:36:43.157   743   787 I libPowerHal: [perfLockAcq] idx:8 hdl:8607 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8607
+08-29 08:36:43.157   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.158 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=78
+08-29 08:36:43.158   743   787 I libPowerHal: [perfLockAcq] idx:9 hdl:8608 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8608
+08-29 08:36:43.158   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.208 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=79
+08-29 08:36:43.258   743   787 I libPowerHal: [perfLockAcq] idx:32 hdl:8609 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8609
+08-29 08:36:43.258   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.259   743   787 I libPowerHal: [perfLockAcq] idx:33 hdl:8610 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8610
+08-29 08:36:43.259   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.259 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=80
+08-29 08:36:43.310 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=81
+08-29 08:36:43.360   743   787 I libPowerHal: [perfLockAcq] idx:34 hdl:8611 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8611
+08-29 08:36:43.360   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.360   743   787 I libPowerHal: [perfLockAcq] idx:35 hdl:8612 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8612
+08-29 08:36:43.360   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.361 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=82
+08-29 08:36:43.410 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=83
+08-29 08:36:43.425   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8577
+08-29 08:36:43.426   743   787 I libPowerHal: [perfLockRel] hdl:8577, idx:10
+08-29 08:36:43.426   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8578
+08-29 08:36:43.426   743   787 I libPowerHal: [perfLockRel] hdl:8578, idx:11
+08-29 08:36:43.460   743   787 I libPowerHal: [perfLockAcq] idx:10 hdl:8613 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8613
+08-29 08:36:43.460   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.461   743   787 I libPowerHal: [perfLockAcq] idx:11 hdl:8614 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8614
+08-29 08:36:43.461   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.461 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=84
+08-29 08:36:43.507   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8579
+08-29 08:36:43.507   743   787 I libPowerHal: [perfLockRel] hdl:8579, idx:12
+08-29 08:36:43.508   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8580
+08-29 08:36:43.508   743   787 I libPowerHal: [perfLockRel] hdl:8580, idx:13
+08-29 08:36:43.512 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=85
+08-29 08:36:43.562   743   787 I libPowerHal: [perfLockAcq] idx:12 hdl:8615 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8615
+08-29 08:36:43.562   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.563   743   787 I libPowerHal: [perfLockAcq] idx:13 hdl:8616 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8616
+08-29 08:36:43.563   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.563 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=86
+08-29 08:36:43.564   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 8c
+08-29 08:36:43.613 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=87
+08-29 08:36:43.663   743   787 I libPowerHal: [perfLockAcq] idx:36 hdl:8617 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8617
+08-29 08:36:43.663   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.664 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=88
+08-29 08:36:43.664   743   787 I libPowerHal: [perfLockAcq] idx:37 hdl:8618 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8618
+08-29 08:36:43.664   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:43.676 31108 31108 D PSTV    : key action=1 code=20 isLong=false repeat=0
+08-29 08:36:43.704   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8581
+08-29 08:36:43.704   743   787 I libPowerHal: [perfLockRel] hdl:8581, idx:14
+08-29 08:36:43.705   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8582
+08-29 08:36:43.705   743   787 I libPowerHal: [perfLockRel] hdl:8582, idx:15
+08-29 08:36:43.810   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8583
+08-29 08:36:43.810   743   787 I libPowerHal: [perfLockRel] hdl:8583, idx:16
+08-29 08:36:43.811   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8584
+08-29 08:36:43.811   743   787 I libPowerHal: [perfLockRel] hdl:8584, idx:17
+08-29 08:36:43.905   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8585
+08-29 08:36:43.905   743   787 I libPowerHal: [perfLockRel] hdl:8585, idx:18
+08-29 08:36:43.906   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8586
+08-29 08:36:43.906   743   787 I libPowerHal: [perfLockRel] hdl:8586, idx:19
+08-29 08:36:44.006   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8587
+08-29 08:36:44.007   743   787 I libPowerHal: [perfLockRel] hdl:8587, idx:20
+08-29 08:36:44.011   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8588
+08-29 08:36:44.011   743   787 I libPowerHal: [perfLockRel] hdl:8588, idx:21
+08-29 08:36:44.110   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8589
+08-29 08:36:44.110   743   787 I libPowerHal: [perfLockRel] hdl:8589, idx:22
+08-29 08:36:44.111   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8590
+08-29 08:36:44.111   743   787 I libPowerHal: [perfLockRel] hdl:8590, idx:23
+08-29 08:36:44.169   689   992 I MdnsReplySender: Sending {MdnsReplyInfo: /[fe80::240f:30ff:fe9b:8ba9%wlan0]:5353 to /[ff02::fb]:5353, answers: 2, additionalAnswers: 6, knownAnswers: 0, sendDelayMs 30}
+08-29 08:36:44.215   689   992 I MdnsReplySender: Sending {MdnsReplyInfo: /10.1.69.69:5353 to /224.0.0.251:5353, answers: 2, additionalAnswers: 6, knownAnswers: 0, sendDelayMs 78}
+08-29 08:36:44.224   504  4620 D StreamOutMSDHAL: StreamOut::write() this:0xe8a00c90,buffer:0xf15c6130, bytes:4096 mStandby:0 mIsValid:1 mFlags:0x8 mWriteCount:151
+08-29 08:36:44.224   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8591
+08-29 08:36:44.224   743   787 I libPowerHal: [perfLockRel] hdl:8591, idx:24
+08-29 08:36:44.225   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8592
+08-29 08:36:44.225   743   787 I libPowerHal: [perfLockRel] hdl:8592, idx:25
+08-29 08:36:44.313   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8593
+08-29 08:36:44.313   743   787 I libPowerHal: [perfLockRel] hdl:8593, idx:26
+08-29 08:36:44.314   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8594
+08-29 08:36:44.314   743   787 I libPowerHal: [perfLockRel] hdl:8594, idx:27
+08-29 08:36:44.316 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=0
+08-29 08:36:44.324   743   787 I libPowerHal: [perfLockAcq] idx:14 hdl:8619 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8619
+08-29 08:36:44.324   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:44.324   743   787 I libPowerHal: [perfLockAcq] idx:15 hdl:8620 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8620
+08-29 08:36:44.325   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:44.326   540  8556 D audioserver: FGS Logger Transaction failed
+08-29 08:36:44.326   540  8556 D audioserver: -129
+08-29 08:36:44.344 31108 31155 I ReactNativeJS: [DIAG] focus tt1442464 t=1788007004344
+08-29 08:36:44.356   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 8d
+08-29 08:36:44.372   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(9)
+08-29 08:36:44.435   540  3880 D AudioFlinger: mixer(0xf17b2dd0) throttle end: throttle time(10)
+08-29 08:36:44.508   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8595
+08-29 08:36:44.508   743   787 I libPowerHal: [perfLockRel] hdl:8595, idx:4
+08-29 08:36:44.510   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8596
+08-29 08:36:44.510   743   787 I libPowerHal: [perfLockRel] hdl:8596, idx:5
+08-29 08:36:44.615   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8597
+08-29 08:36:44.615   743   787 I libPowerHal: [perfLockRel] hdl:8597, idx:28
+08-29 08:36:44.616   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8598
+08-29 08:36:44.616   743   787 I libPowerHal: [perfLockRel] hdl:8598, idx:29
+08-29 08:36:44.713   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8599
+08-29 08:36:44.713   743   787 I libPowerHal: [perfLockRel] hdl:8599, idx:30
+08-29 08:36:44.715   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8600
+08-29 08:36:44.715   743   787 I libPowerHal: [perfLockRel] hdl:8600, idx:31
+08-29 08:36:44.717 31108 31108 D PSTV    : key action=0 code=19 isLong=true repeat=1
+08-29 08:36:44.724   743   787 I libPowerHal: [perfLockAcq] idx:4 hdl:8621 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8621
+08-29 08:36:44.724   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:44.725   743   787 I libPowerHal: [perfLockAcq] idx:5 hdl:8622 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8622
+08-29 08:36:44.725   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:44.725   540  3880 D audioserver: FGS Logger Transaction failed
+08-29 08:36:44.725   540  3880 D audioserver: -129
+08-29 08:36:44.736 31108 31155 I ReactNativeJS: [DIAG] focus tt0460681 t=1788007004736
+08-29 08:36:44.736 31108 31155 I ReactNativeJS: [V569] enter row=19 landed=2 remembered=2 -> keep
+08-29 08:36:44.777 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=2
+08-29 08:36:44.801 31108 31155 I ReactNativeJS: [DIAG] focus tt1591095 t=1788007004801
+08-29 08:36:44.801 31108 31155 I ReactNativeJS: [V569] enter row=18 landed=2 remembered=2 -> keep
+08-29 08:36:44.817   743   787 I libPowerHal: [perfLockAcq] idx:16 hdl:8623 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8623
+08-29 08:36:44.817   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:44.818   743   787 I libPowerHal: [perfLockAcq] idx:17 hdl:8624 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8624
+08-29 08:36:44.818   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:44.819 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=3
+08-29 08:36:44.853   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8601
+08-29 08:36:44.853   743   787 I libPowerHal: [perfLockRel] hdl:8601, idx:0
+08-29 08:36:44.854   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8602
+08-29 08:36:44.854   743   787 I libPowerHal: [perfLockRel] hdl:8602, idx:1
+08-29 08:36:44.868 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=4
+08-29 08:36:44.888 31108 31155 I ReactNativeJS: [DIAG] focus tt19231492 t=1788007004888
+08-29 08:36:44.889 31108 31155 I ReactNativeJS: [V569] enter row=17 landed=2 remembered=null -> keep
+08-29 08:36:44.918   743   787 I libPowerHal: [perfLockAcq] idx:0 hdl:8625 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8625
+08-29 08:36:44.919   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:44.919   743   787 I libPowerHal: [perfLockAcq] idx:1 hdl:8626 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8626
+08-29 08:36:44.919   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:44.920 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=5
+08-29 08:36:44.956 31108 31155 I ReactNativeJS: [DIAG] focus tt10366460 t=1788007004956
+08-29 08:36:44.956 31108 31155 I ReactNativeJS: [V569] enter row=16 landed=2 remembered=2 -> keep
+08-29 08:36:44.959   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8603
+08-29 08:36:44.960   743   787 I libPowerHal: [perfLockRel] hdl:8603, idx:2
+08-29 08:36:44.960   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8604
+08-29 08:36:44.960   743   787 I libPowerHal: [perfLockRel] hdl:8604, idx:3
+08-29 08:36:44.969 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=6
+08-29 08:36:44.976   514 26947 I Hw_Cec  : [HwCecMessage] Tx: 8e
+08-29 08:36:45.019   743   787 I libPowerHal: [perfLockAcq] idx:2 hdl:8627 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8627
+08-29 08:36:45.019   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.020   743   787 I libPowerHal: [perfLockAcq] idx:3 hdl:8628 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8628
+08-29 08:36:45.020   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.027 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=7
+08-29 08:36:45.041 31108 31155 I ReactNativeJS: [DIAG] focus tt26656917 t=1788007005041
+08-29 08:36:45.041 31108 31155 I ReactNativeJS: [V569] enter row=15 landed=2 remembered=2 -> keep
+08-29 08:36:45.056   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8605
+08-29 08:36:45.056   743   787 I libPowerHal: [perfLockRel] hdl:8605, idx:6
+08-29 08:36:45.057   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8606
+08-29 08:36:45.057   743   787 I libPowerHal: [perfLockRel] hdl:8606, idx:7
+08-29 08:36:45.070 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=8
+08-29 08:36:45.087 31108 31155 I ReactNativeJS: [DIAG] focus tt33763941 t=1788007005087
+08-29 08:36:45.087 31108 31155 I ReactNativeJS: [V569] enter row=14 landed=2 remembered=2 -> keep
+08-29 08:36:45.098   689   689 V HotPlugDetectionAction: Finish poll all devices.
+08-29 08:36:45.120   743   787 I libPowerHal: [perfLockAcq] idx:6 hdl:8629 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8629
+08-29 08:36:45.120   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.122 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=9
+08-29 08:36:45.122   743   787 I libPowerHal: [perfLockAcq] idx:7 hdl:8630 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8630
+08-29 08:36:45.122   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.157   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8607
+08-29 08:36:45.157   743   787 I libPowerHal: [perfLockRel] hdl:8607, idx:8
+08-29 08:36:45.158   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8608
+08-29 08:36:45.158   743   787 I libPowerHal: [perfLockRel] hdl:8608, idx:9
+08-29 08:36:45.171 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=10
+08-29 08:36:45.185 31108 31155 I ReactNativeJS: [DIAG] focus tt33049767 t=1788007005185
+08-29 08:36:45.185 31108 31155 I ReactNativeJS: [V569] enter row=13 landed=2 remembered=2 -> keep
+08-29 08:36:45.221   743   787 I libPowerHal: [perfLockAcq] idx:8 hdl:8631 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8631
+08-29 08:36:45.221   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.222   743   787 I libPowerHal: [perfLockAcq] idx:9 hdl:8632 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8632
+08-29 08:36:45.222   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.225 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=11
+08-29 08:36:45.241 31108 31155 I ReactNativeJS: [DIAG] focus tt1341338 t=1788007005241
+08-29 08:36:45.242 31108 31155 I ReactNativeJS: [V569] enter row=12 landed=2 remembered=null -> keep
+08-29 08:36:45.259   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8609
+08-29 08:36:45.259   743   787 I libPowerHal: [perfLockRel] hdl:8609, idx:32
+08-29 08:36:45.260   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8610
+08-29 08:36:45.260   743   787 I libPowerHal: [perfLockRel] hdl:8610, idx:33
+08-29 08:36:45.272 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=12
+08-29 08:36:45.282   504  4620 D StreamOutMSDHAL: StreamOut::write() this:0xe8a00c90,buffer:0xf15c6130, bytes:4096 mStandby:0 mIsValid:1 mFlags:0x8 mWriteCount:201
+08-29 08:36:45.287 31108 31155 I ReactNativeJS: [DIAG] focus tt27790101 t=1788007005287
+08-29 08:36:45.287 31108 31155 I ReactNativeJS: [V569] enter row=11 landed=2 remembered=0 -> RESTORE
+08-29 08:36:45.322   743   787 I libPowerHal: [perfLockAcq] idx:18 hdl:8633 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8633
+08-29 08:36:45.322   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.322   743   787 I libPowerHal: [perfLockAcq] idx:19 hdl:8634 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8634
+08-29 08:36:45.322   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.323 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=13
+08-29 08:36:45.359   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8611
+08-29 08:36:45.360   743   787 I libPowerHal: [perfLockRel] hdl:8611, idx:34
+08-29 08:36:45.360   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8612
+08-29 08:36:45.361   743   787 I libPowerHal: [perfLockRel] hdl:8612, idx:35
+08-29 08:36:45.372 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=14
+08-29 08:36:45.386 31108 31155 I ReactNativeJS: [DIAG] focus tt0241527 t=1788007005386
+08-29 08:36:45.386 31108 31155 I ReactNativeJS: [V569] enter row=10 landed=2 remembered=0 -> RESTORE
+08-29 08:36:45.422   743   787 I libPowerHal: [perfLockAcq] idx:20 hdl:8635 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8635
+08-29 08:36:45.422   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.423   743   787 I libPowerHal: [perfLockAcq] idx:21 hdl:8636 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8636
+08-29 08:36:45.423   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.425 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=15
+08-29 08:36:45.438 31108 31155 I ReactNativeJS: [DIAG] focus tt9288030 t=1788007005438
+08-29 08:36:45.438 31108 31155 I ReactNativeJS: [V569] enter row=9 landed=2 remembered=0 -> RESTORE
+08-29 08:36:45.460   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8613
+08-29 08:36:45.460   743   787 I libPowerHal: [perfLockRel] hdl:8613, idx:10
+08-29 08:36:45.461   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8614
+08-29 08:36:45.461   743   787 I libPowerHal: [perfLockRel] hdl:8614, idx:11
+08-29 08:36:45.473 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=16
+08-29 08:36:45.487 31108 31155 I ReactNativeJS: [DIAG] focus tt27543578 t=1788007005487
+08-29 08:36:45.488 31108 31155 I ReactNativeJS: [V569] enter row=8 landed=2 remembered=0 -> RESTORE
+08-29 08:36:45.523   743   787 I libPowerHal: [perfLockAcq] idx:10 hdl:8637 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8637
+08-29 08:36:45.523   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.524 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=17
+08-29 08:36:45.524   743   787 I libPowerHal: [perfLockAcq] idx:11 hdl:8638 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8638
+08-29 08:36:45.524   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.563   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8615
+08-29 08:36:45.563   743   787 I libPowerHal: [perfLockRel] hdl:8615, idx:12
+08-29 08:36:45.564   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8616
+08-29 08:36:45.564   743   787 I libPowerHal: [perfLockRel] hdl:8616, idx:13
+08-29 08:36:45.574 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=18
+08-29 08:36:45.590 31108 31155 I ReactNativeJS: [DIAG] focus tt33049767 t=1788007005590
+08-29 08:36:45.590 31108 31155 I ReactNativeJS: [V569] enter row=7 landed=2 remembered=0 -> RESTORE
+08-29 08:36:45.624   743   787 I libPowerHal: [perfLockAcq] idx:12 hdl:8639 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8639
+08-29 08:36:45.624   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.625   743   787 I libPowerHal: [perfLockAcq] idx:13 hdl:8640 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8640
+08-29 08:36:45.625   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.625 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=19
+08-29 08:36:45.656 31108 31155 I ReactNativeJS: [DIAG] focus tt0156887 t=1788007005656
+08-29 08:36:45.656 31108 31155 I ReactNativeJS: [V569] enter row=6 landed=2 remembered=0 -> RESTORE
+08-29 08:36:45.663   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8617
+08-29 08:36:45.663   743   787 I libPowerHal: [perfLockRel] hdl:8617, idx:36
+08-29 08:36:45.664   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8618
+08-29 08:36:45.664   743   787 I libPowerHal: [perfLockRel] hdl:8618, idx:37
+08-29 08:36:45.676 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=20
+08-29 08:36:45.726   743   787 I libPowerHal: [perfLockAcq] idx:22 hdl:8641 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8641
+08-29 08:36:45.726   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.726   743   787 I libPowerHal: [perfLockAcq] idx:23 hdl:8642 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8642
+08-29 08:36:45.726   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.729 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=21
+08-29 08:36:45.741 31108 31155 I ReactNativeJS: [DIAG] focus tt13210838 t=1788007005741
+08-29 08:36:45.742 31108 31155 I ReactNativeJS: [V569] enter row=5 landed=2 remembered=0 -> RESTORE
+08-29 08:36:45.777 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=22
+08-29 08:36:45.790 31108 31155 I ReactNativeJS: [DIAG] focus tt11561116 t=1788007005790
+08-29 08:36:45.790 31108 31155 I ReactNativeJS: [V569] enter row=4 landed=2 remembered=0 -> RESTORE
+08-29 08:36:45.827   743   787 I libPowerHal: [perfLockAcq] idx:24 hdl:8643 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8643
+08-29 08:36:45.827   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.827 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=23
+08-29 08:36:45.827   743   787 I libPowerHal: [perfLockAcq] idx:25 hdl:8644 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8644
+08-29 08:36:45.827   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.878 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=24
+08-29 08:36:45.890 31108 31155 I ReactNativeJS: [DIAG] focus tt27846061 t=1788007005890
+08-29 08:36:45.891 31108 31155 I ReactNativeJS: [V569] enter row=3 landed=2 remembered=0 -> RESTORE
+08-29 08:36:45.928   743   787 I libPowerHal: [perfLockAcq] idx:26 hdl:8645 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8645
+08-29 08:36:45.928   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.929   743   787 I libPowerHal: [perfLockAcq] idx:27 hdl:8646 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8646
+08-29 08:36:45.929   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:45.929 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=25
+08-29 08:36:45.943 31108 31155 I ReactNativeJS: [DIAG] focus tt18259538 t=1788007005943
+08-29 08:36:45.943 31108 31155 I ReactNativeJS: [V569] enter row=2 landed=2 remembered=0 -> RESTORE
+08-29 08:36:45.979 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=26
+08-29 08:36:46.028   743   787 I libPowerHal: [perfLockAcq] idx:28 hdl:8647 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8647
+08-29 08:36:46.028   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.029 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=27
+08-29 08:36:46.030   743   787 I libPowerHal: [perfLockAcq] idx:29 hdl:8648 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8648
+08-29 08:36:46.030   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.041 31108 31155 I ReactNativeJS: [DIAG] focus tt14688458 t=1788007006041
+08-29 08:36:46.042 31108 31155 I ReactNativeJS: [V569] enter row=1 landed=2 remembered=0 -> RESTORE
+08-29 08:36:46.080 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=28
+08-29 08:36:46.103 31108 31155 I ReactNativeJS: [DIAG] focus tt36590417 t=1788007006103
+08-29 08:36:46.103 31108 31155 I ReactNativeJS: [V569] enter row=0 landed=2 remembered=0 -> RESTORE
+08-29 08:36:46.130   743   787 I libPowerHal: [perfLockAcq] idx:30 hdl:8649 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8649
+08-29 08:36:46.130   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.131   743   787 I libPowerHal: [perfLockAcq] idx:31 hdl:8650 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8650
+08-29 08:36:46.131   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.142 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=29
+08-29 08:36:46.181 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=30
+08-29 08:36:46.231   743   787 I libPowerHal: [perfLockAcq] idx:32 hdl:8651 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8651
+08-29 08:36:46.232 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=31
+08-29 08:36:46.247   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.250   743   787 I libPowerHal: [perfLockAcq] idx:33 hdl:8652 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8652
+08-29 08:36:46.250   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.283 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=32
+08-29 08:36:46.325   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8619
+08-29 08:36:46.325   743   787 I libPowerHal: [perfLockRel] hdl:8619, idx:14
+08-29 08:36:46.326   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8620
+08-29 08:36:46.326   743   787 I libPowerHal: [perfLockRel] hdl:8620, idx:15
+08-29 08:36:46.333   743   787 I libPowerHal: [perfLockAcq] idx:14 hdl:8653 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8653
+08-29 08:36:46.333   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.334 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=33
+08-29 08:36:46.345   504  4620 D StreamOutMSDHAL: StreamOut::write() this:0xe8a00c90,buffer:0xf15c6130, bytes:4096 mStandby:0 mIsValid:1 mFlags:0x8 mWriteCount:251
+08-29 08:36:46.347   743   787 I libPowerHal: [perfLockAcq] idx:15 hdl:8654 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8654
+08-29 08:36:46.347   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.383 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=34
+08-29 08:36:46.434 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=35
+08-29 08:36:46.447   743   787 I libPowerHal: [perfLockAcq] idx:34 hdl:8655 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8655
+08-29 08:36:46.447   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.448   743   787 I libPowerHal: [perfLockAcq] idx:35 hdl:8656 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8656
+08-29 08:36:46.448   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.485 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=36
+08-29 08:36:46.535   743   787 I libPowerHal: [perfLockAcq] idx:36 hdl:8657 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8657
+08-29 08:36:46.536 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=37
+08-29 08:36:46.547   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.553   743   787 I libPowerHal: [perfLockAcq] idx:37 hdl:8658 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8658
+08-29 08:36:46.553   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.586 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=38
+08-29 08:36:46.636   743   787 I libPowerHal: [perfLockAcq] idx:38 hdl:8659 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8659
+08-29 08:36:46.636   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.637 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=39
+08-29 08:36:46.647   743   787 I libPowerHal: [perfLockAcq] idx:39 hdl:8660 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8660
+08-29 08:36:46.647   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.688 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=40
+08-29 08:36:46.724   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8621
+08-29 08:36:46.725   743   787 I libPowerHal: [perfLockRel] hdl:8621, idx:4
+08-29 08:36:46.725   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8622
+08-29 08:36:46.725   743   787 I libPowerHal: [perfLockRel] hdl:8622, idx:5
+08-29 08:36:46.738   743   787 I libPowerHal: [perfLockAcq] idx:4 hdl:8661 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8661
+08-29 08:36:46.738   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.738   743   787 I libPowerHal: [perfLockAcq] idx:5 hdl:8662 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8662
+08-29 08:36:46.738   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.739 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=41
+08-29 08:36:46.788 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=42
+08-29 08:36:46.818   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8623
+08-29 08:36:46.818   743   787 I libPowerHal: [perfLockRel] hdl:8623, idx:16
+08-29 08:36:46.819   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8624
+08-29 08:36:46.819   743   787 I libPowerHal: [perfLockRel] hdl:8624, idx:17
+08-29 08:36:46.838   743   787 I libPowerHal: [perfLockAcq] idx:16 hdl:8663 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8663
+08-29 08:36:46.838   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.839   743   787 I libPowerHal: [perfLockAcq] idx:17 hdl:8664 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8664
+08-29 08:36:46.839   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.840 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=43
+08-29 08:36:46.889 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=44
+08-29 08:36:46.918   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8625
+08-29 08:36:46.918   743   787 I libPowerHal: [perfLockRel] hdl:8625, idx:0
+08-29 08:36:46.919   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8626
+08-29 08:36:46.919   743   787 I libPowerHal: [perfLockRel] hdl:8626, idx:1
+08-29 08:36:46.939   743   787 I libPowerHal: [perfLockAcq] idx:0 hdl:8665 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8665
+08-29 08:36:46.939   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.940   743   787 I libPowerHal: [perfLockAcq] idx:1 hdl:8666 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8666
+08-29 08:36:46.940   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:46.941 31108 31108 D PSTV    : key action=0 code=19 isLong=false repeat=45
+08-29 08:36:46.958 31108 31108 D PSTV    : key action=1 code=19 isLong=false repeat=0
+08-29 08:36:47.019   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8627
+08-29 08:36:47.019   743   787 I libPowerHal: [perfLockRel] hdl:8627, idx:2
+08-29 08:36:47.020   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8628
+08-29 08:36:47.020   743   787 I libPowerHal: [perfLockRel] hdl:8628, idx:3
+08-29 08:36:47.120   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8629
+08-29 08:36:47.120   743   787 I libPowerHal: [perfLockRel] hdl:8629, idx:6
+08-29 08:36:47.122   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8630
+08-29 08:36:47.122   743   787 I libPowerHal: [perfLockRel] hdl:8630, idx:7
+08-29 08:36:47.222   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8631
+08-29 08:36:47.222   743   787 I libPowerHal: [perfLockRel] hdl:8631, idx:8
+08-29 08:36:47.223   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8632
+08-29 08:36:47.223   743   787 I libPowerHal: [perfLockRel] hdl:8632, idx:9
+08-29 08:36:47.236   743   787 I libPowerHal: [perfLockAcq] idx:2 hdl:8667 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8667
+08-29 08:36:47.236   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:47.236   743   787 I libPowerHal: [perfLockAcq] idx:3 hdl:8668 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8668
+08-29 08:36:47.236   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:47.236 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=0
+08-29 08:36:47.254 31108 31155 I ReactNativeJS: [DIAG] focus tt14688458 t=1788007007254
+08-29 08:36:47.254 31108 31155 I ReactNativeJS: [V569] enter row=1 landed=2 remembered=0 -> RESTORE
+08-29 08:36:47.322   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8633
+08-29 08:36:47.322   743   787 I libPowerHal: [perfLockRel] hdl:8633, idx:18
+08-29 08:36:47.323   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8634
+08-29 08:36:47.323   743   787 I libPowerHal: [perfLockRel] hdl:8634, idx:19
+08-29 08:36:47.423   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8635
+08-29 08:36:47.423   743   787 I libPowerHal: [perfLockRel] hdl:8635, idx:20
+08-29 08:36:47.424   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8636
+08-29 08:36:47.424   743   787 I libPowerHal: [perfLockRel] hdl:8636, idx:21
+08-29 08:36:47.424   504   561 I StreamOutMSDHAL: standby(), halRequest:0 this:0xe8a00c90 
+08-29 08:36:47.524   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8637
+08-29 08:36:47.524   743   787 I libPowerHal: [perfLockRel] hdl:8637, idx:10
+08-29 08:36:47.525   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8638
+08-29 08:36:47.525   743   787 I libPowerHal: [perfLockRel] hdl:8638, idx:11
+08-29 08:36:47.625   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8639
+08-29 08:36:47.625   743   787 I libPowerHal: [perfLockRel] hdl:8639, idx:12
+08-29 08:36:47.626   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8640
+08-29 08:36:47.626   743   787 I libPowerHal: [perfLockRel] hdl:8640, idx:13
+08-29 08:36:47.637 31108 31108 D PSTV    : key action=0 code=20 isLong=true repeat=1
+08-29 08:36:47.638   743   787 I libPowerHal: [perfLockAcq] idx:6 hdl:8669 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8669
+08-29 08:36:47.638   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:47.639   743   787 I libPowerHal: [perfLockAcq] idx:7 hdl:8670 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8670
+08-29 08:36:47.639   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:47.652 31108 31155 I ReactNativeJS: [DIAG] focus tt18259538 t=1788007007652
+08-29 08:36:47.652 31108 31155 I ReactNativeJS: [V569] enter row=2 landed=2 remembered=0 -> RESTORE
+08-29 08:36:47.694 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=2
+08-29 08:36:47.709 31108 31155 I ReactNativeJS: [DIAG] focus tt27846061 t=1788007007709
+08-29 08:36:47.709 31108 31155 I ReactNativeJS: [V569] enter row=3 landed=2 remembered=0 -> RESTORE
+08-29 08:36:47.727   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8641
+08-29 08:36:47.727   743   787 I libPowerHal: [perfLockRel] hdl:8641, idx:22
+08-29 08:36:47.728   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8642
+08-29 08:36:47.728   743   787 I libPowerHal: [perfLockRel] hdl:8642, idx:23
+08-29 08:36:47.737   743   787 I libPowerHal: [perfLockAcq] idx:8 hdl:8671 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8671
+08-29 08:36:47.737   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:47.737 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=3
+08-29 08:36:47.738   743   787 I libPowerHal: [perfLockAcq] idx:9 hdl:8672 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8672
+08-29 08:36:47.738   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:47.754 31108 31155 I ReactNativeJS: [DIAG] focus tt11561116 t=1788007007754
+08-29 08:36:47.754 31108 31155 I ReactNativeJS: [V569] enter row=4 landed=2 remembered=0 -> RESTORE
+08-29 08:36:47.788 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=4
+08-29 08:36:47.827   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8643
+08-29 08:36:47.827   743   787 I libPowerHal: [perfLockRel] hdl:8643, idx:24
+08-29 08:36:47.828   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8644
+08-29 08:36:47.828   743   787 I libPowerHal: [perfLockRel] hdl:8644, idx:25
+08-29 08:36:47.839 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=5
+08-29 08:36:47.846   743   787 I libPowerHal: [perfLockAcq] idx:10 hdl:8673 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8673
+08-29 08:36:47.846   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:47.846   743   787 I libPowerHal: [perfLockAcq] idx:11 hdl:8674 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8674
+08-29 08:36:47.846   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:47.852 31108 31155 I ReactNativeJS: [DIAG] focus tt13210838 t=1788007007852
+08-29 08:36:47.852 31108 31155 I ReactNativeJS: [V569] enter row=5 landed=2 remembered=0 -> RESTORE
+08-29 08:36:47.892 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=6
+08-29 08:36:47.905 31108 31155 I ReactNativeJS: [DIAG] focus tt0156887 t=1788007007904
+08-29 08:36:47.905 31108 31155 I ReactNativeJS: [V569] enter row=6 landed=2 remembered=0 -> RESTORE
+08-29 08:36:47.929   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8645
+08-29 08:36:47.929   743   787 I libPowerHal: [perfLockRel] hdl:8645, idx:26
+08-29 08:36:47.931   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8646
+08-29 08:36:47.931   743   787 I libPowerHal: [perfLockRel] hdl:8646, idx:27
+08-29 08:36:47.939   743   787 I libPowerHal: [perfLockAcq] idx:12 hdl:8675 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8675
+08-29 08:36:47.939   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:47.940   743   787 I libPowerHal: [perfLockAcq] idx:13 hdl:8676 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8676
+08-29 08:36:47.940   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:47.940 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=7
+08-29 08:36:47.954 31108 31155 I ReactNativeJS: [DIAG] focus tt33049767 t=1788007007954
+08-29 08:36:47.954 31108 31155 I ReactNativeJS: [V569] enter row=7 landed=2 remembered=0 -> RESTORE
+08-29 08:36:47.990 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=8
+08-29 08:36:48.029   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8647
+08-29 08:36:48.029   743   787 I libPowerHal: [perfLockRel] hdl:8647, idx:28
+08-29 08:36:48.030   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8648
+08-29 08:36:48.030   743   787 I libPowerHal: [perfLockRel] hdl:8648, idx:29
+08-29 08:36:48.040   743   787 I libPowerHal: [perfLockAcq] idx:18 hdl:8677 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8677
+08-29 08:36:48.040   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.041   743   787 I libPowerHal: [perfLockAcq] idx:19 hdl:8678 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8678
+08-29 08:36:48.041   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.041 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=9
+08-29 08:36:48.057 31108 31155 I ReactNativeJS: [DIAG] focus tt27543578 t=1788007008057
+08-29 08:36:48.057 31108 31155 I ReactNativeJS: [V569] enter row=8 landed=2 remembered=0 -> RESTORE
+08-29 08:36:48.092 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=10
+08-29 08:36:48.119 31108 31155 I ReactNativeJS: [DIAG] focus tt9288030 t=1788007008119
+08-29 08:36:48.119 31108 31155 I ReactNativeJS: [V569] enter row=9 landed=2 remembered=0 -> RESTORE
+08-29 08:36:48.131   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8649
+08-29 08:36:48.131   743   787 I libPowerHal: [perfLockRel] hdl:8649, idx:30
+08-29 08:36:48.132   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8650
+08-29 08:36:48.132   743   787 I libPowerHal: [perfLockRel] hdl:8650, idx:31
+08-29 08:36:48.142   743   787 I libPowerHal: [perfLockAcq] idx:20 hdl:8679 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8679
+08-29 08:36:48.142   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.142   743   787 I libPowerHal: [perfLockAcq] idx:21 hdl:8680 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8680
+08-29 08:36:48.142   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.143 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=11
+08-29 08:36:48.192 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=12
+08-29 08:36:48.205 31108 31155 I ReactNativeJS: [DIAG] focus tt0241527 t=1788007008204
+08-29 08:36:48.205 31108 31155 I ReactNativeJS: [V569] enter row=10 landed=2 remembered=0 -> RESTORE
+08-29 08:36:48.243   743   787 I libPowerHal: [perfLockAcq] idx:22 hdl:8681 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8681
+08-29 08:36:48.243   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.243 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=13
+08-29 08:36:48.246   743   787 I libPowerHal: [perfLockAcq] idx:23 hdl:8682 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8682
+08-29 08:36:48.246   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.247   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8651
+08-29 08:36:48.247   743   787 I libPowerHal: [perfLockRel] hdl:8651, idx:32
+08-29 08:36:48.249   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8652
+08-29 08:36:48.249   743   787 I libPowerHal: [perfLockRel] hdl:8652, idx:33
+08-29 08:36:48.257 31108 31155 I ReactNativeJS: [DIAG] focus tt27790101 t=1788007008257
+08-29 08:36:48.257 31108 31155 I ReactNativeJS: [V569] enter row=11 landed=2 remembered=0 -> RESTORE
+08-29 08:36:48.293 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=14
+08-29 08:36:48.333   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8653
+08-29 08:36:48.333   743   787 I libPowerHal: [perfLockRel] hdl:8653, idx:14
+08-29 08:36:48.343   743   787 I libPowerHal: [perfLockAcq] idx:14 hdl:8683 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8683
+08-29 08:36:48.343   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.344 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=15
+08-29 08:36:48.347   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8654
+08-29 08:36:48.347   743   787 I libPowerHal: [perfLockRel] hdl:8654, idx:15
+08-29 08:36:48.348   743   787 I libPowerHal: [perfLockAcq] idx:24 hdl:8684 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8684
+08-29 08:36:48.348   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.357 31108 31155 I ReactNativeJS: [DIAG] focus tt1341338 t=1788007008357
+08-29 08:36:48.357 31108 31155 I ReactNativeJS: [V569] enter row=12 landed=2 remembered=2 -> keep
+08-29 08:36:48.394 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=16
+08-29 08:36:48.407 31108 31155 I ReactNativeJS: [DIAG] focus tt33049767 t=1788007008407
+08-29 08:36:48.408 31108 31155 I ReactNativeJS: [V569] enter row=13 landed=2 remembered=2 -> keep
+08-29 08:36:48.444   743   787 I libPowerHal: [perfLockAcq] idx:15 hdl:8685 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8685
+08-29 08:36:48.444   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.445   743   787 I libPowerHal: [perfLockAcq] idx:25 hdl:8686 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8686
+08-29 08:36:48.445   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.445 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=17
+08-29 08:36:48.447   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8655
+08-29 08:36:48.447   743   787 I libPowerHal: [perfLockRel] hdl:8655, idx:34
+08-29 08:36:48.448   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8656
+08-29 08:36:48.448   743   787 I libPowerHal: [perfLockRel] hdl:8656, idx:35
+08-29 08:36:48.495 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=18
+08-29 08:36:48.524 31108 31155 I ReactNativeJS: [DIAG] focus tt33763941 t=1788007008524
+08-29 08:36:48.524 31108 31155 I ReactNativeJS: [V569] enter row=14 landed=2 remembered=2 -> keep
+08-29 08:36:48.545   743   787 I libPowerHal: [perfLockAcq] idx:26 hdl:8687 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8687
+08-29 08:36:48.545   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.546   743   787 I libPowerHal: [perfLockAcq] idx:27 hdl:8688 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8688
+08-29 08:36:48.546   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.546 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=19
+08-29 08:36:48.547   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8657
+08-29 08:36:48.547   743   787 I libPowerHal: [perfLockRel] hdl:8657, idx:36
+08-29 08:36:48.552   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8658
+08-29 08:36:48.553   743   787 I libPowerHal: [perfLockRel] hdl:8658, idx:37
+08-29 08:36:48.576 31108 31155 I ReactNativeJS: [DIAG] focus tt26656917 t=1788007008576
+08-29 08:36:48.576 31108 31155 I ReactNativeJS: [V569] enter row=15 landed=2 remembered=2 -> keep
+08-29 08:36:48.596 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=20
+08-29 08:36:48.637   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8659
+08-29 08:36:48.637   743   787 I libPowerHal: [perfLockRel] hdl:8659, idx:38
+08-29 08:36:48.647   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8660
+08-29 08:36:48.647   743   787 I libPowerHal: [perfLockRel] hdl:8660, idx:39
+08-29 08:36:48.648   743   787 I libPowerHal: [perfLockAcq] idx:28 hdl:8689 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8689
+08-29 08:36:48.648   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.648   743   787 I libPowerHal: [perfLockAcq] idx:29 hdl:8690 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8690
+08-29 08:36:48.648   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.650 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=21
+08-29 08:36:48.669 31108 31155 I ReactNativeJS: [DIAG] focus tt10366460 t=1788007008669
+08-29 08:36:48.669 31108 31155 I ReactNativeJS: [V569] enter row=16 landed=2 remembered=2 -> keep
+08-29 08:36:48.708 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=22
+08-29 08:36:48.721 31108 31155 I ReactNativeJS: [DIAG] focus tt19231492 t=1788007008721
+08-29 08:36:48.721 31108 31155 I ReactNativeJS: [V569] enter row=17 landed=2 remembered=2 -> keep
+08-29 08:36:48.739   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8661
+08-29 08:36:48.739   743   787 I libPowerHal: [perfLockRel] hdl:8661, idx:4
+08-29 08:36:48.740   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8662
+08-29 08:36:48.740   743   787 I libPowerHal: [perfLockRel] hdl:8662, idx:5
+08-29 08:36:48.748   743   787 I libPowerHal: [perfLockAcq] idx:4 hdl:8691 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8691
+08-29 08:36:48.748   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.749   743   787 I libPowerHal: [perfLockAcq] idx:5 hdl:8692 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8692
+08-29 08:36:48.749   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.749 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=23
+08-29 08:36:48.770 31108 31155 I ReactNativeJS: [DIAG] focus tt1591095 t=1788007008770
+08-29 08:36:48.770 31108 31155 I ReactNativeJS: [V569] enter row=18 landed=2 remembered=2 -> keep
+08-29 08:36:48.808 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=24
+08-29 08:36:48.821 31108 31155 I ReactNativeJS: [DIAG] focus tt0460681 t=1788007008821
+08-29 08:36:48.822 31108 31155 I ReactNativeJS: [V569] enter row=19 landed=2 remembered=2 -> keep
+08-29 08:36:48.839   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8663
+08-29 08:36:48.839   743   787 I libPowerHal: [perfLockRel] hdl:8663, idx:16
+08-29 08:36:48.840   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8664
+08-29 08:36:48.840   743   787 I libPowerHal: [perfLockRel] hdl:8664, idx:17
+08-29 08:36:48.850   743   787 I libPowerHal: [perfLockAcq] idx:16 hdl:8693 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8693
+08-29 08:36:48.850   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.850 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=25
+08-29 08:36:48.851   743   787 I libPowerHal: [perfLockAcq] idx:17 hdl:8694 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8694
+08-29 08:36:48.851   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.870 31108 31155 I ReactNativeJS: [DIAG] focus tt1442464 t=1788007008870
+08-29 08:36:48.871 31108 31155 I ReactNativeJS: [V569] enter row=20 landed=2 remembered=2 -> keep
+08-29 08:36:48.908 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=26
+08-29 08:36:48.932   540  8556 D audioserver: FGS Logger Transaction failed
+08-29 08:36:48.932   540  8556 D audioserver: -129
+08-29 08:36:48.936   504  4620 D StreamOutMSDHAL: StreamOut::write() this:0xe8a00c90,buffer:0xf15c6130, bytes:4096 mStandby:1 mIsValid:1 mFlags:0x8 mWriteCount:1
+08-29 08:36:48.936   504  4620 D StreamOutMSDHAL: StreamOut::write() mFramer:0xf25d0b40, mWorkerThread:0xf2541990 this:0xe8a00c90
+08-29 08:36:48.936   504  4620 D StreamOutMSDHAL: StreamOut::write() inter_conf.last_ns:738270777130772
+08-29 08:36:48.950   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8665
+08-29 08:36:48.950   743   787 I libPowerHal: [perfLockRel] hdl:8665, idx:0
+08-29 08:36:48.951   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8666
+08-29 08:36:48.951   743   787 I libPowerHal: [perfLockRel] hdl:8666, idx:1
+08-29 08:36:48.953 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=27
+08-29 08:36:48.953   743   787 I libPowerHal: [perfLockAcq] idx:0 hdl:8695 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8695
+08-29 08:36:48.953   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:48.954   743   787 I libPowerHal: [perfLockAcq] idx:1 hdl:8696 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8696
+08-29 08:36:48.954   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:49.003 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=28
+08-29 08:36:49.053   743   787 I libPowerHal: [perfLockAcq] idx:30 hdl:8697 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8697
+08-29 08:36:49.053   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:49.054 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=29
+08-29 08:36:49.060   743   787 I libPowerHal: [perfLockAcq] idx:31 hdl:8698 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8698
+08-29 08:36:49.060   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:49.104 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=30
+08-29 08:36:49.155   743   787 I libPowerHal: [perfLockAcq] idx:32 hdl:8699 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8699
+08-29 08:36:49.155   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:49.156   743   787 I libPowerHal: [perfLockAcq] idx:33 hdl:8700 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8700
+08-29 08:36:49.156   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:49.157 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=31
+08-29 08:36:49.205 31108 31117 I vastream.cinema: Background concurrent mark compact GC freed 435171(10MB) AllocSpace objects, 81(3840KB) LOS objects, 49% free, 15MB/30MB, paused 2.095ms,4.967ms total 351.798ms
+08-29 08:36:49.206 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=32
+08-29 08:36:49.236   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8667
+08-29 08:36:49.236   743   787 I libPowerHal: [perfLockRel] hdl:8667, idx:2
+08-29 08:36:49.237   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8668
+08-29 08:36:49.237   743   787 I libPowerHal: [perfLockRel] hdl:8668, idx:3
+08-29 08:36:49.256   743   787 I libPowerHal: [perfLockAcq] idx:2 hdl:8701 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8701
+08-29 08:36:49.256   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:49.257   743   787 I libPowerHal: [perfLockAcq] idx:3 hdl:8702 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8702
+08-29 08:36:49.257   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:49.257 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=33
+08-29 08:36:49.268   540  3880 D audioserver: FGS Logger Transaction failed
+08-29 08:36:49.268   540  3880 D audioserver: -129
+08-29 08:36:49.307 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=34
+08-29 08:36:49.357   743   787 I libPowerHal: [perfLockAcq] idx:34 hdl:8703 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8703
+08-29 08:36:49.357   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:49.358   743   787 I libPowerHal: [perfLockAcq] idx:35 hdl:8704 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8704
+08-29 08:36:49.358   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:49.358 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=35
+08-29 08:36:49.409 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=36
+08-29 08:36:49.459   743   787 I libPowerHal: [perfLockAcq] idx:36 hdl:8705 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8705
+08-29 08:36:49.459   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:49.460 31108 31108 D PSTV    : key action=0 code=20 isLong=false repeat=37
+08-29 08:36:49.462   743   787 I libPowerHal: [perfLockAcq] idx:37 hdl:8706 hint:50 pid:743 tid:743 duration:2000 lock_user:vendor.mediatek => ret_hdl:8706
+08-29 08:36:49.462   743   787 I libPowerHal: [setClusterFreq] INTERACTION set cpufreq[0] min:2000000 max:-1 
+08-29 08:36:49.498 31108 31108 D PSTV    : key action=1 code=20 isLong=false repeat=0
+08-29 08:36:49.639   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8669
+08-29 08:36:49.639   743   787 I libPowerHal: [perfLockRel] hdl:8669, idx:6
+08-29 08:36:49.640   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8670
+08-29 08:36:49.640   743   787 I libPowerHal: [perfLockRel] hdl:8670, idx:7
+08-29 08:36:49.738   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8671
+08-29 08:36:49.738   743   787 I libPowerHal: [perfLockRel] hdl:8671, idx:8
+08-29 08:36:49.739   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8672
+08-29 08:36:49.739   743   787 I libPowerHal: [perfLockRel] hdl:8672, idx:9
+08-29 08:36:49.845   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8673
+08-29 08:36:49.845   743   787 I libPowerHal: [perfLockRel] hdl:8673, idx:10
+08-29 08:36:49.846   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8674
+08-29 08:36:49.846   743   787 I libPowerHal: [perfLockRel] hdl:8674, idx:11
+08-29 08:36:49.939   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8675
+08-29 08:36:49.939   743   787 I libPowerHal: [perfLockRel] hdl:8675, idx:12
+08-29 08:36:49.940   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8676
+08-29 08:36:49.940   743   787 I libPowerHal: [perfLockRel] hdl:8676, idx:13
+08-29 08:36:49.951   504  4620 D StreamOutMSDHAL: StreamOut::write() this:0xe8a00c90,buffer:0xf15c6130, bytes:4096 mStandby:0 mIsValid:1 mFlags:0x8 mWriteCount:51
+08-29 08:36:50.040   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8677
+08-29 08:36:50.041   743   787 I libPowerHal: [perfLockRel] hdl:8677, idx:18
+08-29 08:36:50.042   743   787 I mtkpower@impl: [powerd_req] TIMER_MSG_PERF_LOCK_TIMEOUT hdl:8678
+08-29 08:36:50.042   743   787 I libPowerHal: [perfLockRel] hdl:8678, idx:19
