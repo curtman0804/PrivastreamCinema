@@ -22,7 +22,7 @@ import { ContentItem } from '../api/client';
 import apiClient, { api } from '../api/client';
 import { getMetaCache, setMetaCache } from '../store/contentStore'; // PATCH_V250_VIEWPORT_PREFETCH
 import { colors } from '../styles/colors';
-import { tvRegisterRow, tvUnregisterRow, tvSubscribe, tvSubscribeRow, tvState } from '../nav/tvSelect';
+import { tvRegisterRow, tvUnregisterRow, tvSubscribe, tvSubscribeRow, tvState, tvSetCol, tvSetRow } from '../nav/tvSelect';
 
 const ITEM_GAP = 16;
 const TV_PADDING_LEFT = 48;
@@ -273,6 +273,13 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         // V575_DECOUPLE - mark that the D-pad just moved so any in-flight
         // viewport prefetch pauses until navigation settles.
         _v575LastNavAt = Date.now();
+
+        // V541_PRESS_SYNC - keep the tvSelect selector locked to the card that
+        // ACTUALLY has native focus, so pressing OK opens THIS poster in THIS
+        // row (not the item at a drifted JS row/column). Fixes "row 2 opens
+        // row 1's details" and "opens the wrong content".
+        if (typeof tvRowIndex === 'number') tvSetRow(tvRowIndex);
+        tvSetCol(index);
 
         onSectionFocus?.();
 

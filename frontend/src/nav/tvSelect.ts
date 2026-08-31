@@ -28,3 +28,5 @@ export function tvPress(){if(!_active)return;const a=_rows.get(_row);if(a){try{a
 export function tvLongSelect(){if(!_active)return;const a=_rows.get(_row);if(a&&a.longPress){try{a.longPress(_eff(_row))}catch(_){}}}
 export function tvEffCol(c:number){if(c<=0)return 0;return Math.min(Math.max(0,_col),c-1)}
 export function tvReset(r=0,c=0){_row=r;_col=c;_emit()}
+export function tvSetCol(c:number){_col=Math.max(0,c)}
+export function tvSetRow(r:number){_row=Math.max(0,r)}

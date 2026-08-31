@@ -32,8 +32,7 @@ import { useContentStore, useDiscoverData } from '../../src/store/contentStore';
 import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
 import { FlashList } from '@shopify/flash-list'; // PATCH_V54_VIRTUALIZE
 import { ServiceRow } from '../../src/components/ServiceRow';
-import { tvMove, tvPress, tvLongSelect, tvSetActive, tvSetOnRowChange, tvSubscribe, tvSubscribeRow, tvState, tvRegisterRow, tvUnregisterRow, tvEffCol, tvHasRow } from '../../src/nav/tvSelect';
-import PSTVScrollView from '../../src/components/PSTVScrollView';
+import { tvMove, tvPress, tvLongSelect, tvSetActive, tvSetOnRowChange, tvSubscribe, tvSubscribeRow, tvState, tvRegisterRow, tvUnregisterRow, tvEffCol, tvHasRow, tvSetCol, tvSetRow } from '../../src/nav/tvSelect';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 /* V176_LONGPRESS_MENU ├óΓé¼ΓÇ¥ extend the ContentCard import with the
    watched/progress helpers + unified menu opener. */
@@ -762,10 +761,14 @@ export default function DiscoverScreen() {
     // win the race even on slow Firestick frames.  Only fires for the
     // top row (target === 0) ├óΓé¼ΓÇ¥ other rows are unaffected.
     if (target === 0) {
-      // V540_PSTV_SCROLL - native PSTVScrollView now suppresses Android's focus
-      // auto-scroll, so the old V277/V278 top-row re-snap retries are gone. Just
-      // release the CW snap-back lock; the anchor scroll above is the single move.
-      cwFocusLockUntilRef.current = 0;
+      cwFocusLockUntilRef.current = Date.now() + 0;
+      const _snap = () => {
+        if (lastFocusedSection.current !== '__cw__') return;
+        if (scrollViewRef.current) {
+          scrollViewRef.current.scrollTo({ y: 0, animated: false });
+        }
+      };
+      if (false) { setTimeout(_snap, 0); }
     }
     lastFocusedSection.current = key;
   });
@@ -965,9 +968,15 @@ const _v369RowFocusHandler = (rowKey: string, contentType: string) => {
          anchor has to come from here. Safe to restore now: V526 put both
          scroll paths on ONE target and V527 removed the 0/80/180/320ms
          re-snaps, so this is a single settle, not the old jump. */
-      // V540_PSTV_SCROLL - native PSTVScrollView suppresses Android's focus
-      // auto-scroll, so the V531 synchronous pre-scroll (which only existed to
-      // beat it) is gone. handleSectionFocus's rAF anchor is the single scroll.
+      /* V531_NO_HESITATE - handleSectionFocus defers its scroll to the next
+         animation frame, so Android's minimum scroll lands first and ours
+         corrects it a frame or more later. That gap is the hesitation. Do
+         the same-target scroll synchronously here so the row is already in
+         place when the frame is drawn; the deferred call then re-affirms
+         the identical offset, so there is nothing left to move. Same
+         target as handleSectionFocus (sectionY - 12), so no second jump. */
+      const _v531y = sectionPositions.current[rowKey];
+      if (typeof _v531y === 'number' && scrollViewRef.current) { (scrollViewRef.current as any).scrollTo({ y: Math.max(0, _v531y - 12), animated: false }); }
       handleSectionFocus(rowKey);
       _v371OnRowFocus(rowKey); /* V373_FOCUS_ANCHORED_RAILS */
       if (contentType !== 'channels') handleItemFocus(ci);
@@ -1161,7 +1170,8 @@ const handleItemPress = useCallback((item: ContentItem) => {
     cwCompute(); const cu1 = tvSubscribe(cwCompute); const cu2 = tvSubscribeRow(0, cwCompute);
     tvSetOnRowChange((row) => { try { /* V526_ONE_SCROLL - this used to scroll directly to (y - 40) while handleSectionFocus scrolls to (sectionY - 12), so a single D-pad press produced two scrolls 28px apart - the two-step jump. Route it through handleSectionFocus so there is one target, coalesced to one scroll per frame. */ let key = '__cw__'; if (row !== 0) { const ti = row - 1; let k = ''; const map = _v371RowIdxByKey.current; for (const kk in map) { if (map[kk] === ti) { k = kk; break; } } key = k; _v371FocusedRowIdx.current = ti; _v371Bump((x) => (x + 1) & 0xff); } if (key) { handleSectionFocus(key); } } catch (_) {} });
     const keySub = DeviceEventEmitter.addListener('onTVKeyEvent', (evt) => { if (!evt || !evt.eventType) return; const t = evt.eventType; if (t === 'up' || t === 'down') { (globalThis as any).__dK = (((globalThis as any).__dK)||0)+1; } if (t === 'up' || t === 'down' || t === 'left' || t === 'right') tvMove(t); else if (t === 'select') tvPress(); else if (t === 'longSelect') tvLongSelect(); _v371Bump((x) => (x + 1) & 0xff); });
-    return () => { try { keySub.remove(); } catch (_) {} tvSetOnRowChange(null); tvUnregisterRow(0); try { cu1(); cu2(); } catch (_) {} };
+    tvSetActive(true); // V541_TV_ACTIVE_GATE - was never set true anywhere, so tvPress/tvMove no-op'd and OK/Select on posters was dead
+    return () => { try { keySub.remove(); } catch (_) {} tvSetActive(false); tvSetOnRowChange(null); tvUnregisterRow(0); try { cu1(); cu2(); } catch (_) {} };
   }, [isTV]);
 
   const handleRemoveFromContinueWatching = async (item: WatchProgress) => {
@@ -1242,7 +1252,7 @@ const renderContinueWatchingItem = useCallback(
          scrolls up to reveal it. CW is the top section, so y=0 is always
          the right target: scroll there directly and record the position so
          the shared handler works for CW from here on. */
-      onSectionFocus={() => { try { sectionPositions.current['__cw__'] = 0; (scrollViewRef.current as any)?.scrollTo({ y: 0, animated: false }); } catch (_) {} handleSectionFocus('__cw__'); }}
+      onSectionFocus={() => { try { tvSetRow(0); tvSetCol(index); } catch (_) {} try { sectionPositions.current['__cw__'] = 0; (scrollViewRef.current as any)?.scrollTo({ y: 0, animated: false }); } catch (_) {} handleSectionFocus('__cw__'); }}
     />
   ),
   [isTV, tvCwSel]
@@ -1338,7 +1348,7 @@ return (
         </View>
 
         {/* Scrollable Content */}
-        <PSTVScrollView
+        <ScrollView
           ref={scrollViewRef}
           scrollEnabled={!isTV}
           style={styles.scrollView}
@@ -1558,7 +1568,7 @@ return (
           })}
 
           <View style={styles.bottomPadding} />
-        </PSTVScrollView>
+        </ScrollView>
       </View>
     )}
   </SafeAreaView>
