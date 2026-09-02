@@ -1,11 +1,11 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid, findNodeHandle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// V261_TAB_FOCUS_CHAIN â€” module-level map of route.name -> native tag.
+// V261_TAB_FOCUS_CHAIN — module-level map of route.name -> native tag.
 // Populated as each tab button mounts.  Used to wire every tab's
 // nextFocusLeft / nextFocusRight to its adjacent sibling so D-pad LEFT/RIGHT
 // stays inside the tab bar instead of jumping into the content posters.
@@ -71,7 +71,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         // PATCH_V14B_FREEZE_ON_BLUR_TABS
-        // PATCH_V40_NO_FREEZE â€” keep Discover mounted; back returns instantly.
+        // PATCH_V40_NO_FREEZE — keep Discover mounted; back returns instantly.
         freezeOnBlur: false,
         lazy: true,
         headerShown: false,
@@ -94,7 +94,7 @@ export default function TabsLayout() {
           isTV && styles.tabBarItemTV,
         ],
         tabBarButton: (props: any) => {
-          // V261_TAB_FOCUS_CHAIN â€” every tab button now explicitly wires
+          // V261_TAB_FOCUS_CHAIN — every tab button now explicitly wires
           // nextFocusLeft / nextFocusRight to its adjacent tab's tag so the
           // D-pad never escapes the tab bar horizontally.  The first tab
           // traps LEFT to itself; the last tab traps RIGHT to itself.
@@ -142,7 +142,7 @@ export default function TabsLayout() {
             return unsub;
           }, [myName]);
 
-          // Ladder of retries â€” mount, layout, plus delayed attempts.
+          // Ladder of retries — mount, layout, plus delayed attempts.
           useEffect(() => {
             if (!myName) return;
             const timers = [0, 80, 250, 600, 1500].map((ms) => setTimeout(grabTag, ms));
@@ -176,13 +176,20 @@ export default function TabsLayout() {
               {...props}
               {...trap}
               focusable={true}
-              /* v238 â€” cold-boot focus lands on the Discover tab button.
+              /* v238 — cold-boot focus lands on the Discover tab button.
                  Without this, no element claimed initial TV focus and the
                  selector ring was invisible until the user pressed a key. */
               hasTVPreferredFocus={isFirst}
               onLayout={grabTag}
-              onFocus={() => { setIsFocused(true); grabTag(); }}
-              onBlur={() => setIsFocused(false)}
+              onFocus={() => {
+                console.log('[FOCUS_DIAG] TAB focus name=' + myName + ' t=' + Date.now());
+                setIsFocused(true);
+                grabTag();
+              }}
+              onBlur={() => {
+                console.log('[FOCUS_DIAG] TAB blur name=' + myName + ' t=' + Date.now());
+                setIsFocused(false);
+              }}
               style={({ focused }: any) => [
                 props.style,
                 (focused || isFocused) && styles.tabItemFocused,

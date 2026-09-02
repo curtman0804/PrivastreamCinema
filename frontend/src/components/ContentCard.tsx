@@ -633,13 +633,27 @@ export const V176kPopover: React.FC = () => {
 
 const V176kRow: React.FC<{ action: V176kAction; isFirst: boolean; onSelect: (a: V176kAction) => void }> = ({ action, isFirst, onSelect }) => {
   const [focused, setFocused] = useState(false);
+  // V576_MENU_FRESH_PRESS - the CENTER release that ends the poster
+  // long-press must not activate the newly-focused first menu row.
+  // A row may select only after it receives its own fresh press-in.
+  const _v576PressBeganHere = useRef(false);
   return (
     <Pressable
       hasTVPreferredFocus={isFirst}
       focusable={true}
-      onPress={() => onSelect(action)}
+      onPress={() => {
+        if (!_v576PressBeganHere.current) return;
+        _v576PressBeganHere.current = false;
+        onSelect(action);
+      }}
+      onPressIn={() => {
+        _v576PressBeganHere.current = true;
+      }}
       onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onBlur={() => {
+        _v576PressBeganHere.current = false;
+        setFocused(false);
+      }}
       android_ripple={null}
       style={[v176kStyles.row, focused && v176kStyles.rowFocused]}
     >
@@ -1082,6 +1096,10 @@ export const getCardWidth = (
    freshest closure. */
 let _v173FocusedLP: (() => void) | null = null;
 let _v176iLatestGetter: (() => (() => void) | null) | null = null;
+/* V176P_TV_SHORTPRESS_REGISTRY — TV CENTER short-press is emitted by
+   MainActivity on KEY_UP, after Android has had time to distinguish it from
+   a long press. Only the currently native-focused ContentCard registers here. */
+let _v176pLatestPressGetter: (() => (() => void) | null) | null = null;
 try {
   /* DeviceEventEmitter is already imported at top of file. */
   /* V176F_TV_DIAG â€” diagnostic logs so we can SEE in logcat which TV
@@ -1089,6 +1107,14 @@ try {
          adb logcat -d -t 500 ReactNativeJS:V *:S | findstr V176F */
   DeviceEventEmitter.addListener('onTVKeyEvent', (evt: any) => {
     /* V176L_PERF_CLEANUP â€” diagnostic log removed (fired per keypress). */
+    if (evt && evt.eventType === 'select') {
+      let target: (() => void) | null = null;
+      try { if (_v176pLatestPressGetter) target = _v176pLatestPressGetter(); } catch (_) {}
+      if (target) {
+        try { target(); } catch (e) { console.log('[V176P] select dispatch error:', e); }
+      }
+      return;
+    }
     if (evt && evt.eventType === 'longSelect') {
       /* V176M_DIAG â€” single log per long-press (NOT per keypress) so
          we can confirm in logcat that the JS bridge received the event
@@ -1120,6 +1146,10 @@ export function v176iRegisterGetter(get: (() => (() => void) | null) | null): vo
   _v176iLatestGetter = get;
 }
 
+export function v176pRegisterPressGetter(get: (() => (() => void) | null) | null): void {
+  _v176pLatestPressGetter = get;
+}
+
 const ContentCardComponent: React.FC<ContentCardProps> = ({
   item,
   onPress,
@@ -1137,8 +1167,6 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   onCardBlur,
   nextFocusUpTag,
   rowIndex,
-  selected = false,
-  tvNav = false,
 }) => {
   const { width, height } = useWindowDimensions();
 
@@ -1335,6 +1363,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     /* V176I_REF_DISPATCH â€” register a getter, not the closure itself. */
     try { v176iRegisterGetter(() => _v176iLpRef.current); } catch (_) {}
     try { v173RegisterLongPress(handleLongPress); } catch (_) {}
+    try { v176pRegisterPressGetter(() => _v176pPressRef.current); } catch (_) {}
     /* V176M_DIAG â€” confirm registration happened on this focus. */
     /* V452_DEFER_LOG */ setTimeout(() => { try { console.log('[V176M] focus reg id=' + String((item as any)?.imdb_id || (item as any)?.id || '?')); } catch (_) {} }, 0);
     /* V435_FOCUS_MEMORY - save id so next Discover mount can restore focus. */
@@ -1372,6 +1401,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     /* V173_TV_LONGPRESS_REGISTRY â€” clear long-press registration on blur. */
     try { v176iRegisterGetter(null); } catch (_) {}
     try { v173RegisterLongPress(null); } catch (_) {}
+    try { v176pRegisterPressGetter(null); } catch (_) {}
   }, [onCardBlur]);
 
   const handleLongPress = useCallback(async () => {
@@ -1398,8 +1428,8 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
      (not a stale closure frozen at the last onFocus). */
   const _v176iLpRef = useRef<(() => void) | null>(null);
   _v176iLpRef.current = handleLongPress;
-
-  
+  const _v176pPressRef = useRef<(() => void) | null>(null);
+  _v176pPressRef.current = onPress || null;
 
   /* V176B_PRESS_TIMING â€” Pressable.onLongPress is unreliable on
      Firestick / Android TV OK buttons.  Do our own timing via
@@ -1409,10 +1439,12 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   const _v176bPressIn = useCallback(() => {
     _v176bLpFired.current = false;
     if (_v176bLpTimer.current) clearTimeout(_v176bLpTimer.current);
-    _v176bLpTimer.current = setTimeout(() => {
-      _v176bLpFired.current = true;
-      try { handleLongPress(); } catch (_) {}
-    }, 500);
+    if (!isTV) {
+      _v176bLpTimer.current = setTimeout(() => {
+        _v176bLpFired.current = true;
+        try { handleLongPress(); } catch (_) {}
+      }, 500);
+    }
     // PATCH_V249_PRESSIN_PREFETCH â€” fire meta prefetch IMMEDIATELY on press
     // (before the click resolves into a navigation).  This guarantees the
     // network round-trip starts ASAP even when the user clicks faster than
@@ -1426,7 +1458,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
           .catch(() => { /* best-effort */ });
       }
     } catch (_) {}
-  }, [handleLongPress, item]);
+  }, [handleLongPress, item, isTV]);
   const _v176bPressOut = useCallback(() => {
     if (_v176bLpTimer.current) {
       clearTimeout(_v176bLpTimer.current);
@@ -1434,9 +1466,12 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     }
   }, []);
   const _v176bOnPress = useCallback(() => {
+    /* TV short presses are dispatched from MainActivity on KEY_UP so a held
+       CENTER can never navigate before long-press detection completes. */
+    if (isTV) return;
     if (_v176bLpFired.current) { _v176bLpFired.current = false; return; }
     try { onPress && onPress(); } catch (_) {}
-  }, [onPress]);
+  }, [onPress, isTV]);
 
   if (!item) return null;
 
@@ -1494,16 +1529,18 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     <V176kPopoverHost />
     <Pressable
       ref={pressableRef}
-      focusable={!tvNav}
+      /* Native Android/Fire TV focus is the single source of truth.
+         JS may observe focus for scrolling/prefetch, but it does not own selection. */
+      focusable={true}
       onPress={_v176bOnPress}
       onPressIn={_v176bPressIn}
       onPressOut={_v176bPressOut}
-      onLongPress={handleLongPress}
+      onLongPress={isTV ? undefined : handleLongPress}
       delayLongPress={500}
       onFocus={handleFocus}
       onBlur={handleBlur}
       android_ripple={null}
-      hasTVPreferredFocus={tvNav ? false : (hasTVPreferredFocus || _v443SelfFocus)}
+      hasTVPreferredFocus={hasTVPreferredFocus || _v443SelfFocus}
 
       nextFocusRight={
         isLastInRow && selfNode
@@ -1542,7 +1579,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
         style={[
           styles.posterContainer,
           { height: cardHeight },
-          (isFocused || selected) && styles.posterFocused,
+          isFocused && styles.posterFocused,
         ]}
       >
         <View style={styles.imageWrapper}>

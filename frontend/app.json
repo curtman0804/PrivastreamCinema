@@ -3,7 +3,7 @@
     "name": "Privastream Cinema",
     "slug": "privastreamcinema",
     "version": "1.7.2",
-    "runtimeVersion": "1.1.0",
+    "runtimeVersion": "1.1.1",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "privastreamcinema",
@@ -68,7 +68,8 @@
         }
       ],
       "expo-video",
-      "expo-updates"
+      "expo-updates",
+      "@react-native-tvos/config-tv"
     ],
     "experiments": {
       "typedRoutes": true

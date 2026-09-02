@@ -110,6 +110,30 @@ class MainActivity : ReactActivity() {
       return true
     }
 
+    /* V176P_TV_SHORTPRESS — emit SELECT only on KEY_UP. The initial
+       CENTER down is still allowed through to Android for native focus/pressed
+       state, but ContentCard ignores its native onPress on TV. If this press
+       became a long press, the branch above consumes this KEY_UP instead. */
+    if (isOk && event.action == KeyEvent.ACTION_UP) {
+      try {
+        val reactApp = application as? com.facebook.react.ReactApplication
+        if (reactApp != null) {
+          var ctx: com.facebook.react.bridge.ReactContext? = null
+          try { ctx = reactApp.reactHost?.currentReactContext } catch (e: Exception) {}
+          if (ctx == null) {
+            try { ctx = reactApp.reactNativeHost?.reactInstanceManager?.currentReactContext } catch (e: Exception) {}
+          }
+          if (ctx != null) {
+            val params = Arguments.createMap()
+            params.putString("eventType", "select")
+            params.putInt("keyCode", event.keyCode)
+            ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+              .emit("onTVKeyEvent", params)
+          }
+        }
+      } catch (e: Exception) {}
+    }
+
     if (event.action == KeyEvent.ACTION_DOWN) {
       val eventName = when (event.keyCode) {
         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "playPause"
@@ -123,8 +147,6 @@ class MainActivity : ReactActivity() {
         KeyEvent.KEYCODE_DPAD_UP -> "up"
         KeyEvent.KEYCODE_DPAD_DOWN -> "down"
         KeyEvent.KEYCODE_MENU -> "longSelect"
-        KeyEvent.KEYCODE_DPAD_CENTER -> "select"
-        KeyEvent.KEYCODE_ENTER -> "select"
         else -> null
       }
 

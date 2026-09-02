@@ -22,14 +22,13 @@ import { ContentItem } from '../api/client';
 import apiClient, { api } from '../api/client';
 import { getMetaCache, setMetaCache } from '../store/contentStore'; // PATCH_V250_VIEWPORT_PREFETCH
 import { colors } from '../styles/colors';
-import { tvRegisterRow, tvUnregisterRow, tvSubscribe, tvSubscribeRow, tvState, tvSetCol, tvSetRow } from '../nav/tvSelect';
+import PSTVHorizontalScrollView from './PSTVHorizontalScrollView';
 
 const ITEM_GAP = 16;
 const TV_PADDING_LEFT = 48;
 const TV_PADDING_RIGHT = 48;
 const MOBILE_PADDING = 16;
 
-const TV_SCROLL_ANCHOR = 4;
 
 // PATCH_V250_BACK_NAV_FOCUS Ã¢â‚¬â€ module-level map of rowKey -> last-focused content_id.
 // When user backs out of Details, ServiceRow re-mounts and gives the previously
@@ -180,6 +179,27 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
     const flatListRef = useRef<FlashList<ContentItem>>(null);
 
+    // V577_TV_HORIZONTAL_WINDOW
+    // Index occupying the first fully-visible poster slot.
+    // Native Android owns focus; this ref only owns deliberate row position.
+    const tvWindowStartRef = useRef(0);
+
+    // Keep current geometry in refs so handleCardFocus never needs to be
+    // recreated when dimensions change.
+    const tvVisibleCountRef = useRef(1);
+    const tvItemStepRef = useRef(itemTotalWidth);
+
+    tvItemStepRef.current = itemTotalWidth;
+    tvVisibleCountRef.current = isTV
+      ? Math.max(
+          1,
+          Math.floor(
+            (Math.max(0, screenWidth - TV_PADDING_LEFT) + ITEM_GAP) /
+              itemTotalWidth
+          )
+        )
+      : 1;
+
     const isNavigatingInRowRef = useRef(false);
 
     const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -192,21 +212,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
     );
 
     itemCountRef.current = validItems.length;
-    const validItemsRef = useRef(validItems); validItemsRef.current = validItems;
-    const isTVNav = isTV;
-    const [tvSelCol, setTvSelCol] = useState(-1);
-    const _tvScrollToCol = useCallback((c: number) => { const off = Math.max(0, (c - TV_SCROLL_ANCHOR) * itemTotalWidth); try { (flatListRef.current as any)?.scrollToOffset({ offset: off, animated: false }); } catch (_) {} }, [itemTotalWidth]);
-    useEffect(() => {
-      if (!isTVNav || typeof tvRowIndex !== 'number') return;
-      tvRegisterRow(tvRowIndex, { getCount: () => validItemsRef.current.length, scrollToCol: _tvScrollToCol, press: (c: number) => { const it = validItemsRef.current[c]; if (it) onItemPress(it); }, focus: (c: number) => { const it = validItemsRef.current[c]; if (it && onItemFocus) onItemFocus(it); } });
-      return () => tvUnregisterRow(tvRowIndex);
-    }, [isTVNav, tvRowIndex, _tvScrollToCol, onItemPress, onItemFocus]);
-    useEffect(() => {
-      if (!isTVNav || typeof tvRowIndex !== 'number') { setTvSelCol(-1); return; }
-      const compute = () => { const st = tvState(); if (st.active && st.row === tvRowIndex) { const n = validItemsRef.current.length; setTvSelCol(n > 0 ? Math.min(Math.max(0, st.col), n - 1) : 0); } else { setTvSelCol(-1); } };
-      compute(); const u1 = tvSubscribe(compute); const u2 = tvSubscribeRow(tvRowIndex, compute);
-      return () => { u1(); u2(); };
-    }, [isTVNav, tvRowIndex]);
 
     // v238 Ã¢â‚¬â€ DO NOT early-return here.  Hooks below this point MUST run
     // every render or React throws "Rendered more/fewer hooks than during
@@ -274,13 +279,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         // viewport prefetch pauses until navigation settles.
         _v575LastNavAt = Date.now();
 
-        // V541_PRESS_SYNC - keep the tvSelect selector locked to the card that
-        // ACTUALLY has native focus, so pressing OK opens THIS poster in THIS
-        // row (not the item at a drifted JS row/column). Fixes "row 2 opens
-        // row 1's details" and "opens the wrong content".
-        if (typeof tvRowIndex === 'number') tvSetRow(tvRowIndex);
-        tvSetCol(index);
-
         onSectionFocus?.();
 
         const focusedItem = validItems[index];
@@ -301,20 +299,69 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
           onItemFocus(focusedItem);
         }
 
-        if (
-          isTV &&
-          flatListRef.current &&
-          isNavigatingInRowRef.current
-        ) {
-          const targetOffset = Math.max(
-            0,
-            (index - TV_SCROLL_ANCHOR) * itemTotalWidth
+
+        // V577_TV_HORIZONTAL_WINDOW
+        //
+        // Focus moves freely inside the visible poster window.
+        //
+        // Example with six fully-visible posters:
+        //   0 1 2 3 4 5   -> no scrolling
+        //
+        // Moving 5 -> 6 shifts the row exactly one poster so index 6 occupies
+        // visual slot 6. Reversing direction then moves focus 6 -> 5 -> 4...
+        // without moving the row until focus crosses the left window edge.
+        if (isTV && flatListRef.current) {
+          const visibleCount = tvVisibleCountRef.current;
+          let windowStart = tvWindowStartRef.current;
+          const windowEnd = windowStart + visibleCount - 1;
+
+          console.log(
+            '[V577_WINDOW]',
+            'index=', index,
+            'start=', windowStart,
+            'end=', windowEnd,
+            'visible=', visibleCount,
+            'step=', tvItemStepRef.current
           );
 
-          flatListRef.current.scrollToOffset({
-            offset: targetOffset,
-            animated: false,
-          });
+          try {
+            const flashListDimensions =
+              (flatListRef.current as any)?.getChildContainerDimensions?.();
+
+            console.log(
+              '[V588_FLASHLIST_GEOMETRY]',
+              'index=', index,
+              'items=', validItems.length,
+              'itemTotalWidth=', itemTotalWidth,
+              'expectedWidth=', validItems.length * itemTotalWidth,
+              'flashListWidth=', flashListDimensions?.width,
+              'flashListHeight=', flashListDimensions?.height
+            );
+          } catch (error) {
+            console.log(
+              '[V588_FLASHLIST_GEOMETRY]',
+              'status=threw',
+              'error=', String(error)
+            );
+          }
+
+          if (index > windowEnd) {
+            windowStart = index - visibleCount + 1;
+            tvWindowStartRef.current = windowStart;
+
+            flatListRef.current.scrollToOffset({
+              offset: windowStart * tvItemStepRef.current,
+              animated: false,
+            });
+          } else if (index < windowStart) {
+            windowStart = index;
+            tvWindowStartRef.current = windowStart;
+
+            flatListRef.current.scrollToOffset({
+              offset: windowStart * tvItemStepRef.current,
+              animated: false,
+            });
+          }
         }
 
         isNavigatingInRowRef.current = true;
@@ -381,8 +428,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
             /* v475: pass rowIndex so ContentCard's v443:navBack listener
                can scope focus restore by row (fixes cross-row focus race). */
             rowIndex={rowIndex}
-            selected={isTVNav && tvSelCol === index}
-            tvNav={isTVNav}
           />
         );
       },
@@ -395,8 +440,6 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         serviceName,
         title,
         nextFocusUpTag,
-        tvSelCol,
-        isTVNav,
       ]
     );
 
@@ -463,8 +506,11 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
           <FlashList
             ref={flatListRef as any}
             horizontal
+            renderScrollComponent={
+              isTV ? (PSTVHorizontalScrollView as any) : undefined
+            }
             data={validItems}
-            extraData={`${validItems.length}:${tvSelCol}`}
+            extraData={validItems.length}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             showsHorizontalScrollIndicator={false}

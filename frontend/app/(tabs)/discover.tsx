@@ -32,7 +32,6 @@ import { useContentStore, useDiscoverData } from '../../src/store/contentStore';
 import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
 import { FlashList } from '@shopify/flash-list'; // PATCH_V54_VIRTUALIZE
 import { ServiceRow } from '../../src/components/ServiceRow';
-import { tvMove, tvPress, tvLongSelect, tvSetActive, tvSetOnRowChange, tvSubscribe, tvSubscribeRow, tvState, tvRegisterRow, tvUnregisterRow, tvEffCol, tvHasRow, tvSetCol, tvSetRow } from '../../src/nav/tvSelect';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
 /* V176_LONGPRESS_MENU ├óΓé¼ΓÇ¥ extend the ContentCard import with the
    watched/progress helpers + unified menu opener. */
@@ -248,8 +247,6 @@ export default function DiscoverScreen() {
   const lastFocusedSection = useRef<string>('');
   const lastCWFetchTime = useRef<number>(0);
   const cwListRef = useRef<FlatList>(null);
-  const cwDataRef = useRef<any[]>([]);
-  const [tvCwSel, setTvCwSel] = useState<number>(-1);
 
   // V316c_FOCUS_UP - first-mounted Continue-Watching poster's native
   // view tag.  ContinueWatchingItem broadcasts the tag via
@@ -721,6 +718,7 @@ export default function DiscoverScreen() {
        D-pad repeats, so doing it there left the lock engaged. */
     if (sectionKey !== '__cw__') { cwFocusLockUntilRef.current = 0; }
     lastFocusedSection.current = sectionKey;
+    console.log('[HOLD_DIAG] handleSectionFocus ENTRY key=' + sectionKey + ' t=' + Date.now());
     /* V524_HOLD_SCROLL - this cancelled the queued scroll on every key repeat,
        so while the D-pad was held it never ran and the page only caught up on
        release. Let the queued frame run; it reads the latest row. */
@@ -738,14 +736,14 @@ export default function DiscoverScreen() {
     // V279_DIAG ├óΓé¼ΓÇ¥ trace every section focus event with timestamp + current
     // scroll position so we can see whether the FIRST UP press is even
     // calling this for the CW row.
-    false && console.log('[V279_DIAG] handleSectionFocus key=' + sectionKey + ' t=' + Date.now());
+    console.log('[V279_DIAG] handleSectionFocus key=' + sectionKey + ' t=' + Date.now());
     { const _v343dt = Date.now() - (_v343NavBackAt.current || 0); if (_v343dt >= 0 && _v343dt < 800) false && console.log('[V343 NAV_BACK] first section focus t+' + _v343dt + 'ms key=' + sectionKey); }
     if (_v211PendingFrame.current != null) {
       cancelAnimationFrame(_v211PendingFrame.current);
       _v211PendingFrame.current = null;
     }
     const sectionY = sectionPositions.current[key];
-    false && console.log('[V279_DIAG]   sectionY=' + sectionY + ' lastFocusedSection=' + lastFocusedSection.current);
+    console.log('[V279_DIAG]   sectionY=' + sectionY + ' lastFocusedSection=' + lastFocusedSection.current);
     if (sectionY === undefined || !scrollViewRef.current) return;
     const target = Math.max(0, sectionY - 12);
     /* V382_LOCK_RELEASE - focus moved to a non-CW row: kill the V278 CW
@@ -753,7 +751,7 @@ export default function DiscoverScreen() {
        ("selector moves but the page doesn't"). */
     if (sectionKey !== '__cw__') { cwFocusLockUntilRef.current = 0; }
     scrollViewRef.current.scrollTo({ y: target, animated: false });
-    false && console.log('[V279_DIAG]   scrollTo(' + target + ')');
+    console.log('[V279_DIAG]   scrollTo(' + target + ')');
     // V277_CW_SNAP_HARDER ├óΓé¼ΓÇ¥ v238g only retried ONCE at 50ms which left the
     // CW row "halfway up" because Android TV's `requestRectangleOnScreen`
     // fires AFTER our scroll and re-positions to "just visible".  Now:
@@ -975,9 +973,22 @@ const _v369RowFocusHandler = (rowKey: string, contentType: string) => {
          place when the frame is drawn; the deferred call then re-affirms
          the identical offset, so there is nothing left to move. Same
          target as handleSectionFocus (sectionY - 12), so no second jump. */
-      const _v531y = sectionPositions.current[rowKey];
-      if (typeof _v531y === 'number' && scrollViewRef.current) { (scrollViewRef.current as any).scrollTo({ y: Math.max(0, _v531y - 12), animated: false }); }
-      handleSectionFocus(rowKey);
+      const _v531RowChanged = lastFocusedSection.current !== rowKey;
+
+      if (_v531RowChanged) {
+        const _v531y = sectionPositions.current[rowKey];
+
+        if (typeof _v531y === 'number' && scrollViewRef.current) {
+          console.log('[HOLD_DIAG] V531 sync scroll key=' + rowKey + ' y=' + Math.max(0, _v531y - 12) + ' t=' + Date.now());
+          (scrollViewRef.current as any).scrollTo({
+            y: Math.max(0, _v531y - 12),
+            animated: false
+          });
+        }
+
+        handleSectionFocus(rowKey);
+      }
+
       _v371OnRowFocus(rowKey); /* V373_FOCUS_ANCHORED_RAILS */
       if (contentType !== 'channels') handleItemFocus(ci);
     };
@@ -1148,31 +1159,6 @@ const handleItemPress = useCallback((item: ContentItem) => {
   };
 
   // Handle removing item from continue watching
-  cwDataRef.current = (continueWatching && continueWatching.length > 0) ? continueWatching : cachedCW;
-  useEffect(() => {
-    if (!isTV) return;
-    tvRegisterRow(0, { getCount: () => (cwDataRef.current ? cwDataRef.current.length : 0), scrollToCol: (c) => { const stride = isTV ? 320 : 220; const off = Math.max(0, (c - 2) * stride); try { (cwListRef.current as any)?.scrollToOffset({ offset: off, animated: false }); } catch (_) {} }, press: (c) => { const it = cwDataRef.current ? cwDataRef.current[c] : null; if (it) { try { handleContinueWatchingPress(it); } catch (_) {} } } });
-    // V536b_GUARD - drive the CW highlight from the JS focus engine (one move
-    // per D-pad press), but NO-OP during transient states (engine inactive, or
-    // CW row 0 not registered yet) so a momentary lapse never blanks the last
-    // selection with a `-1` write. Only clear when focus is genuinely on
-    // another active row.
-    const cwCompute = () => {
-      const st = tvState();
-      if (!st.active || !tvHasRow(0)) return; // transient - keep last selection
-      if (st.row === 0) {
-        const n = cwDataRef.current ? cwDataRef.current.length : 0;
-        setTvCwSel(n > 0 ? tvEffCol(n) : 0);
-      } else {
-        setTvCwSel(-1);
-      }
-    };
-    cwCompute(); const cu1 = tvSubscribe(cwCompute); const cu2 = tvSubscribeRow(0, cwCompute);
-    tvSetOnRowChange((row) => { try { /* V526_ONE_SCROLL - this used to scroll directly to (y - 40) while handleSectionFocus scrolls to (sectionY - 12), so a single D-pad press produced two scrolls 28px apart - the two-step jump. Route it through handleSectionFocus so there is one target, coalesced to one scroll per frame. */ let key = '__cw__'; if (row !== 0) { const ti = row - 1; let k = ''; const map = _v371RowIdxByKey.current; for (const kk in map) { if (map[kk] === ti) { k = kk; break; } } key = k; _v371FocusedRowIdx.current = ti; _v371Bump((x) => (x + 1) & 0xff); } if (key) { handleSectionFocus(key); } } catch (_) {} });
-    const keySub = DeviceEventEmitter.addListener('onTVKeyEvent', (evt) => { if (!evt || !evt.eventType) return; const t = evt.eventType; if (t === 'up' || t === 'down') { (globalThis as any).__dK = (((globalThis as any).__dK)||0)+1; } if (t === 'up' || t === 'down' || t === 'left' || t === 'right') tvMove(t); else if (t === 'select') tvPress(); else if (t === 'longSelect') tvLongSelect(); _v371Bump((x) => (x + 1) & 0xff); });
-    tvSetActive(true); // V541_TV_ACTIVE_GATE - was never set true anywhere, so tvPress/tvMove no-op'd and OK/Select on posters was dead
-    return () => { try { keySub.remove(); } catch (_) {} tvSetActive(false); tvSetOnRowChange(null); tvUnregisterRow(0); try { cu1(); cu2(); } catch (_) {} };
-  }, [isTV]);
 
   const handleRemoveFromContinueWatching = async (item: WatchProgress) => {
     // V275_CW_INSTANT_REMOVE_FIX ├óΓé¼ΓÇ¥ was using stale closure values
@@ -1237,8 +1223,6 @@ const renderContinueWatchingItem = useCallback(
       isTV={isTV}
       isFirst={index === 0} /* V446_CW_LEFT_EDGE */
       isLast={index === Math.max(0, (_v342CwLenRef.current - 1))}
-      selected={isTV && tvCwSel === index}
-      tvNav={isTV}
       onPress={() => handleContinueWatchingPress(item)}
       onRemove={() => handleRemoveFromContinueWatching(item)}
       /* V536_CW_REVEAL - handleSectionFocus reads sectionPositions[key] and
@@ -1252,10 +1236,10 @@ const renderContinueWatchingItem = useCallback(
          scrolls up to reveal it. CW is the top section, so y=0 is always
          the right target: scroll there directly and record the position so
          the shared handler works for CW from here on. */
-      onSectionFocus={() => { try { tvSetRow(0); tvSetCol(index); } catch (_) {} try { sectionPositions.current['__cw__'] = 0; (scrollViewRef.current as any)?.scrollTo({ y: 0, animated: false }); } catch (_) {} handleSectionFocus('__cw__'); }}
+      onSectionFocus={() => { try { sectionPositions.current['__cw__'] = 0; (scrollViewRef.current as any)?.scrollTo({ y: 0, animated: false }); } catch (_) {} handleSectionFocus('__cw__'); }}
     />
   ),
-  [isTV, tvCwSel]
+  [isTV]
 );
 
 // Show loading only on initial load
@@ -1431,15 +1415,9 @@ return (
         >
           {/* PATCH_V241_USE_DEFERRED ├óΓé¼ΓÇ¥ render from deferredFlatRows so heavy
               row map is non-blocking */}
-          {/* V535_NO_STRAY_TARGET - this invisible 1x1 sits directly above the
-              first row. Before V533 it was the only focusable thing at the top,
-              so it was the intended landing spot. Now that the Continue Watching
-              posters are focusable it is a stray candidate: coming back DOWN from
-              the top, Android could pick this 1x1 instead of the next row, which
-              hid the selector and flipped the JS engine on mid-navigation. Nothing
-              else writes tvSetActive, and the CW highlight now comes from
-              isFocused, so tvCwSel is already redundant. Non-focusable leaves one
-              owner for focus: Android. accessibilityLabel is the build marker. */}
+          {/* V535_NO_STRAY_TARGET - keep this invisible 1x1 non-focusable.
+              Continue Watching and content posters are real native focus targets,
+              so Android/Fire TV remains the single owner of D-pad focus. */}
           {isTV ? (<View accessibilityLabel="V536" focusable={false} style={{ width: 1, height: 1 }} />) : null}
           {deferredFlatRows.map((item: any) => {
             // V274_CW_INSTANT_REMOVE ├óΓé¼ΓÇ¥ bypass useDeferredValue lag: when
@@ -1485,7 +1463,6 @@ return (
                   <FlatList
                     /* PATCH_V144_CACHE_CWDATA ├óΓé¼ΓÇ¥ fall back to cached CW for cold-start paint */
                     ref={cwListRef}
-                    extraData={tvCwSel}
                     data={(continueWatching && continueWatching.length > 0) ? continueWatching : cachedCW}
                     renderItem={renderContinueWatchingItem}
                     keyExtractor={(cwItem) =>
@@ -1600,8 +1577,6 @@ function ContinueWatchingItem({
   isTV, 
   isFirst,  /* V446_CW_LEFT_EDGE */
   isLast,
-  selected,
-  tvNav,
   onPress, 
   onRemove,
   onSectionFocus,
@@ -1612,8 +1587,6 @@ function ContinueWatchingItem({
   isTV: boolean;
   isFirst?: boolean;  /* V446_CW_LEFT_EDGE */
   isLast?: boolean;
-  selected?: boolean;
-  tvNav?: boolean;
   onPress: () => void;
   onRemove: () => void;
   onSectionFocus?: () => void;
@@ -1769,16 +1742,9 @@ function ContinueWatchingItem({
       {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
         ref={posterRef}
-        /* V533_CW_FOCUSABLE - on TV tvNav is true, so this evaluated to
-           focusable=false and Android's focus search could not land on a
-           Continue Watching poster at all. The only focusable thing at the
-           top was the invisible 1x1 sentinel, so moving up put focus on a
-           1x1 view, flipped the JS engine on, and the highlight only
-           appeared after a re-render: the snag at the top. Every other row
-           on this screen is focusable and steps correctly, so make this
-           row behave the same. isFocused already drives the highlight
-           alongside selected, and the V342/V446 self-loop guards on the
-           first and last poster now actually take effect. */
+        /* V533_CW_FOCUSABLE - Continue Watching posters are real native
+           focus targets. Android/Fire TV owns focus; isFocused owns the
+           visible highlight, and V342/V446 contain LEFT/RIGHT at the edges. */
         focusable={true}
         // V342_CW_RIGHT_EDGE - when this is the last CW card, block RIGHT
         // navigation from falling through into the row below by pointing
@@ -1793,14 +1759,22 @@ function ContinueWatchingItem({
         onPressOut={_v176bPressOut}
         onLongPress={_v176OpenMenu}
         delayLongPress={500}
-        onFocus={() => { try { _v173RegLP(_v176OpenMenu); } catch (_) {} handleFocus(); }}
-        onBlur={() => { try { _v173RegLP(null); } catch (_) {} setIsFocused(false); }}
+        onFocus={() => {
+          console.log('[FOCUS_DIAG] CW focus id=' + (item?.content_id || item?.id || item?.imdb_id || 'unknown') + ' t=' + Date.now());
+          try { _v173RegLP(_v176OpenMenu); } catch (_) {}
+          handleFocus();
+        }}
+        onBlur={() => {
+          console.log('[FOCUS_DIAG] CW blur id=' + (item?.content_id || item?.id || item?.imdb_id || 'unknown') + ' t=' + Date.now());
+          try { _v173RegLP(null); } catch (_) {}
+          setIsFocused(false);
+        }}
         android_ripple={null}
         /* V176P_X_REMOVED ├óΓé¼ΓÇ¥ nextFocusUp target gone. */
         style={[
           styles.continueImageWrapper,
           /* V176P_X_REMOVED ├óΓé¼ΓÇ¥ no more X row to overlap. */
-          (isFocused || selected) && styles.continueImageWrapperFocused,
+          isFocused && styles.continueImageWrapperFocused,
         ]}
       >
         <View style={[styles.continueImageContainer, { height: posterHeight }]}>
@@ -2104,3 +2078,4 @@ const styles = StyleSheet.create({
     marginLeft: 14,
   },
 });
+

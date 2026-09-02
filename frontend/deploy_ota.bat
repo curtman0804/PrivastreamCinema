@@ -34,7 +34,7 @@ echo.
 echo === [3/3] Uploading (curl, primary) ===
 curl --show-error --http1.1 --tlsv1.2 -H "Expect:" --max-time 180 -X POST ^
   -H "Authorization: Bearer %PRIVASTREAM_OTA_TOKEN%" ^
-  -H "x-runtime-version: 1.1.0" ^
+  -H "x-runtime-version: 1.1.1" ^
   -H "x-platform: android" ^
   -F "file=@ota.zip" ^
   "https://api.privastreamsolutions.com/api/expo-updates/upload"
@@ -54,7 +54,7 @@ powershell -NoProfile -Command ^
   "  $client.Timeout = [TimeSpan]::FromSeconds(180);" ^
   "  $client.DefaultRequestHeaders.ExpectContinue = $false;" ^
   "  $client.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue('Bearer', $env:PRIVASTREAM_OTA_TOKEN);" ^
-  "  $client.DefaultRequestHeaders.Add('x-runtime-version','1.1.0');" ^
+  "  $client.DefaultRequestHeaders.Add('x-runtime-version','1.1.1');" ^
   "  $client.DefaultRequestHeaders.Add('x-platform','android');" ^
   "  $content = New-Object System.Net.Http.MultipartFormDataContent;" ^
   "  $fs = [System.IO.File]::OpenRead((Resolve-Path 'ota.zip'));" ^

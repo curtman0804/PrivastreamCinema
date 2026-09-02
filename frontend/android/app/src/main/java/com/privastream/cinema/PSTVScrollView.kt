@@ -16,5 +16,5 @@ class PSTVScrollView(context: Context) : ReactScrollView(context) {
     Log.d("PSTV", "PSTVScrollView created - native focus auto-scroll suppressed (V540)")
   }
 
-  override fun computeScrollDeltaToGetChildRectOnScreen(rect: Rect?): Int = 0
+  override fun computeScrollDeltaToGetChildRectOnScreen(rect: Rect): Int = 0
 }
