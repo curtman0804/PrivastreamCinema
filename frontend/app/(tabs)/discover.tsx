@@ -1355,8 +1355,6 @@ return (
             _v371OnScrollY(y);
             const lockUntil = cwFocusLockUntilRef.current || 0;
             const inLock = Date.now() < lockUntil;
-            if (y > 0) {
-            }
             if (inLock && y > 0 && lastFocusedSection.current === '__cw__' && scrollViewRef.current) { /* V382_LOCK_SCOPE */
               scrollViewRef.current.scrollTo({ y: 0, animated: false });
             }
