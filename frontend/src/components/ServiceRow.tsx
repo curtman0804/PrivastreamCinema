@@ -315,35 +315,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
           let windowStart = tvWindowStartRef.current;
           const windowEnd = windowStart + visibleCount - 1;
 
-          console.log(
-            '[V577_WINDOW]',
-            'index=', index,
-            'start=', windowStart,
-            'end=', windowEnd,
-            'visible=', visibleCount,
-            'step=', tvItemStepRef.current
-          );
 
-          try {
-            const flashListDimensions =
-              (flatListRef.current as any)?.getChildContainerDimensions?.();
-
-            console.log(
-              '[V588_FLASHLIST_GEOMETRY]',
-              'index=', index,
-              'items=', validItems.length,
-              'itemTotalWidth=', itemTotalWidth,
-              'expectedWidth=', validItems.length * itemTotalWidth,
-              'flashListWidth=', flashListDimensions?.width,
-              'flashListHeight=', flashListDimensions?.height
-            );
-          } catch (error) {
-            console.log(
-              '[V588_FLASHLIST_GEOMETRY]',
-              'status=threw',
-              'error=', String(error)
-            );
-          }
 
           if (index > windowEnd) {
             windowStart = index - visibleCount + 1;

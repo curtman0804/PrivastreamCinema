@@ -718,7 +718,6 @@ export default function DiscoverScreen() {
        D-pad repeats, so doing it there left the lock engaged. */
     if (sectionKey !== '__cw__') { cwFocusLockUntilRef.current = 0; }
     lastFocusedSection.current = sectionKey;
-    console.log('[HOLD_DIAG] handleSectionFocus ENTRY key=' + sectionKey + ' t=' + Date.now());
     /* V524_HOLD_SCROLL - this cancelled the queued scroll on every key repeat,
        so while the D-pad was held it never ran and the page only caught up on
        release. Let the queued frame run; it reads the latest row. */
@@ -733,17 +732,12 @@ export default function DiscoverScreen() {
         const _v442Until = (globalThis as any).__v442SuppressSectionScrollUntil || 0;
         if (Date.now() < _v442Until) return;
       } catch (_) {}
-    // V279_DIAG ├óΓé¼ΓÇ¥ trace every section focus event with timestamp + current
-    // scroll position so we can see whether the FIRST UP press is even
-    // calling this for the CW row.
-    console.log('[V279_DIAG] handleSectionFocus key=' + sectionKey + ' t=' + Date.now());
     { const _v343dt = Date.now() - (_v343NavBackAt.current || 0); if (_v343dt >= 0 && _v343dt < 800) false && console.log('[V343 NAV_BACK] first section focus t+' + _v343dt + 'ms key=' + sectionKey); }
     if (_v211PendingFrame.current != null) {
       cancelAnimationFrame(_v211PendingFrame.current);
       _v211PendingFrame.current = null;
     }
     const sectionY = sectionPositions.current[key];
-    console.log('[V279_DIAG]   sectionY=' + sectionY + ' lastFocusedSection=' + lastFocusedSection.current);
     if (sectionY === undefined || !scrollViewRef.current) return;
     const target = Math.max(0, sectionY - 12);
     /* V382_LOCK_RELEASE - focus moved to a non-CW row: kill the V278 CW
@@ -751,7 +745,6 @@ export default function DiscoverScreen() {
        ("selector moves but the page doesn't"). */
     if (sectionKey !== '__cw__') { cwFocusLockUntilRef.current = 0; }
     scrollViewRef.current.scrollTo({ y: target, animated: false });
-    console.log('[V279_DIAG]   scrollTo(' + target + ')');
     // V277_CW_SNAP_HARDER ├óΓé¼ΓÇ¥ v238g only retried ONCE at 50ms which left the
     // CW row "halfway up" because Android TV's `requestRectangleOnScreen`
     // fires AFTER our scroll and re-positions to "just visible".  Now:
@@ -979,7 +972,6 @@ const _v369RowFocusHandler = (rowKey: string, contentType: string) => {
         const _v531y = sectionPositions.current[rowKey];
 
         if (typeof _v531y === 'number' && scrollViewRef.current) {
-          console.log('[HOLD_DIAG] V531 sync scroll key=' + rowKey + ' y=' + Math.max(0, _v531y - 12) + ' t=' + Date.now());
           (scrollViewRef.current as any).scrollTo({
             y: Math.max(0, _v531y - 12),
             animated: false
@@ -1364,11 +1356,9 @@ return (
             const lockUntil = cwFocusLockUntilRef.current || 0;
             const inLock = Date.now() < lockUntil;
             if (y > 0) {
-              false && console.log('[V279_DIAG] onScroll y=' + y.toFixed(1) + ' inLock=' + inLock + ' t=' + Date.now());
             }
             if (inLock && y > 0 && lastFocusedSection.current === '__cw__' && scrollViewRef.current) { /* V382_LOCK_SCOPE */
               scrollViewRef.current.scrollTo({ y: 0, animated: false });
-              false && console.log('[V279_DIAG]   ├óΓÇáΓÇÖ SNAP BACK to 0');
             }
             // V316_CW_SHORT_SCROLL_RESCUE ├óΓé¼ΓÇ¥ when the Android TV focus engine
             // partially scrolls the CW row into view but doesn't deliver
@@ -1672,7 +1662,6 @@ function ContinueWatchingItem({
   // poster's native tag.  Set by the FIRST ContinueWatchingItem (index 0)
   // after mount.  Used as nextFocusUp on first-row ContentCards so UP
   // from any non-CW row routes directly to a CW poster.
-  // V279_DIAG ├óΓé¼ΓÇ¥ kept the section header trace.
   // Refs for explicit focus navigation between poster and X button
   const posterRef = useRef<View>(null);
   const xButtonRef = useRef<View>(null);
@@ -1722,7 +1711,6 @@ function ContinueWatchingItem({
   }, []);
 
   const handleFocus = () => {
-    false && console.log('[V279_DIAG] CW poster onFocus t=' + Date.now());
     setIsFocused(true);
     onSectionFocus?.();
   };
@@ -1760,12 +1748,10 @@ function ContinueWatchingItem({
         onLongPress={_v176OpenMenu}
         delayLongPress={500}
         onFocus={() => {
-          console.log('[FOCUS_DIAG] CW focus id=' + (item?.content_id || item?.id || item?.imdb_id || 'unknown') + ' t=' + Date.now());
           try { _v173RegLP(_v176OpenMenu); } catch (_) {}
           handleFocus();
         }}
         onBlur={() => {
-          console.log('[FOCUS_DIAG] CW blur id=' + (item?.content_id || item?.id || item?.imdb_id || 'unknown') + ' t=' + Date.now());
           try { _v173RegLP(null); } catch (_) {}
           setIsFocused(false);
         }}

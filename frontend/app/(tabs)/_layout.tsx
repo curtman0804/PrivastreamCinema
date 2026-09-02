@@ -182,12 +182,10 @@ export default function TabsLayout() {
               hasTVPreferredFocus={isFirst}
               onLayout={grabTag}
               onFocus={() => {
-                console.log('[FOCUS_DIAG] TAB focus name=' + myName + ' t=' + Date.now());
                 setIsFocused(true);
                 grabTag();
               }}
               onBlur={() => {
-                console.log('[FOCUS_DIAG] TAB blur name=' + myName + ' t=' + Date.now());
                 setIsFocused(false);
               }}
               style={({ focused }: any) => [
