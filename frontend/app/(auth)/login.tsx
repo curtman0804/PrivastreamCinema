@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
   ActivityIndicator,
   useWindowDimensions,
   findNodeHandle,
@@ -26,6 +25,7 @@ export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { width, height } = useWindowDimensions();
@@ -61,14 +61,16 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     const trimmedUsername = username.trim();
     const trimmedPassword = password.trim();
-    
+
+    setLoginError(null);
+
     if (!trimmedUsername || !trimmedPassword) {
-      Alert.alert('Error', 'Please enter username and password');
+      setLoginError('Please enter username and password');
       return;
     }
 
     setIsLoading(true);
-    
+
     try {
       await login(trimmedUsername, trimmedPassword);
     } catch (error: any) {
@@ -80,7 +82,8 @@ export default function LoginScreen() {
       } else if (error.message) {
         errorMessage = error.message;
       }
-      Alert.alert('Login Failed', errorMessage);
+      setLoginError(errorMessage);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -89,6 +92,7 @@ export default function LoginScreen() {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        enabled={!isTV}
         style={styles.keyboardView}
       >
         <ScrollView
@@ -193,6 +197,12 @@ export default function LoginScreen() {
                 </Pressable>
               </Pressable>
 
+              {loginError ? (
+                <Text style={styles.loginError} accessibilityRole="alert">
+                  {loginError}
+                </Text>
+              ) : null}
+
               {/* Sign In Button - TV Optimized */}
               <Pressable
                 ref={signInRef}
@@ -289,6 +299,12 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     padding: 8,
+  },
+  loginError: {
+    color: '#ff6b6b',
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   loginButton: {
     backgroundColor: colors.primary,
