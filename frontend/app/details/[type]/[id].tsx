@@ -1352,6 +1352,7 @@ const EpisodeCard = React.memo(function EpisodeCard({
   isWatched,
   onMarkUnwatched,
   autoFocus,
+  onFocused,
 }: {
   episode: Episode;
   fallbackPoster?: string;
@@ -1359,6 +1360,7 @@ const EpisodeCard = React.memo(function EpisodeCard({
   isWatched?: boolean;
   onMarkUnwatched?: () => void;
   autoFocus?: boolean;
+  onFocused?: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const [thumbError, setThumbError] = useState(false);
@@ -1515,6 +1517,7 @@ const EpisodeCard = React.memo(function EpisodeCard({
         setIsFocused(true);
         hasFocusedRef.current = true;
         focusGrabbedOnceRef.current = true;
+        try { onFocused && onFocused(); } catch (_) {}
         console.log('[FOCUS v135] onFocus ep=' + episode.episode + ' (one-shot guard set)');
         /* V176I_EPISODE_PAINT â€” register a stable wrapper that reads
            the latest opener from the ref, so toggling watched in the
@@ -1591,6 +1594,7 @@ export default function DetailsScreen() {
     background: paramBackground,
     logo: paramLogo,
     autoPlay: autoPlayParam,
+    fromEpisodeBack: fromEpisodeBackParam,
     selectedSeason: paramSelectedSeason,
     selectedEpisode: paramSelectedEpisode,
     nextTitle: nextTitleParam,
@@ -1607,6 +1611,7 @@ export default function DetailsScreen() {
     background?: string;
     logo?: string;
     autoPlay?: string;
+    fromEpisodeBack?: string;
     nextTitle?: string;
     nextPoster?: string;
     nextBackdrop?: string;
@@ -1615,6 +1620,21 @@ export default function DetailsScreen() {
   }>();
 
   const router = useRouter();
+
+  /* V508_EPISODE_ROW_VISIBLE - measured vertical return position; no fixed pixel offset. */
+  const _v508DetailsScrollRef = useRef<any>(null);
+  const _v508SeasonSectionYRef = useRef<number | null>(null);
+  const _v508ScrollEpisodeRowIntoView = useCallback(() => {
+    if (fromEpisodeBackParam !== 'true') return;
+    const y = _v508SeasonSectionYRef.current;
+    if (y == null) return;
+    requestAnimationFrame(() => {
+      try {
+        _v508DetailsScrollRef.current?.scrollTo({ y, animated: false });
+        console.log('[V508_EPISODE_ROW_VISIBLE] scrollTo measured season y=' + y);
+      } catch (e) { console.log('[V508_EPISODE_ROW_VISIBLE] scroll error', e); }
+    });
+  }, [fromEpisodeBackParam]);
 
   // === ANDROID-TV BACK BUTTON FIX =========================================
   // Hardware back from any episode-details page teleports straight to the
@@ -1654,7 +1674,7 @@ export default function DetailsScreen() {
       console.log('[V386_BACK] prevId=' + _prevId + ' base=' + _v386Base + ' prevIsRoot=' + _v386PrevIsRoot);
     } catch (_e386) { console.log('[V386_BACK] state inspect failed'); }
     try {
-      if (_v386PrevIsRoot) {
+      if (false && _v386PrevIsRoot) { /* V505_PERSISTENT_EPISODE_BACK - always use deterministic root replace */
         router.back();
         // After back lands us on RMroot, push focus params so the selector
         // highlights the just-watched episode.
@@ -1666,7 +1686,7 @@ export default function DetailsScreen() {
         console.log('[V386_BACK] no series root beneath - replacing with root');
         router.replace({
           pathname: `/details/series/${encodeURIComponent(_v386Base)}`,
-          params: { selectedSeason: s, selectedEpisode: e },
+          params: { selectedSeason: s, selectedEpisode: e, fromEpisodeBack: 'true' },
         } as any);
       }
       return true;
@@ -1704,7 +1724,9 @@ export default function DetailsScreen() {
     });
   }, [goToSeriesRootWithFocus, router]);
 
-  useEffect(() => {
+  /* V506_FOCUSED_BACK_OWNER - only the focused Details screen owns Android hardware Back. */
+  useFocusEffect(
+    useCallback(() => {
     // PATCH_V34_DETAILS_BACK â€” back ALWAYS does something visible:
     //   1. Series-episode page â†’ goToSeriesRootWithFocus() handles it (returns true)
     //   2. Movies / series-roots â†’ router.back() to previous screen
@@ -1715,6 +1737,12 @@ export default function DetailsScreen() {
       const _v360_backT0 = Date.now();
         console.log('[V360_BACK] t0=hwBack fired');
         console.log('[BACK v134/v186] main hwBack fired');
+        /* V507_BINGE_ROOT_BACK - a series root created by episode Back has no reliable screen beneath it. */
+        if (fromEpisodeBackParam === 'true') {
+          console.log('[V507_BINGE_ROOT_BACK] tagged binge root -> discover');
+          try { router.replace('/(tabs)/discover'); } catch (e) { console.log('[V507_BINGE_ROOT_BACK] replace discover error', e); }
+          return true;
+        }
       // Hide heavy tree on this frame.
       /* V361_FAST_UNMOUNT - clear heavy state BEFORE router.back() so React
    has less to tear down (was 2960ms UNMOUNT). Drop stream arrays,
@@ -1742,7 +1770,8 @@ export default function DetailsScreen() {
       return true;
     });
     return () => sub.remove();
-  }, [goToSeriesRootWithFocus]);
+    }, [goToSeriesRootWithFocus, router, fromEpisodeBackParam])
+  );
   // ========================================================================
 
 
@@ -2034,6 +2063,9 @@ export default function DetailsScreen() {
   // the episodes list (series root) instead of the previous episode's page.
   // Matches Stremio: back from next-up screen = back to the show, not to EP-N-1.
   useEffect(() => {
+    /* V505_PERSISTENT_EPISODE_BACK - unified BackHandler above owns all episode back navigation. */
+    const _v505DisableLegacyAutoPlayBack = true;
+    if (_v505DisableLegacyAutoPlayBack) return;
     if (autoPlayParam !== 'true' || type !== 'series' || !baseId) return;
     const handler = () => {
       /* v134-clean-stack-on-back */
@@ -3211,6 +3243,7 @@ const nextEpisodeData = nextEpisode ? {
         isWatched={epWatched}
         onMarkUnwatched={() => handleMarkUnwatched(epContentId)}
         autoFocus={isFocusTarget}
+        onFocused={isFocusTarget && fromEpisodeBackParam === 'true' ? _v508ScrollEpisodeRowIntoView : undefined}
       />
     );
   };
@@ -3398,6 +3431,7 @@ const nextEpisodeData = nextEpisode ? {
 
         {/* Scrollable Content - everything below the pinned area */}
         <ScrollView
+          ref={_v508DetailsScrollRef}
           style={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContentContainer}
@@ -3445,7 +3479,13 @@ const nextEpisodeData = nextEpisode ? {
 
           {/* Season Selector for Series */}
           {type === 'series' && !isEpisodePage && seasons.length > 0 && (
-            <View style={styles.seasonSection}>
+            <View
+              style={styles.seasonSection}
+              onLayout={(e) => {
+                _v508SeasonSectionYRef.current = e.nativeEvent.layout.y;
+                if (fromEpisodeBackParam === 'true') _v508ScrollEpisodeRowIntoView();
+              }}
+            >
               <Text style={styles.sectionTitle}>Episodes</Text>
               <ScrollView 
                 horizontal 
