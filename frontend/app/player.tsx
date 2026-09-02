@@ -34,6 +34,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/api/client';
+import { getMetaCache } from '../src/store/contentStore';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import Constants from 'expo-constants';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
@@ -322,9 +323,9 @@ export default function PlayerScreen() {
     fileIdx,
     filename,
     // Next episode data
-    nextEpisodeId,
-    nextEpisodeTitle,
-    nextEpisodePoster,
+    nextEpisodeId: routeNextEpisodeId,
+    nextEpisodeTitle: routeNextEpisodeTitle,
+    nextEpisodePoster: routeNextEpisodePoster,
     seriesId,
     season,
     episode,
@@ -365,6 +366,35 @@ export default function PlayerScreen() {
     fallbackTorrents?: string;
   }>();
   const router = useRouter();
+
+  /* V502_BINGE_NEXT_CHAIN - recover authoritative following-episode metadata
+     when direct /player binge navigation does not carry nextEpisode* params. */
+  const _v502DerivedNextEpisode = useMemo(() => {
+    if (contentType !== 'series' || routeNextEpisodeId) return null;
+    const _cidParts = String(contentId || '').split(':');
+    const _baseId = String(seriesId || _cidParts[0] || '').trim();
+    const _seasonNum = parseInt(String(season || (_cidParts.length >= 3 ? _cidParts[_cidParts.length - 2] : '')), 10);
+    const _episodeNum = parseInt(String(episode || (_cidParts.length >= 3 ? _cidParts[_cidParts.length - 1] : '')), 10);
+    if (!_baseId || !Number.isFinite(_seasonNum) || !Number.isFinite(_episodeNum)) return null;
+    const _meta: any = getMetaCache(_baseId);
+    const _videos: any[] = Array.isArray(_meta?.videos) ? _meta.videos : [];
+    if (_videos.length === 0) return null;
+    const _next = _videos.find((ep: any) => ep?.season === _seasonNum && ep?.episode === _episodeNum + 1)
+      || _videos.find((ep: any) => ep?.season === _seasonNum + 1 && ep?.episode === 1)
+      || null;
+    if (!_next) return null;
+    const _id = _baseId + ':' + _next.season + ':' + _next.episode;
+    console.log('[UPNEXT V502] derived next episode', _id, 'from', String(contentId || ''));
+    return {
+      id: _id,
+      title: 'S' + _next.season + 'E' + _next.episode + ' - ' + (_next.name || 'Next Episode'),
+      poster: _next.thumbnail || _meta?.background || backdrop || poster || '',
+    };
+  }, [contentType, routeNextEpisodeId, seriesId, contentId, season, episode, backdrop, poster]);
+
+  const nextEpisodeId = routeNextEpisodeId || _v502DerivedNextEpisode?.id;
+  const nextEpisodeTitle = routeNextEpisodeTitle || _v502DerivedNextEpisode?.title;
+  const nextEpisodePoster = routeNextEpisodePoster || _v502DerivedNextEpisode?.poster;
 
   // V273_NAN_ID_GUARD — some addons (PornTube, JustWatch) return content
   // IDs shaped like "pt:NaN:1054329" or "jt:NaN:NaN" because the addon
@@ -1503,12 +1533,31 @@ export default function PlayerScreen() {
   // as this player mounts with a nextEpisodeId.  By the time the user FFs
   // to credits or watches through, both server caches are hot and
   // preResolveRef is populated -> one loading screen on episode change.
-  const preWarmStartedRef = useRef(false);
+  const preWarmStartedRef = useRef('');
+
+  /* V501_UPNEXT_EPISODE_RESET - Next Episode state belongs to one episode only. */
   useEffect(() => {
-    if (preWarmStartedRef.current) return;
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+    creditsShownRef.current = false;
+    preWarmStartedRef.current = '';
+    preResolveRef.current = null;
+    setShowNextEpisodeModal(false);
+    setCountdown(15);
+    console.log('[UPNEXT V501] reset for contentId=', String(contentId || ''));
+  }, [contentId]);
+
+  useEffect(() => {
+    /* V504_SAFE_BINGE - do not pre-resolve the next episode while ExoPlayer is active. */
+    const _v504DisableMountPrewarm = true;
+    if (_v504DisableMountPrewarm) return;
     if (!nextEpisodeId || contentType !== 'series') return;
-    preWarmStartedRef.current = true;
     const _nid = nextEpisodeId as string;
+    const _warmKey = String(contentId || '') + '->' + _nid;
+    if (preWarmStartedRef.current === _warmKey) return;
+    preWarmStartedRef.current = _warmKey;
     const _parts = _nid.split(':');
     const _baseId = _parts[0] || '';
     const _sn = _parts.length >= 3 ? parseInt(_parts[_parts.length - 2], 10) : NaN;
@@ -1541,6 +1590,7 @@ export default function PlayerScreen() {
         // before start_and_wait finishes.
         const _top = list.find((s: any) => s && s.infoHash) || list[0];
         if (_top && _top.infoHash) {
+          if (preWarmStartedRef.current !== _warmKey) return;
           preResolveRef.current = {
             infoHash: _top.infoHash,
             sources: _top.sources || [],
@@ -1574,6 +1624,7 @@ export default function PlayerScreen() {
             const _tResolve = Date.now() - _t1;
             console.log('[PREWARM v136] start_and_wait status=', startData && startData.status, 'in', _tResolve, 'ms');
             if (startData && startData.status === 'ready' && startData.debrid_url) {
+              if (preWarmStartedRef.current !== _warmKey) return;
               const _cur = preResolveRef.current || ({} as any);
               preResolveRef.current = { ..._cur, directUrl: `${_backendUrl}${startData.debrid_url}`, infoHash: _top.infoHash };
               console.log('[PREWARM v136] DONE - directUrl ready, next episode will be INSTANT');
@@ -1596,6 +1647,7 @@ export default function PlayerScreen() {
                 });
                 const altData = await altResp.json().catch(() => ({}));
                 if (altData && altData.status === 'ready' && altData.debrid_url) {
+                  if (preWarmStartedRef.current !== _warmKey) return;
                   preResolveRef.current = {
                     infoHash: _alt.infoHash,
                     sources: _alt.sources || [],
@@ -1622,7 +1674,7 @@ export default function PlayerScreen() {
         console.log('[PREWARM v136] failed', e);
       }
     })();
-  }, [nextEpisodeId, contentType]);
+  }, [nextEpisodeId, contentType, contentId]);
   
   // PATCH_V143C_NO_THROTTLE — reverted v143b's setPosition throttle because
   // it desynced the UI position from the actual playhead, breaking the FF
@@ -1817,9 +1869,12 @@ export default function PlayerScreen() {
     
     setShowNextEpisodeModal(true);
     setCountdown(remainingSeconds); // Match actual remaining time
+    /* V504_SAFE_BINGE - clear stale fast-path state and use Details/V503 for transition. */
+    preResolveRef.current = null;
     
     /* v126-preresolve-block */
-    if (nextEpisodeId && contentType === 'series') {
+    const _v504DisableCreditsPreresolve = true;
+    if (!_v504DisableCreditsPreresolve && nextEpisodeId && contentType === 'series') {
       /* v127-preresolve-early */
       /* v128-quality-race */
       // v128: ask backend for upgrade candidates (?upgrade=1), then RACE

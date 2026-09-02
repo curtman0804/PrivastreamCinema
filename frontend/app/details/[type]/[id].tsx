@@ -1200,6 +1200,38 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
   return [..._nonComm, ..._comm];
 }
 
+/* V503_RELIABLE_AUTOPICK - automatic playback favors compatibility over raw resolution. */
+function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
+  const playable = (streams || []).filter((s: any) => !!(s && (s.url || s.externalUrl || s.direct_url || s.infoHash || s.info_hash)));
+  if (playable.length === 0) return null;
+  const score = (s: any): number => {
+    const info: any = parseStreamInfo(s);
+    const t = String((s?.title || '') + ' ' + (s?.name || '') + ' ' + (s?.filename || '')).toUpperCase();
+    let n = 0;
+    if (info?.isForeign) n -= 100000;
+    if (info?.isCommentary) n -= 100000;
+    if (info?.isHDR) n -= 50000;
+    if (/\b(?:BLURAY|BLU-RAY|BDRIP|BD-RIP|BRRIP|BR-RIP|REMUX|BDMV|COMPLETE)\b/.test(t)) n -= 20000;
+    if (info?.quality === '1080p') n += 30000;
+    else if (info?.quality === '4K') n += 10000;
+    else if (info?.quality === '720p') n += 7000;
+    else if (info?.quality === 'HD') n += 5000;
+    if (/\bWEB-?DL\b/.test(t)) n += 1500;
+    else if (/\bWEB-?RIP\b/.test(t)) n += 500;
+    if (/\b(?:H\.?264|AVC|X264)\b/.test(t)) n += 500;
+    if (/\b(?:H\.?265|HEVC|X265)\b/.test(t)) n -= 300;
+    if (/\b(?:TRUE ?HD|DTS[-. ]?X|DTSX|DTS[-. ]?HD(?:[-. ]?MA)?|ATMOS)\b/.test(t)) n -= 3000;
+    else if (/\bDTS\b/.test(t)) n -= 1200;
+    else if (/\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)) n += 800;
+    else if (/\b(?:AC-?3|DD ?5)\b/.test(t)) n += 650;
+    else if (/\bAAC\b/.test(t)) n += 500;
+    if (s?.url || s?.externalUrl || s?.direct_url) n += 250;
+    return n;
+  };
+  const ranked = playable.map((s: any, i: number) => ({ s, i, n: score(s) })).sort((a: any, b: any) => (b.n - a.n) || (a.i - b.i));
+  try { console.log('[V503 AUTO PICK]', 'score=' + ranked[0].n, '|', String(ranked[0].s?.title || ranked[0].s?.name || '').slice(0, 110)); } catch (_) {}
+  return ranked[0].s as Stream;
+}
 // Stream Card Component - 3-row vertical layout (PATCH_V19A_STREAMCARD_MEMO React.memo)
 // V302_STREAMCARD_REDESIGN_BUILD_TAG â€” top-center play button, removes the
 // "Stream" label row, moves size into the bottom badge row right of
@@ -2139,7 +2171,7 @@ export default function DetailsScreen() {
       const _v498_t2 = _v498_pickBest(sorted, (i, b) => i.quality === '4K'    && !i.isForeign && !i.isHDR                          && !i.isCommentary);
       const _v498_t3 = _v498_pickBest(sorted, (i, b) => i.quality === '1080p' && !i.isForeign            && !_v498_isBluRayLike(b) && !i.isCommentary);
       const _v498_t4 = _v498_pickBest(sorted, (i, _b) => i.quality === '1080p' && !i.isForeign                                     && !i.isCommentary);
-      const bestStream = _v498_t1 || _v498_t2 || _v498_t3 || _v498_t4 || sorted[0];
+      const bestStream = _v503PickReliableAutoStream(sorted) || sorted[0];
       try {
         const _tier = _v498_t1 ? '4K_ENG_noHDR_noBluRay' : _v498_t2 ? '4K_ENG_noHDR' : _v498_t3 ? '1080p_ENG_noBluRay' : _v498_t4 ? '1080p_ENG' : 'RAW_TOP';
         console.log('[v498] auto-play tier=' + _tier + ' | ' + String((bestStream && (bestStream as any).title) || '').slice(0, 110));
@@ -3509,7 +3541,7 @@ const nextEpisodeData = nextEpisode ? {
                              from Torrentio can be dead RD links. Trust the ranker. */
                           const _v356Playable = (s: any) =>
                             !!(s && (s.url || s.externalUrl || s.direct_url || s.infoHash || (s as any).info_hash));
-                          picked = (list[0] && _v356Playable(list[0])) ? list[0] : (list.find((s: any) => _v356Playable(s)) || null);
+                          picked = _v503PickReliableAutoStream(list) || (list.find((s: any) => _v356Playable(s)) || null);
                         }
                         // Normalize info_hash -> infoHash so handleStreamSelect's downstream
                         // checks find what they expect.
