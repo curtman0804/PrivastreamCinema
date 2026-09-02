@@ -1025,6 +1025,8 @@ export default function PlayerScreen() {
   };
   const _v391SkipVisibleRef = useRef(false);
   const _v391DoneRef = useRef(false);
+  const _v500IntroMarkerRef = useRef<{ startMs: number; endMs: number } | null>(null);
+  const _v500IntroLookupRef = useRef('');
   /* V393_REMOTE_DEBUG - no-adb diagnostics: reports skip-intro state to the
      patch server so issues can be debugged without logcat. Remove later. */
   const _v393LastRef = useRef('');
@@ -1044,21 +1046,17 @@ export default function PlayerScreen() {
   /* V392_SKIP_INTRO_BUTTON - shared skip action for the focusable button. */
   const _v391Skip = useCallback(() => {
     if (_v391DoneRef.current) return;
-    console.log('[V392] Skip Intro pressed: +85s');
-    _v393Log('skipintro PRESSED'); /* V393_REMOTE_DEBUG */
+    const marker = _v500IntroMarkerRef.current;
+    if (!marker) return;
     _v391DoneRef.current = true;
     _v391SkipVisibleRef.current = false;
     setV391SkipVisible(false);
     try {
-      _v399StartRef.current = Math.max(0, positionRef.current - 3000); /* V399 - learn intro start (minus press reaction time) */
-      _v399Persist();
-      _v396SkipAtRef.current = Date.now(); /* V396_ADAPTIVE_SKIP */
-      _v396AdjRef.current = 0;
-      const _np = Math.min(
-        (durationRef.current || Number.MAX_SAFE_INTEGER) - 1000,
-        positionRef.current + _v396LenRef.current
-      );
-      if (videoRef.current) videoRef.current.setPositionAsync(Math.max(0, _np));
+      const maxPlayable = durationRef.current > 1000 ? durationRef.current - 1000 : marker.endMs;
+      const target = Math.max(0, Math.min(marker.endMs, maxPlayable));
+      console.log('[INTRO V500] Skip Intro -> ' + target + 'ms');
+      _v393Log('skipintro exact-marker end=' + target);
+      if (videoRef.current) videoRef.current.setPositionAsync(target);
     } catch (_) {}
   }, []);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -1076,6 +1074,56 @@ export default function PlayerScreen() {
   positionRef.current = position;
   const durationRef = useRef(duration);
   durationRef.current = duration;
+
+  /* V500_EXACT_INTRO_MARKERS - episode-specific TheIntroDB markers only.
+     No learned/fixed-duration fallback and no automatic skipping. */
+  useEffect(() => {
+    _v500IntroLookupRef.current = '';
+    _v500IntroMarkerRef.current = null;
+    _v391DoneRef.current = false;
+    _v391SkipVisibleRef.current = false;
+    setV391SkipVisible(false);
+  }, [contentId, seriesId, season, episode]);
+
+  const _v500EnsureIntroMarker = (actualDurationMs: number) => {
+    if (contentType !== 'series' || !actualDurationMs || actualDurationMs <= 0) return;
+    const cidParts = String(contentId || '').split(':');
+    const imdbId = String(seriesId || cidParts[0] || '').trim();
+    const seasonNum = parseInt(String(season || (cidParts.length >= 3 ? cidParts[cidParts.length - 2] : '')), 10);
+    const episodeNum = parseInt(String(episode || (cidParts.length >= 3 ? cidParts[cidParts.length - 1] : '')), 10);
+    if (!/^tt\d{7,8}$/i.test(imdbId) || !Number.isFinite(seasonNum) || !Number.isFinite(episodeNum)) return;
+    const durationMs = Math.round(actualDurationMs);
+    const lookupKey = imdbId + ':' + seasonNum + ':' + episodeNum + ':' + Math.round(durationMs / 1000);
+    if (_v500IntroLookupRef.current === lookupKey) return;
+    _v500IntroLookupRef.current = lookupKey;
+    (async () => {
+      try {
+        const markerUrl = 'https://api.theintrodb.org/v3/media?imdb_id=' + encodeURIComponent(imdbId) + '&season=' + seasonNum + '&episode=' + episodeNum + '&duration_ms=' + durationMs;
+        const response = await fetch(markerUrl, { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error('INTRODB_HTTP_' + response.status);
+        const data = await response.json();
+        if (_v500IntroLookupRef.current !== lookupKey) return;
+        const intros = Array.isArray(data?.intro) ? data.intro : [];
+        const segment = intros.find((x: any) => {
+          const startMs = x?.start_ms == null ? 0 : Number(x.start_ms);
+          const endMs = Number(x?.end_ms);
+          return Number.isFinite(startMs) && Number.isFinite(endMs) && startMs >= 0 && endMs > startMs && endMs <= durationMs;
+        });
+        if (!segment) {
+          _v500IntroMarkerRef.current = null;
+          console.log('[INTRO V500] No exact marker for ' + imdbId + ' S' + seasonNum + 'E' + episodeNum);
+          return;
+        }
+        const startMs = Math.round(segment.start_ms == null ? 0 : Number(segment.start_ms));
+        const endMs = Math.round(Number(segment.end_ms));
+        _v500IntroMarkerRef.current = { startMs, endMs };
+        console.log('[INTRO V500] Exact marker ' + imdbId + ' S' + seasonNum + 'E' + episodeNum + ' ' + startMs + '-' + endMs + 'ms duration=' + durationMs);
+      } catch (error: any) {
+        if (_v500IntroLookupRef.current === lookupKey) _v500IntroMarkerRef.current = null;
+        console.log('[INTRO V500] Lookup failed:', String(error?.message || error));
+      }
+    })();
+  };
   const progressBarFocusedRef = useRef(false);
   const showControlsWithTimeoutRef = useRef<(() => void) | null>(null);
   // V266_STICKY_CONTROLS_DURING_SCRUB — set true while the user is
@@ -1587,6 +1635,7 @@ export default function PlayerScreen() {
       setIsPlaying(status.isPlaying);
       setPosition(status.positionMillis);
       setDuration(status.durationMillis || 0);
+      _v500EnsureIntroMarker(status.durationMillis || 0);
       
       // Save watch progress periodically
       if (status.isPlaying && status.durationMillis && status.durationMillis > 0) {
@@ -1690,7 +1739,10 @@ export default function PlayerScreen() {
           _v399AutoDoneRef.current = true;
           _v399AutoSkip();
         }
-        const _v391Show = false; /* V400B_ORPHAN_FIX - Skip Intro pill fully disabled. */
+        const _v500Marker = _v500IntroMarkerRef.current;
+        const _v391Show = !!_v500Marker
+          && _v391Pos >= _v500Marker.startMs
+          && _v391Pos < _v500Marker.endMs;
         /* was:
            _v399StartRef.current === null && _v391Pos >= 15000 && _v391Pos <= 120000
            && !(parsedResumePosition && parsedResumePosition * 1000 >= 240000);
