@@ -221,7 +221,7 @@ export function ToSGate({ visible, onAccepted }: ToSGateProps) {
         <Text style={styles.subheading}>
           {reachedBottom
             ? 'Press OK on "I Agree" to continue.'
-            : 'Press DOWN on your remote to scroll through every section of the agreement.'}
+            : 'Please review the Terms of Service in full. Scroll to the bottom to enable acceptance.'}
         </Text>
 
         <View style={styles.idRow}>
@@ -248,7 +248,12 @@ export function ToSGate({ visible, onAccepted }: ToSGateProps) {
                 focusable={true}
                 // @ts-ignore RN TV
                 hasTVPreferredFocus={idx === 0}
-                onFocus={() => setFocusedIdx(idx)}
+                onFocus={() => {
+                  setFocusedIdx(idx);
+                  if (idx === TOS_PARAGRAPHS.length - 1) {
+                    setReachedBottom(true);
+                  }
+                }}
                 onBlur={() => setFocusedIdx((prev) => (prev === idx ? -1 : prev))}
                 onPress={() => {}}
                 style={[styles.paragraph, isFocused && styles.paragraphFocused]}
@@ -303,8 +308,8 @@ export function ToSGate({ visible, onAccepted }: ToSGateProps) {
  *
  * If no user is logged in, returns false (so the modal won't show before login).
  */
-export async function hasAcceptedToS(): Promise<boolean> {
-  const username = await _readUsernameFromStorage();
+export async function hasAcceptedToS(usernameOverride?: string): Promise<boolean> {
+  const username = usernameOverride || await _readUsernameFromStorage();
   if (!username) return false;
 
   // One-time migration from V335 single-key cache.
@@ -342,7 +347,7 @@ export async function hasAcceptedToS(): Promise<boolean> {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG, paddingTop: 56, paddingHorizontal: 32, paddingBottom: 24 },
   heading: { color: GOLD, fontSize: 32, fontWeight: '700', marginBottom: 6, letterSpacing: 1 },
-  subheading: { color: '#bbb', fontSize: 14, marginBottom: 16 },
+  subheading: { color: GOLD, fontSize: 18, lineHeight: 24, fontWeight: '700', marginBottom: 16, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: GOLD_DIM, borderRadius: 8, backgroundColor: '#1a1a1a', textAlign: 'center' },
   idRow: { marginBottom: 12, paddingHorizontal: 14, paddingVertical: 10, borderColor: GOLD_DIM, borderWidth: 1, borderRadius: 8, backgroundColor: '#1a1a1a' },
   idLabel: { color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
   idValue: { color: GOLD, fontSize: 16, fontWeight: '600', marginTop: 2, fontFamily: Platform.OS === 'android' ? 'monospace' : 'Menlo' },
@@ -352,9 +357,9 @@ const styles = StyleSheet.create({
   paragraphFocused: { backgroundColor: '#1f1a08', borderColor: GOLD },
   body: { color: GOLD, fontSize: 16, lineHeight: 24, fontWeight: '500' },
   bodyFocused: { color: GOLD_BRIGHT },
-  agreeBtn: { marginTop: 16, backgroundColor: GOLD, borderRadius: 10, paddingVertical: 22, alignItems: 'center', borderWidth: 5, borderColor: '#ffffff', shadowColor: GOLD, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.85, shadowRadius: 20, elevation: 16, transform: [{ scale: 1.04 }] },
+  agreeBtn: { marginTop: 12, backgroundColor: GOLD, borderRadius: 8, paddingVertical: 12, alignItems: 'center', borderWidth: 3, borderColor: '#ffffff', shadowColor: GOLD, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.75, shadowRadius: 12, elevation: 10 },
   agreeBtnLocked: { backgroundColor: '#2a2a2a', borderColor: GOLD_DIM },
-  agreeBtnFocused: { borderColor: '#ffffff', backgroundColor: GOLD_BRIGHT, shadowColor: '#ffffff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 44, elevation: 28, transform: [{ scale: 1.12 }] },
-  agreeBtnText: { color: BG, fontSize: 28, fontWeight: '900', letterSpacing: 2 },
+  agreeBtnFocused: { borderColor: '#ffffff', backgroundColor: GOLD_BRIGHT, shadowColor: '#ffffff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 18, elevation: 16, transform: [{ scale: 1.04 }] },
+  agreeBtnText: { color: BG, fontSize: 20, fontWeight: '900', letterSpacing: 1 },
   agreeBtnTextLocked: { color: GOLD_DIM, fontSize: 16, fontWeight: '700' },
 });

@@ -677,6 +677,10 @@ export const api = {
       const response = await apiClient.get(`/api/addons/resolve-code/${code}`);
       return response.data;
     },
+    createShareCode: async (manifestUrl: string): Promise<{ url: string; code: string }> => {
+      const response = await apiClient.post('/api/addons/share-code', { url: manifestUrl });
+      return response.data;
+    },
   },
   library: {
     get: async (): Promise<LibraryResponse> => {

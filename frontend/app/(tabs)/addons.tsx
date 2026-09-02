@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
+import { useAuthStore } from '../../src/store/authStore';
 import { Addon, api } from '../../src/api/client';
 import { Image } from 'expo-image';
 import { colors } from '../../src/styles/colors';
@@ -170,9 +171,19 @@ function FocusButton({
 export default function AddonsScreen() {
   // V326_TOS_GATE - one-time Terms of Service on first Addons entry
   const [_v326TosVisible, _setV326TosVisible] = React.useState(false);
+  const _v601AddonsListRef = React.useRef<any>(null);
+  const _v603LastFocusedCardIndex = React.useRef<number>(-1);
+  const _v604ScrollY = React.useRef(0);
+  const _v326CurrentUsername = useAuthStore((s) => s.user?.username || '');
   React.useEffect(() => {
-    hasAcceptedToS().then((acked) => { if (!acked) _setV326TosVisible(true); });
-  }, []);
+    if (!_v326CurrentUsername) {
+      _setV326TosVisible(false);
+      return;
+    }
+    hasAcceptedToS(_v326CurrentUsername).then((acked) => {
+      _setV326TosVisible(!acked);
+    });
+  }, [_v326CurrentUsername]);
   const { addons, isLoadingAddons, fetchAddons, fetchDiscover } = useContentStore();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
@@ -206,6 +217,33 @@ export default function AddonsScreen() {
   
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
+
+  const _v604HandleAddonActionFocus = (index: number, cardRef: any) => {
+    const previousIndex = _v603LastFocusedCardIndex.current;
+    _v603LastFocusedCardIndex.current = index;
+
+    if (!isTV || previousIndex < 0 || index <= previousIndex || !cardRef?.current) return;
+    InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        try {
+          cardRef.current?.measureInWindow((_x: number, y: number, _w: number, h: number) => {
+            const desiredBottom = height - 80 - 12;
+            const hiddenBy = (y + h) - desiredBottom;
+
+            if (hiddenBy > 0) {
+              const requestedOffset = Math.max(0, _v604ScrollY.current + hiddenBy);
+
+              _v601AddonsListRef.current?.scrollToOffset({
+                animated: true,
+                offset: requestedOffset,
+              });
+
+            }
+          });
+        } catch (_) {}
+      });
+    });
+  };
 
   useEffect(() => {
     fetchAddons(true);
@@ -609,13 +647,11 @@ export default function AddonsScreen() {
     return 'extension-puzzle-outline';
   };
 
-  const renderAddon = ({ item }: { item: Addon }) => {
+  const renderAddon = ({ item, index }: { item: Addon; index: number }) => {
     if (!item || !item.manifest) return null;
     
     return (
     <>
-      <ToSGate visible={_v326TosVisible} onAccepted={() => _setV326TosVisible(false)} />
-
       <AddonCard 
         addon={item}
         isTV={isTV}
@@ -623,6 +659,7 @@ export default function AddonsScreen() {
         onUninstall={() => handleUninstall(item)}
         isDeleting={deletingAddonId === item.id}
         getAddonIcon={getAddonIcon}
+        onActionFocus={(cardRef) => _v604HandleAddonActionFocus(index, cardRef)}
       />
     
     </>
@@ -631,6 +668,7 @@ export default function AddonsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <ToSGate visible={_v326TosVisible} onAccepted={() => _setV326TosVisible(false)} />
       {/* Header */}
       <View style={[styles.header, isTV && styles.headerTV]}>
         <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Addons</Text>
@@ -674,10 +712,13 @@ export default function AddonsScreen() {
         </View>
       ) : (
         <FlatList
+          ref={_v601AddonsListRef}
           data={addons}
           renderItem={renderAddon}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          onScroll={(e) => { _v604ScrollY.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={16}
+          contentContainerStyle={[styles.listContent, isTV && styles.listContentTV]}
           ListHeaderComponent={
             savedSources.length > 0 ? (
               <View style={styles.directSourcesSection}>
@@ -1006,6 +1047,7 @@ function AddonCard({
   onUninstall, 
   isDeleting,
   getAddonIcon,
+  onActionFocus,
 }: {
   addon: Addon;
   isTV: boolean;
@@ -1013,12 +1055,14 @@ function AddonCard({
   onUninstall: () => void;
   isDeleting: boolean;
   getAddonIcon: (types?: string[]) => string;
+  onActionFocus?: (cardRef: any) => void;
 }) {
   const [shareFocused, setShareFocused] = useState(false);
   const [trashFocused, setTrashFocused] = useState(false);
+  const cardRef = React.useRef<any>(null);
 
   return (
-    <View style={styles.addonCard}>
+    <View ref={cardRef} style={styles.addonCard}>
       <View style={styles.addonIconContainer}>
         {addon.manifest.logo ? (
           <Image
@@ -1051,7 +1095,7 @@ function AddonCard({
       <View style={styles.addonActions}>
         <Pressable 
           style={[styles.actionButton, shareFocused && styles.actionButtonFocused]}
-          onFocus={() => setShareFocused(true)}
+          onFocus={() => { setShareFocused(true); onActionFocus?.(cardRef); }}
           onBlur={() => setShareFocused(false)}
           onPress={onShare}
         >
@@ -1059,7 +1103,7 @@ function AddonCard({
         </Pressable>
         <Pressable 
           style={[styles.actionButton, trashFocused && styles.actionButtonFocused]}
-          onFocus={() => setTrashFocused(true)}
+          onFocus={() => { setTrashFocused(true); onActionFocus?.(cardRef); }}
           onBlur={() => setTrashFocused(false)}
           onPress={onUninstall} 
           disabled={isDeleting}
@@ -1274,6 +1318,9 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
+  },
+  listContentTV: {
+    paddingBottom: 138,
   },
   addonCard: {
     flexDirection: 'row',
