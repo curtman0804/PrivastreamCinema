@@ -541,6 +541,11 @@ export default function PlayerScreen() {
   
   const [pendingResumePosition, setPendingResumePosition] = useState<number | null>(parsedResumePosition);
   const hasResumedRef = useRef(false); // Track if we've already attempted resume
+  // V505_RESUME_SEEK_GUARD - prevent playback-status callbacks from
+  // issuing overlapping setPositionAsync calls while Android/ExoPlayer
+  // is still processing the Continue Watching resume seek.
+  const resumeSeekInFlightRef = useRef(false);
+  const resumeSeekStartedAtRef = useRef(0);
   
   // Update pending resume position when route param changes
   useEffect(() => {
@@ -550,6 +555,8 @@ export default function PlayerScreen() {
         if (__DEV__) console.log(`[PLAYER] Setting pending resume position from route param: ${parsed}s`); // PATCH_V143_PERF_DEV1
         setPendingResumePosition(parsed);
         hasResumedRef.current = false; // Reset resume flag
+        resumeSeekInFlightRef.current = false; // V505
+        resumeSeekStartedAtRef.current = 0; // V505
       }
     }
   }, [resumePosition]);
@@ -625,6 +632,11 @@ export default function PlayerScreen() {
   const [fallbackUrls, setFallbackUrls] = useState<string[]>([]);
   const [currentStreamIndex, setCurrentStreamIndex] = useState(-1);
   const [playbackStarted, setPlaybackStarted] = useState(false);
+  // V506_PLAYBACK_START_GUARD - React state updates are asynchronous.
+  // ExoPlayer can deliver multiple isPlaying callbacks before the
+  // playbackStarted state render commits, so use a synchronous ref
+  // to guarantee startup side effects execute exactly once per stream.
+  const playbackStartedRef = useRef(false);
   const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Fallback torrent streams — used when primary torrent fails (no peers, timeout)
@@ -1690,13 +1702,15 @@ export default function PlayerScreen() {
       _v500EnsureIntroMarker(status.durationMillis || 0);
       
       // Save watch progress periodically
-      if (status.isPlaying && status.durationMillis && status.durationMillis > 0) {
+      if (status.isPlaying && playbackStartedRef.current && status.durationMillis && status.durationMillis > 0) {
         saveWatchProgress(status.positionMillis, status.durationMillis);
       }
       
       // Hide loading screen when video is ACTUALLY PLAYING (not just loaded)
       // This keeps the loading screen visible during ExoPlayer's buffering phase
-      if (status.isPlaying && !playbackStarted) {
+      if (status.isPlaying && !playbackStartedRef.current) {
+        // V506: lock synchronously BEFORE another ExoPlayer callback can enter.
+        playbackStartedRef.current = true;
         console.log('[PLAYER] Playback started successfully!');
         setPlaybackStarted(true);
         setIsRebuffering(false);
@@ -1752,22 +1766,53 @@ export default function PlayerScreen() {
           if (resumeMs >= totalDuration * 0.95) {
             console.log(`[PLAYER] Resume position past 95%, not resuming`);
             hasResumedRef.current = true;
+            resumeSeekInFlightRef.current = false; // V505
+            resumeSeekStartedAtRef.current = 0; // V505
             setPendingResumePosition(null);
             setIsLoading(false); /* V387_HOLD_TILL_RESUME */
           } else {
             const positionDiff = Math.abs(currentPos - resumeMs);
-            // If we're more than 3 seconds away from target, seek
+
+            /* V505_RESUME_SEEK_GUARD
+             * onPlaybackStatusUpdate can fire repeatedly while ExoPlayer is
+             * processing a seek. Previously every callback could issue another
+             * setPositionAsync(resumeMs), creating a seek storm on slower Android
+             * streaming devices. Allow only one outstanding resume seek.
+             *
+             * If Android never reports the target, expire the guard after 8s so
+             * one controlled retry is possible instead of permanently locking it.
+             */
+            if (resumeSeekInFlightRef.current
+                && Date.now() - resumeSeekStartedAtRef.current >= 8000) {
+              console.log('[PLAYER] Resume seek guard expired - allowing one retry');
+              resumeSeekInFlightRef.current = false;
+              resumeSeekStartedAtRef.current = 0;
+            }
+
+            // If we're more than 3 seconds away from target, seek once.
             if (positionDiff > 3000) {
-              console.log(`[PLAYER] Seeking to resume position: ${pendingResumePosition}s`);
-              videoRef.current.setPositionAsync(resumeMs).then(() => {
-                console.log(`[PLAYER] Seek completed to ${pendingResumePosition}s`);
-              }).catch((err) => {
-                console.log(`[PLAYER] Seek failed:`, err);
-              });
+              if (!resumeSeekInFlightRef.current) {
+                resumeSeekInFlightRef.current = true;
+                resumeSeekStartedAtRef.current = Date.now();
+
+                console.log(`[PLAYER] Seeking to resume position: ${pendingResumePosition}s`);
+                videoRef.current.setPositionAsync(resumeMs).then(() => {
+                  // Do NOT clear the guard here. Wait for a status callback to
+                  // confirm that ExoPlayer actually reached the requested position.
+                  console.log(`[PLAYER] Resume seek command completed to ${pendingResumePosition}s`);
+                }).catch((err) => {
+                  console.log(`[PLAYER] Resume seek failed:`, err);
+                  // Allow a later playback-status callback to retry.
+                  resumeSeekInFlightRef.current = false;
+                  resumeSeekStartedAtRef.current = 0;
+                });
+              }
             } else {
-              // We're at or near the target position, mark as resumed
+              // We're at or near the target position, mark as resumed.
               console.log(`[PLAYER] Resume complete - at position: ${currentPos/1000}s`);
               hasResumedRef.current = true;
+              resumeSeekInFlightRef.current = false;
+              resumeSeekStartedAtRef.current = 0;
               setPendingResumePosition(null);
               setTimeout(() => { setIsLoading(false); }, 150); /* V387_HOLD_TILL_RESUME */
             }
@@ -2562,6 +2607,7 @@ export default function PlayerScreen() {
       setCurrentStreamIndex(nextIndex);
       setStreamUrl(fallbackUrls[nextIndex]);
       setPlaybackStarted(false);
+      playbackStartedRef.current = false; // V506
       setError(null);
       setIsLoading(true);
       setLoadingStatus('');
@@ -2571,7 +2617,7 @@ export default function PlayerScreen() {
         clearTimeout(playbackTimeoutRef.current);
       }
       playbackTimeoutRef.current = setTimeout(() => {
-        if (!playbackStarted) {
+        if (!playbackStartedRef.current) {
           console.log('[PLAYER] Stream timeout, trying next...');
           tryNextStream();
         }
@@ -2605,6 +2651,7 @@ export default function PlayerScreen() {
       // Reset state for new torrent
       setStreamUrl(null);
       setPlaybackStarted(false);
+      playbackStartedRef.current = false; // V506
       setError(null);
       setIsLoading(true);
       setLoadingStatus('Searching for streams...');
@@ -2674,7 +2721,7 @@ export default function PlayerScreen() {
       // Timeout for playback to start - direct URLs fail fast, torrents need time
       const timeoutMs = directUrl ? 15000 : 30000;
       playbackTimeoutRef.current = setTimeout(() => {
-        if (!playbackStarted) {
+        if (!playbackStartedRef.current) {
           if (fallbackUrls.length > currentStreamIndex + 1) {
             console.log('[PLAYER] Playback timeout - trying next stream');
             tryNextStream();
@@ -3016,6 +3063,8 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
     try {
       const parsedFileIdx = fileIdx && fileIdx !== '' ? parseInt(fileIdx, 10) : undefined;
       const validFileIdx = parsedFileIdx !== undefined && !isNaN(parsedFileIdx) ? parsedFileIdx : undefined;
+      const seasonNum = season ? parseInt(season, 10) : undefined;
+      const episodeNum = episode ? parseInt(episode, 10) : undefined;
       
       let streamSources: string[] = [];
       try {
@@ -3042,7 +3091,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
         hash: infoHash,
         fileIdx: validFileIdx,
         filename: filename || '',
-        videoUrl: api.stream.getVideoUrl(infoHash, validFileIdx),
+        videoUrl: api.stream.getVideoUrl(infoHash, validFileIdx, undefined, seasonNum, episodeNum),
         label: 'Primary',
       }];
 
@@ -3060,8 +3109,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
       //   - made "all streams failed" happen when any one errored
       // Fallback torrents are held in reserve and tried sequentially via
       // tryNextFallbackTorrent() if the primary errors out.
-      const seasonNum = season ? parseInt(season, 10) : undefined;
-      const episodeNum = episode ? parseInt(episode, 10) : undefined;
+
       /* v132-fast-resolve */
       // v132: try the synchronous start_and_wait endpoint first.  For
       // PM-cached streams this returns the resolved URL in 200-800ms,
@@ -3098,7 +3146,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
           // Keep PM warm via the same lightweight keep-alive the slow path uses
           pollIntervalRef.current = setTimeout(function _v132KeepAlive() {
             if (continuePollingRef.current) {
-              api.stream.status(infoHash).catch(() => {});
+              api.stream.status(infoHash, seasonNum, episodeNum).catch(() => {});
               pollIntervalRef.current = setTimeout(_v132KeepAlive, 10000) as any;
             }
           }, 10000) as any;
@@ -3156,7 +3204,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
         // resolver cache (it's empty when the candidate was first built).
         // Also removes the hardcoded 71.9.152.146 ghost from the legacy
         // debrid_url path; if a backend ever returns one it's already dead.
-        const _v294Fresh = api.stream.getVideoUrl(winner.hash, winner.fileIdx);
+        const _v294Fresh = api.stream.getVideoUrl(winner.hash, winner.fileIdx, undefined, seasonNum, episodeNum);
         const finalUrl = _v294Fresh || winner.videoUrl;
         console.log(`[PLAYER v294] WINNER: ${winner.label} (q=${bestQ}) ${((Date.now()-startTime)/1000).toFixed(1)}s peers=${info.peers} fresh=${(_v294Fresh || '').slice(0,60)}`);
         setLoadingStatus('');
@@ -3164,7 +3212,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
         const winHash = winner.hash;
         pollIntervalRef.current = setTimeout(function keepAlive() {
           if (continuePollingRef.current) {
-            api.stream.status(winHash).catch(() => {});
+            api.stream.status(winHash, seasonNum, episodeNum).catch(() => {});
             pollIntervalRef.current = setTimeout(keepAlive, 10000) as any;
           }
         }, 10000) as any;
@@ -3178,7 +3226,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
           const elapsedSec = (Date.now() - startTime) / 1000;
           
           const statuses = await Promise.allSettled(
-            candidates.map(c => api.stream.status(c.hash))
+            candidates.map(c => api.stream.status(c.hash, seasonNum, episodeNum))
           );
           
           for (let i = 0; i < statuses.length; i++) {
@@ -3308,12 +3356,14 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
   // Start a torrent with explicit hash (for fallback torrents)
   const startTorrentStreamWithHash = async (hash: string, fIdx?: number, fname?: string, srcs: string[] = [], retryCount = 0) => {
     const MAX_RETRIES = 2;
+    const fallbackSeasonNum = season ? parseInt(season, 10) : undefined;
+    const fallbackEpisodeNum = episode ? parseInt(episode, 10) : undefined;
     try {
       console.log(`[PLAYER] Starting fallback torrent: ${hash.slice(0,8)}... fileIdx=${fIdx} (attempt ${retryCount + 1})`);
       setDownloadProgress(5);
       
-      await api.stream.start(hash, fIdx, fname || undefined, srcs);
-      const videoUrl = api.stream.getVideoUrl(hash, fIdx);
+      await api.stream.start(hash, fIdx, fname || undefined, srcs, fallbackSeasonNum, fallbackEpisodeNum);
+      const videoUrl = api.stream.getVideoUrl(hash, fIdx, undefined, fallbackSeasonNum, fallbackEpisodeNum);
       
       let pollCount = 0;
       let smoothProgress = 5;
@@ -3325,7 +3375,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
         if (!continuePollingRef.current) return;
         pollCount++;
         try {
-          const status = await api.stream.status(hash);
+          const status = await api.stream.status(hash, fallbackSeasonNum, fallbackEpisodeNum);
           const peerCount = status.peers || 0;
           const dlRate = status.download_rate || 0;
           setPeers(peerCount);
@@ -3360,7 +3410,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
             // V294_FRESH_PM_URL — kill the hardcoded 71.9.152.146 ghost.
             // Use getVideoUrl which returns the absolute PM URL when
             // resolved on-device, or a (live) backend URL otherwise.
-            const debridVideoUrl = api.stream.getVideoUrl(hash, fIdx);
+            const debridVideoUrl = api.stream.getVideoUrl(hash, fIdx, undefined, fallbackSeasonNum, fallbackEpisodeNum);
             console.log(`[PLAYER v294] Fallback DEBRID ready in ${elapsedSec.toFixed(1)}s url=${(debridVideoUrl||'').slice(0,60)}`);
             videoRetryCountRef.current = 0;
             setStreamUrl(debridVideoUrl);
@@ -3377,7 +3427,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
             // pick up the freshly-resolved PM URL from the client-side
             // resolver cache (the videoUrl computed at start was the dead
             // backend route before PM had a chance to populate).
-            const _v294Fresh = api.stream.getVideoUrl(hash, fIdx);
+            const _v294Fresh = api.stream.getVideoUrl(hash, fIdx, undefined, fallbackSeasonNum, fallbackEpisodeNum);
             console.log(`[PLAYER v294] Fallback stream READY in ${elapsedSec.toFixed(1)}s url=${(_v294Fresh||'').slice(0,60)}`);
             videoRetryCountRef.current = 0;
             setStreamUrl(_v294Fresh || videoUrl);
