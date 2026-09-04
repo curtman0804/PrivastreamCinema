@@ -41,6 +41,7 @@ import {
   v160GetPoster as _v160GetPoster,
   v160SubscribePoster as _v160SubscribePoster /* V166_POSTER_SUB */,
   v160RegisterPoster as _v160RegisterPoster /* V386_CW_REGISTERS_POSTER */,
+  v614RegisterVerifiedPoster as _v614RegisterVerifiedPoster, /* V614_CW_CURRENT_POSTER */
   v167PrewarmReleaseStatus as _v167PrewarmReleaseStatus /* V167_RELEASE_PREWARM */,
   v172IsWatched as _v172IsWatched,
   v172SubscribeWatched as _v172SubscribeWatched,
@@ -1626,6 +1627,46 @@ function ContinueWatchingItem({
     return unsub;
   }, [(item as any).content_id]);
 
+  /* V614_CW_CURRENT_POSTER
+     Watch-progress contains the poster saved at playback time. Refresh the
+     IMDb title against current metadata and replace the canonical poster
+     when Cinemeta supplies newer artwork. */
+  useEffect(() => {
+    const cid = String((item as any).content_id || '');
+    const baseId = cid.split(':')[0];
+
+    let type = String((item as any).content_type || '').toLowerCase();
+    if (type === 'movies') type = 'movie';
+    if (type === 'series') type = 'series';
+
+    if (
+      !/^tt\d+$/.test(baseId) ||
+      (type !== 'movie' && type !== 'series')
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void api.content
+      .getMeta(type as 'movie' | 'series', baseId)
+      .then((meta: any) => {
+        if (!cancelled && meta?.poster) {
+          _v614RegisterVerifiedPoster(
+            baseId,
+            String(meta.poster)
+          );
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    (item as any).content_id,
+    (item as any).content_type,
+  ]);
   /* V386_CW_REGISTERS_POSTER - if nothing has claimed this content's
      canonical poster yet (fresh registry / rails never mounted), the CW
      card's own poster becomes the canon so rails adopt it when they mount.

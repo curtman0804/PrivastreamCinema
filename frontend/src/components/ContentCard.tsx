@@ -101,6 +101,42 @@ export function v160RegisterPoster(imdbId: string | undefined | null, url: strin
 /* V166_POSTER_SUB â€” subscribe to canonical poster URL updates for a given id.
    Fires immediately with the current value if one exists.  Returns an
    unsubscribe function. */
+/* V614_CANONICAL_POSTER_CORE
+   Verified current metadata is allowed to replace stale poster artwork.
+   Ordinary catalog/CW posters remain seed/fallback values only. */
+export function v614RegisterVerifiedPoster(
+  imdbId: string | undefined | null,
+  url: string | undefined | null
+): void {
+  if (!imdbId || !url) return;
+
+  const key = _v215PosterKey(imdbId);
+  const next = String(url).trim();
+
+  if (!/^tt\d+$/.test(key) || !next) return;
+  if (_v160PosterRegistry[key] === next) return;
+
+  _v160PosterRegistry[key] = next;
+  _v383Persist();
+
+  const subs = _v166PosterSubs[key];
+
+  if (subs && subs.size) {
+    subs.forEach(cb => {
+      try { cb(next); } catch (_) {}
+    });
+  }
+
+  // V614B_NATIVE_POSTER_SYNC
+  // React ContentCards have per-id subscribers. Native TV rails use one
+  // row-level event so hundreds of native posters do not need JS listeners.
+  try {
+    DeviceEventEmitter.emit(
+      'v614:posterChanged',
+      { key, url: next }
+    );
+  } catch (_) {}
+}
 export function v160SubscribePoster(imdbId: string | undefined | null, cb: (url: string) => void): () => void {
   if (!imdbId || typeof cb !== 'function') return () => {};
   const key = _v215PosterKey(imdbId);
@@ -121,7 +157,7 @@ export function v160SubscribePoster(imdbId: string | undefined | null, cb: (url:
    stale watch-progress poster instead of the canonical rail poster.
    Persist the registry to MMKV and hydrate it SYNCHRONOUSLY at module load
    so every surface agrees from first paint, stable across sessions. */
-const _V383_REG_KEY = '@ps_poster_reg_v1';
+const _V383_REG_KEY = '@ps_poster_reg_v2'; // V614_CANONICAL_POSTER_CORE
 let _v383Timer: any = null;
 function _v383Persist(): void {
   if (_v383Timer) return;
@@ -802,23 +838,27 @@ export const V176kPopoverHost: React.FC = () => {
 
 /* â”€â”€â”€ /V176K_POPOVER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
-export function v160GetPoster(imdbId: string | undefined | null, fallback: string | undefined | null): string {
-  // V448_POSTER_TRUST_ITEM - the item's own poster is the freshest, most
-  // authoritative signal for THIS render.  Registry is used ONLY when the
-  // item does not supply a poster URL (e.g. some CW records only have a
-  // backdrop).  Prior code let a single bad Torrentio/TMDB row poison the
-  // registry forever, so every subsequent card with the same imdb_id -
-  // including the Continue Watching poster - displayed the wrong movie.
+export function v160GetPoster(
+  imdbId: string | undefined | null,
+  fallback: string | undefined | null
+): string {
+  // V614_CANONICAL_POSTER_CORE
+  // Once current metadata has established a canonical poster, every
+  // surface uses it instead of its own historical/surface-specific URL.
+  if (imdbId) {
+    const key = _v215PosterKey(imdbId);
+
+    if (key && _v160PosterRegistry[key]) {
+      return _v160PosterRegistry[key];
+    }
+  }
+
   if (fallback && String(fallback).trim().length > 0) {
     return String(fallback);
   }
-  if (imdbId) {
-    const key = _v215PosterKey(imdbId);
-    if (key && _v160PosterRegistry[key]) return _v160PosterRegistry[key];
-  }
+
   return '';
 }
-
 // === RELEASE_STATUS_V77E ===
 // Singleton batched fetcher. Coalesces release-status requests across all
 // mounted ContentCards so we send 1 batch per 250ms (up to 50 ids).
@@ -1728,8 +1768,32 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
   // render so the SAME poster URL renders no matter which surface mounted
   // this content first.
   const _v160_id = ((item as any).imdb_id || (item as any).id) as string | undefined;
-  if (_v160_id && (item as any).poster) v160RegisterPoster(_v160_id, (item as any).poster as string);
-  const _v160_poster = v160GetPoster(_v160_id, (item as any).poster);
+
+  if (_v160_id && (item as any).poster) {
+    v160RegisterPoster(
+      _v160_id,
+      (item as any).poster as string
+    );
+  }
+
+  // V614B_NATIVE_POSTER_SYNC
+  // Repaint this ContentCard if verified current metadata replaces its poster.
+  const [_v614PosterRevision, _v614SetPosterRevision] = useState(0);
+
+  useEffect(() => {
+    return v160SubscribePoster(
+      _v160_id,
+      () => _v614SetPosterRevision(v => v + 1)
+    );
+  }, [_v160_id]);
+
+  void _v614PosterRevision;
+
+  const _v160_poster =
+    v160GetPoster(
+      _v160_id,
+      (item as any).poster
+    );
 
   /* V172_WATCHED_REGISTRY â€” per-card derived flag + re-render hook.
      Subscribes to the module-level set so any long-press unmark (this

@@ -13,12 +13,18 @@ import {
   StyleSheet,
   useWindowDimensions,
   InteractionManager,
+  DeviceEventEmitter,
 } from 'react-native';
 
 import { FlashList } from '@shopify/flash-list';
 import PrivastreamTVRow from './PrivastreamTVRow';
 
-import { ContentCard, getCardWidth } from './ContentCard';
+import {
+  ContentCard,
+  getCardWidth,
+  v160GetPoster as _v614GetPoster,
+  v614RegisterVerifiedPoster as _v614RegisterVerifiedPoster,
+} from './ContentCard'; // V614B_NATIVE_POSTER_SYNC
 import {
   v173RegisterLongPress,
   v176iRegisterGetter,
@@ -63,7 +69,20 @@ function _v445Drain() {
     if (!job) break;
     _v445Inflight++;
     (api as any)?.content?.getMeta?.(job.t, job.cid)
-      .then((d: any) => { if (d) setMetaCache(job.cid, d); })
+      .then((d: any) => {
+        if (d) {
+          setMetaCache(job.cid, d);
+
+          if (d.poster) {
+            try {
+              _v614RegisterVerifiedPoster(
+                job.cid,
+                String(d.poster)
+              );
+            } catch (_) {}
+          }
+        }
+      })
       .catch(() => { /* best-effort */ })
       .finally(() => { _v445Inflight = Math.max(0, _v445Inflight - 1); _v445Drain(); });
   }
@@ -194,6 +213,57 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
     const [allItems, setAllItems] = useState<ContentItem[]>(
       () => initialItems || []
     );
+
+    // V614B_NATIVE_POSTER_SYNC
+    // When verified current metadata changes a poster, update only the
+    // matching item's poster URL. Native focus/scroll ownership is untouched.
+    useEffect(() => {
+      const sub = DeviceEventEmitter.addListener(
+        'v614:posterChanged',
+        (payload: any) => {
+          const key = String(payload?.key || '');
+          const url = String(payload?.url || '');
+
+          if (!key || !url) return;
+
+          setAllItems(prev => {
+            let changed = false;
+
+            const next = (prev || []).map((it: any) => {
+              const rawId = String(
+                it?.imdb_id ||
+                it?.id ||
+                ''
+              );
+
+              const itemKey = /^tt\d+/.test(rawId)
+                ? rawId.split(':')[0]
+                : rawId;
+
+              if (
+                itemKey === key &&
+                String(it?.poster || '') !== url
+              ) {
+                changed = true;
+
+                return {
+                  ...it,
+                  poster: url,
+                };
+              }
+
+              return it;
+            });
+
+            return changed ? next : prev;
+          });
+        }
+      );
+
+      return () => {
+        try { sub.remove(); } catch (_) {}
+      };
+    }, []);
 
     const skipRef = useRef(initialItems?.length || 0);
     const hasMoreRef = useRef(true);
@@ -654,7 +724,26 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         validItems.map((it, index) => ({
           id: String(it.id || it.imdb_id || `${serviceName}-${index}`),
           title: String(it.name || it.title || ''),
-          poster: it.poster ? String(it.poster) : null,
+          poster: (() => {
+            const cid = String(
+              (it as any).imdb_id ||
+              (it as any).id ||
+              ''
+            );
+
+            const supplied =
+              it.poster
+                ? String(it.poster)
+                : null;
+
+            const canonical =
+              _v614GetPoster(
+                cid,
+                supplied
+              );
+
+            return canonical || null;
+          })(),
           badge:
             v610GetReleaseStatus(
               String((it as any).imdb_id || (it as any).id || '')
@@ -683,6 +772,43 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
         const focusedItem = validItems[index];
         if (!focusedItem) return;
+        // V614B_NATIVE_POSTER_SYNC
+        // Current metadata verification reuses the existing settle-aware,
+        // bounded metadata queue. No network work is added to held-D-pad focus.
+        try {
+          const cid = String(
+            (focusedItem as any).imdb_id ||
+            (focusedItem as any).id ||
+            ''
+          );
+
+          const baseId = /^tt\d+/.test(cid)
+            ? cid.split(':')[0]
+            : cid;
+
+          const type = String(
+            (focusedItem as any).type || ''
+          ).toLowerCase();
+
+          if (
+            /^tt\d+$/.test(baseId) &&
+            (type === 'movie' || type === 'series')
+          ) {
+            const cached: any = getMetaCache(baseId);
+
+            if (cached?.poster) {
+              _v614RegisterVerifiedPoster(
+                baseId,
+                String(cached.poster)
+              );
+            } else {
+              _v575QueueMetaWhenIdle(
+                type,
+                baseId
+              );
+            }
+          }
+        } catch (_) {}
 
         nativeTVFocusedIndexRef.current = index;
         (globalThis as any).__psNativeTVFocusOwner = nativeTVOwnerRef.current;
