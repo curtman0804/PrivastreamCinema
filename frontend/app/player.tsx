@@ -78,12 +78,16 @@ function TVFocusButton({
   focusedStyle,
   children,
   hasTVPreferredFocus = false,
+  onFocus,
+  onBlur,
 }: {
   onPress?: () => void;
   style: any;
   focusedStyle?: any;
   children: React.ReactNode;
   hasTVPreferredFocus?: boolean;
+  onFocus?: () => void;
+  onBlur?: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
   
@@ -91,8 +95,14 @@ function TVFocusButton({
     <Pressable
       style={[style, isFocused && focusedStyle]}
       onPress={onPress}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
+      onFocus={() => {
+        setIsFocused(true);
+        onFocus?.();
+      }}
+      onBlur={() => {
+        setIsFocused(false);
+        onBlur?.();
+      }}
       hasTVPreferredFocus={hasTVPreferredFocus}
     >
       {children}
@@ -696,6 +706,8 @@ export default function PlayerScreen() {
     } catch (_) {}
   }, [selectedSubtitle]);
   const [showSubtitlePicker, setShowSubtitlePicker] = useState(false);
+  // V604_SUBTITLE_FOCUS_SCROLL
+  const v604SubtitleListRef = useRef<FlatList<any>>(null);
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [_v478AutoSubUrl, _setV478AutoSubUrl] = useState<string | null>(null);
   const [_v478AutoCues, _setV478AutoCues] = useState<SubtitleCue[]>([]);
@@ -4274,9 +4286,27 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
               )}
 
               {/* V411_UI - no auto note */}
-              <TouchableOpacity onPress={() => setShowSubtitlePicker(false)}>
+              {/* V606_SUBTITLE_CLOSE_FOCUS */}
+              <TVFocusButton
+                onPress={() => setShowSubtitlePicker(false)}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 2,
+                  borderColor: "transparent",
+                  backgroundColor: "rgba(255,255,255,0.06)",
+                }}
+                focusedStyle={{
+                  borderColor: "#B8A05C",
+                  backgroundColor: "rgba(184,160,92,0.25)",
+                  transform: [{ scale: 1.10 }],
+                }}
+              >
                 <Ionicons name="close" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
+              </TVFocusButton>
             </View>
             
 
@@ -4289,6 +4319,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
               </View>
             ) : (
               <FlatList
+                ref={v604SubtitleListRef}
                 /* V412_PICKER_DEDUPE - collapse to one row per language and
                    drop Forced/HI variants (those are only for auto-load). */
                 data={(() => {
@@ -4306,7 +4337,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                   return _rows;
                 })()}
                 keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
+                renderItem={({ item, index }) => (
                   <TVFocusButton
                     hasTVPreferredFocus={
                       /* V433_POLISHED - autofocus currently-selected sub */
@@ -4318,6 +4349,18 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                       (item.url === selectedSubtitle || (item.lang === 'off' && !selectedSubtitle)) && styles.subtitleItemActive
                     ]}
                     focusedStyle={styles.subtitleItemFocused}
+                    onFocus={() => {
+                      // V604_SUBTITLE_FOCUS_SCROLL
+                      requestAnimationFrame(() => {
+                        try {
+                          v604SubtitleListRef.current?.scrollToIndex({
+                            index,
+                            animated: true,
+                            viewPosition: 0.4,
+                          });
+                        } catch (_) {}
+                      });
+                    }}
                     onPress={() => {
                       setSelectedSubtitle(item.lang === 'off' ? null : item.url);
                       setV408AutoActive(false); /* V408 - user is now in control */
@@ -4336,6 +4379,17 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                     )}
                   </TVFocusButton>
                 )}
+                removeClippedSubviews={false}
+                ListFooterComponent={<View style={{ height: 160 }} />}
+                contentContainerStyle={{ paddingBottom: 16 }}
+                onScrollToIndexFailed={(info) => {
+                  try {
+                    v604SubtitleListRef.current?.scrollToOffset({
+                      offset: Math.max(0, info.averageItemLength * info.index),
+                      animated: true,
+                    });
+                  } catch (_) {}
+                }}
                 style={styles.subtitleList}
               />
             )}
