@@ -16,19 +16,27 @@ import {
 } from 'react-native';
 
 import { FlashList } from '@shopify/flash-list';
+import PrivastreamTVRow from './PrivastreamTVRow';
 
 import { ContentCard, getCardWidth } from './ContentCard';
+import {
+  v173RegisterLongPress,
+  v176iRegisterGetter,
+  v176pRegisterPressGetter,
+  v176ShowLongPressMenu,
+} from './ContentCard';
 import { ContentItem } from '../api/client';
 import apiClient, { api } from '../api/client';
+import { useContentStore } from '../store/contentStore';
 import { getMetaCache, setMetaCache } from '../store/contentStore'; // PATCH_V250_VIEWPORT_PREFETCH
 import { colors } from '../styles/colors';
-import PSTVHorizontalScrollView from './PSTVHorizontalScrollView';
 
 const ITEM_GAP = 16;
 const TV_PADDING_LEFT = 48;
 const TV_PADDING_RIGHT = 48;
 const MOBILE_PADDING = 16;
 
+const TV_SCROLL_ANCHOR = 4;
 
 // PATCH_V250_BACK_NAV_FOCUS Ã¢â‚¬â€ module-level map of rowKey -> last-focused content_id.
 // When user backs out of Details, ServiceRow re-mounts and gives the previously
@@ -90,9 +98,24 @@ function _v575QueueMetaWhenIdle(t: string, cid: string) {
   if (!_v575DrainTimer) _v575DrainTimer = setTimeout(_v575Tick, _v575SettleMs);
 }
 
+// V598D_PROACTIVE_PRIMARY_RAIL_BUFFER
+// The four main Discover rails must load ahead of navigation instead of
+// waiting for the selector to get close to the currently loaded edge.
+// A hard TV hold can consume posters much faster than a catalog page returns.
+const _V598D_PRIMARY_RAIL_NAMES = new Set([
+  'popular movies',
+  'popular series',
+  'new movies',
+  'new series',
+]);
+const _V598D_PRIMARY_PRIME_TARGET = 300;
+const _V598D_PRIMARY_FETCH_AHEAD = 120;
+const _V598D_FETCH_COOLDOWN_MS = 250;
+
 // V444_BOOT_SERVICE_ROW - visible startup marker.  If this line appears in
 // logcat, v443+v444 patches are ACTIVE in the bundle.
 try { console.log('[V444_BOOT] ServiceRow module loaded; v443 map-read=DISABLED'); } catch (_) {}
+try { console.log('[V587_RUNTIME] Fast held-D-pad navigation ACTIVE'); } catch (_) {}
 
 // V443_STOP_FOCUS_HOP marker.  See patch_v443.ps1 for rationale.  The map
 // _v250_lastFocusedByRow is still written on every card focus (harmless
@@ -179,37 +202,33 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
     const flatListRef = useRef<FlashList<ContentItem>>(null);
 
-    // V577_TV_HORIZONTAL_WINDOW
-    // Index occupying the first fully-visible poster slot.
-    // Native Android owns focus; this ref only owns deliberate row position.
-    const tvWindowStartRef = useRef(0);
-
-    // Keep current geometry in refs so handleCardFocus never needs to be
-    // recreated when dimensions change.
-    const tvVisibleCountRef = useRef(1);
-    const tvItemStepRef = useRef(itemTotalWidth);
-
-    tvItemStepRef.current = itemTotalWidth;
-    tvVisibleCountRef.current = isTV
-      ? Math.max(
-          1,
-          Math.floor(
-            (Math.max(0, screenWidth - TV_PADDING_LEFT) + ITEM_GAP) /
-              itemTotalWidth
-          )
-        )
-      : 1;
-
     const isNavigatingInRowRef = useRef(false);
 
     const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
       null
     );
 
+    // V587_FAST_HOLD
+    // During a held D-pad sequence, native TV focus must remain the hot path.
+    // Do not force the parent to process every intermediate focused poster.
+    const rapidFocusLastAtRef = useRef(0);
+    const rapidFocusTimerRef =
+      useRef<ReturnType<typeof setTimeout> | null>(null);
+    const rapidFocusPendingRef = useRef<ContentItem | null>(null);
+
     const validItems = useMemo(
       () => (allItems || []).filter(Boolean),
       [allItems]
     );
+
+    const isV598DPrimaryRail = useMemo(() => {
+      const names = [
+        String(title || '').trim().toLowerCase(),
+        String(serviceName || '').trim().toLowerCase(),
+      ];
+
+      return names.some(name => _V598D_PRIMARY_RAIL_NAMES.has(name));
+    }, [title, serviceName]);
 
     itemCountRef.current = validItems.length;
 
@@ -223,12 +242,20 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
       if (isFetchingRef.current || !hasMoreRef.current) return;
 
-      if (now - lastFetchTime.current < 2000) return;
+      if (now - lastFetchTime.current < _V598D_FETCH_COOLDOWN_MS) return;
 
       isFetchingRef.current = true;
       lastFetchTime.current = now;
 
       try {
+        if (isV598DPrimaryRail) {
+          console.log(
+            '[V598D_RAIL_FETCH]',
+            String(title || serviceName || ''),
+            `skip=${skipRef.current}`,
+            `loaded=${totalRef.current}`
+          );
+        }
         const resp = await apiClient.get(
           `/api/content/category/${encodeURIComponent(
             serviceName
@@ -266,7 +293,74 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
       } finally {
         isFetchingRef.current = false;
       }
-    }, [serviceName, contentType]);
+    }, [serviceName, contentType, isV598DPrimaryRail, title]);
+
+    // V598D_PROACTIVE_PRIMARY_RAIL_BUFFER
+    // Prime Popular/New Movies/Series in the background. This is deliberately
+    // independent of focus so merely sitting on the screen fills the rail.
+    useEffect(() => {
+      if (
+        !isTV ||
+        !isV598DPrimaryRail ||
+        validItems.length === 0 ||
+        validItems.length >= _V598D_PRIMARY_PRIME_TARGET ||
+        !hasMoreRef.current
+      ) {
+        return;
+      }
+
+      let cancelled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+
+      const pump = async () => {
+        if (
+          cancelled ||
+          !hasMoreRef.current ||
+          totalRef.current >= _V598D_PRIMARY_PRIME_TARGET
+        ) {
+          return;
+        }
+
+        if (isFetchingRef.current) {
+          timer = setTimeout(pump, 150);
+          return;
+        }
+
+        const elapsed = Date.now() - lastFetchTime.current;
+        if (elapsed < _V598D_FETCH_COOLDOWN_MS) {
+          timer = setTimeout(
+            pump,
+            Math.max(50, _V598D_FETCH_COOLDOWN_MS - elapsed)
+          );
+          return;
+        }
+
+        await fetchMore();
+
+        if (
+          !cancelled &&
+          hasMoreRef.current &&
+          totalRef.current < _V598D_PRIMARY_PRIME_TARGET
+        ) {
+          timer = setTimeout(pump, 150);
+        }
+      };
+
+      // Small row stagger prevents all four main rails from issuing their
+      // first look-ahead request on the exact same JS frame.
+      timer = setTimeout(pump, 75 + Math.min(rowIndex, 3) * 125);
+
+      return () => {
+        cancelled = true;
+        if (timer) clearTimeout(timer);
+      };
+    }, [
+      isTV,
+      isV598DPrimaryRail,
+      validItems.length,
+      fetchMore,
+      rowIndex,
+    ]);
 
     const handleCardFocus = useCallback(
       (index: number) => {
@@ -278,6 +372,20 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         // V575_DECOUPLE - mark that the D-pad just moved so any in-flight
         // viewport prefetch pauses until navigation settles.
         _v575LastNavAt = Date.now();
+
+        // TV_AXIS_GUARD
+        // Remember which rail owns focus. A vertical row-entry must NEVER
+        // cause this rail to horizontally reposition itself.
+        const tvRowToken =
+          typeof tvRowIndex === 'number' ? tvRowIndex : rowIndex + 1;
+
+        const enteringDifferentRow =
+          isTV &&
+          (globalThis as any).__psTVActiveRowIndex !== tvRowToken;
+
+        if (isTV) {
+          (globalThis as any).__psTVActiveRowIndex = tvRowToken;
+        }
 
         onSectionFocus?.();
 
@@ -296,50 +404,69 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         }
 
         if (focusedItem && onItemFocus) {
-          onItemFocus(focusedItem);
+          const now = Date.now();
+          const gap = now - rapidFocusLastAtRef.current;
+          rapidFocusLastAtRef.current = now;
+
+          if (rapidFocusTimerRef.current) {
+            clearTimeout(rapidFocusTimerRef.current);
+            rapidFocusTimerRef.current = null;
+          }
+
+          // Normal individual D-pad press: notify immediately.
+          if (gap <= 0 || gap >= 140) {
+            rapidFocusPendingRef.current = null;
+            onItemFocus(focusedItem);
+          } else {
+            // Held D-pad / rapid repeat:
+            // let native focus fly through cards without making Discover
+            // re-process every intermediate poster.
+            rapidFocusPendingRef.current = focusedItem;
+
+            rapidFocusTimerRef.current = setTimeout(() => {
+              rapidFocusTimerRef.current = null;
+
+              const pending = rapidFocusPendingRef.current;
+              rapidFocusPendingRef.current = null;
+
+              if (pending) {
+                onItemFocus(pending);
+              }
+            }, 140);
+          }
         }
 
+        const recentVerticalTVNav =
+          isTV &&
+          (globalThis as any).__psTVLastNavAxis === 'vertical' &&
+          Date.now() - Number((globalThis as any).__psTVLastNavAt || 0) < 220;
 
-        // V577_TV_HORIZONTAL_WINDOW
-        //
-        // Focus moves freely inside the visible poster window.
-        //
-        // Example with six fully-visible posters:
-        //   0 1 2 3 4 5   -> no scrolling
-        //
-        // Moving 5 -> 6 shifts the row exactly one poster so index 6 occupies
-        // visual slot 6. Reversing direction then moves focus 6 -> 5 -> 4...
-        // without moving the row until focus crosses the left window edge.
-        if (isTV && flatListRef.current) {
-          const visibleCount = tvVisibleCountRef.current;
-          let windowStart = tvWindowStartRef.current;
-          const windowEnd = windowStart + visibleCount - 1;
+        if (
+          isTV &&
+          !recentVerticalTVNav &&
+          !enteringDifferentRow &&
+          flatListRef.current &&
+          isNavigatingInRowRef.current
+        ) {
+          const targetOffset = Math.max(
+            0,
+            (index - TV_SCROLL_ANCHOR) * itemTotalWidth
+          );
 
-
-
-          if (index > windowEnd) {
-            windowStart = index - visibleCount + 1;
-            tvWindowStartRef.current = windowStart;
-
-            flatListRef.current.scrollToOffset({
-              offset: windowStart * tvItemStepRef.current,
-              animated: false,
-            });
-          } else if (index < windowStart) {
-            windowStart = index;
-            tvWindowStartRef.current = windowStart;
-
-            flatListRef.current.scrollToOffset({
-              offset: windowStart * tvItemStepRef.current,
-              animated: false,
-            });
-          }
+          flatListRef.current.scrollToOffset({
+            offset: targetOffset,
+            animated: false,
+          });
         }
 
         isNavigatingInRowRef.current = true;
 
+        const fetchAhead = isV598DPrimaryRail
+          ? _V598D_PRIMARY_FETCH_AHEAD
+          : 15;
+
         if (
-          index >= totalRef.current - 15 &&
+          index >= totalRef.current - fetchAhead &&
           hasMoreRef.current
         ) {
           fetchMore();
@@ -352,6 +479,9 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         fetchMore,
         itemTotalWidth,
         isTV,
+        tvRowIndex,
+        rowIndex,
+        isV598DPrimaryRail,
       ]
     );
 
@@ -452,6 +582,188 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
     // v238 Ã¢â‚¬â€ SAFE empty-state guard: every hook above has already been
     // called this render, so React's hook order is stable across renders
     // regardless of whether validItems is empty.
+    // NATIVE_TV_RECYCLER_ROW
+    // TV service rails use one native RecyclerView instead of mounting a
+    // React ContentCard for every poster. Mobile keeps the existing FlashList.
+    const nativeTVItems = useMemo(
+      () =>
+        validItems.map((it, index) => ({
+          id: String(it.id || it.imdb_id || `${serviceName}-${index}`),
+          title: String(it.name || it.title || ''),
+          poster: it.poster ? String(it.poster) : null,
+        })),
+      [validItems, serviceName]
+    );
+
+    const nativeTVPressRef = useRef<(() => void) | null>(null);
+    const nativeTVLongPressRef = useRef<(() => void) | null>(null);
+    const nativeTVFocusedIndexRef = useRef<number>(-1);
+    const nativeTVOwnerRef = useRef(
+      `native-tv-row:${rowIndex}:${serviceName || title || ''}`
+    );
+
+    const handleNativeTVFocus = useCallback(
+      (event: any) => {
+        const ne = event?.nativeEvent || {};
+        const index = Number(ne.index);
+
+        if (!Number.isInteger(index) || index < 0 || index >= validItems.length) {
+          return;
+        }
+
+        const focusedItem = validItems[index];
+        if (!focusedItem) return;
+
+        nativeTVFocusedIndexRef.current = index;
+        (globalThis as any).__psNativeTVFocusOwner = nativeTVOwnerRef.current;
+
+        const anchor =
+          [ne.x, ne.y, ne.width, ne.height].every(
+            (v: any) => typeof v === 'number' && Number.isFinite(v)
+          )
+            ? {
+                x: Number(ne.x),
+                y: Number(ne.y),
+                width: Number(ne.width),
+                height: Number(ne.height),
+              }
+            : null;
+
+        nativeTVPressRef.current = () => {
+          try {
+            onItemPress(focusedItem);
+          } catch (_) {}
+        };
+
+        nativeTVLongPressRef.current = () => {
+          let inLibrary = false;
+
+          try {
+            const cid = String(
+              (focusedItem as any).content_id ||
+                (focusedItem as any).imdb_id ||
+                (focusedItem as any).id ||
+                ''
+            );
+
+            const libSet = (useContentStore as any).getState?.().librarySet;
+
+            if (cid && libSet && typeof libSet.has === 'function') {
+              inLibrary = !!libSet.has(cid);
+            }
+          } catch (_) {}
+
+          try {
+            v176ShowLongPressMenu({
+              item: focusedItem,
+              inLibraryOverride: inLibrary,
+              anchor,
+            });
+          } catch (_) {}
+        };
+
+        // Reuse the SAME MainActivity -> onTVKeyEvent short/long-select path
+        // ContentCard already uses. Only the focused native item owns it.
+        try {
+          v176pRegisterPressGetter(() => nativeTVPressRef.current);
+        } catch (_) {}
+
+        try {
+          v176iRegisterGetter(() => nativeTVLongPressRef.current);
+        } catch (_) {}
+
+        try {
+          v173RegisterLongPress(nativeTVLongPressRef.current);
+        } catch (_) {}
+
+        handleCardFocus(index);
+      },
+      [validItems, onItemPress, handleCardFocus]
+    );
+
+    const handleNativeTVRowBlur = useCallback(() => {
+      if (
+        (globalThis as any).__psNativeTVFocusOwner !==
+        nativeTVOwnerRef.current
+      ) {
+        return;
+      }
+
+      (globalThis as any).__psNativeTVFocusOwner = null;
+      nativeTVFocusedIndexRef.current = -1;
+      nativeTVPressRef.current = null;
+      nativeTVLongPressRef.current = null;
+
+      try {
+        v176pRegisterPressGetter(null);
+      } catch (_) {}
+
+      try {
+        v176iRegisterGetter(null);
+      } catch (_) {}
+
+      try {
+        v173RegisterLongPress(null);
+      } catch (_) {}
+
+      handleCardBlur();
+    }, [handleCardBlur]);
+
+    useEffect(() => {
+      return () => {
+        if (
+          (globalThis as any).__psNativeTVFocusOwner ===
+          nativeTVOwnerRef.current
+        ) {
+          (globalThis as any).__psNativeTVFocusOwner = null;
+
+          try {
+            v176pRegisterPressGetter(null);
+          } catch (_) {}
+
+          try {
+            v176iRegisterGetter(null);
+          } catch (_) {}
+
+          try {
+            v173RegisterLongPress(null);
+          } catch (_) {}
+        }
+      };
+    }, []);
+
+    const nativeTVPreferredFocusIndex = useMemo(() => {
+      try {
+        const savedRow = Number((globalThis as any).__v442LastNavRowIdx);
+        const savedId = String(
+          (globalThis as any).__v443LastPressedId ||
+            (globalThis as any).__v442LastFocusedId ||
+            ''
+        );
+        const savedAt = Number(
+          (globalThis as any).__v443LastPressedAt ||
+            (globalThis as any).__v442LastNavAt ||
+            0
+        );
+
+        if (
+          savedId &&
+          savedRow === rowIndex &&
+          savedAt > 0 &&
+          Date.now() - savedAt < 60000
+        ) {
+          const i = validItems.findIndex(
+            (it: any) =>
+              String(it?.imdb_id || it?.id || it?.content_id || '') === savedId
+          );
+
+          if (i >= 0) return i;
+        }
+      } catch (_) {}
+
+      return isFirstRow ? 0 : -1;
+    }, [validItems, rowIndex, isFirstRow]);
+
     if (validItems.length === 0) {
       return null;
     }
@@ -475,12 +787,25 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
             </Text>
           </View>
 
-          <FlashList
+          {isTV ? (
+            <PrivastreamTVRow
+              style={{ height: cardWidth * 1.5 + 44 }}
+              items={nativeTVItems}
+              cardWidth={cardWidth}
+              cardHeight={cardWidth * 1.5}
+              gap={ITEM_GAP}
+              leftPadding={TV_PADDING_LEFT}
+              rightPadding={screenWidth}
+              anchorColumn={5}
+              diagnosticLabel={String(title || serviceName || '')}
+              preferredFocusIndex={nativeTVPreferredFocusIndex}
+              onItemFocus={handleNativeTVFocus}
+              onRowBlur={handleNativeTVRowBlur}
+            />
+          ) : (
+            <FlashList
             ref={flatListRef as any}
             horizontal
-            renderScrollComponent={
-              isTV ? (PSTVHorizontalScrollView as any) : undefined
-            }
             data={validItems}
             extraData={validItems.length}
             renderItem={renderItem}
@@ -492,13 +817,14 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
                 : styles.scrollContent
             }
             estimatedItemSize={itemTotalWidth}
-            drawDistance={itemTotalWidth * 2} /* V438_ROW_HYDRATION - more pre-rendered tiles = D-pad stays in-row */ // V250 Ã¢â‚¬â€ was 1.5x; gives more pre-rendered cards = smoother D-pad
+            drawDistance={itemTotalWidth * 4} /* V438_ROW_HYDRATION - more pre-rendered tiles = D-pad stays in-row */ // V250 Ã¢â‚¬â€ was 1.5x; gives more pre-rendered cards = smoother D-pad
             onEndReached={handleEndReached}
             onEndReachedThreshold={3}
             onViewableItemsChanged={onViewableItemsChanged} // PATCH_V250_VIEWPORT_PREFETCH
             viewabilityConfig={viewabilityConfig}
             removeClippedSubviews={true} /* V438 - keep native tags alive for spatial nav */
           />
+          )}
         </View>
       </LazyMount>
     );
