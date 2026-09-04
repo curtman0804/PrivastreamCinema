@@ -1785,12 +1785,22 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
             // matches the adapter item at its current position.
             val pos = holder.bindingAdapterPosition
             val currentItem = data.getOrNull(pos)
-            val identityMatches =
+            // V615B_SAME_ID_POSTER_ATTACH
+            //
+            // A canonical poster URL may change while RecyclerView preserves
+            // the holder because the content ID is unchanged.
+            //
+            // Poster URL mismatch is NOT an identity mismatch.
+            // Never hide a valid poster merely because newer artwork arrived.
+            val idMatches =
                 currentItem != null &&
-                    holder.boundId == currentItem.id &&
-                    holder.boundPoster == currentItem.poster
+                    holder.boundId == currentItem.id
 
-            if (!identityMatches) {
+            val posterMatches =
+                idMatches &&
+                    holder.boundPoster == currentItem?.poster
+
+            if (!idMatches) {
                 holder.image.visibility = View.INVISIBLE
                 holder.image.invalidate()
 
@@ -1800,6 +1810,38 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                         "holder=${holderKey(holder)} pos=$pos " +
                         "boundId=${holder.boundId} actualId=${currentItem?.id ?: "none"}"
                 )
+            } else if (!posterMatches && currentItem != null) {
+                val currentPoster =
+                    cachedPosterDrawable(currentItem.poster)
+
+                if (currentPoster != null) {
+                    holder.image.setImageDrawable(currentPoster)
+                    holder.boundPoster = currentItem.poster
+                    holder.image.visibility = View.VISIBLE
+                    holder.image.invalidate()
+
+                    Log.e(
+                        "PSTVIMG",
+                        "row=\"$diagnosticLabel\" V615B_ATTACH_CACHE_SWAP " +
+                            "holder=${holderKey(holder)} pos=$pos " +
+                            "id=${holder.boundId} " +
+                            "poster=${posterKey(currentItem.poster)}"
+                    )
+                } else if (holder.image.drawable != null) {
+                    // Keep the currently rendered artwork until RecyclerView
+                    // legitimately binds this holder again.
+                    holder.image.visibility = View.VISIBLE
+                    holder.image.invalidate()
+
+                    Log.e(
+                        "PSTVIMG",
+                        "row=\"$diagnosticLabel\" V615B_KEEP_OLD_ON_ATTACH " +
+                            "holder=${holderKey(holder)} pos=$pos " +
+                            "id=${holder.boundId} " +
+                            "old=${posterKey(holder.boundPoster)} " +
+                            "new=${posterKey(currentItem.poster)}"
+                    )
+                }
             } else if (holder.image.drawable != null) {
                 holder.image.visibility = View.VISIBLE
             }
