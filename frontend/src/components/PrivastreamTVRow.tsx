@@ -9,6 +9,7 @@ export type PrivastreamTVRowItem = {
   id: string;
   title: string;
   poster?: string | null;
+  badge?: string | null;
 };
 
 export type PrivastreamTVRowFocusEvent = {

@@ -49,7 +49,8 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
     data class RowItem(
         val id: String,
         val title: String,
-        val poster: String?
+        val poster: String?,
+        val badge: String?
     )
 
     private val density = resources.displayMetrics.density
@@ -319,7 +320,12 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                         m.getString("poster")
                     else null
 
-                next.add(RowItem(id, title, poster))
+                val badge =
+                    if (m.hasKey("badge") && !m.isNull("badge"))
+                        m.getString("badge")
+                    else null
+
+                next.add(RowItem(id, title, poster, badge))
             }
         }
 
@@ -1087,6 +1093,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
         val root: LinearLayout,
         val posterFrame: FrameLayout,
         val image: ImageView,
+        val badge: TextView,
         val title: TextView
     ) : RecyclerView.ViewHolder(root) {
         var bindToken: Long = 0L
@@ -1251,8 +1258,24 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
             if (samePrefix) {
                 // Refresh metadata for existing positions without invalidating
                 // the entire RecyclerView.
+                val badgeChangedPositions = ArrayList<Int>()
+
                 for (i in 0 until oldSize) {
+                    if (data[i].badge != next[i].badge) {
+                        badgeChangedPositions.add(i)
+                    }
+
                     data[i] = next[i]
+                }
+
+                badgeChangedPositions.forEach { position ->
+                    val attached =
+                        recycler.findViewHolderForAdapterPosition(position)
+                            as? Holder
+
+                    if (attached != null) {
+                        bindCinemaBadge(attached, data[position])
+                    }
                 }
 
                 val added = next.size - oldSize
@@ -1350,6 +1373,17 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
         fun posterAt(position: Int): String? =
             data.getOrNull(position)?.poster
 
+        // V610_NATIVE_TV_CINEMA_BADGE
+        // Visual-only update. Never touches focus, scrolling, image targets,
+        // holder identity, or RecyclerView navigation state.
+        private fun bindCinemaBadge(holder: Holder, item: RowItem) {
+            val value = item.badge?.trim().orEmpty()
+
+            holder.badge.text = value
+            holder.badge.visibility =
+                if (value.isNotEmpty()) View.VISIBLE
+                else View.GONE
+        }
         override fun onCreateViewHolder(
             parent: ViewGroup,
             viewType: Int
@@ -1400,6 +1434,41 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                 )
             )
 
+            val cinemaBadge = TextView(context).apply {
+                text = ""
+                setTextColor(Color.WHITE)
+                textSize = 9f
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                isFocusable = false
+                visibility = View.GONE
+                paint.isFakeBoldText = true
+                letterSpacing = 0.05f
+
+                setPadding(
+                    px(7f),
+                    px(3f),
+                    px(7f),
+                    px(3f)
+                )
+
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = px(4f).toFloat()
+                    setColor(Color.rgb(184, 160, 92))
+                }
+            }
+
+            posterFrame.addView(
+                cinemaBadge,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                ).apply {
+                    topMargin = px(9f)
+                }
+            )
             val title = TextView(context).apply {
                 setTextColor(Color.rgb(184, 160, 92))
                 textSize = 13f
@@ -1490,7 +1559,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                     }
                 }
 
-            return Holder(root, posterFrame, image, title)
+            return Holder(root, posterFrame, image, cinemaBadge, title)
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
@@ -1545,6 +1614,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                 item.title.ifBlank { "Content" }
 
             holder.title.text = item.title
+            bindCinemaBadge(holder, item)
 
             // V598B_POSTER_RENDER_OWNERSHIP
             //

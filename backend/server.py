@@ -3427,32 +3427,26 @@ async def search_content(
             movies_filtered = [m for m, score in sorted(movies_scored, key=lambda x: -x[1]) if score > 0][:result_limit]
             series_filtered = [s for s, score in sorted(series_scored, key=lambda x: -x[1]) if score > 0][:result_limit]
             
-            logger.info(f"Search '{q}': checking streams for {len(movies_filtered)} movies, {len(series_filtered)} series")
-            
-            # Check stream availability in parallel (limit to top results for speed)
-            async def check_movie(m):
-                content_id = m.get('imdb_id') or m.get('id')
-                if content_id and await check_has_streams('movie', content_id):
-                    return m
-                return None
-            
-            async def check_series(s):
-                content_id = s.get('imdb_id') or s.get('id')
-                # For series, check first episode of first season
-                if content_id and await check_has_streams('series', f"{content_id}:1:1"):
-                    return s
-                return None
-            
-            # Run stream checks in parallel
-            movie_checks = await asyncio.gather(*[check_movie(m) for m in movies_filtered])
-            series_checks = await asyncio.gather(*[check_series(s) for s in series_filtered])
-            
-            movies_with_streams = [m for m in movie_checks if m is not None]
-            series_with_streams = [s for s in series_checks if s is not None]
-            
-            logger.info(f"Search '{q}': {len(movies_with_streams)} movies, {len(series_with_streams)} series with streams")
-            
-            return {"movies": movies_with_streams, "series": series_with_streams}
+            # V613_SEARCH_METADATA_FIRST
+            # Search is a metadata/catalog operation, not a stream-availability
+            # test. A valid Cinemeta title must remain searchable even when
+            # torrent providers have no stream for it yet.
+            #
+            # Stream availability is resolved later when the user opens the
+            # title. This also prevents new theatrical releases from randomly
+            # disappearing from Search as external torrent indexes fluctuate.
+            logger.info(
+                f"V613 Search '{q}': returning "
+                f"{len(movies_filtered)} movies, {len(series_filtered)} series "
+                f"without stream-availability filtering"
+            )
+
+            return {
+                "movies": movies_filtered,
+                "series": series_filtered,
+                "hasMore": False,
+                "total": len(movies_filtered) + len(series_filtered),
+            }
     except Exception as e:
         logger.error(f"Search error: {str(e)}")
         return {"movies": [], "series": []}
@@ -4613,6 +4607,344 @@ async def proxy_xhamster_stream(
         logger.error(f"xHamster proxy error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ==================== V609_THEATER_ONLY_BADGES ====================
+# Badge rule:
+#   1. Movie must currently appear in TMDB US Now Playing.
+#   2. Movie must have NO US watch-provider availability.
+#      Any streaming/free/ads/rent/buy provider suppresses the badge.
+#
+# IMDb -> TMDB mapping uses TMDB /find.
+# Provider data is supplied by TMDB/JustWatch.
+# Never embed the TMDB credential here; read TMDB_API_KEY from .env.
+
+_V609_RELEASE_STATUS_CACHE: Dict[str, Dict[str, Any]] = {}
+_V609_RELEASE_STATUS_TTL_SECONDS = 1800
+
+_v609_now_playing_ids = set()
+_v609_now_playing_expires = 0.0
+# ==================== V611_RELIABLE_CINEMA_STATUS ====================
+# IMPORTANT:
+# An upstream/TMDB failure means UNKNOWN, never "none".
+# Only a positively verified non-theatrical/home-available result may
+# become "none".
+
+async def _v611_tmdb_json(
+    tmdb_client,
+    url,
+    params
+):
+    last_exc = None
+
+    for attempt in range(1, 4):
+        try:
+            resp = await tmdb_client.get(
+                url,
+                params=params,
+            )
+
+            resp.raise_for_status()
+            return resp.json()
+
+        except Exception as exc:
+            last_exc = exc
+
+            logger.warning(
+                f"[V611] TMDB attempt {attempt}/3 failed "
+                f"url={url}: {exc}"
+            )
+
+            if attempt < 3:
+                await asyncio.sleep(0.30 * attempt)
+
+    raise last_exc or RuntimeError("TMDB request failed")
+
+
+
+
+async def _v609_get_now_playing_ids(
+    tmdb_client: httpx.AsyncClient,
+    tmdb_api_key: str
+):
+    global _v609_now_playing_ids, _v609_now_playing_expires
+
+    now_ts = time.time()
+
+    if (
+        _v609_now_playing_ids
+        and now_ts < _v609_now_playing_expires
+    ):
+        return _v609_now_playing_ids
+
+    base_url = "https://api.themoviedb.org/3/movie/now_playing"
+
+    first_data = await _v611_tmdb_json(
+        tmdb_client,
+        base_url,
+        {
+            "api_key": tmdb_api_key,
+            "language": "en-US",
+            "region": "US",
+            "page": 1,
+        },
+    )
+
+    ids = {
+        int(movie["id"])
+        for movie in first_data.get("results", [])
+        if movie.get("id") is not None
+    }
+
+    # Conservative ceiling. Current/popular theatrical titles will be
+    # contained here; anything not positively confirmed receives no badge.
+    try:
+        total_pages = int(first_data.get("total_pages") or 1)
+    except Exception:
+        total_pages = 1
+
+    total_pages = max(1, min(total_pages, 10))
+
+    page_semaphore = asyncio.Semaphore(3)
+
+    async def fetch_page(page: int):
+        async with page_semaphore:
+            data = await _v611_tmdb_json(
+                tmdb_client,
+                base_url,
+                {
+                    "api_key": tmdb_api_key,
+                    "language": "en-US",
+                    "region": "US",
+                    "page": page,
+                },
+            )
+
+            return data.get("results", [])
+
+    if total_pages > 1:
+        # V611: if even ONE requested page cannot be verified after
+        # retries, abort the roster load. Never cache a partial list.
+        page_results = await asyncio.gather(
+            *(fetch_page(page) for page in range(2, total_pages + 1))
+        )
+
+        for result in page_results:
+            for movie in result:
+                if movie.get("id") is not None:
+                    try:
+                        ids.add(int(movie["id"]))
+                    except Exception:
+                        pass
+
+    _v609_now_playing_ids = ids
+
+    # Refresh the theatrical roster every 15 minutes.
+    _v609_now_playing_expires = now_ts + 900
+
+    logger.info(
+        f"[V609] Loaded {len(ids)} US Now Playing TMDB movie ids"
+    )
+
+    return ids
+
+
+async def _v609_classify_movie(
+    imdb_id: str,
+    tmdb_client: httpx.AsyncClient,
+    tmdb_api_key: str,
+    now_playing_ids
+):
+    imdb_id = str(imdb_id or "").strip()
+
+    if not imdb_id.startswith("tt"):
+        return "none"
+
+    now_ts = time.time()
+
+    cached = _V609_RELEASE_STATUS_CACHE.get(imdb_id)
+
+    if cached:
+        checked = float(cached.get("checked", 0) or 0)
+
+        if now_ts - checked < _V609_RELEASE_STATUS_TTL_SECONDS:
+            return cached.get("status", "none")
+
+    # ------------------------------------------------------------
+    # IMDb ID -> TMDB movie ID
+    # ------------------------------------------------------------
+
+    find_data = await _v611_tmdb_json(
+        tmdb_client,
+        f"https://api.themoviedb.org/3/find/{imdb_id}",
+        {
+            "api_key": tmdb_api_key,
+            "external_source": "imdb_id",
+            "language": "en-US",
+        },
+    )
+
+    movie_results = find_data.get("movie_results", [])
+
+    if not movie_results:
+        status = "none"
+        _V609_RELEASE_STATUS_CACHE[imdb_id] = {
+            "status": status,
+            "checked": now_ts,
+        }
+        return status
+
+    tmdb_id = movie_results[0].get("id")
+
+    if tmdb_id is None:
+        return "none"
+
+    try:
+        tmdb_id = int(tmdb_id)
+    except Exception:
+        return "none"
+
+    # ------------------------------------------------------------
+    # Must actually be in TMDB's CURRENT US theatrical roster.
+    # ------------------------------------------------------------
+
+    if tmdb_id not in now_playing_ids:
+        status = "none"
+
+        _V609_RELEASE_STATUS_CACHE[imdb_id] = {
+            "status": status,
+            "checked": now_ts,
+        }
+
+        return status
+
+    # ------------------------------------------------------------
+    # Check US home availability.
+    #
+    # We deliberately reject ANY provider list, not only flatrate.
+    # This catches:
+    #   flatrate
+    #   free
+    #   ads
+    #   rent
+    #   buy
+    # and any future provider category TMDB adds.
+    # ------------------------------------------------------------
+
+    providers_data = await _v611_tmdb_json(
+        tmdb_client,
+        f"https://api.themoviedb.org/3/movie/{tmdb_id}/watch/providers",
+        {"api_key": tmdb_api_key},
+    )
+
+    us = (
+        providers_data
+        .get("results", {})
+        .get("US", {})
+    )
+
+    has_home_provider = False
+
+    if isinstance(us, dict):
+        for provider_type, providers in us.items():
+            if provider_type == "link":
+                continue
+
+            if isinstance(providers, list) and len(providers) > 0:
+                has_home_provider = True
+                break
+
+    status = (
+        "none"
+        if has_home_provider
+        else "in_cinemas"
+    )
+
+    _V609_RELEASE_STATUS_CACHE[imdb_id] = {
+        "status": status,
+        "checked": now_ts,
+    }
+
+    logger.info(
+        f"[V609] {imdb_id} tmdb={tmdb_id} "
+        f"now_playing=True home_provider={has_home_provider} "
+        f"status={status}"
+    )
+
+    return status
+
+
+@api_router.post("/movie/release_status")
+async def movie_release_status(request: Request):
+    body = await request.json()
+
+    raw_ids = body.get("imdb_ids", [])
+
+    if not isinstance(raw_ids, list):
+        raise HTTPException(
+            status_code=400,
+            detail="imdb_ids must be an array",
+        )
+
+    ids = []
+
+    for raw in raw_ids[:50]:
+        imdb_id = str(raw or "").strip()
+
+        if imdb_id.startswith("tt") and imdb_id not in ids:
+            ids.append(imdb_id)
+
+    if not ids:
+        return {}
+
+    tmdb_api_key = os.environ.get("TMDB_API_KEY", "").strip()
+
+    if not tmdb_api_key:
+        logger.error("[V609] TMDB_API_KEY is not configured")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Cinema classification unavailable",
+        )
+
+    tmdb_client = await get_shared_http_client()
+
+    try:
+        now_playing_ids = await _v609_get_now_playing_ids(
+            tmdb_client,
+            tmdb_api_key,
+        )
+    except Exception as exc:
+        logger.error(
+            f"[V609] Unable to load TMDB Now Playing: {exc}"
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to verify theatrical status",
+        )
+
+    semaphore = asyncio.Semaphore(8)
+
+    async def classify(imdb_id: str):
+        async with semaphore:
+            try:
+                return await _v609_classify_movie(
+                    imdb_id,
+                    tmdb_client,
+                    tmdb_api_key,
+                    now_playing_ids,
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"[V611] classification UNKNOWN for {imdb_id}: {exc}"
+                )
+                return "unknown"
+
+    statuses = await asyncio.gather(
+        *(classify(imdb_id) for imdb_id in ids)
+    )
+
+    return dict(zip(ids, statuses))
 
 # ==================== ROOT ====================
 

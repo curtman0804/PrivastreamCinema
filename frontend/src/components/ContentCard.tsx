@@ -838,7 +838,73 @@ let _v77FlushTimer = null;
 // (debounced) so subsequent boots are instant.
 const _V304_BUILD_TAG = 'V304_RELEASE_CACHE_PERSISTENT_BUILD_TAG';
 void _V304_BUILD_TAG;
-const _V304_STORAGE_KEY = '@v304_release_status_cache_v2'; /* V439 - bumped to invalidate stale 'none' entries */
+const _V304_STORAGE_KEY = '@v611_release_status_cache_v4'; /* V607_CINEMA_BADGE_CONSISTENCY - discard failure-cached none entries */
+/* V611_RELEASE_STATUS_RETRY
+   "unknown" means verification failed. Never cache it and never tell
+   the poster it is a confirmed non-cinema title. Retry while the
+   poster/row is still subscribed. */
+const _v611RetryCounts = new Map<string, number>();
+const _v611RetryIds = new Set<string>();
+let _v611RetryTimer: any = null;
+const _V611_MAX_RETRY_ROUNDS = 2;
+
+function _v611RetryUnknown(ids: string[]): void {
+  let queued = false;
+  let highestRound = 1;
+
+  for (const rawId of ids) {
+    const id = String(rawId || '');
+    if (!id) continue;
+
+    const subs = _v77Subscribers.get(id);
+
+    // Nobody currently displays this id. Leave it uncached; a future
+    // mount/search will request it normally.
+    if (!subs || subs.size === 0) {
+      _v611RetryCounts.delete(id);
+      continue;
+    }
+
+    const nextRound = (_v611RetryCounts.get(id) || 0) + 1;
+
+    if (nextRound > _V611_MAX_RETRY_ROUNDS) {
+      continue;
+    }
+
+    _v611RetryCounts.set(id, nextRound);
+    _v611RetryIds.add(id);
+
+    highestRound = Math.max(highestRound, nextRound);
+    queued = true;
+  }
+
+  if (!queued || _v611RetryTimer) return;
+
+  const delayMs = highestRound === 1 ? 1000 : 2000;
+
+  _v611RetryTimer = setTimeout(() => {
+    _v611RetryTimer = null;
+
+    for (const id of Array.from(_v611RetryIds)) {
+      _v611RetryIds.delete(id);
+
+      const subs = _v77Subscribers.get(id);
+
+      if (
+        subs &&
+        subs.size > 0 &&
+        !_v77ReleaseCache.has(id)
+      ) {
+        _v77PendingIds.add(id);
+      }
+    }
+
+    if (_v77PendingIds.size > 0 && !_v77FlushTimer) {
+      _v77FlushTimer = setTimeout(_v77FlushBatch, 50);
+    }
+  }, delayMs);
+}
+
 let _v304PersistTimer: any = null;
 function _v304SchedulePersist(): void {
   if (_v304PersistTimer) return;
@@ -897,22 +963,43 @@ async function _v77FlushBatch() {
       body: JSON.stringify({ imdb_ids: ids }),
     });
     if (!res.ok) {
-      notifyAll('none');
+      // V611: transport/backend failure is UNKNOWN.
+      _v611RetryUnknown(ids);
     } else {
       const data = await res.json();
+      const unknownIds: string[] = [];
+
       ids.forEach(id => {
-        const status = (data && data[id]) || 'none';
+        const status = (data && data[id]) || 'unknown';
+
+        if (status !== 'in_cinemas' && status !== 'none') {
+          unknownIds.push(id);
+          return;
+        }
+
+        _v611RetryCounts.delete(id);
         _v77ReleaseCache.set(id, status);
+
         const subs = _v77Subscribers.get(id);
+
         if (subs) {
-          subs.forEach(cb => { try { cb(status); } catch (e) {} });
+          subs.forEach(cb => {
+            try { cb(status); } catch (e) {}
+          });
+
           _v77Subscribers.delete(id);
         }
       });
+
+      if (unknownIds.length > 0) {
+        _v611RetryUnknown(unknownIds);
+      }
+
       _v304SchedulePersist();
     }
   } catch (e) {
-    notifyAll('none');
+    // V611: network failure is UNKNOWN, never confirmed "none".
+    _v611RetryUnknown(ids);
   }
 
   if (_v77PendingIds.size > 0 && !_v77FlushTimer) {
@@ -921,6 +1008,91 @@ async function _v77FlushBatch() {
 }
 
 /* V167_RELEASE_PREWARM â€” ids currently in-flight via prewarm. */
+/* V610_NATIVE_TV_CINEMA_BADGE
+   Expose the existing release-status singleton to the native Android-TV row.
+   This does NOT create another fetch/cache system. */
+export function v610GetReleaseStatus(
+  imdbId: string | undefined | null
+): string | null {
+  if (!imdbId) return null;
+  const id = String(imdbId);
+  if (!_v77ReleaseCache.has(id)) return null;
+  return String(_v77ReleaseCache.get(id) || 'none');
+}
+
+export function v610SubscribeReleaseStatus(
+  imdbId: string | undefined | null,
+  cb: (status: string) => void
+): () => void {
+  if (!imdbId) return () => {};
+  const id = String(imdbId);
+  if (!id.startsWith('tt')) return () => {};
+  return _v77RequestReleaseStatus(id, cb);
+}
+/* V612_SEARCH_BADGE_ATOMIC_PAINT
+   Await confirmed release status before Search mounts its native TV rows.
+   This reuses the existing V611 singleton/cache/retry path. */
+export async function v612AwaitReleaseStatuses(
+  imdbIds: Array<string | undefined | null>,
+  timeoutMs: number = 8000
+): Promise<void> {
+  const ids = Array.from(
+    new Set(
+      (imdbIds || [])
+        .map(id => String(id || ''))
+        .filter(id => id.startsWith('tt'))
+    )
+  );
+
+  if (ids.length === 0) return;
+
+  await Promise.all(
+    ids.map(id => {
+      if (_v77ReleaseCache.has(id)) {
+        return Promise.resolve();
+      }
+
+      return new Promise<void>(resolve => {
+        let settled = false;
+        let cleanup: (() => void) | null = null;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
+
+          if (cleanup) {
+            try { cleanup(); } catch (_) {}
+          }
+
+          resolve();
+        };
+
+        cleanup = v610SubscribeReleaseStatus(id, status => {
+          if (status === 'in_cinemas' || status === 'none') {
+            finish();
+          }
+        });
+
+        // Handle synchronous callback when cache became hot between checks.
+        if (settled && cleanup) {
+          try { cleanup(); } catch (_) {}
+        }
+
+        timer = setTimeout(() => {
+          // Do not invent "none" on timeout.
+          // Search may render without an unresolved badge rather than hang.
+          finish();
+        }, Math.max(1000, timeoutMs));
+      });
+    })
+  );
+}
 const _v167InFlight = new Set();
 function _v77RequestReleaseStatus(imdbId, cb) {
   if (_v77ReleaseCache.has(imdbId)) {
@@ -938,7 +1110,16 @@ function _v77RequestReleaseStatus(imdbId, cb) {
   }
   return () => {
     const s = _v77Subscribers.get(imdbId);
-    if (s) s.delete(cb);
+
+    if (s) {
+      s.delete(cb);
+
+      if (s.size === 0) {
+        _v77Subscribers.delete(imdbId);
+        _v611RetryCounts.delete(imdbId);
+        _v611RetryIds.delete(imdbId);
+      }
+    }
   };
 }
 
@@ -957,22 +1138,28 @@ export function _v188ArmNavCooldown(ms: number = 1500): void {
 
 export function v167PrewarmReleaseStatus(imdbIds: string[] | undefined | null): void {
   if (!Array.isArray(imdbIds) || imdbIds.length === 0) return;
+
   const seen = new Set<string>();
   const todo: string[] = [];
+
   for (const raw of imdbIds) {
     if (!raw) continue;
+
     const id = String(raw);
+
     if (!id.startsWith('tt')) continue;
     if (_v77ReleaseCache.has(id)) continue;
     if (_v167InFlight.has(id)) continue;
     if (seen.has(id)) continue;
+
     seen.add(id);
     todo.push(id);
     _v167InFlight.add(id);
-    /* Claim ownership from the regular batcher so it can't fire a
-       duplicate POST for these same ids. */
+
+    // Prewarm owns this id until its request resolves.
     _v77PendingIds.delete(id);
   }
+
   if (todo.length === 0) return;
 
   const backendUrl =
@@ -980,41 +1167,94 @@ export function v167PrewarmReleaseStatus(imdbIds: string[] | undefined | null): 
     (Constants as any).expoConfig?.extra?.backendUrl ||
     '';
 
-  /* Chunk to mirror the existing 50-id batch ceiling. */
   const chunks: string[][] = [];
-  for (let i = 0; i < todo.length; i += 50) chunks.push(todo.slice(i, i + 50));
+
+  for (let i = 0; i < todo.length; i += 50) {
+    chunks.push(todo.slice(i, i + 50));
+  }
 
   chunks.forEach(async (ids) => {
-    const finish = (statusForAll: string | null, data: any) => {
+    const finish = (data: any) => {
+      const unknownIds: string[] = [];
+      let confirmedAny = false;
+
       ids.forEach(id => {
-        const status = data ? ((data[id] as string) || 'none') : (statusForAll || 'none');
-        _v77ReleaseCache.set(id, status);
+        const status =
+          data && typeof data[id] === 'string'
+            ? String(data[id])
+            : 'unknown';
+
         _v167InFlight.delete(id);
+
+        if (status !== 'in_cinemas' && status !== 'none') {
+          unknownIds.push(id);
+          return;
+        }
+
+        confirmedAny = true;
+
+        _v611RetryCounts.delete(id);
+        _v77ReleaseCache.set(id, status);
+
         const subs = _v77Subscribers.get(id);
+
         if (subs) {
-          subs.forEach(cb => { try { (cb as any)(status); } catch (_) {} });
+          subs.forEach(cb => {
+            try {
+              (cb as any)(status);
+            } catch (_) {}
+          });
+
           _v77Subscribers.delete(id);
         }
       });
-      // V304: persist after every prewarm batch â€” so subsequent cold
-      // boots paint the IN CINEMA badge on the first frame.
-      _v304SchedulePersist();
+
+      if (unknownIds.length > 0) {
+        _v611RetryUnknown(unknownIds);
+      }
+
+      if (confirmedAny) {
+        _v304SchedulePersist();
+      }
     };
-    try {
-      const res = await fetch(`${backendUrl}/api/movie/release_status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imdb_ids: ids }),
+
+    // V611: transport/backend failure means UNKNOWN.
+    // Never convert failure into confirmed "none".
+    const fail = () => {
+      ids.forEach(id => {
+        _v167InFlight.delete(id);
       });
-      if (!res.ok) { finish('none', null); return; }
+
+      _v611RetryUnknown(ids);
+    };
+
+    try {
+      const res = await fetch(
+        `${backendUrl}/api/movie/release_status`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            imdb_ids: ids,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        fail();
+        return;
+      }
+
       const data = await res.json();
-      finish(null, data);
+
+      finish(data);
     } catch (_) {
-      finish('none', null);
+      fail();
     }
   });
 }
-
 
 const getProxiedPosterUrl = (originalUrl: string): string => {
   const backendUrl =
@@ -1220,7 +1460,13 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     if (!imdbId || !String(imdbId).startsWith('tt')) return;
     // V304: if cache already has a value (seeded synchronously above),
     // skip the subscription entirely â€” no work, no re-render storm.
-    if (_v77ReleaseCache.has(String(imdbId))) return;
+    // V607_CINEMA_BADGE_CONSISTENCY
+    // Async hydration may have completed after this card mounted.
+    // Synchronize local state from the module cache before returning.
+    if (_v77ReleaseCache.has(String(imdbId))) {
+      setReleaseStatus(_v77ReleaseCache.get(String(imdbId)));
+      return;
+    }
     // v238 â€” defer release-status fetch by 250ms so cold-boot rendering
     // of 200+ ContentCards completes BEFORE batched backend roundtrips kick
     // in.  The _v77 fetcher debounces to 250ms anyway, so this just moves

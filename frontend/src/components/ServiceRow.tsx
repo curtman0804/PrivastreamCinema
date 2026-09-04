@@ -24,6 +24,8 @@ import {
   v176iRegisterGetter,
   v176pRegisterPressGetter,
   v176ShowLongPressMenu,
+  v610GetReleaseStatus,
+  v610SubscribeReleaseStatus,
 } from './ContentCard';
 import { ContentItem } from '../api/client';
 import apiClient, { api } from '../api/client';
@@ -217,6 +219,12 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
       useRef<ReturnType<typeof setTimeout> | null>(null);
     const rapidFocusPendingRef = useRef<ContentItem | null>(null);
 
+    // V610_NATIVE_TV_BADGE_SUBSCRIPTION
+    // One coalesced render tick when release statuses arrive. The actual
+    // status/cache/network ownership remains in ContentCard's singleton.
+    const [v610BadgeVersion, setV610BadgeVersion] = useState(0);
+    const v610BadgeRefreshTimerRef =
+      useRef<ReturnType<typeof setTimeout> | null>(null);
     const validItems = useMemo(
       () => (allItems || []).filter(Boolean),
       [allItems]
@@ -232,6 +240,61 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
     }, [title, serviceName]);
 
     itemCountRef.current = validItems.length;
+    // V610_NATIVE_TV_BADGE_SUBSCRIPTION
+    // TV rails bypass React ContentCard and render through PrivastreamTVRow.
+    // Subscribe each loaded movie IMDb id to the SAME V607 release cache.
+    useEffect(() => {
+      if (!isTV || validItems.length === 0) return;
+
+      let disposed = false;
+      const cleanups: Array<() => void> = [];
+      const ids = new Set<string>();
+
+      for (const it of validItems as any[]) {
+        if (!it) continue;
+
+        const type = String(it.type || '').toLowerCase();
+        if (type && type !== 'movie') continue;
+
+        const id = String(it.imdb_id || it.id || '');
+        if (!id.startsWith('tt')) continue;
+
+        ids.add(id);
+      }
+
+      const scheduleRefresh = () => {
+        if (disposed || v610BadgeRefreshTimerRef.current) return;
+
+        v610BadgeRefreshTimerRef.current = setTimeout(() => {
+          v610BadgeRefreshTimerRef.current = null;
+          if (!disposed) {
+            setV610BadgeVersion(v => v + 1);
+          }
+        }, 80);
+      };
+
+      ids.forEach(id => {
+        cleanups.push(
+          v610SubscribeReleaseStatus(id, () => {
+            scheduleRefresh();
+          })
+        );
+      });
+
+      return () => {
+        disposed = true;
+
+        cleanups.forEach(fn => {
+          try { fn(); } catch (_) {}
+        });
+
+        if (v610BadgeRefreshTimerRef.current) {
+          clearTimeout(v610BadgeRefreshTimerRef.current);
+          v610BadgeRefreshTimerRef.current = null;
+        }
+      };
+    }, [isTV, validItems]);
+
 
     // v238 Ã¢â‚¬â€ DO NOT early-return here.  Hooks below this point MUST run
     // every render or React throws "Rendered more/fewer hooks than during
@@ -592,8 +655,14 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
           id: String(it.id || it.imdb_id || `${serviceName}-${index}`),
           title: String(it.name || it.title || ''),
           poster: it.poster ? String(it.poster) : null,
+          badge:
+            v610GetReleaseStatus(
+              String((it as any).imdb_id || (it as any).id || '')
+            ) === 'in_cinemas'
+              ? 'IN CINEMA'
+              : null,
         })),
-      [validItems, serviceName]
+      [validItems, serviceName, v610BadgeVersion]
     );
 
     const nativeTVPressRef = useRef<(() => void) | null>(null);

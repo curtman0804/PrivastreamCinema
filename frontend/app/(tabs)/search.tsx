@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { SearchBar } from '../../src/components/SearchBar';
 import { ServiceRow } from '../../src/components/ServiceRow';
+import { v612AwaitReleaseStatuses } from '../../src/components/ContentCard'; // V612_SEARCH_BADGE_ATOMIC_PAINT
 import { SearchResult } from '../../src/api/client';
 
 export default function SearchScreen() {
@@ -27,6 +28,7 @@ export default function SearchScreen() {
   const clearSearch = useContentStore(s => s.clearSearch);
   const [hasSearched, setHasSearched] = useState(false);
   const [currentQuery, setCurrentQuery] = useState<string>('');
+  const [isPreparingBadges, setIsPreparingBadges] = useState(false);
   const hasTriggeredInitialSearch = useRef(false);
   // V112_SEARCH_NAV: pagination + row-snap nav (parity with Discover screen)
   const loadMoreSearch = useContentStore(s => s.loadMoreSearch);
@@ -37,6 +39,63 @@ export default function SearchScreen() {
   const lastFocusedSection = useRef<string>('');
   const pagesLoaded = useRef<number>(0);
 
+  // V612_SEARCH_BADGE_ATOMIC_PAINT
+  // Search rows stay behind the loading state until the CURRENT movie
+  // results have a confirmed cinema/non-cinema status in the shared cache.
+  const prepareSearchCinemaBadges = useCallback(async () => {
+    const state = useContentStore.getState();
+    const movies = state.searchMovies || [];
+
+    const ids = movies
+      .map((movie: any) =>
+        String(movie?.imdb_id || movie?.id || '')
+      )
+      .filter((id: string) => id.startsWith('tt'));
+
+    if (ids.length === 0) return;
+
+    await v612AwaitReleaseStatuses(ids, 8000);
+  }, []);
+  // V612B_SEARCH_ATOMIC_FULL_RESULTS
+  // Finish the same pagination Search previously performed in the
+  // background BEFORE releasing the loading screen. This prevents
+  // later-page titles from appearing/disappearing around badge work.
+  const completeSearchPages = useCallback(async () => {
+    let loadedPages = 0;
+
+    while (loadedPages < 15) {
+      const before = useContentStore.getState();
+
+      const totalBefore =
+        (before.searchMovies?.length || 0) +
+        (before.searchSeries?.length || 0);
+
+      const looksTruncated =
+        !before.searchHasMore &&
+        totalBefore > 0 &&
+        totalBefore % 30 === 0;
+
+      if (!before.searchHasMore && !looksTruncated) {
+        break;
+      }
+
+      await loadMoreSearch();
+      loadedPages += 1;
+      pagesLoaded.current = loadedPages;
+
+      const after = useContentStore.getState();
+
+      const totalAfter =
+        (after.searchMovies?.length || 0) +
+        (after.searchSeries?.length || 0);
+
+      // Empty/duplicate page = real end. Do not spin through 15
+      // identical requests just because the old hasMore flag was wrong.
+      if (totalAfter <= totalBefore) {
+        break;
+      }
+    }
+  }, [loadMoreSearch]);
   // Auto-trigger search when navigated to with a query parameter
   useEffect(() => {
     if (queryParam && !hasTriggeredInitialSearch.current) {
@@ -44,12 +103,23 @@ export default function SearchScreen() {
       const decodedQuery = decodeURIComponent(queryParam);
       setCurrentQuery(decodedQuery);
       setHasSearched(true);
-      // V119: defer the network call until the screen has painted
+      // V612_SEARCH_BADGE_ATOMIC_PAINT
+      // Keep Search in its loading state until movie badge statuses are hot.
+      setIsPreparingBadges(true);
+
       InteractionManager.runAfterInteractions(() => {
-        search(decodedQuery);
+        void (async () => {
+          try {
+            await search(decodedQuery);
+            await completeSearchPages();
+            await prepareSearchCinemaBadges();
+          } finally {
+            setIsPreparingBadges(false);
+          }
+        })();
       });
     }
-  }, [queryParam, search]);
+  }, [queryParam, search, completeSearchPages, prepareSearchCinemaBadges]);
 
   // Reset when component unmounts
   useEffect(() => {
@@ -58,28 +128,9 @@ export default function SearchScreen() {
     };
   }, [queryParam]);
 
-  // V119_TRANSITION_LAG: defer auto-paging until AFTER nav transition completes
-  // so the Discover->Search animation doesn't stutter on the JS thread.
-  // v238 â€” also IGNORE backend's `searchHasMore=false` after the first
-  // page if we got a full page of results.  The backend's hasMore flag
-  // mis-fires on genre + multi-word queries and was capping results at
-  // 30.  We keep paginating until we get a partial/empty page back.
-  useEffect(() => {
-    if (!hasSearched) return;
-    if (isLoadingSearch || isLoadingMoreSearch) return;
-    const totalSoFar = searchMovies.length + searchSeries.length;
-    // Trust hasMore for stop-condition only if we got fewer than 30 the
-    // last time around (real end of stream).  Otherwise keep pulling.
-    const looksTruncated = !searchHasMore && totalSoFar > 0 && totalSoFar % 30 === 0;
-    if (!searchHasMore && !looksTruncated) return;
-    if (pagesLoaded.current >= 15) return;
-    const handle = InteractionManager.runAfterInteractions(() => {
-      pagesLoaded.current += 1;
-      loadMoreSearch();
-    });
-    return () => handle.cancel();
-  }, [hasSearched, isLoadingSearch, isLoadingMoreSearch, searchHasMore, loadMoreSearch, searchMovies.length, searchSeries.length]);
-
+  // V612B_SEARCH_ATOMIC_FULL_RESULTS
+  // Background pagination removed. completeSearchPages() now owns
+  // pagination so Search results and badges can paint as one snapshot.
   // Reset paging + focus state when query changes
   useEffect(() => {
     pagesLoaded.current = 0;
@@ -105,7 +156,10 @@ export default function SearchScreen() {
     }
     setCurrentQuery(query);
     setHasSearched(true);
-    await search(query);
+    setIsPreparingBadges(true);
+
+    try {
+      await search(query);
     // v238 â€” if a multi-word query returned ZERO movies AND ZERO series,
     // retry once with a more lenient form (drop short stop-words like
     // "of", "the", "a", "an" â€” addons that index titles literally will
@@ -122,6 +176,11 @@ export default function SearchScreen() {
         await search(lean);
       }
     }
+      await completeSearchPages();
+      await prepareSearchCinemaBadges();
+    } finally {
+      setIsPreparingBadges(false);
+    }
     // V450_SEARCH_UX - jump the selector to the first result poster so the
     // user does NOT have to D-pad DOWN through the SearchBar chain.  Reuses
     // the v443:navBack event that every ContentCard already listens for.
@@ -135,7 +194,7 @@ export default function SearchScreen() {
         console.log('[V450_SEARCH_UX] auto-focus target:', firstId);
       }
     } catch (_) {}
-  }, [search, clearSearch]);
+  }, [search, clearSearch, prepareSearchCinemaBadges, completeSearchPages]);
 
   const handleItemPress = (item: SearchResult) => {
     router.push({
@@ -157,7 +216,7 @@ export default function SearchScreen() {
 
       <SearchBar onSearch={handleSearch} initialValue={currentQuery} />
 
-      {isLoadingSearch ? (
+      {isLoadingSearch || isPreparingBadges ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#B8A05C" />
           <Text style={styles.loadingText}>Searching...</Text>
