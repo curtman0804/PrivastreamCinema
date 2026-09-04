@@ -6,6 +6,7 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.Drawable
 import android.text.TextUtils
+import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
@@ -84,6 +85,13 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
     private var pendingHorizontalTarget: Int = -1
     private var pendingHorizontalDirection: Int = 0
     private var pendingHorizontalRetryPosted: Boolean = false
+
+    // V600_PENDING_FOCUS_ESCAPE
+    // A failed requestFocus must never become a permanent frame loop.
+    // Give RecyclerView a short settle window, then abandon the stale
+    // target and resync to the card Android actually still owns.
+    private var pendingHorizontalRetryCount: Int = 0
+    private val maxPendingHorizontalFocusRetries: Int = 12
     private var queuedHorizontalDirection: Int = 0
     private var queuedHorizontalSteps: Int = 0
 
@@ -512,6 +520,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
         pendingHorizontalTarget = -1
         pendingHorizontalDirection = 0
         pendingHorizontalRetryPosted = false
+        pendingHorizontalRetryCount = 0
         queuedHorizontalDirection = 0
         queuedHorizontalSteps = 0
     }
@@ -529,6 +538,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
         pendingHorizontalTarget = -1
         pendingHorizontalDirection = 0
         pendingHorizontalRetryPosted = false
+        pendingHorizontalRetryCount = 0
 
         if (queuedHorizontalSteps <= 0) {
             queuedHorizontalDirection = 0
@@ -592,17 +602,42 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                 }
             }
 
-            // Absolute geometry is used only on an actual holder miss.
-            // This keeps normal one-step scrollBy() behavior unchanged, while
-            // guaranteeing that a busy held-repeat cannot stall waiting for a
-            // holder that is still offscreen.
-            Log.e(
-                "PSTVROW",
-                "row=\"$diagnosticLabel\" view=$id FOCUS_FORCE_LAYOUT " +
-                    "position=$target direction=$pendingHorizontalDirection"
-            )
+            pendingHorizontalRetryCount += 1
 
-            positionForTarget(target)
+            if (pendingHorizontalRetryCount >= maxPendingHorizontalFocusRetries) {
+                val actual = currentAdapterFocus()
+
+                Log.e(
+                    "PSTVROW",
+                    "row=\"$diagnosticLabel\" view=$id FOCUS_RETRY_ABORT " +
+                        "target=$target actual=$actual " +
+                        "direction=$pendingHorizontalDirection " +
+                        "retries=$pendingHorizontalRetryCount"
+                )
+
+                clearPendingHorizontal("FOCUS_RETRY_EXHAUSTED")
+
+                if (actual in 0 until rowAdapter.itemCount) {
+                    logicalFocusPosition = actual
+                }
+
+                return@postOnAnimation
+            }
+
+            // Do not hammer scrollToPositionWithOffset every frame.
+            // focusAttachedPosition() already positioned the target once.
+            // One additional correction is enough; later frames only wait
+            // for RecyclerView/focus to settle.
+            if (pendingHorizontalRetryCount == 1) {
+                Log.e(
+                    "PSTVROW",
+                    "row=\"$diagnosticLabel\" view=$id FOCUS_RETRY_LAYOUT " +
+                        "position=$target direction=$pendingHorizontalDirection"
+                )
+
+                positionForTarget(target)
+            }
+
             schedulePendingHorizontalFocus()
         }
     }
@@ -868,6 +903,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
 
         pendingHorizontalTarget = position
         pendingHorizontalDirection = direction
+        pendingHorizontalRetryCount = 0
 
         // Force the exact adapter item to the exact column; once it attaches,
         // focus completes automatically and queued physical repeats continue.
@@ -1058,6 +1094,9 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
         var boundPoster: String? = null
         var boundPosition: Int = RecyclerView.NO_POSITION
 
+        // V601_RETURN_POSTER_RESTORE
+        var lastBindUptimeMs: Long = 0L
+
         // V598B_POSTER_RENDER_OWNERSHIP
         // Glide never owns the ImageView directly. Only the CustomTarget for
         // this exact holder/bind token may paint the poster.
@@ -1106,6 +1145,57 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
 
         fun clearRecentPosterRenderCache() {
             recentPosterStates.clear()
+        }
+
+        // V601_RETURN_POSTER_RESTORE
+        // React-Native Screens can leave an already-bound native holder
+        // alive while its Glide target has been cleared. When Discover
+        // regains focus, rebind ONLY old attached holders whose poster
+        // is actually blank/invisible.
+        private var lastPosterRestoreCheckUptimeMs: Long = 0L
+
+        fun restoreAttachedPostersIfBlank() {
+            val now = SystemClock.uptimeMillis()
+
+            // Horizontal focus changes can occur very rapidly.
+            // Do not scan/rebind on every held-repeat frame.
+            if (now - lastPosterRestoreCheckUptimeMs < 500L) return
+            lastPosterRestoreCheckUptimeMs = now
+
+            val restorePositions = LinkedHashSet<Int>()
+
+            for (i in 0 until recycler.childCount) {
+                val child = recycler.getChildAt(i)
+                val holder = recycler.getChildViewHolder(child) as? Holder ?: continue
+                val pos = holder.bindingAdapterPosition
+                val item = data.getOrNull(pos) ?: continue
+
+                val identityMatches =
+                    holder.boundId == item.id &&
+                        holder.boundPoster == item.poster
+
+                val staleBlank =
+                    item.poster?.isNotBlank() == true &&
+                        (holder.image.visibility != View.VISIBLE ||
+                            holder.image.drawable == null) &&
+                        now - holder.lastBindUptimeMs >= 500L
+
+                if (identityMatches && staleBlank) {
+                    restorePositions.add(pos)
+                }
+            }
+
+            if (restorePositions.isEmpty()) return
+
+            Log.e(
+                "PSTVIMG",
+                "row=\"$diagnosticLabel\" RETURN_POSTER_REBIND " +
+                    "positions=${restorePositions.joinToString(",")}"
+            )
+
+            restorePositions.forEach { position ->
+                notifyItemChanged(position)
+            }
         }
 
         private fun posterKey(poster: String?): String =
@@ -1334,6 +1424,13 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                             logicalFocusPosition = p
                             drainQueuedHorizontalAfterFocus(p)
 
+                            // V601_RETURN_POSTER_RESTORE
+                            // Posted so RecyclerView is outside the current
+                            // focus/layout transaction before rebinding.
+                            recycler.post {
+                                rowAdapter.restoreAttachedPostersIfBlank()
+                            }
+
                             // V598A_FOCUS_GEOMETRY_INVARIANT
                             //
                             // A row can regain focus vertically while preserving
@@ -1407,6 +1504,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
             holder.boundId = item.id
             holder.boundPoster = item.poster
             holder.boundPosition = position
+            holder.lastBindUptimeMs = SystemClock.uptimeMillis()
 
             Log.e(
                 "PSTVIMG",
@@ -1459,7 +1557,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
             holder.activePosterTarget = null
             if (previousTarget != null) {
                 try {
-                    Glide.with(recycler).clear(previousTarget)
+                    Glide.with(context.applicationContext).clear(previousTarget)
                 } catch (_: Throwable) {
                 }
             }
@@ -1568,16 +1666,32 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
 
                         override fun onLoadCleared(placeholder: Drawable?) {
                             if (holder.activePosterTarget === this) {
-                                holder.image.visibility = View.INVISIBLE
-                                holder.image.setImageDrawable(null)
-                                holder.image.invalidate()
+                                Log.e(
+                                    "PSTVIMG",
+                                    "row=\"$diagnosticLabel\" ACTIVE_TARGET_CLEARED " +
+                                        "holder=$holderIdentity pos=${holder.bindingAdapterPosition} " +
+                                        "id=${holder.boundId} poster=$expectedPosterKey"
+                                )
+
+                                // V603_KEEP_RENDERED_POSTER_ON_CLEAR
+                                // Do not turn a still-bound poster black.
+                                // True recycling clears it separately.
+                                holder.activePosterTarget = null
+                                if (holder.image.drawable != null) {
+                                    holder.image.visibility = View.VISIBLE
+                                    holder.image.invalidate()
+                                }
                             }
                         }
                     }
 
                 holder.activePosterTarget = renderTarget
 
-                Glide.with(recycler)
+                // V603_POSTER_LIFECYCLE_FIX
+                // Keep poster ownership independent of React Navigation
+                // screen detach/reattach. Holder recycling still clears
+                // the CustomTarget explicitly below.
+                Glide.with(context.applicationContext)
                     .load(poster)
                     .dontAnimate()
                     .priority(Priority.HIGH)
@@ -1636,10 +1750,11 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                     "id=${holder.boundId} poster=${posterKey(holder.boundPoster)}"
             )
 
-            // Hide immediately while detached so a cached holder can never
-            // contribute an old poster during a rapid RecyclerView layout turn.
-            holder.image.visibility = View.INVISIBLE
-            holder.image.invalidate()
+            // V602_KEEP_POSTER_ON_DETACH
+            // A screen transition can detach an otherwise-valid RecyclerView
+            // holder without recycling or rebinding it. Do NOT blank its
+            // poster here. onViewRecycled() still clears recycled holders,
+            // and onBindViewHolder() still owns identity-safe replacement.
 
             super.onViewDetachedFromWindow(holder)
         }
@@ -1659,7 +1774,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
 
             if (activeTarget != null) {
                 try {
-                    Glide.with(recycler).clear(activeTarget)
+                    Glide.with(context.applicationContext).clear(activeTarget)
                 } catch (_: Throwable) {
                 }
             }
