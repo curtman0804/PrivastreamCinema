@@ -3,7 +3,7 @@ import AsyncStorage from '../utils/mmkvStorage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 // V287_PREMIUMIZE_MIDDLE_ISOLATION
-import { resolveMagnet as _pmResolveMagnet } from '../services/premiumizeClient';
+import { resolveMagnet as _pmResolveMagnet, isPremiumizeConfigured } from '../services/premiumizeClient';
 
 // ============================================================
 // V287 — Premiumize client-side resolver cache.
@@ -11,20 +11,24 @@ import { resolveMagnet as _pmResolveMagnet } from '../services/premiumizeClient'
 // resolution happens on-device.  Backend is bypassed entirely
 // for /api/stream/start, /status, /video.
 // ============================================================
-const _PM_KEY_STORAGE = '@pm_key_v1';
 const _pmResolved = new Map<string, string>();        // infoHash -> absolute PM URL
 const _pmInFlight = new Map<string, Promise<string | null>>();
 const _pmFailed = new Set<string>();                  // infoHash that PM rejected
 
 async function _hasPMKey(): Promise<boolean> {
-  try {
-    const k = await AsyncStorage.getItem(_PM_KEY_STORAGE);
-    return !!(k && k.trim());
-  } catch (_) { return false; }
+  return isPremiumizeConfigured();
 }
 
 function _normHash(h: string): string {
   return (h || '').toLowerCase().trim();
+}
+
+function _pmStateKey(infoHash: string, season?: number, episode?: number): string {
+  const h = _normHash(infoHash);
+  if (season != null && episode != null && Number.isFinite(season) && Number.isFinite(episode)) {
+    return h + ':s' + season + ':e' + episode;
+  }
+  return h;
 }
 
 function _findMagnet(sources?: string[]): string | undefined {
@@ -40,7 +44,8 @@ function _kickPmResolve(opts: {
 }): void {
   const h = _normHash(opts.infoHash);
   if (!h) return;
-  if (_pmResolved.has(h) || _pmInFlight.has(h)) return;
+  const k = _pmStateKey(h, opts.season, opts.episode);
+  if (_pmResolved.has(k) || _pmInFlight.has(k)) return;
   const magnet = opts.magnet || `magnet:?xt=urn:btih:${h}`;
   const p = _pmResolveMagnet({
     infoHash: h,
@@ -49,24 +54,24 @@ function _kickPmResolve(opts: {
     episode: opts.episode,
   })
     .then(url => {
-      _pmInFlight.delete(h);
+      _pmInFlight.delete(k);
       if (url) {
-        _pmResolved.set(h, url);
-        _pmFailed.delete(h);
+        _pmResolved.set(k, url);
+        _pmFailed.delete(k);
         console.log('[PM v287] resolved', h.slice(0, 8), '→', String(url).slice(0, 60));
       } else {
-        _pmFailed.add(h);
+        _pmFailed.add(k);
         console.warn('[PM v287] resolve returned null for', h.slice(0, 8));
       }
       return url;
     })
     .catch(err => {
-      _pmInFlight.delete(h);
-      _pmFailed.add(h);
+      _pmInFlight.delete(k);
+      _pmFailed.add(k);
       console.warn('[PM v287] resolve threw for', h.slice(0, 8), String(err?.message || err));
       return null;
     });
-  _pmInFlight.set(h, p);
+  _pmInFlight.set(k, p);
 }
 
 // ============================================
@@ -773,7 +778,7 @@ export const api = {
       const response = await apiClient.post(url, body);
       return response.data;
     },
-    status: async (infoHash: string): Promise<{
+    status: async (infoHash: string, season?: number, episode?: number): Promise<{
       status: string;
       progress?: number;
       ready_progress?: number;
@@ -789,7 +794,8 @@ export const api = {
       // BACKEND_URL with it).  Player will call getVideoUrl(infoHash) which
       // returns the absolute Premiumize URL directly.
       const h = _normHash(infoHash);
-      if (_pmResolved.has(h)) {
+      const k = _pmStateKey(h, season, episode);
+      if (_pmResolved.has(k)) {
         return {
           status: 'ready',
           progress: 100,
@@ -799,7 +805,7 @@ export const api = {
           video_size: 1,
         };
       }
-      if (_pmInFlight.has(h)) {
+      if (_pmInFlight.has(k)) {
         return {
           status: 'downloading',
           progress: 50,
@@ -807,7 +813,7 @@ export const api = {
           peers: 0,
         };
       }
-      if (_pmFailed.has(h)) {
+      if (_pmFailed.has(k)) {
         return { status: 'error', progress: 0 };
       }
       if (await _hasPMKey()) {
@@ -831,11 +837,12 @@ export const api = {
         return { status: 'failed' };
       }
     },
-    getVideoUrl: (infoHash: string, fileIdx?: number, torrServerUrl?: string): string => {
+    getVideoUrl: (infoHash: string, fileIdx?: number, torrServerUrl?: string, season?: number, episode?: number): string => {
       // V287_PM_MIDDLE_ISOLATION — if Premiumize has resolved this hash,
       // return the absolute PM URL.  No backend prefix.
       const h = _normHash(infoHash);
-      const pmUrl = _pmResolved.get(h);
+      const k = _pmStateKey(h, season, episode);
+      const pmUrl = _pmResolved.get(k);
       if (pmUrl) return pmUrl;
 
       if (torrServerUrl) {

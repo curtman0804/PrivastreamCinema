@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 import hashlib
 import jwt
 import httpx
+from cryptography.fernet import Fernet, InvalidToken
 import asyncio
 try:
     import libtorrent as lt
@@ -40,6 +41,28 @@ load_dotenv(ROOT_DIR / '.env')
 # JWT Secret
 JWT_SECRET = os.environ.get('JWT_SECRET', 'privastream-cinema-secret-key-2025')
 JWT_ALGORITHM = "HS256"
+
+# V509_PREMIUMIZE_SERVER_SECURITY - Premiumize credentials are encrypted at rest.
+def _get_premiumize_fernet() -> Fernet:
+    key = os.environ.get("PREMIUMIZE_FERNET_KEY", "").strip()
+    if not key:
+        raise RuntimeError("PREMIUMIZE_FERNET_KEY is not configured")
+    return Fernet(key.encode("utf-8"))
+
+def encrypt_premiumize_key(value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        raise ValueError("Premiumize API key is empty")
+    return _get_premiumize_fernet().encrypt(value.encode("utf-8")).decode("utf-8")
+
+def decrypt_premiumize_key(value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        raise ValueError("Encrypted Premiumize API key is empty")
+    try:
+        return _get_premiumize_fernet().decrypt(value.encode("utf-8")).decode("utf-8")
+    except InvalidToken as exc:
+        raise RuntimeError("Unable to decrypt Premiumize API key") from exc
 
 # ==================== IN-MEMORY CACHE ====================
 # Cache discover results per user to avoid re-fetching from external APIs
@@ -691,12 +714,14 @@ class User(BaseModel):
     email: Optional[str] = None
     is_admin: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    premiumize_api_key_encrypted: Optional[str] = None
 
 class UserCreate(BaseModel):
     username: str
     password: str
     email: Optional[str] = None
     is_admin: bool = False
+    premiumize_api_key: Optional[str] = None
 
 class UserLogin(BaseModel):
     username: str
@@ -718,6 +743,16 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     password: Optional[str] = None
     is_admin: Optional[bool] = None
+    premiumize_api_key: Optional[str] = None
+
+class PremiumizeCacheCheckRequest(BaseModel):
+    items: List[str]
+
+class PremiumizeDirectDLRequest(BaseModel):
+    src: str
+
+class PremiumizeConfigureRequest(BaseModel):
+    api_key: str
 
 class AddonInstall(BaseModel):
     manifestUrl: str
@@ -786,6 +821,16 @@ async def get_admin_user(current_user: User = Depends(get_current_user)) -> User
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
+
+def get_premiumize_key_for_user(user: User) -> str:
+    encrypted = (user.premiumize_api_key_encrypted or "").strip()
+    if not encrypted:
+        raise HTTPException(status_code=409, detail="Premiumize is not configured for this account")
+    try:
+        return decrypt_premiumize_key(encrypted)
+    except Exception:
+        logger.exception("Failed to decrypt Premiumize credential for user %s", user.id)
+        raise HTTPException(status_code=500, detail="Premiumize credential is unavailable")
 
 def get_base_url(manifest_url: str) -> str:
     """Extract base URL from manifest URL"""
@@ -1065,7 +1110,8 @@ async def create_user(user_data: UserCreate, admin: User = Depends(get_admin_use
         username=user_data.username,
         password_hash=hash_password(user_data.password),
         email=user_data.email,
-        is_admin=user_data.is_admin
+        is_admin=user_data.is_admin,
+        premiumize_api_key_encrypted=(encrypt_premiumize_key(user_data.premiumize_api_key) if user_data.premiumize_api_key and user_data.premiumize_api_key.strip() else None)
     )
     await db.users.insert_one(new_user.dict())
     
@@ -1110,6 +1156,9 @@ async def update_user(user_id: str, user_data: UserUpdate, admin: User = Depends
         update_fields["password_hash"] = hash_password(user_data.password)
     if user_data.is_admin is not None:
         update_fields["is_admin"] = user_data.is_admin
+    if user_data.premiumize_api_key is not None:
+        premiumize_key = user_data.premiumize_api_key.strip()
+        update_fields["premiumize_api_key_encrypted"] = encrypt_premiumize_key(premiumize_key) if premiumize_key else None
     if user_data.username is not None:
         # Check username not taken by another user
         name_check = await db.users.find_one({"username": user_data.username, "id": {"$ne": user_id}})
@@ -1131,6 +1180,108 @@ async def update_user(user_id: str, user_data: UserUpdate, admin: User = Depends
         created_at=updated.get("created_at", datetime.utcnow())
     )
 
+
+# ==================== V509 PREMIUMIZE SERVER PROXY ====================
+
+@api_router.put("/premiumize/configure")
+async def premiumize_configure(request: PremiumizeConfigureRequest, current_user: User = Depends(get_current_user)):
+    api_key = (request.api_key or "").strip()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="Premiumize API key is required")
+    try:
+        client = await get_shared_http_client()
+        response = await client.get(
+            "https://www.premiumize.me/api/account/info",
+            params={"apikey": api_key},
+            timeout=10.0,
+        )
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Premiumize rejected this API key")
+        data = response.json()
+        if data.get("status") != "success":
+            raise HTTPException(status_code=400, detail="Premiumize rejected this API key")
+        encrypted = encrypt_premiumize_key(api_key)
+        await db.users.update_one(
+            {"id": current_user.id},
+            {"$set": {"premiumize_api_key_encrypted": encrypted}},
+        )
+        return {
+            "configured": True,
+            "username": data.get("customer_id") or data.get("email"),
+            "premium_until": data.get("premium_until"),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Premiumize configure error for user %s: %s", current_user.id, type(exc).__name__)
+        raise HTTPException(status_code=502, detail="Unable to configure Premiumize")
+
+@api_router.delete("/premiumize/configure")
+async def premiumize_disconnect(current_user: User = Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": current_user.id},
+        {"$unset": {"premiumize_api_key_encrypted": ""}},
+    )
+    return {"configured": False}
+
+@api_router.get("/premiumize/status")
+async def premiumize_status(current_user: User = Depends(get_current_user)):
+    return {"configured": bool((current_user.premiumize_api_key_encrypted or "").strip())}
+
+@api_router.post("/premiumize/cache-check")
+async def premiumize_cache_check(request: PremiumizeCacheCheckRequest, current_user: User = Depends(get_current_user)):
+    items = [str(item).strip().lower() for item in request.items if str(item).strip()][:50]
+    if not items:
+        raise HTTPException(status_code=400, detail="No cache-check items supplied")
+    premiumize_key = get_premiumize_key_for_user(current_user)
+    form = [("apikey", premiumize_key)] + [("items[]", item) for item in items]
+    try:
+        client = await get_shared_http_client()
+        response = await client.post("https://www.premiumize.me/api/cache/check", data=form, timeout=10.0)
+        if response.status_code != 200:
+            logger.warning("Premiumize cache-check HTTP %s for user %s", response.status_code, current_user.id)
+            raise HTTPException(status_code=502, detail="Premiumize cache check failed")
+        data = response.json()
+        return {
+            "status": data.get("status"),
+            "response": data.get("response"),
+            "message": data.get("message"),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Premiumize cache-check error for user %s: %s", current_user.id, type(exc).__name__)
+        raise HTTPException(status_code=502, detail="Premiumize cache check failed")
+
+@api_router.post("/premiumize/directdl")
+async def premiumize_directdl(request: PremiumizeDirectDLRequest, current_user: User = Depends(get_current_user)):
+    src = (request.src or "").strip()
+    if not src.lower().startswith("magnet:?xt=urn:btih:"):
+        raise HTTPException(status_code=400, detail="Invalid magnet source")
+    if len(src) > 8192:
+        raise HTTPException(status_code=400, detail="Magnet source is too long")
+    premiumize_key = get_premiumize_key_for_user(current_user)
+    try:
+        client = await get_shared_http_client()
+        response = await client.post(
+            "https://www.premiumize.me/api/transfer/directdl",
+            data={"apikey": premiumize_key, "src": src},
+            timeout=20.0,
+        )
+        if response.status_code != 200:
+            logger.warning("Premiumize directdl HTTP %s for user %s", response.status_code, current_user.id)
+            raise HTTPException(status_code=502, detail="Premiumize direct resolve failed")
+        data = response.json()
+        return {
+            "status": data.get("status"),
+            "content": data.get("content"),
+            "message": data.get("message"),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Premiumize directdl error for user %s: %s", current_user.id, type(exc).__name__)
+        raise HTTPException(status_code=502, detail="Premiumize direct resolve failed")
 
 # ==================== ADDON ROUTES ====================
 

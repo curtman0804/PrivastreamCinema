@@ -1,16 +1,5 @@
-// ============================================================
-// V288_PRIVACY_SETTINGS_BLOCK — sync-aware, no modal, TV focus
-// ============================================================
-// Replaces v286.  Identical UI; adds cross-device sync:
-//   - On mount: pulls key from /api/user/settings if local is empty
-//   - On validate success: pushes key to backend  (handled in client)
-//   - On Disconnect: wipes local AND backend
-//   - Status row shows "Synced across your devices" when connected
-//
-// Save as:
-//   src/components/PrivacySettingsBlock.tsx
-// ============================================================
-
+// V509_PREMIUMIZE_PROFILE_PROVISIONING
+// API key entry remains available in Profile, but credentials are stored and used server-side only.
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -22,54 +11,44 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import AsyncStorage from '../utils/mmkvStorage';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  validateKey,
+  configurePremiumize,
+  disconnectPremiumize,
+  isPremiumizeConfigured,
+  clearCache,
   setClientSideStreamsEnabled,
-  trySyncFromBackend,
-  deleteKeyOnBackend,
-  resetSyncFlag,
 } from '../services/premiumizeClient';
 
-const KEY_STORAGE = '@pm_key_v1';
 const ACCENT = '#B8A05C';
 
 export function PrivacySettingsBlock() {
-  const [savedKey, setSavedKey] = useState('');
   const [draftKey, setDraftKey] = useState('');
   const [keySaved, setKeySaved] = useState(false);
   const [keyUsername, setKeyUsername] = useState<string | null>(null);
   const [premiumUntil, setPremiumUntil] = useState<number | null>(null);
   const [validating, setValidating] = useState(false);
   const [syncing, setSyncing] = useState(true);
-
   const [inputFocused, setInputFocused] = useState(false);
   const [connectFocused, setConnectFocused] = useState(false);
   const [disconnectFocused, setDisconnectFocused] = useState(false);
 
-  // Force client-side resolution ON every boot, then sync from backend
-  // before reading local key.
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try { await setClientSideStreamsEnabled(true); } catch (_) {}
       try {
-        // Lazy-pull from server if local is empty.  Falls back to local.
-        const synced = await trySyncFromBackend();
-        const k = synced.key || (await AsyncStorage.getItem(KEY_STORAGE));
-        if (k) {
-          setSavedKey(k);
-          setKeySaved(true);
-        }
+        const configured = await isPremiumizeConfigured();
+        if (!cancelled) setKeySaved(configured);
       } catch (_) {}
-      setSyncing(false);
+      if (!cancelled) setSyncing(false);
     })();
+    return () => { cancelled = true; };
   }, []);
 
   const showAlert = (title: string, msg: string) => {
     if (Platform.OS === 'web') {
-      // eslint-disable-next-line no-alert
-      window.alert(`${title}\n\n${msg}`);
+      window.alert(title + '\n\n' + msg);
     } else {
       Alert.alert(title, msg);
     }
@@ -77,8 +56,7 @@ export function PrivacySettingsBlock() {
 
   const confirmDestructive = (title: string, msg: string, onYes: () => void) => {
     if (Platform.OS === 'web') {
-      // eslint-disable-next-line no-alert
-      if (window.confirm(`${title}\n\n${msg}`)) onYes();
+      if (window.confirm(title + '\n\n' + msg)) onYes();
     } else {
       Alert.alert(title, msg, [
         { text: 'Cancel', style: 'cancel' },
@@ -90,43 +68,43 @@ export function PrivacySettingsBlock() {
   const onConnect = async () => {
     const trimmed = draftKey.trim();
     if (!trimmed) {
-      showAlert('Premiumize', 'Type or paste your API key first.');
+      showAlert('Premiumize', 'Type or paste the Premiumize API key first.');
       return;
     }
     setValidating(true);
     try {
-      const res = await validateKey(trimmed);   // also pushes to backend on success
-      if (!res.valid) {
-        showAlert('Premiumize', 'That key was rejected by Premiumize. Double-check at premiumize.me/account.');
-        setValidating(false);
+      const res = await configurePremiumize(trimmed);
+      if (!res.configured) {
+        showAlert('Premiumize', 'Premiumize could not be configured for this account.');
         return;
       }
-      await AsyncStorage.setItem(KEY_STORAGE, trimmed);
-      setSavedKey(trimmed);
       setKeySaved(true);
       setKeyUsername(res.username || null);
       setPremiumUntil(res.premium_until || null);
       setDraftKey('');
-      setValidating(false);
+      await clearCache().catch(() => 0);
     } catch (e: any) {
+      showAlert('Premiumize', String(e?.message || e));
+    } finally {
       setValidating(false);
-      showAlert('Premiumize', 'Network error: ' + String(e?.message || e));
     }
   };
 
   const onDisconnect = () => {
     confirmDestructive(
       'Disconnect Premiumize?',
-      'Your key will be removed from this device AND from your other devices. Streams will stop working until you reconnect.',
+      'Premiumize will be removed from this Privastream account. Streams requiring Premiumize will stop working until another key is configured.',
       async () => {
-        try { await AsyncStorage.removeItem(KEY_STORAGE); } catch (_) {}
-        try { await deleteKeyOnBackend(); } catch (_) {}
-        resetSyncFlag();
-        setSavedKey('');
-        setDraftKey('');
-        setKeySaved(false);
-        setKeyUsername(null);
-        setPremiumUntil(null);
+        try {
+          await disconnectPremiumize();
+          await clearCache().catch(() => 0);
+          setKeySaved(false);
+          setDraftKey('');
+          setKeyUsername(null);
+          setPremiumUntil(null);
+        } catch (e: any) {
+          showAlert('Premiumize', String(e?.message || e));
+        }
       }
     );
   };
@@ -135,7 +113,7 @@ export function PrivacySettingsBlock() {
     if (!premiumUntil) return null;
     try {
       const d = new Date(premiumUntil * 1000);
-      return `Premium until ${d.toLocaleDateString()}`;
+      return 'Premium until ' + d.toLocaleDateString();
     } catch (_) { return null; }
   })();
 
@@ -143,24 +121,24 @@ export function PrivacySettingsBlock() {
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.iconCircle}>
-          <Ionicons name="key" size={20} color={ACCENT} />
+          <Ionicons name='key' size={20} color={ACCENT} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.cardTitle}>Premiumize</Text>
           <View style={styles.statusRow}>
             <View style={[styles.statusDot, keySaved ? styles.statusDotOn : styles.statusDotOff]} />
             <Text style={styles.statusText}>
-              {syncing ? 'Syncing…' : keySaved
-                ? (keyUsername ? `Connected · ${keyUsername}` : 'Connected')
-                : 'Not connected'}
+              {syncing ? 'Checking account…' : keySaved
+                ? (keyUsername ? 'Connected · ' + keyUsername : 'Connected')
+                : 'Not configured'}
             </Text>
           </View>
           {keySaved && expiryText ? (
-            <Text style={styles.statusSub}>{expiryText} · Synced across your devices</Text>
+            <Text style={styles.statusSub}>{expiryText} · Securely stored with this Privastream account</Text>
           ) : keySaved ? (
-            <Text style={styles.statusSub}>Synced across your devices</Text>
+            <Text style={styles.statusSub}>Securely stored with this Privastream account</Text>
           ) : !syncing ? (
-            <Text style={styles.statusSub}>Required to play any stream. Enter once, syncs everywhere.</Text>
+            <Text style={styles.statusSub}>Enter the Premiumize key to provision this Privastream account.</Text>
           ) : null}
         </View>
       </View>
@@ -172,9 +150,7 @@ export function PrivacySettingsBlock() {
           onFocus={() => setDisconnectFocused(true)}
           onBlur={() => setDisconnectFocused(false)}
         >
-          <Text style={[styles.btnGhostText, disconnectFocused && styles.btnGhostTextFocused]}>
-            Disconnect
-          </Text>
+          <Text style={[styles.btnGhostText, disconnectFocused && styles.btnGhostTextFocused]}>Disconnect</Text>
         </Pressable>
       ) : !syncing ? (
         <>
@@ -183,32 +159,26 @@ export function PrivacySettingsBlock() {
             style={[styles.input, inputFocused && styles.inputFocused]}
             value={draftKey}
             onChangeText={setDraftKey}
-            placeholder="Paste or type your Premiumize API key"
-            placeholderTextColor="#666"
-            autoCapitalize="none"
+            placeholder='Paste or type the Premiumize API key'
+            placeholderTextColor='#666'
+            autoCapitalize='none'
             autoCorrect={false}
+            secureTextEntry={true}
             editable={!validating}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
-            returnKeyType="done"
+            returnKeyType='done'
           />
-          <Text style={styles.hint}>
-            Get yours at premiumize.me/account on a phone or PC. Enter it once — every device on your account picks it up automatically.
-          </Text>
-
+          <Text style={styles.hint}>The key is sent securely to Privastream and is not stored on this device.</Text>
           <Pressable
-            style={[
-              styles.btnPrimary,
-              connectFocused && styles.btnPrimaryFocused,
-              validating && styles.btnDisabled,
-            ]}
+            style={[styles.btnPrimary, connectFocused && styles.btnPrimaryFocused, validating && styles.btnDisabled]}
             onPress={onConnect}
             disabled={validating}
             onFocus={() => setConnectFocused(true)}
             onBlur={() => setConnectFocused(false)}
           >
             {validating ? (
-              <ActivityIndicator size="small" color="#000" />
+              <ActivityIndicator size='small' color='#000' />
             ) : (
               <Text style={styles.btnPrimaryText}>Connect Premiumize</Text>
             )}
@@ -216,14 +186,13 @@ export function PrivacySettingsBlock() {
         </>
       ) : (
         <View style={styles.syncingBox}>
-          <ActivityIndicator size="small" color={ACCENT} />
+          <ActivityIndicator size='small' color={ACCENT} />
           <Text style={styles.syncingText}>Checking your account…</Text>
         </View>
       )}
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   card: { marginTop: 8, padding: 16, backgroundColor: '#1a1a1a', borderRadius: 12 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },

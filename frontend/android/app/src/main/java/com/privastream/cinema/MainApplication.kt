@@ -24,6 +24,7 @@ class MainApplication : Application(), ReactApplication {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
               add(com.privastream.cinema.PSTVScrollViewPackage())
+              add(com.privastream.cinema.PrivastreamTVRowPackage())
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())
             }

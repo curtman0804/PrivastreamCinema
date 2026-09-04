@@ -44,6 +44,7 @@ const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
 
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage from '../../../src/utils/mmkvStorage';
+import { premiumizeCacheCheck, isPremiumizeConfigured, premiumizeDirectDL } from '../../../src/services/premiumizeClient';
 /* V176C_EPISODE_MENU_IMPORT â€” Stremio-style menu helpers for episode posters. */
 import {
   v172IsWatched as _v176cV172IsWatched,
@@ -2242,37 +2243,7 @@ export default function DetailsScreen() {
   //   2. Else, write the build-constant key and set '@pm_key_v297_seeded=1'.
   //   3. If the user later clears the key via the Privacy Settings UI, the
   //      seed flag remains set so we do NOT re-seed â€” user retains control.
-  const _V297_PM_KEY_SEED_BUILD_TAG = 'V297_PM_KEY_SEED_BUILD_TAG';
-  void _V297_PM_KEY_SEED_BUILD_TAG;
-  useEffect(() => {
-    let _cancelled = false;
-    (async () => {
-      try {
-        const _seedFlag = await AsyncStorage.getItem('@pm_key_v297_seeded');
-        if (_seedFlag === '1') {
-          // We have seeded once already.  Respect user's subsequent choices.
-          return;
-        }
-        const _existing = await AsyncStorage.getItem('@pm_key_v1');
-        if (_existing && _existing.trim()) {
-          // Key already present â€” just record that we've completed the seed
-          // step so we never overwrite it on future boots.
-          if (!_cancelled) {
-            await AsyncStorage.setItem('@pm_key_v297_seeded', '1');
-          }
-          return;
-        }
-        // No key on device â€” seed it now.
-        if (_cancelled) return;
-        await AsyncStorage.setItem('@pm_key_v1', 'mfdjfcfm9cnq757s');
-        await AsyncStorage.setItem('@pm_key_v297_seeded', '1');
-        console.log('[v297] PM key seeded into AsyncStorage (was empty)');
-      } catch (_e) {
-        console.log('[v297] PM key seed threw:', String((_e as any)?.message || _e));
-      }
-    })();
-    return () => { _cancelled = true; };
-  }, []);
+
 
   // V296_PM_CACHE_CHECK â€” when streams load, POST every infoHash (up to 50)
   // to Premiumize's /cache/check endpoint.  Results populate _v296_cacheMap
@@ -2288,11 +2259,6 @@ export default function DetailsScreen() {
     let _cancelled = false;
     (async () => {
       try {
-        const _pmKey = await AsyncStorage.getItem('@pm_key_v1');
-        if (!_pmKey || !_pmKey.trim()) {
-          console.log('[v296] no PM key on device â€” skipping cache check');
-          return;
-        }
         const _hashes: string[] = [];
         const _seen = new Set<string>();
         for (const _s of streams) {
@@ -2308,32 +2274,17 @@ export default function DetailsScreen() {
           console.log('[v296] all hashes already in cache map');
           return;
         }
-        const _form = new URLSearchParams();
-        _form.append('apikey', _pmKey.trim());
-        for (const _h of _hashes) _form.append('items[]', _h);
-        const _ctrl = new AbortController();
-        const _to = setTimeout(() => _ctrl.abort(), 6000);
-        const _res = await fetch('https://www.premiumize.me/api/cache/check', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: _form.toString(),
-          signal: _ctrl.signal,
-        });
-        clearTimeout(_to);
+        // V509: backend owns the Premiumize credential; client sends hashes only.
+        const _response = await premiumizeCacheCheck(_hashes);
         if (_cancelled) return;
-        const _j = await _res.json();
-        if (_j && _j.status === 'success' && Array.isArray(_j.response)) {
-          let _cached = 0;
-          for (let _i = 0; _i < _hashes.length; _i++) {
-            const _isCached = !!_j.response[_i];
-            _v296_cacheMap.set(_hashes[_i], _isCached);
-            if (_isCached) _cached++;
-          }
-          console.log('[v296] PM /cache/check:', _cached + '/' + _hashes.length, 'cached for', _contentKey);
-          _v296_setCacheTick((t) => t + 1);
-        } else {
-          console.log('[v296] PM /cache/check non-success:', _j && _j.status, _j && _j.message);
+        let _cached = 0;
+        for (let _i = 0; _i < _hashes.length; _i++) {
+          const _isCached = !!_response[_i];
+          _v296_cacheMap.set(_hashes[_i], _isCached);
+          if (_isCached) _cached++;
         }
+        console.log('[v296] PM /cache/check:', _cached + '/' + _hashes.length, 'cached for', _contentKey);
+        _v296_setCacheTick((t) => t + 1);
       } catch (_e) {
         console.log('[v296] PM /cache/check threw:', String((_e as any)?.message || _e));
       }
@@ -2387,7 +2338,7 @@ export default function DetailsScreen() {
     // V291 â€” bail out entirely when PM key is set; v291 prewarm handles it.
     (async () => {
       try {
-        const _pmKey = await AsyncStorage.getItem('@pm_key_v1');
+        const _pmKey = await isPremiumizeConfigured();
         if (_pmKey) {
           false && console.log('[PRERESOLVE v151] skipped â€” PM key present, v291 prewarm handles this');
           return;
@@ -2408,7 +2359,7 @@ export default function DetailsScreen() {
     // so we don't fire the dead start_and_wait endpoint at all.
     (async () => {
       try {
-        const _pmKey = await AsyncStorage.getItem('@pm_key_v1');
+        const _pmKey = await isPremiumizeConfigured();
         if (_pmKey) return; // V291 â€” bail
       } catch (_) {}
     for (const tgt of targets) {
@@ -2476,20 +2427,6 @@ export default function DetailsScreen() {
     // PM short-circuit in client.ts.  We re-check + write the key INLINE,
     // awaited, before any PM-dependent code path runs.  After this returns,
     // _hasPMKey() in client.ts is guaranteed to read true.
-    {
-      const _V298_BUILD_TAG = 'V298_INLINE_PM_KEY_SEED_BUILD_TAG';
-      void _V298_BUILD_TAG;
-      try {
-        const _v298_existing = await AsyncStorage.getItem('@pm_key_v1');
-        if (!_v298_existing || !_v298_existing.trim()) {
-          await AsyncStorage.setItem('@pm_key_v1', 'mfdjfcfm9cnq757s');
-          try { await AsyncStorage.setItem('@pm_key_v297_seeded', '1'); } catch (_) {}
-          console.log('[v298] PM key seeded INLINE inside handleStreamSelect (was empty)');
-        }
-      } catch (_e) {
-        console.log('[v298] PM key inline seed threw:', String((_e as any)?.message || _e));
-      }
-    }
     /* v129-handle-upgrade */
     /* v131-handle-normalize */
     // Normalize info_hash (snake) -> infoHash (camel) up-front so the
@@ -2514,7 +2451,7 @@ export default function DetailsScreen() {
     const _V295_BUILD_TAG = 'V295_PM_INFOHASH_PRIORITY_BUILD_TAG';
     void _V295_BUILD_TAG;
     try {
-      const _v293_pmKey = await AsyncStorage.getItem('@pm_key_v1');
+      const _v293_pmKey = await isPremiumizeConfigured();
       if (_v293_pmKey && stream.infoHash) {
         if (stream.url) {
           console.log('[v295] PM+infoHash present â€” stripping url (was', String(stream.url).slice(0,60), ') to force fresh on-device PM resolve');
@@ -2711,7 +2648,7 @@ const nextEpisodeData = nextEpisode ? {
       const _V300_BUILD_TAG = 'V300_PM_BATCH_CACHE_RESOLVE_BUILD_TAG';
       void _V300_BUILD_TAG;
       try {
-        const _v300_pm = ((await AsyncStorage.getItem('@pm_key_v1')) || '').trim();
+        const _v300_pm = await isPremiumizeConfigured();
         if (_v300_pm) {
           // Build ordered candidate list: chosen stream first, then the
           // rest of `streams` (already sorted by quality/language above).
@@ -2731,21 +2668,13 @@ const nextEpisodeData = nextEpisode ? {
           if (_v300_candidates.length > 0) {
             // Batch cache check (max 50 per PM call).
             const _v300_hashes = _v300_candidates.slice(0, 50).map((c) => c.hash);
-            const _v300_form1 = new URLSearchParams();
-            _v300_form1.append('apikey', _v300_pm);
-            for (const _h of _v300_hashes) _v300_form1.append('items[]', _h);
             const _v300_cached = new Set<string>();
             try {
               const _v300_ctrl1 = new AbortController();
               const _v300_to1 = setTimeout(() => _v300_ctrl1.abort(), 8000);
-              const _v300_resp1 = await fetch('https://www.premiumize.me/api/cache/check', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: _v300_form1.toString(),
-                signal: _v300_ctrl1.signal,
-              });
+              const _v300_backend1 = await premiumizeCacheCheck(_v300_hashes);
               clearTimeout(_v300_to1);
-              const _v300_j1: any = await _v300_resp1.json();
+              const _v300_j1: any = { status: 'success', response: _v300_backend1 };
               if (_v300_j1 && _v300_j1.status === 'success' && Array.isArray(_v300_j1.response)) {
                 for (let _i = 0; _i < _v300_hashes.length && _i < _v300_j1.response.length; _i++) {
                   if (_v300_j1.response[_i]) _v300_cached.add(_v300_hashes[_i]);
@@ -2767,20 +2696,12 @@ const nextEpisodeData = nextEpisode ? {
             const _v300_picked = (_v300_cleanCached.length > 0 ? _v300_cleanCached : _v300_cachedCandidates)[0];
             if (_v300_picked) {
               // Resolve via directdl on the cached candidate.
-              const _v300_form2 = new URLSearchParams();
-              _v300_form2.append('apikey', _v300_pm);
-              _v300_form2.append('src', `magnet:?xt=urn:btih:${_v300_picked.hash}`);
               try {
                 const _v300_ctrl2 = new AbortController();
                 const _v300_to2 = setTimeout(() => _v300_ctrl2.abort(), 15000);
-                const _v300_resp2 = await fetch('https://www.premiumize.me/api/transfer/directdl', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                  body: _v300_form2.toString(),
-                  signal: _v300_ctrl2.signal,
-                });
+                const _v300_backend2 = await premiumizeDirectDL(`magnet:?xt=urn:btih:${_v300_picked.hash}`);
                 clearTimeout(_v300_to2);
-                const _v300_j2: any = await _v300_resp2.json();
+                const _v300_j2: any = { status: 'success', content: _v300_backend2 };
                 if (_v300_j2 && _v300_j2.status === 'success' && Array.isArray(_v300_j2.content) && _v300_j2.content.length > 0) {
                   const _v300_videoExt = /\.(mkv|mp4|avi|mov|m4v|ts|m2ts|webm)$/i;
                   let _v300_videos: any[] = _v300_j2.content.filter((c: any) => c && c.link && _v300_videoExt.test(c.path || c.link || ''));
@@ -2860,26 +2781,18 @@ const nextEpisodeData = nextEpisode ? {
       const _V299_BUILD_TAG = 'V299_INLINE_PM_DIRECT_RESOLVE_BUILD_TAG';
       void _V299_BUILD_TAG;
       try {
-        const _v299_pm = ((await AsyncStorage.getItem('@pm_key_v1')) || '').trim();
+        const _v299_pm = await isPremiumizeConfigured();
         if (_v299_pm && stream.infoHash) {
           const _v299_hash = String(stream.infoHash).toLowerCase();
           const _v299_magnet = `magnet:?xt=urn:btih:${_v299_hash}`;
-          const _v299_form = new URLSearchParams();
-          _v299_form.append('apikey', _v299_pm);
-          _v299_form.append('src', _v299_magnet);
           const _v299_ctrl = new AbortController();
           const _v299_to = setTimeout(() => _v299_ctrl.abort(), 15000);
           let _v299_link: string | null = null;
           try {
             console.log('[v299] inline PM resolve â†’', _v299_hash.slice(0, 12));
-            const _v299_resp = await fetch('https://www.premiumize.me/api/transfer/directdl', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: _v299_form.toString(),
-              signal: _v299_ctrl.signal,
-            });
+            const _v299_backend = await premiumizeDirectDL(_v299_magnet);
             clearTimeout(_v299_to);
-            const _v299_j: any = await _v299_resp.json();
+            const _v299_j: any = { status: 'success', content: _v299_backend };
             if (_v299_j && _v299_j.status === 'success' && Array.isArray(_v299_j.content) && _v299_j.content.length > 0) {
               const _v299_videoExt = /\.(mkv|mp4|avi|mov|m4v|ts|m2ts|webm)$/i;
               let _v299_videos: any[] = _v299_j.content.filter((c: any) => c && c.link && _v299_videoExt.test(c.path || c.link || ''));
