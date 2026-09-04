@@ -9,6 +9,7 @@ import android.text.TextUtils
 import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.SoundEffectConstants
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
@@ -193,7 +194,49 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                 }
             }
 
-            // UP/DOWN/CENTER/BACK retain normal Android/React behavior.
+            // V599B_VERTICAL_NAV_SOUND
+            // Keep Android's existing UP/DOWN focus navigation completely intact.
+            // Only add the platform directional sound when focus actually changes.
+            if (
+                event.action == KeyEvent.ACTION_DOWN &&
+                (
+                    event.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                    event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                )
+            ) {
+                val beforeFocus = rootView.findFocus()
+                val soundEffect =
+                    if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP)
+                        SoundEffectConstants.NAVIGATION_UP
+                    else
+                        SoundEffectConstants.NAVIGATION_DOWN
+
+                val handled = super.dispatchKeyEvent(event)
+                val afterFocus = rootView.findFocus()
+
+                if (afterFocus != null && afterFocus !== beforeFocus) {
+                    try {
+                        afterFocus.playSoundEffect(soundEffect)
+                    } catch (_: Throwable) {
+                    }
+                } else {
+                    // Some Android TV devices finish spatial focus on the
+                    // following UI turn. Check once more without changing focus.
+                    post {
+                        val deferredFocus = rootView.findFocus()
+                        if (deferredFocus != null && deferredFocus !== beforeFocus) {
+                            try {
+                                deferredFocus.playSoundEffect(soundEffect)
+                            } catch (_: Throwable) {
+                            }
+                        }
+                    }
+                }
+
+                return handled
+            }
+
+            // CENTER/BACK and UP/DOWN key-up retain normal Android/React behavior.
             return super.dispatchKeyEvent(event)
         }
     }
@@ -539,7 +582,10 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                     "row=\"$diagnosticLabel\" view=$id FOCUS_FORCED_ATTACHED position=$target"
                 )
 
+                val soundDirection = pendingHorizontalDirection
+
                 if (holder.itemView.requestFocus()) {
+                    playHorizontalNavigationSound(soundDirection, holder.itemView)
                     // CARD_FOCUS synchronously calls
                     // drainQueuedHorizontalAfterFocus().
                     return@postOnAnimation
@@ -778,6 +824,23 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
         }
     }
 
+    // V599_HORIZONTAL_NAV_SOUND
+    // LEFT/RIGHT are manually consumed by this RecyclerView.
+    // Play Android's normal directional sound only after focus
+    // actually moves to another horizontal poster.
+    private fun playHorizontalNavigationSound(direction: Int, targetView: View) {
+        val soundEffect = when {
+            direction < 0 -> SoundEffectConstants.NAVIGATION_LEFT
+            direction > 0 -> SoundEffectConstants.NAVIGATION_RIGHT
+            else -> return
+        }
+
+        try {
+            targetView.playSoundEffect(soundEffect)
+        } catch (_: Throwable) {
+        }
+    }
+
     private fun focusAttachedPosition(
         position: Int,
         direction: Int
@@ -793,6 +856,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
             )
 
             if (holder.itemView.requestFocus()) {
+                playHorizontalNavigationSound(direction, holder.itemView)
                 return
             }
         }

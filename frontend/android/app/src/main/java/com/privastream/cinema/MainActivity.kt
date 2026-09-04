@@ -6,6 +6,7 @@ import android.os.Bundle
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import android.view.KeyEvent
+import android.view.SoundEffectConstants
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -71,7 +72,26 @@ class MainActivity : ReactActivity() {
      stop Pressable.onPress from firing after the menu opens. */
   private var v176fConsumeOkUp: Boolean = false
 
+  // V599C_CW_TO_NATIVE_DOWN
+  private fun v599cInsideNativeRow(view: android.view.View?): Boolean {
+    var node: android.view.View? = view
+    while (node != null) {
+      if (node is PrivastreamTVRowView) return true
+      node = node.parent as? android.view.View
+    }
+    return false
+  }
+
   override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+    val v599cBeforeFocus =
+      if (event.action == KeyEvent.ACTION_DOWN &&
+          event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+        currentFocus
+      else
+        null
+
+    val v599cDownIntoNativeCandidate =
+      v599cBeforeFocus != null && !v599cInsideNativeRow(v599cBeforeFocus)
     /* V176F diagnostic — see in logcat with: adb logcat -d -t 500 PSTV:V *:S */
     android.util.Log.d("PSTV", "key action=" + event.action + " code=" + event.keyCode + " isLong=" + event.isLongPress + " repeat=" + event.repeatCount)
 
@@ -179,6 +199,36 @@ class MainActivity : ReactActivity() {
         }
       }
     }
+    if (v599cDownIntoNativeCandidate) {
+      val handled = super.dispatchKeyEvent(event)
+      val afterFocus = currentFocus
+
+      if (
+        afterFocus != null &&
+        afterFocus !== v599cBeforeFocus &&
+        v599cInsideNativeRow(afterFocus)
+      ) {
+        try {
+          afterFocus.playSoundEffect(SoundEffectConstants.NAVIGATION_DOWN)
+        } catch (_: Throwable) {}
+      } else {
+        window.decorView.post {
+          val deferredFocus = currentFocus
+          if (
+            deferredFocus != null &&
+            deferredFocus !== v599cBeforeFocus &&
+            v599cInsideNativeRow(deferredFocus)
+          ) {
+            try {
+              deferredFocus.playSoundEffect(SoundEffectConstants.NAVIGATION_DOWN)
+            } catch (_: Throwable) {}
+          }
+        }
+      }
+
+      return handled
+    }
+
     return super.dispatchKeyEvent(event)
   }
 
