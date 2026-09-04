@@ -102,11 +102,12 @@ function _v575QueueMetaWhenIdle(t: string, cid: string) {
 // The four main Discover rails must load ahead of navigation instead of
 // waiting for the selector to get close to the currently loaded edge.
 // A hard TV hold can consume posters much faster than a catalog page returns.
+// V608_CINEMETA_FEATURED_ROWS
 const _V598D_PRIMARY_RAIL_NAMES = new Set([
   'popular movies',
   'popular series',
-  'new movies',
-  'new series',
+  'featured movies',
+  'featured series',
 ]);
 const _V598D_PRIMARY_PRIME_TARGET = 300;
 const _V598D_PRIMARY_FETCH_AHEAD = 120;
@@ -296,7 +297,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
     }, [serviceName, contentType, isV598DPrimaryRail, title]);
 
     // V598D_PROACTIVE_PRIMARY_RAIL_BUFFER
-    // Prime Popular/New Movies/Series in the background. This is deliberately
+    // Prime Popular/Featured Movies/Series in the background. This is deliberately
     // independent of focus so merely sitting on the screen fills the rail.
     useEffect(() => {
       if (

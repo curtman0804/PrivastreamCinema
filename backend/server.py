@@ -2776,11 +2776,12 @@ async def get_discover(current_user: User = Depends(get_current_user)):
         'hlu': 'Hulu', 'pmp': 'Paramount+', 'atp': 'Apple TV+', 'pcp': 'Peacock', 'dpe': 'Discovery+'
     }
     
+    # V608_CINEMETA_FEATURED_ROWS
     cinemeta_fetch = [
         ('movie', 'top', 'Popular Movies'),
         ('series', 'top', 'Popular Series'),
-        ('movie', 'year', 'New Movies', 'genre=2025'),
-        ('series', 'year', 'New Series', 'genre=2025'),
+        ('movie', 'imdbRating', 'Featured Movies'),
+        ('series', 'imdbRating', 'Featured Series'),
     ]
     
     # Build list of ALL fetch tasks to run in parallel
