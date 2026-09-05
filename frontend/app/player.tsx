@@ -37,7 +37,11 @@ import { api } from '../src/api/client';
 import { getMetaCache } from '../src/store/contentStore';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import Constants from 'expo-constants';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { ResizeMode, AVPlaybackStatus } from 'expo-av';
+import {
+  ExpoVideoCompat as Video,
+  type ExpoVideoCompatHandle,
+} from '../src/components/ExpoVideoCompat';
 import { Modal, FlatList } from 'react-native';
 import AsyncStorage from '../src/utils/mmkvStorage';
 /* V176C_PLAYER_MARK_WATCHED — keep the in-memory _v172WatchedSet in sync
@@ -150,6 +154,11 @@ function SeekableProgressBar({
   const isDraggingRef = useRef(false);
   const lastScrubRef = useRef<number>(0);
 
+  // V620C_SMOOTH_SCRUB
+  // Coalesce pointer traffic to at most one React update/frame.
+  const v620cFrameRef = useRef<number | null>(null);
+  const v620cPendingRef = useRef<number | null>(null);
+
   // V266_FIX — measure the bar's absolute screen position whenever layout
   // changes.  Called from onLayout via measureInWindow.
   const _measureBar = () => {
@@ -217,10 +226,28 @@ function SeekableProgressBar({
     onPanResponderMove: (evt) => {
       const p = _v264TouchToPos(evt.nativeEvent.pageX ?? 0);
       lastScrubRef.current = p;
-      setScrubPosition(p);
+      v620cPendingRef.current = p;
+
+      // V620C_SMOOTH_SCRUB
+      if (v620cFrameRef.current === null) {
+        v620cFrameRef.current = requestAnimationFrame(() => {
+          v620cFrameRef.current = null;
+          const pending = v620cPendingRef.current;
+
+          if (pending !== null) {
+            setScrubPosition(pending);
+          }
+        });
+      }
     },
     onPanResponderRelease: () => {
       const target = lastScrubRef.current;
+
+      if (v620cFrameRef.current !== null) {
+        cancelAnimationFrame(v620cFrameRef.current);
+        v620cFrameRef.current = null;
+      }
+      v620cPendingRef.current = null;
       isDraggingRef.current = false;
       setScrubPosition(null);
       // V266_STICKY_CONTROLS_DURING_SCRUB — release: tell parent to
@@ -231,6 +258,11 @@ function SeekableProgressBar({
       }
     },
     onPanResponderTerminate: () => {
+      if (v620cFrameRef.current !== null) {
+        cancelAnimationFrame(v620cFrameRef.current);
+        v620cFrameRef.current = null;
+      }
+      v620cPendingRef.current = null;
       isDraggingRef.current = false;
       setScrubPosition(null);
       try { onScrubChange?.(false); } catch (_) {}
@@ -1117,7 +1149,100 @@ export default function PlayerScreen() {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isEnded, setIsEnded] = useState(false);
-  const videoRef = useRef<Video>(null);
+  const videoRef = useRef<ExpoVideoCompatHandle>(null);
+  // V616B_AUDIO_PICKER
+  // Embedded audio tracks exposed by the V616A expo-video wrapper.
+  const [showAudioPicker, setShowAudioPicker] = useState(false);
+  const [audioTracks, setAudioTracks] = useState<any[]>([]);
+  const [selectedAudioTrackKey, setSelectedAudioTrackKey] =
+    useState<string | null>(null);
+  const v616AudioListRef = useRef<FlatList<any>>(null);
+
+  const v616AudioTrackKey = useCallback(
+    (track: any, index: number = -1): string => {
+      const id = String(track?.id ?? '').trim();
+      if (id) return 'id:' + id;
+
+      const language = String(track?.language ?? '').trim();
+      const label = String(track?.label ?? '').trim();
+
+      if (language || label) {
+        return 'meta:' + language + '|' + label;
+      }
+
+      return 'index:' + index;
+    },
+    []
+  );
+
+  const v616AudioTrackLabel = useCallback(
+    (track: any, index: number): string => {
+      const language = String(track?.language ?? '').trim();
+      const label = String(track?.label ?? '').trim();
+
+      if (
+        label &&
+        language &&
+        !label.toLowerCase().includes(language.toLowerCase())
+      ) {
+        return label + ' (' + language.toUpperCase() + ')';
+      }
+
+      if (label) return label;
+      if (language) return language.toUpperCase();
+
+      return 'Audio Track ' + String(index + 1);
+    },
+    []
+  );
+
+  const v616OpenAudioPicker = useCallback(() => {
+    try {
+      const player = videoRef.current;
+
+      const tracks =
+        player?.getAvailableAudioTracks?.() || [];
+
+      const selected =
+        player?.getSelectedAudioTrack?.() || null;
+
+      setAudioTracks(tracks);
+
+      if (selected) {
+        let selectedIndex = tracks.indexOf(selected);
+
+        if (selectedIndex < 0) {
+          selectedIndex = tracks.findIndex(
+            (track: any) =>
+              v616AudioTrackKey(track) ===
+              v616AudioTrackKey(selected)
+          );
+        }
+
+        setSelectedAudioTrackKey(
+          v616AudioTrackKey(selected, selectedIndex)
+        );
+      } else {
+        setSelectedAudioTrackKey(null);
+      }
+
+      console.log(
+        '[V616B] audio picker tracks=' +
+          tracks.length +
+          ' selected=' +
+          (selected
+            ? v616AudioTrackKey(selected)
+            : 'none')
+      );
+
+      setShowAudioPicker(true);
+    } catch (error) {
+      console.log('[V616B] audio picker error', error);
+      setAudioTracks([]);
+      setSelectedAudioTrackKey(null);
+      setShowAudioPicker(true);
+    }
+  }, [v616AudioTrackKey]);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   
@@ -1126,6 +1251,11 @@ export default function PlayerScreen() {
   isPlayingRef.current = isPlaying;
   const positionRef = useRef(position);
   positionRef.current = position;
+
+  // V621B_TV_SEEK_ACCUMULATOR
+  // Keep an immediate logical target while LEFT/RIGHT repeats arrive.
+  const v621SeekTargetRef = useRef<number | null>(null);
+  const v621SeekLastAtRef = useRef(0);
   const durationRef = useRef(duration);
   durationRef.current = duration;
 
@@ -1709,7 +1839,13 @@ export default function PlayerScreen() {
   const handlePlaybackStatus = (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
       setIsPlaying(status.isPlaying);
-      setPosition(status.positionMillis);
+      // V621B_TV_SEEK_ACCUMULATOR
+      // During a held TV seek, do not let a delayed playback callback
+      // pull the visible/logical position backward.
+      if (Date.now() - v621SeekLastAtRef.current >= 700) {
+        v621SeekTargetRef.current = null;
+        setPosition(status.positionMillis);
+      }
       setDuration(status.durationMillis || 0);
       _v500EnsureIntroMarker(status.durationMillis || 0);
       
@@ -2450,20 +2586,53 @@ export default function PlayerScreen() {
           }
           break;
         case 'left':
-          // If progress bar is focused, seek backward 10s
+          // V621B_TV_SEEK_ACCUMULATOR
           if (progressBarFocusedRef.current && videoRef.current) {
             console.log('[TV] Seek Left -10s (progress bar focused)');
             _v396NoteSeek(-10000); /* V396 */
-            const newPos = Math.max(0, positionRef.current - 10000);
+
+            const now = Date.now();
+            const base =
+              v621SeekTargetRef.current !== null &&
+              now - v621SeekLastAtRef.current < 700
+                ? v621SeekTargetRef.current
+                : positionRef.current;
+
+            const newPos = Math.max(0, base - 10000);
+
+            v621SeekTargetRef.current = newPos;
+            v621SeekLastAtRef.current = now;
+
+            positionRef.current = newPos;
+            setPosition(newPos);
+
             videoRef.current.setPositionAsync(newPos);
           }
           break;
         case 'right':
-          // If progress bar is focused, seek forward 10s
+          // V621B_TV_SEEK_ACCUMULATOR
           if (progressBarFocusedRef.current && videoRef.current) {
             console.log('[TV] Seek Right +10s (progress bar focused)');
             _v396NoteSeek(10000); /* V396 */
-            const newPos = Math.min(durationRef.current, positionRef.current + 10000);
+
+            const now = Date.now();
+            const base =
+              v621SeekTargetRef.current !== null &&
+              now - v621SeekLastAtRef.current < 700
+                ? v621SeekTargetRef.current
+                : positionRef.current;
+
+            const newPos = Math.min(
+              durationRef.current,
+              base + 10000
+            );
+
+            v621SeekTargetRef.current = newPos;
+            v621SeekLastAtRef.current = now;
+
+            positionRef.current = newPos;
+            setPosition(newPos);
+
             videoRef.current.setPositionAsync(newPos);
           }
           break;
@@ -3710,6 +3879,18 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                 </TouchableOpacity>
                 
 
+                {/* V616B_AUDIO_PICKER */}
+                <TouchableOpacity
+                  style={styles.controlButton}
+                  onPress={v616OpenAudioPicker}
+                >
+                  <Ionicons
+                    name="volume-high-outline"
+                    size={24}
+                    color="#FFFFFF"
+                  />
+                </TouchableOpacity>
+
                 <TouchableOpacity 
                   style={styles.controlButton} /* V411_UI - no active ring */
                   onPress={() => setShowSubtitlePicker(true)}
@@ -4164,6 +4345,19 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                     >
                       <Ionicons name={v457ModeIcon} size={24} color={'#FFFFFF'} />
                     </TVFocusButton>
+                    {/* V616B_AUDIO_PICKER */}
+                    <TVFocusButton
+                      style={styles.controlButton}
+                      focusedStyle={styles.controlButtonFocused}
+                      onPress={v616OpenAudioPicker}
+                    >
+                      <Ionicons
+                        name="volume-high-outline"
+                        size={24}
+                        color="#FFFFFF"
+                      />
+                    </TVFocusButton>
+
                     <TVFocusButton 
                       style={styles.controlButton} /* V411_UI - no active ring */
                       focusedStyle={styles.controlButtonFocused}
@@ -4397,6 +4591,158 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
         </View>
       </Modal>
 
+      {/* V616B_AUDIO_PICKER */}
+      <Modal
+        visible={showAudioPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAudioPicker(false)}
+      >
+        <View style={styles.subtitleModalOverlay}>
+          <View style={styles.subtitleModal}>
+            <View style={styles.subtitleModalHeader}>
+              <Text style={styles.subtitleModalTitle}>
+                Audio
+              </Text>
+
+              <TVFocusButton
+                onPress={() => setShowAudioPicker(false)}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 2,
+                  borderColor: 'transparent',
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                }}
+                focusedStyle={{
+                  borderColor: '#B8A05C',
+                  backgroundColor: 'rgba(184,160,92,0.25)',
+                  transform: [{ scale: 1.10 }],
+                }}
+              >
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color="#FFFFFF"
+                />
+              </TVFocusButton>
+            </View>
+
+            {audioTracks.length === 0 ? (
+              <View style={styles.noSubtitlesContainer}>
+                <Ionicons
+                  name="volume-high-outline"
+                  size={48}
+                  color="#666"
+                />
+                <Text style={styles.noSubtitlesText}>
+                  No audio tracks available
+                </Text>
+                <Text style={styles.noSubtitlesHint}>
+                  No selectable embedded audio tracks were reported for this stream.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                ref={v616AudioListRef}
+                data={audioTracks}
+                keyExtractor={(item, index) =>
+                  v616AudioTrackKey(item, index)
+                }
+                renderItem={({ item, index }) => {
+                  const key =
+                    v616AudioTrackKey(item, index);
+
+                  const selected =
+                    key === selectedAudioTrackKey;
+
+                  return (
+                    <TVFocusButton
+                      hasTVPreferredFocus={selected}
+                      style={[
+                        styles.subtitleItem,
+                        selected && styles.subtitleItemActive,
+                      ]}
+                      focusedStyle={styles.subtitleItemFocused}
+                      onFocus={() => {
+                        requestAnimationFrame(() => {
+                          try {
+                            v616AudioListRef.current?.scrollToIndex({
+                              index,
+                              animated: true,
+                              viewPosition: 0.4,
+                            });
+                          } catch (_) {}
+                        });
+                      }}
+                      onPress={() => {
+                        try {
+                          videoRef.current?.selectAudioTrack(item);
+
+                          setSelectedAudioTrackKey(key);
+
+                          console.log(
+                            '[V616B] selected audio ' +
+                              v616AudioTrackLabel(item, index)
+                          );
+                        } catch (error) {
+                          console.log(
+                            '[V616B] audio selection failed',
+                            error
+                          );
+                        }
+
+                        setShowAudioPicker(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.subtitleItemText,
+                          selected &&
+                            styles.subtitleItemTextActive,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {v616AudioTrackLabel(item, index)}
+                      </Text>
+
+                      {selected && (
+                        <Ionicons
+                          name="checkmark"
+                          size={20}
+                          color="#B8A05C"
+                        />
+                      )}
+                    </TVFocusButton>
+                  );
+                }}
+                removeClippedSubviews={false}
+                ListFooterComponent={
+                  <View style={{ height: 160 }} />
+                }
+                contentContainerStyle={{
+                  paddingBottom: 16,
+                }}
+                onScrollToIndexFailed={(info) => {
+                  try {
+                    v616AudioListRef.current?.scrollToOffset({
+                      offset: Math.max(
+                        0,
+                        info.averageItemLength * info.index
+                      ),
+                      animated: true,
+                    });
+                  } catch (_) {}
+                }}
+                style={styles.subtitleList}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
       {/* Next Episode - Stremio-style bottom-right card (Modal for TV focus) */}
       <Modal
         visible={showNextEpisodeModal}

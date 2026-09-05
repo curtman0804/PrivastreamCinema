@@ -557,9 +557,30 @@ export const useContentStore = create<ContentState>((set, get) => ({
           .concat(((data as any) && (data as any).series) || [])
           .concat(((data as any) && (data as any).channels) || [])
           .concat(((data as any) && (data as any).tv) || []);
+        // V630_LIBRARY_ALL_ID_ALIASES
+        // Keep every usable identity for each library item instead of
+        // discarding all but the first non-empty field.
         for (const it of _v176lArr) {
-          const id = String((it && (it.imdb_id || it.id || it.content_id)) || '');
-          if (id) _v176lSet.add(id);
+          const ids = [
+            it && it.content_id,
+            it && it.imdb_id,
+            it && it.id,
+          ];
+
+          for (const raw of ids) {
+            const id =
+              String(raw || '').trim();
+
+            if (!id) continue;
+
+            _v176lSet.add(id);
+
+            if (/^tt\d+:/.test(id)) {
+              _v176lSet.add(
+                id.split(':')[0]
+              );
+            }
+          }
         }
       } catch (_) {}
       set({ library: data, librarySet: _v176lSet, isLoadingLibrary: false });

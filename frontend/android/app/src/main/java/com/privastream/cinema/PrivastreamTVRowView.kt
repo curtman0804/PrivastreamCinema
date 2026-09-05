@@ -1,7 +1,12 @@
 package com.privastream.cinema
 
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PixelFormat
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.Drawable
@@ -50,7 +55,9 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
         val id: String,
         val title: String,
         val poster: String?,
-        val badge: String?
+        val badge: String?,
+        val inLibrary: Boolean,
+        val watched: Boolean
     )
 
     private val density = resources.displayMetrics.density
@@ -203,52 +210,17 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                 }
             }
 
-            // V599B_VERTICAL_NAV_SOUND
-            // Keep Android's existing UP/DOWN focus navigation completely intact.
-            // Only add the platform directional sound when focus actually changes.
-            if (
-                event.action == KeyEvent.ACTION_DOWN &&
-                (
-                    event.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
-                    event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-                )
-            ) {
-                val beforeFocus = rootView.findFocus()
-                val soundEffect =
-                    if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP)
-                        SoundEffectConstants.NAVIGATION_UP
-                    else
-                        SoundEffectConstants.NAVIGATION_DOWN
-
-                val handled = super.dispatchKeyEvent(event)
-                val afterFocus = rootView.findFocus()
-
-                if (afterFocus != null && afterFocus !== beforeFocus) {
-                    try {
-                        afterFocus.playSoundEffect(soundEffect)
-                    } catch (_: Throwable) {
-                    }
-                } else {
-                    // Some Android TV devices finish spatial focus on the
-                    // following UI turn. Check once more without changing focus.
-                    post {
-                        val deferredFocus = rootView.findFocus()
-                        if (deferredFocus != null && deferredFocus !== beforeFocus) {
-                            try {
-                                deferredFocus.playSoundEffect(soundEffect)
-                            } catch (_: Throwable) {
-                            }
-                        }
-                    }
-                }
-
-                return handled
-            }
+            // V624_SOUND_OWNED_BY_ACTIVITY
+            // UP/DOWN keep normal focus behavior. MainActivity owns sound.
 
             // CENTER/BACK and UP/DOWN key-up retain normal Android/React behavior.
             return super.dispatchKeyEvent(event)
         }
     }
+
+    // V630_BADGE_PAYLOAD
+    // Visual-only RecyclerView payload. Never performs a full poster bind.
+    private val v630BadgePayload = "V630_BADGE_ONLY"
 
     private val rowAdapter = RowAdapter()
 
@@ -325,7 +297,26 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                         m.getString("badge")
                     else null
 
-                next.add(RowItem(id, title, poster, badge))
+                val inLibrary =
+                    m.hasKey("inLibrary") &&
+                        !m.isNull("inLibrary") &&
+                        m.getBoolean("inLibrary")
+
+                val watched =
+                    m.hasKey("watched") &&
+                        !m.isNull("watched") &&
+                        m.getBoolean("watched")
+
+                next.add(
+                    RowItem(
+                        id,
+                        title,
+                        poster,
+                        badge,
+                        inLibrary,
+                        watched
+                    )
+                )
             }
         }
 
@@ -869,10 +860,23 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
     // LEFT/RIGHT are manually consumed by this RecyclerView.
     // Play Android's normal directional sound only after focus
     // actually moves to another horizontal poster.
-    private fun playHorizontalNavigationSound(direction: Int, targetView: View) {
+    // V627_NATIVE_HORIZONTAL_SOUND
+    // LEFT/RIGHT are consumed inside this RecyclerView, so Android's normal
+    // outer focus path never produces their sound.  Existing call sites invoke
+    // this ONLY after a real successful poster focus move.
+    //
+    // Normal views/CW/tabs remain owned by Android's platform focus sound.
+    private fun playHorizontalNavigationSound(
+        direction: Int,
+        targetView: View
+    ) {
         val soundEffect = when {
-            direction < 0 -> SoundEffectConstants.NAVIGATION_LEFT
-            direction > 0 -> SoundEffectConstants.NAVIGATION_RIGHT
+            direction < 0 ->
+                SoundEffectConstants.NAVIGATION_LEFT
+
+            direction > 0 ->
+                SoundEffectConstants.NAVIGATION_RIGHT
+
             else -> return
         }
 
@@ -1029,6 +1033,46 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
         }
     }
 
+    // V624_DIRECT_NATIVE_LONGPRESS
+    // MainActivity calls this for the currently-focused native poster.
+    // No JS global focus registry is involved.
+    fun emitCurrentItemLongPress(): Boolean {
+        val position = currentAdapterFocus()
+
+        if (position < 0) {
+            return false
+        }
+
+        val holder =
+            recycler.findViewHolderForAdapterPosition(position)
+                ?: return false
+
+        val itemView = holder.itemView
+
+        val loc = IntArray(2)
+        itemView.getLocationOnScreen(loc)
+
+        val p = Arguments.createMap()
+        p.putInt("index", position)
+        p.putDouble("x", loc[0] / density.toDouble())
+        p.putDouble("y", loc[1] / density.toDouble())
+        p.putDouble("width", cardWidthDp.toDouble())
+        p.putDouble("height", cardHeightDp.toDouble())
+
+        // V625_LONGPRESS_OVER_FOCUS_EVENT
+        // topItemFocus is already proven end-to-end on this native row.
+        // Reuse that exact bridge and distinguish the hold with a flag.
+        p.putBoolean("longPress", true)
+
+        Log.d(
+            "PSTVROW",
+            "V625 LONGPRESS_OVER_FOCUS_EVENT position=$position"
+        )
+
+        emit("topItemFocus", p)
+        return true
+    }
+
     private fun emitItemFocus(position: Int, itemView: View) {
         val loc = IntArray(2)
         itemView.getLocationOnScreen(loc)
@@ -1089,11 +1133,151 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
             setColor(Color.rgb(26, 26, 26))
         }
 
+    // V631_ORIGINAL_POSTER_BADGES
+    //
+    // These are the native equivalents of the ORIGINAL ContentCard
+    // overlays. Their visibility is driven by live watched/library state.
+    private fun watchedCheckDrawable(): Drawable =
+        object : Drawable() {
+            private val paint =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color =
+                        Color.rgb(184, 160, 92)
+                    style =
+                        Paint.Style.STROKE
+                    strokeCap =
+                        Paint.Cap.ROUND
+                    strokeJoin =
+                        Paint.Join.ROUND
+                }
+
+            override fun draw(canvas: Canvas) {
+                val b = bounds
+                val w = b.width().toFloat()
+                val h = b.height().toFloat()
+
+                // V634_LIBRARY_CHECKMARK_MATCH
+                //
+                // Ionicons checkmark geometry:
+                // 512 viewbox / 32 stroke -> 6.25%.
+                paint.strokeWidth =
+                    (w * 0.0625f)
+                        .coerceAtLeast(1f)
+
+                val path =
+                    Path().apply {
+                        moveTo(
+                            b.left + w * 0.8125f,
+                            b.top + h * 0.25f
+                        )
+
+                        lineTo(
+                            b.left + w * 0.375f,
+                            b.top + h * 0.75f
+                        )
+
+                        lineTo(
+                            b.left + w * 0.1875f,
+                            b.top + h * 0.5625f
+                        )
+                    }
+
+                canvas.drawPath(
+                    path,
+                    paint
+                )
+            }
+
+            override fun setAlpha(
+                alpha: Int
+            ) {
+                paint.alpha = alpha
+            }
+
+            override fun setColorFilter(
+                colorFilter: ColorFilter?
+            ) {
+                paint.colorFilter =
+                    colorFilter
+            }
+
+            @Suppress("DEPRECATION")
+            override fun getOpacity(): Int =
+                PixelFormat.TRANSLUCENT
+        }
+
+    private fun bookmarkGlyphDrawable(): Drawable =
+        object : Drawable() {
+            private val paint =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    style = Paint.Style.FILL
+                }
+
+            override fun draw(canvas: Canvas) {
+                val b = bounds
+                val w = b.width().toFloat()
+                val h = b.height().toFloat()
+
+                val left =
+                    b.left + w * 0.24f
+
+                val right =
+                    b.left + w * 0.76f
+
+                val top =
+                    b.top + h * 0.12f
+
+                val bottom =
+                    b.top + h * 0.88f
+
+                val middle =
+                    b.left + w * 0.50f
+
+                val notch =
+                    b.top + h * 0.66f
+
+                val path =
+                    Path().apply {
+                        moveTo(left, top)
+                        lineTo(right, top)
+                        lineTo(right, bottom)
+                        lineTo(middle, notch)
+                        lineTo(left, bottom)
+                        close()
+                    }
+
+                canvas.drawPath(
+                    path,
+                    paint
+                )
+            }
+
+            override fun setAlpha(
+                alpha: Int
+            ) {
+                paint.alpha = alpha
+            }
+
+            override fun setColorFilter(
+                colorFilter: ColorFilter?
+            ) {
+                paint.colorFilter =
+                    colorFilter
+            }
+
+            @Suppress("DEPRECATION")
+            override fun getOpacity(): Int =
+                PixelFormat.TRANSLUCENT
+        }
+
     private inner class Holder(
         val root: LinearLayout,
         val posterFrame: FrameLayout,
         val image: ImageView,
         val badge: TextView,
+        val watchedBadge: ImageView,
+        val libraryBadge: ImageView,
         val title: TextView
     ) : RecyclerView.ViewHolder(root) {
         var bindToken: Long = 0L
@@ -1261,7 +1445,11 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                 val badgeChangedPositions = ArrayList<Int>()
 
                 for (i in 0 until oldSize) {
-                    if (data[i].badge != next[i].badge) {
+                    if (
+                        data[i].badge != next[i].badge ||
+                        data[i].inLibrary != next[i].inLibrary ||
+                        data[i].watched != next[i].watched
+                    ) {
                         badgeChangedPositions.add(i)
                     }
 
@@ -1269,12 +1457,51 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                 }
 
                 badgeChangedPositions.forEach { position ->
+                    // V635_DIRECT_NATIVE_STATUS
+                    //
+                    // data[position] already contains the NEW truth.
+                    // Paint only the status overlays on the attached holder.
+                    //
+                    // NEVER manually call onBindViewHolder here.
                     val attached =
                         recycler.findViewHolderForAdapterPosition(position)
                             as? Holder
 
                     if (attached != null) {
-                        bindCinemaBadge(attached, data[position])
+                        bindStatusBadges(
+                            attached,
+                            data[position]
+                        )
+
+                        Log.e(
+                            "PSTVBADGE",
+                            "V635_DIRECT row=\"$diagnosticLabel\" " +
+                                "pos=$position " +
+                                "library=${data[position].inLibrary} " +
+                                "watched=${data[position].watched}"
+                        )
+                    }
+
+                    /*
+                     * Backup for holders that were temporarily cached or
+                     * detached while the popover was closing.
+                     */
+                    notifyItemChanged(
+                        position,
+                        v630BadgePayload
+                    )
+
+                    recycler.post {
+                        val late =
+                            recycler.findViewHolderForAdapterPosition(position)
+                                as? Holder
+
+                        if (late != null) {
+                            bindStatusBadges(
+                                late,
+                                data[position]
+                            )
+                        }
                     }
                 }
 
@@ -1373,16 +1600,106 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
         fun posterAt(position: Int): String? =
             data.getOrNull(position)?.poster
 
-        // V610_NATIVE_TV_CINEMA_BADGE
-        // Visual-only update. Never touches focus, scrolling, image targets,
-        // holder identity, or RecyclerView navigation state.
-        private fun bindCinemaBadge(holder: Holder, item: RowItem) {
-            val value = item.badge?.trim().orEmpty()
+        // V631_ORIGINAL_POSTER_BADGES
+        //
+        // Original independent poster states:
+        //
+        // IN CINEMA -> existing top pill
+        // WATCHED   -> Library-style top-left check
+        // LIBRARY   -> bottom-right bookmark
+        //
+        // Visual only. Never touches poster ownership, focus, or scrolling.
+        // V636_ALWAYS_LAID_OUT_BADGES
+        //
+        // RecyclerView could defer GONE -> VISIBLE layout until the row
+        // moved. That is why V635 logs showed the correct TRUE state but
+        // the badge did not appear until D-pad movement.
+        //
+        // These overlays are permanently measured/layouted. Realtime
+        // state changes now modify only alpha, which invalidates drawing
+        // immediately without requiring RecyclerView layout.
+        private fun bindStatusBadges(
+            holder: Holder,
+            item: RowItem
+        ) {
+            val cinemaValue =
+                item.badge
+                    ?.trim()
+                    .orEmpty()
 
-            holder.badge.text = value
+            holder.badge.text =
+                cinemaValue
+
             holder.badge.visibility =
-                if (value.isNotEmpty()) View.VISIBLE
-                else View.GONE
+                if (cinemaValue.isNotEmpty())
+                    View.VISIBLE
+                else
+                    View.GONE
+
+            // WATCHED
+            holder.watchedBadge.visibility =
+                View.VISIBLE
+
+            holder.watchedBadge.alpha =
+                if (item.watched)
+                    1f
+                else
+                    0f
+
+            if (item.watched) {
+                holder.watchedBadge
+                    .bringToFront()
+            }
+
+            // LIBRARY
+            holder.libraryBadge.visibility =
+                View.VISIBLE
+
+            holder.libraryBadge.alpha =
+                if (item.inLibrary)
+                    1f
+                else
+                    0f
+
+            if (item.inLibrary) {
+                holder.libraryBadge
+                    .bringToFront()
+            }
+
+            /*
+             * Force a draw pass, NOT a layout pass.
+             *
+             * No focus, scroll, poster or holder changes.
+             */
+            holder.watchedBadge.invalidate()
+            holder.libraryBadge.invalidate()
+            holder.posterFrame.invalidate()
+            holder.root.invalidate()
+
+            holder.watchedBadge
+                .postInvalidateOnAnimation()
+
+            holder.libraryBadge
+                .postInvalidateOnAnimation()
+
+            holder.posterFrame
+                .postInvalidateOnAnimation()
+
+            holder.root
+                .postInvalidateOnAnimation()
+
+            recycler
+                .postInvalidateOnAnimation()
+
+            Log.e(
+                "PSTVBADGE",
+                "V636_PAINT row=\"$diagnosticLabel\" " +
+                    "pos=${holder.bindingAdapterPosition} " +
+                    "library=${item.inLibrary} " +
+                    "watched=${item.watched} " +
+                    "libraryAlpha=${holder.libraryBadge.alpha} " +
+                    "watchedAlpha=${holder.watchedBadge.alpha}"
+            )
         }
         override fun onCreateViewHolder(
             parent: ViewGroup,
@@ -1467,6 +1784,113 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                     Gravity.TOP or Gravity.CENTER_HORIZONTAL
                 ).apply {
                     topMargin = px(9f)
+                }
+            )
+
+            // V631_ORIGINAL_POSTER_BADGES
+            //
+            // Same watched appearance as Library:
+            // 24dp black circle + gold check at top-left.
+            val watchedBadge =
+                ImageView(context).apply {
+                    isFocusable = false
+
+                    // V636_ALWAYS_LAID_OUT_BADGES
+                    //
+                    // Never use GONE for realtime poster state.
+                    // Keep the 24dp overlay measured and laid out permanently.
+                    visibility = View.VISIBLE
+                    alpha = 0f
+                    elevation = px(10f).toFloat()
+
+                    setImageDrawable(
+                        watchedCheckDrawable()
+                    )
+
+                    setPadding(
+                        px(5f),
+                        px(5f),
+                        px(5f),
+                        px(5f)
+                    )
+
+                    background =
+                        GradientDrawable().apply {
+                            shape =
+                                GradientDrawable.OVAL
+
+                            setColor(
+                                Color.argb(
+                                    179,
+                                    0,
+                                    0,
+                                    0
+                                )
+                            )
+                        }
+                }
+
+            posterFrame.addView(
+                watchedBadge,
+                FrameLayout.LayoutParams(
+                    px(24f),
+                    px(24f),
+                    Gravity.TOP or Gravity.START
+                ).apply {
+                    leftMargin = px(4f)
+                    topMargin = px(4f)
+                }
+            )
+
+            // Original ContentCard Library badge:
+            // gold square with white bookmark at bottom-right.
+            val libraryBadge =
+                ImageView(context).apply {
+                    isFocusable = false
+
+                    // V636_ALWAYS_LAID_OUT_BADGES
+                    visibility = View.VISIBLE
+                    alpha = 0f
+                    elevation = px(8f).toFloat()
+
+                    setImageDrawable(
+                        bookmarkGlyphDrawable()
+                    )
+
+                    setPadding(
+                        px(4f),
+                        px(4f),
+                        px(4f),
+                        px(4f)
+                    )
+
+                    background =
+                        GradientDrawable().apply {
+                            shape =
+                                GradientDrawable.RECTANGLE
+
+                            cornerRadius =
+                                px(4f).toFloat()
+
+                            setColor(
+                                Color.rgb(
+                                    184,
+                                    160,
+                                    92
+                                )
+                            )
+                        }
+                }
+
+            posterFrame.addView(
+                libraryBadge,
+                FrameLayout.LayoutParams(
+                    px(20f),
+                    px(20f),
+                    Gravity.BOTTOM or Gravity.END
+                ).apply {
+                    rightMargin = px(8f)
+                    bottomMargin = px(8f)
                 }
             )
             val title = TextView(context).apply {
@@ -1559,7 +1983,47 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                     }
                 }
 
-            return Holder(root, posterFrame, image, cinemaBadge, title)
+            return Holder(
+                root,
+                posterFrame,
+                image,
+                cinemaBadge,
+                watchedBadge,
+                libraryBadge,
+                title
+            )
+        }
+
+        // V630_BADGE_PAYLOAD
+        override fun onBindViewHolder(
+            holder: Holder,
+            position: Int,
+            payloads: MutableList<Any>
+        ) {
+            if (
+                payloads.isNotEmpty() &&
+                payloads.all { it == v630BadgePayload }
+            ) {
+                val item = data[position]
+
+                bindStatusBadges(
+                    holder,
+                    item
+                )
+
+                Log.d(
+                    "PSTVBADGE",
+                    "row=\"$diagnosticLabel\" pos=$position cinema=${item.badge} library=${item.inLibrary} watched=${item.watched}"
+                )
+
+                return
+            }
+
+            super.onBindViewHolder(
+                holder,
+                position,
+                payloads
+            )
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
@@ -1614,7 +2078,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                 item.title.ifBlank { "Content" }
 
             holder.title.text = item.title
-            bindCinemaBadge(holder, item)
+            bindStatusBadges(holder, item)
 
             // V598B_POSTER_RENDER_OWNERSHIP
             //

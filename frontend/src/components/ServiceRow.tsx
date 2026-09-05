@@ -30,6 +30,9 @@ import {
   v176iRegisterGetter,
   v176pRegisterPressGetter,
   v176ShowLongPressMenu,
+  v172SubscribeWatched,
+  v634GetStatusIds,
+  v634IsItemWatched,
   v610GetReleaseStatus,
   v610SubscribeReleaseStatus,
 } from './ContentCard';
@@ -719,40 +722,287 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
     // NATIVE_TV_RECYCLER_ROW
     // TV service rails use one native RecyclerView instead of mounting a
     // React ContentCard for every poster. Mobile keeps the existing FlashList.
-    const nativeTVItems = useMemo(
-      () =>
-        validItems.map((it, index) => ({
-          id: String(it.id || it.imdb_id || `${serviceName}-${index}`),
-          title: String(it.name || it.title || ''),
-          poster: (() => {
-            const cid = String(
-              (it as any).imdb_id ||
-              (it as any).id ||
-              ''
+    // V633_LIBRARYCARD_STATE_ON_DISCOVER
+    //
+    // This intentionally copies LibraryCard's working model.
+    //
+    // ONE canonical identity everywhere:
+    //   imdb_id || id || content_id
+    //
+    // The watched registry, library membership, long-press actions and
+    // native poster booleans all use this SAME key.
+    const v633LibrarySet =
+      useContentStore(
+        (state: any) => state.librarySet
+      );
+
+    const [
+      v633WatchedVersion,
+      setV633WatchedVersion,
+    ] = useState(0);
+
+    /*
+     * LibraryCard subscribes directly to the shared watched registry
+     * and bumps when it broadcasts. Do the same at row level.
+     *
+     * One subscription per ServiceRow is still much lighter than the old
+     * one-subscription-per-poster ContentCard implementation.
+     */
+    useEffect(() => {
+      const unsubscribe =
+        v172SubscribeWatched(() => {
+          setV633WatchedVersion(
+            (v) => (v + 1) & 0xffff
+          );
+        });
+
+      return () => {
+        try {
+          unsubscribe();
+        } catch (_) {}
+      };
+    }, []);
+
+    const nativeTVItems =
+      useMemo(
+        () =>
+          validItems.map(
+            (it, index) => {
+              // V634_SHARED_STATUS_IDENTITY
+              //
+              // Every poster checks all known aliases instead of assuming
+              // every addon populated the same id field.
+              const statusIds =
+                v634GetStatusIds(it);
+
+              const watched =
+                v634IsItemWatched(it);
+
+              const inLibrary =
+                !!v633LibrarySet &&
+                typeof (
+                  v633LibrarySet as any
+                ).has ===
+                  'function' &&
+                statusIds.some(
+                  (id) =>
+                    (
+                      v633LibrarySet as
+                        Set<string>
+                    ).has(id)
+                );
+
+              /*
+               * IN CINEMA remains independent.
+               */
+              const releaseId =
+                String(
+                  (it as any).imdb_id ||
+                    (it as any).id ||
+                    ''
+                );
+
+              const inCinema =
+                v610GetReleaseStatus(
+                  releaseId
+                ) === 'in_cinemas';
+
+              /*
+               * Existing canonical artwork logic remains untouched.
+               */
+              const posterId =
+                String(
+                  (it as any).imdb_id ||
+                    (it as any).id ||
+                    (it as any).content_id ||
+                    ''
+                );
+
+              const suppliedPoster =
+                it.poster
+                  ? String(it.poster)
+                  : null;
+
+              const canonicalPoster =
+                _v614GetPoster(
+                  posterId,
+                  suppliedPoster
+                );
+
+              return {
+                id: String(
+                  it.id ||
+                    it.imdb_id ||
+                    `${serviceName}-${index}`
+                ),
+
+                title: String(
+                  it.name ||
+                    it.title ||
+                    ''
+                ),
+
+                poster:
+                  canonicalPoster || null,
+
+                badge:
+                  inCinema
+                    ? 'IN CINEMA'
+                    : null,
+
+                inLibrary,
+                watched,
+              };
+            }
+          ),
+
+        [
+          validItems,
+          serviceName,
+          v610BadgeVersion,
+          v633LibrarySet,
+          v633WatchedVersion,
+        ]
+      );
+
+    // V635_DIRECT_NATIVE_STATUS
+    //
+    // Normal shared state remains authoritative. This is only the
+    // immediate native paint path so the user never has to move focus.
+    const v635NativeTVRowRef =
+      useRef<any>(null);
+
+    const v635NativeItemsRef =
+      useRef<any[]>(
+        nativeTVItems as any[]
+      );
+
+    v635NativeItemsRef.current =
+      nativeTVItems as any[];
+
+    const v635PushNativeStatusNow =
+      useCallback(
+        (
+          index: number,
+          action: any
+        ) => {
+          if (
+            !Number.isInteger(index) ||
+            index < 0
+          ) {
+            return;
+          }
+
+          let watched:
+            boolean |
+            undefined;
+
+          let inLibrary:
+            boolean |
+            undefined;
+
+          if (
+            action === 'watched'
+          ) {
+            watched = true;
+          }
+
+          if (
+            action === 'unwatched'
+          ) {
+            watched = false;
+          }
+
+          if (
+            action === 'added'
+          ) {
+            inLibrary = true;
+          }
+
+          if (
+            action === 'removed'
+          ) {
+            inLibrary = false;
+          }
+
+          if (
+            watched === undefined &&
+            inLibrary === undefined
+          ) {
+            return;
+          }
+
+          const current =
+            v635NativeItemsRef
+              .current || [];
+
+          if (
+            index >=
+            current.length
+          ) {
+            return;
+          }
+
+          const next =
+            current.map(
+              (
+                entry: any,
+                i: number
+              ) =>
+                i === index
+                  ? {
+                      ...entry,
+
+                      ...(watched !==
+                      undefined
+                        ? {
+                            watched,
+                          }
+                        : {}),
+
+                      ...(inLibrary !==
+                      undefined
+                        ? {
+                            inLibrary,
+                          }
+                        : {}),
+                    }
+                  : entry
             );
 
-            const supplied =
-              it.poster
-                ? String(it.poster)
-                : null;
+          v635NativeItemsRef
+            .current = next;
 
-            const canonical =
-              _v614GetPoster(
-                cid,
-                supplied
+          try {
+            const host: any =
+              v635NativeTVRowRef
+                .current;
+
+            /*
+             * Direct host prop update.
+             * No React state wait, no Modal-close wait.
+             */
+            if (
+              host &&
+              typeof host
+                .setNativeProps ===
+                'function'
+            ) {
+              host.setNativeProps({
+                items: next,
+              });
+            }
+          } catch (e) {
+            try {
+              console.log(
+                '[V635] direct native status failed:',
+                e
               );
-
-            return canonical || null;
-          })(),
-          badge:
-            v610GetReleaseStatus(
-              String((it as any).imdb_id || (it as any).id || '')
-            ) === 'in_cinemas'
-              ? 'IN CINEMA'
-              : null,
-        })),
-      [validItems, serviceName, v610BadgeVersion]
-    );
+            } catch (_) {}
+          }
+        },
+        []
+      );
 
     const nativeTVPressRef = useRef<(() => void) | null>(null);
     const nativeTVLongPressRef = useRef<(() => void) | null>(null);
@@ -772,6 +1022,82 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
         const focusedItem = validItems[index];
         if (!focusedItem) return;
+
+        // V625_LONGPRESS_OVER_FOCUS_EVENT
+        // Native row sends holds through the same proven topItemFocus
+        // event that ordinary poster focus already uses.
+        if (ne.longPress === true) {
+          const anchor =
+            [ne.x, ne.y, ne.width, ne.height].every(
+              (v: any) =>
+                typeof v === 'number' &&
+                Number.isFinite(v)
+            )
+              ? {
+                  x: Number(ne.x),
+                  y: Number(ne.y),
+                  width: Number(ne.width),
+                  height: Number(ne.height),
+                }
+              : null;
+
+          let inLibrary = false;
+
+          try {
+            const statusIds =
+              v634GetStatusIds(
+                focusedItem
+              );
+
+            const libSet =
+              (useContentStore as any)
+                .getState?.()
+                .librarySet;
+
+            if (
+              libSet &&
+              typeof libSet.has ===
+                'function'
+            ) {
+              inLibrary =
+                statusIds.some(
+                  (id) =>
+                    libSet.has(id)
+                );
+            }
+          } catch (_) {}
+
+          try {
+            console.log(
+              '[V625] native long-press received index=' +
+                index
+            );
+
+            // V634_SHARED_STATUS_IDENTITY
+            //
+            // Preserve the original object. The shared menu now understands
+            // imdb_id + id + content_id simultaneously.
+            v176ShowLongPressMenu({
+              item: focusedItem,
+              inLibraryOverride:
+                inLibrary,
+              anchor,
+              onAfterChange: (action) => {
+                v635PushNativeStatusNow(
+                  index,
+                  action
+                );
+              },
+            });
+          } catch (e) {
+            console.log(
+              '[V625] long-press menu failed:',
+              e
+            );
+          }
+
+          return;
+        }
         // V614B_NATIVE_POSTER_SYNC
         // Current metadata verification reuses the existing settle-aware,
         // bounded metadata queue. No network work is added to held-D-pad focus.
@@ -835,25 +1161,45 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
           let inLibrary = false;
 
           try {
-            const cid = String(
-              (focusedItem as any).content_id ||
-                (focusedItem as any).imdb_id ||
-                (focusedItem as any).id ||
-                ''
-            );
+            const statusIds =
+              v634GetStatusIds(
+                focusedItem
+              );
 
-            const libSet = (useContentStore as any).getState?.().librarySet;
+            const libSet =
+              (useContentStore as any)
+                .getState?.()
+                .librarySet;
 
-            if (cid && libSet && typeof libSet.has === 'function') {
-              inLibrary = !!libSet.has(cid);
+            if (
+              libSet &&
+              typeof libSet.has ===
+                'function'
+            ) {
+              inLibrary =
+                statusIds.some(
+                  (id) =>
+                    libSet.has(id)
+                );
             }
           } catch (_) {}
 
           try {
+            // V634_SHARED_STATUS_IDENTITY
+            //
+            // Preserve the original object. The shared menu now understands
+            // imdb_id + id + content_id simultaneously.
             v176ShowLongPressMenu({
               item: focusedItem,
-              inLibraryOverride: inLibrary,
+              inLibraryOverride:
+                inLibrary,
               anchor,
+              onAfterChange: (action) => {
+                v635PushNativeStatusNow(
+                  index,
+                  action
+                );
+              },
             });
           } catch (_) {}
         };
@@ -985,6 +1331,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
 
           {isTV ? (
             <PrivastreamTVRow
+              ref={v635NativeTVRowRef as any}
               style={{ height: cardWidth * 1.5 + 44 }}
               items={nativeTVItems}
               cardWidth={cardWidth}

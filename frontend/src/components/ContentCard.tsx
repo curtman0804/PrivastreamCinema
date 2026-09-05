@@ -210,6 +210,184 @@ if (!_v383Hydrated) {
 const _V172_KEY = 'privastream_watched';
 const _v172WatchedSet = new Set<string>();
 const _v172Subs = new Set<() => void>();
+
+// V635_EXPLICIT_UNWATCHED_TOMBSTONE
+//
+// Older builds could store the same title under multiple ids.
+// Explicit Unwatched must win over ANY stale watched alias.
+const _V635_UNWATCHED_KEY =
+  'privastream_explicit_unwatched_v635';
+
+const _v635ExplicitUnwatched =
+  new Set<string>();
+
+let _v635ExplicitUnwatchedLoaded =
+  false;
+
+function _v635Norm(value: any): string {
+  return String(value == null ? '' : value)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function _v635ExplicitKey(
+  item: any
+): string {
+  if (!item) return '';
+
+  if (typeof item === 'string') {
+    const raw =
+      String(item).trim();
+
+    const imdb =
+      raw.match(/tt\d+/i);
+
+    return imdb
+      ? 'imdb:' +
+          imdb[0].toLowerCase()
+      : raw
+        ? 'id:' + raw
+        : '';
+  }
+
+  const rawIds = [
+    item.imdb_id,
+    item.id,
+    item.content_id,
+  ]
+    .map(
+      (v: any) =>
+        String(v || '').trim()
+    )
+    .filter(Boolean);
+
+  /*
+   * IMDb is the strongest semantic identity.
+   * Also catches IMDb embedded inside another source id.
+   */
+  for (const raw of rawIds) {
+    const imdb =
+      raw.match(/tt\d+/i);
+
+    if (imdb) {
+      return (
+        'imdb:' +
+        imdb[0].toLowerCase()
+      );
+    }
+  }
+
+  const type =
+    _v635Norm(
+      item.content_type ||
+      item.type ||
+      'content'
+    ) || 'content';
+
+  const title =
+    _v635Norm(
+      item.name ||
+      item.title
+    );
+
+  const yearRaw =
+    String(
+      item.year ||
+      item.release_year ||
+      item.releaseYear ||
+      item.releaseInfo ||
+      item.release_date ||
+      item.releaseDate ||
+      ''
+    );
+
+  const year =
+    yearRaw.match(
+      /(?:19|20)\d{2}/
+    );
+
+  if (title) {
+    return (
+      'title:' +
+      type +
+      ':' +
+      title +
+      (year
+        ? ':' + year[0]
+        : '')
+    );
+  }
+
+  return rawIds[0]
+    ? 'id:' + rawIds[0]
+    : '';
+}
+
+async function _v635PersistExplicitUnwatched():
+  Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      _V635_UNWATCHED_KEY,
+      JSON.stringify(
+        Array.from(
+          _v635ExplicitUnwatched
+        )
+      )
+    );
+  } catch (_) {}
+}
+
+async function _v635LoadExplicitUnwatched():
+  Promise<void> {
+  if (
+    _v635ExplicitUnwatchedLoaded
+  ) {
+    return;
+  }
+
+  _v635ExplicitUnwatchedLoaded =
+    true;
+
+  try {
+    const raw =
+      await AsyncStorage.getItem(
+        _V635_UNWATCHED_KEY
+      );
+
+    if (raw) {
+      const parsed =
+        JSON.parse(raw);
+
+      if (Array.isArray(parsed)) {
+        parsed.forEach(
+          (key) => {
+            if (
+              typeof key ===
+                'string' &&
+              key
+            ) {
+              _v635ExplicitUnwatched
+                .add(key);
+            }
+          }
+        );
+      }
+    }
+  } catch (_) {}
+
+  _v172Subs.forEach(
+    (cb) => {
+      try {
+        cb();
+      } catch (_) {}
+    }
+  );
+}
 let _v172Loaded = false;
 
 /* V390_WATCHED_UNION - keep the FS tier in lock-step with MMKV so an
@@ -277,54 +455,342 @@ async function _v172Load(): Promise<void> {
 }
 /* Fire-and-forget hydration on module load. */
 _v172Load();
+_v635LoadExplicitUnwatched();
 
-export function v172IsWatched(contentId: string | undefined | null): boolean {
-  if (!contentId) return false;
-  return _v172WatchedSet.has(String(contentId));
+// V634_SHARED_STATUS_IDENTITY
+//
+// Different addon/catalog sources do NOT consistently populate the same
+// identity field. Never throw any of them away.
+//
+// Example:
+//   imdb_id    = tt...
+//   id         = some-addon-id
+//   content_id = another source id
+//
+// Every surface now keeps ALL known aliases.
+export function v634GetStatusIds(
+  itemOrId: any
+): string[] {
+  const rawValues =
+    itemOrId &&
+    typeof itemOrId === 'object'
+      ? [
+          (itemOrId as any).imdb_id,
+          (itemOrId as any).id,
+          (itemOrId as any).content_id,
+        ]
+      : [itemOrId];
+
+  const ids: string[] = [];
+  const seen =
+    new Set<string>();
+
+  const add = (raw: any) => {
+    const value =
+      String(raw || '').trim();
+
+    if (
+      !value ||
+      seen.has(value)
+    ) {
+      return;
+    }
+
+    seen.add(value);
+    ids.push(value);
+
+    /*
+     * Preserve the base IMDb id too:
+     *   tt123:1:4 -> tt123
+     *
+     * Also catches an IMDb token embedded in a source-specific id.
+     */
+    const imdbMatch =
+      value.match(/tt\d+/i);
+
+    if (imdbMatch) {
+      const base =
+        imdbMatch[0]
+          .toLowerCase();
+
+      if (!seen.has(base)) {
+        seen.add(base);
+        ids.unshift(base);
+      }
+    }
+  };
+
+  rawValues.forEach(add);
+
+  return ids;
 }
 
-export function v172SubscribeWatched(cb: () => void): () => void {
+export function v634CanonicalStatusId(
+  itemOrId: any
+): string {
+  const ids =
+    v634GetStatusIds(
+      itemOrId
+    );
+
+  const imdb =
+    ids.find(
+      (id) =>
+        /^tt\d+$/i.test(id)
+    );
+
+  return (
+    imdb ||
+    ids[0] ||
+    ''
+  );
+}
+
+export function v172IsWatched(
+  contentId:
+    string |
+    undefined |
+    null
+): boolean {
+  if (!contentId) {
+    return false;
+  }
+
+  return _v172WatchedSet.has(
+    String(contentId)
+  );
+}
+
+export function v634IsItemWatched(
+  item: any
+): boolean {
+  /*
+   * An explicit Unwatched selection wins over stale
+   * ids left by any older build/storage tier.
+   */
+  const explicitKey =
+    _v635ExplicitKey(item);
+
+  if (
+    explicitKey &&
+    _v635ExplicitUnwatched.has(
+      explicitKey
+    )
+  ) {
+    return false;
+  }
+
+  const ids =
+    v634GetStatusIds(item);
+
+  return ids.some(
+    (id: string) =>
+      _v172WatchedSet.has(id)
+  );
+}
+
+export function v172SubscribeWatched(
+  cb: () => void
+): () => void {
   _v172Subs.add(cb);
-  /* Fire once on subscribe if hydration already completed. */
-  if (_v172Loaded) { try { cb(); } catch (_) {} }
-  return () => { _v172Subs.delete(cb); };
+
+  if (_v172Loaded) {
+    try {
+      cb();
+    } catch (_) {}
+  }
+
+  return () => {
+    _v172Subs.delete(cb);
+  };
 }
 
-export async function v172UnmarkWatched(contentId: string | undefined | null): Promise<void> {
-  if (!contentId) return;
-  const key = String(contentId);
-  _v172WatchedSet.delete(key);
-  try {
-    const raw = await AsyncStorage.getItem(_V172_KEY);
-    const obj = raw ? JSON.parse(raw) : {};
-    delete obj[key];
-    const _j390u = JSON.stringify(obj);
-    await AsyncStorage.setItem(_V172_KEY, _j390u);
-    _v390MirrorWatched(_j390u); /* V390 - unmark must reach the FS tier too */
-  } catch (_) { /* best-effort -- in-memory delete still took effect */ }
-  _v172Subs.forEach((cb) => { try { cb(); } catch (_) {} });
+function _v634PublishWatched(): void {
+  _v172Subs.forEach(
+    (cb) => {
+      try {
+        cb();
+      } catch (_) {}
+    }
+  );
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-   V176_LONGPRESS_MENU â€” companion helpers to the V172 watched registry.
-   Adds Mark-as-Watched (sister to UnmarkWatched), an in-memory progress
-   registry (hydrated by discover.tsx from the CW fetch) so the menu can
-   conditionally show "Clear Progress", and a unified Alert opener that
-   every poster surface (ContentCard, LibraryCard, ContinueWatchingItem)
-   delegates to so the menu wording / button set is identical everywhere. */
-export async function v176MarkWatched(contentId: string | undefined | null): Promise<void> {
-  if (!contentId) return;
-  const key = String(contentId);
-  _v172WatchedSet.add(key);
+async function _v634PersistWatchedSet():
+  Promise<void> {
   try {
-    const raw = await AsyncStorage.getItem(_V172_KEY);
-    const obj = raw ? JSON.parse(raw) : {};
-    obj[key] = true;
-    const _j390m = JSON.stringify(obj);
-    await AsyncStorage.setItem(_V172_KEY, _j390m);
-    _v390MirrorWatched(_j390m); /* V390 - mark reaches the FS tier too */
-  } catch (_) { /* best-effort */ }
-  _v172Subs.forEach((cb) => { try { cb(); } catch (_) {} });
+    const obj:
+      Record<string, boolean> =
+        {};
+
+    _v172WatchedSet.forEach(
+      (key) => {
+        obj[key] = true;
+      }
+    );
+
+    const json =
+      JSON.stringify(obj);
+
+    await AsyncStorage.setItem(
+      _V172_KEY,
+      json
+    );
+
+    _v390MirrorWatched(json);
+  } catch (_) {}
+}
+
+export async function v172UnmarkWatched(
+  contentId:
+    string |
+    undefined |
+    null
+): Promise<void> {
+  if (!contentId) {
+    return;
+  }
+
+  _v172WatchedSet.delete(
+    String(contentId)
+  );
+
+  /*
+   * V634_REALTIME_STATUS
+   * Tell every visible poster NOW.
+   * Disk persistence happens afterward.
+   */
+  _v634PublishWatched();
+
+  await _v634PersistWatchedSet();
+}
+
+export async function v176MarkWatched(
+  contentId:
+    string |
+    undefined |
+    null
+): Promise<void> {
+  if (!contentId) {
+    return;
+  }
+
+  _v172WatchedSet.add(
+    String(contentId)
+  );
+
+  /*
+   * V634_REALTIME_STATUS
+   */
+  _v634PublishWatched();
+
+  await _v634PersistWatchedSet();
+}
+
+export async function v634SetItemWatched(
+  itemOrId: any,
+  watched: boolean
+): Promise<void> {
+  const ids =
+    v634GetStatusIds(
+      itemOrId
+    );
+
+  if (!ids.length) {
+    return;
+  }
+
+  /*
+   * Mark/unmark EVERY known alias.
+   *
+   * This also removes stale old aliases when the user chooses
+   * Mark as Unwatched.
+   */
+  for (const id of ids) {
+    if (watched) {
+      _v172WatchedSet.add(id);
+    } else {
+      _v172WatchedSet.delete(id);
+    }
+  }
+
+  /*
+   * One immediate broadcast.
+   * This is what makes Discover repaint before the menu has even finished
+   * disappearing.
+   */
+    const explicitKey =
+    _v635ExplicitKey(itemOrId);
+
+  if (explicitKey) {
+    if (watched) {
+      _v635ExplicitUnwatched.delete(
+        explicitKey
+      );
+    } else {
+      _v635ExplicitUnwatched.add(
+        explicitKey
+      );
+    }
+  }
+
+  // V635_EXPLICIT_UNWATCHED_TOMBSTONE
+_v634PublishWatched();
+
+  await Promise.allSettled([
+    _v634PersistWatchedSet(),
+    _v635PersistExplicitUnwatched(),
+  ]);
+}
+
+/*
+ * Update the REAL Zustand library membership Set immediately.
+ * This is not poster-local fake state.
+ *
+ * The normal backend operation/refetch still runs afterward and remains
+ * authoritative.
+ */
+function v634SetItemLibraryMembership(
+  itemOrId: any,
+  inLibrary: boolean
+): void {
+  try {
+    const store: any =
+      _v169UseContentStore as any;
+
+    const state: any =
+      store.getState?.();
+
+    const current =
+      state?.librarySet;
+
+    const next =
+      new Set<string>(
+        current &&
+        typeof current.forEach ===
+          'function'
+          ? Array.from(
+              current as Set<string>
+            )
+          : []
+      );
+
+    for (
+      const id of
+        v634GetStatusIds(
+          itemOrId
+        )
+    ) {
+      if (inLibrary) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+    }
+
+    store.setState?.({
+      librarySet: next,
+    });
+  } catch (_) {}
 }
 
 /* Progress registry â€” populated by discover.tsx every time CW data lands. */
@@ -477,10 +943,13 @@ export function v176kBuildActions(opts: {
   const { item, inLibrary, hasProgress, onAfterChange } = opts;
   const includeLibrary = opts.includeLibrary !== false;
   const includeWatchedToggle = opts.includeWatchedToggle !== false;
-  const contentId = String((item as any).content_id || (item as any).imdb_id || (item as any).id || '');
+  // V634_SHARED_STATUS_IDENTITY
+  const contentId =
+    v634CanonicalStatusId(item);
   const title = (item as any).title || (item as any).name || 'this item';
   const contentType = (item as any).content_type || (item as any).type || 'movie';
-  const isWatched = v172IsWatched(contentId);
+  const isWatched =
+    v634IsItemWatched(item);
   const hasProg = hasProgress != null ? !!hasProgress : v176HasProgress(contentId);
 
   const actions: V176kAction[] = [];
@@ -507,7 +976,16 @@ export function v176kBuildActions(opts: {
         onPress: () => {
           // v238 â€” optimistic.
           try { onAfterChange && onAfterChange('unwatched'); } catch (_) {}
-          v172UnmarkWatched(contentId).catch((e) => console.log('[V176K] unwatch failed:', e));
+          v634SetItemWatched(
+            item,
+            false
+          ).catch(
+            (e) =>
+              console.log(
+                '[V176K] unwatch failed:',
+                e
+              )
+          );
         },
       });
     } else {
@@ -518,7 +996,16 @@ export function v176kBuildActions(opts: {
         onPress: () => {
           // v238 â€” optimistic.
           try { onAfterChange && onAfterChange('watched'); } catch (_) {}
-          v176MarkWatched(contentId).catch((e) => console.log('[V176K] watch failed:', e));
+          v634SetItemWatched(
+            item,
+            true
+          ).catch(
+            (e) =>
+              console.log(
+                '[V176K] watch failed:',
+                e
+              )
+          );
         },
       });
     }
@@ -531,6 +1018,19 @@ export function v176kBuildActions(opts: {
         icon: 'bookmark',
         destructive: true,
         onPress: async () => {
+          // V634_REALTIME_STATUS
+          v634SetItemLibraryMembership(
+            item,
+            false
+          );
+          // V635_DIRECT_NATIVE_STATUS
+          try {
+            onAfterChange &&
+              onAfterChange(
+                'removed'
+              );
+          } catch (_) {}
+
           try {
             const removeFn = (_v169UseContentStore as any).getState().removeFromLibrary;
             await removeFn(contentType, contentId);
@@ -544,6 +1044,19 @@ export function v176kBuildActions(opts: {
         label: 'Add to Library',
         icon: 'bookmark-outline',
         onPress: async () => {
+          // V634_REALTIME_STATUS
+          v634SetItemLibraryMembership(
+            item,
+            true
+          );
+          // V635_DIRECT_NATIVE_STATUS
+          try {
+            onAfterChange &&
+              onAfterChange(
+                'added'
+              );
+          } catch (_) {}
+
           try {
             const addFn = (_v169UseContentStore as any).getState().addToLibrary;
             await addFn({
@@ -645,7 +1158,12 @@ export const V176kPopover: React.FC = () => {
       onRequestClose={dismiss}
       statusBarTranslucent
     >
-      <Pressable style={v176kStyles.backdrop} onPress={dismiss}>
+      <Pressable
+        style={v176kStyles.backdrop}
+        onPress={dismiss}
+        focusable={false}
+        android_disableSound={true}
+      >
         <View
           style={[
             v176kStyles.popover,
@@ -1146,7 +1664,10 @@ function _v77RequestReleaseStatus(imdbId, cb) {
      just subscribe; do NOT queue a duplicate batched request. */
   if (!_v167InFlight.has(imdbId)) {
     _v77PendingIds.add(imdbId);
-    if (!_v77FlushTimer) _v77FlushTimer = setTimeout(_v77FlushBatch, 250);
+    // V625_FAST_CINEMA_BADGES
+    // Preserve batching/cache semantics, but don't intentionally sit
+    // for a quarter-second before starting the release-status request.
+    if (!_v77FlushTimer) _v77FlushTimer = setTimeout(_v77FlushBatch, 75);
   }
   return () => {
     const s = _v77Subscribers.get(imdbId);
@@ -1403,8 +1924,10 @@ try {
       /* V176I_REF_DISPATCH â€” prefer the getter; falls back to the
          legacy slot for any callers that still set it directly. */
       let target: (() => void) | null = null;
+
       try { if (_v176iLatestGetter) target = _v176iLatestGetter(); } catch (_) {}
       if (!target) target = _v173FocusedLP;
+
       if (target) {
         /* V176L_PERF_CLEANUP â€” silent fast-path. */
         try { target(); } catch (e) { console.log('[V176L] dispatch error:', e); }
@@ -1514,7 +2037,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
     let cleanup: (() => void) | undefined;
     const t = setTimeout(() => {
       cleanup = _v77RequestReleaseStatus(String(imdbId), setReleaseStatus);
-    }, 250);
+    }, 75);
     return () => {
       clearTimeout(t);
       if (cleanup) { try { cleanup(); } catch (_) {} }

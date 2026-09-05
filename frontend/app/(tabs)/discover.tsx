@@ -51,7 +51,7 @@ import {
   v176ShowLongPressMenu as _v176ShowLongPressMenu,
   /* V176E_TV_LONGPRESS ├óΓé¼ΓÇ¥ register this CW card's menu handler with v173. */
   v173RegisterLongPress as _v173RegLP,
-  /* V176K_POPOVER */ V176kPopover, v176kMeasureAnchor,
+  /* V176K_POPOVER */ V176kPopoverHost, v176kMeasureAnchor,
   /* V365_CW_INSTANT_CLEAR */
   v365MarkCleared as _v365MarkCleared,
   v365IsCleared as _v365IsCleared,
@@ -1234,7 +1234,7 @@ if (
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* V176K_POPOVER_MOUNTED ├óΓé¼ΓÇ¥ Stremio-style menu host for this screen. */}
-      <V176kPopover />
+      <V176kPopoverHost />
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
@@ -1247,7 +1247,7 @@ if (
 if (discoverData && !cachedDiscover && !postersReady) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <V176kPopover />
+      <V176kPopoverHost />
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
@@ -1257,6 +1257,11 @@ if (discoverData && !cachedDiscover && !postersReady) {
 
 return (
   <SafeAreaView style={styles.container} edges={['top']}>
+    {/* V626_NATIVE_ROW_LONGPRESS_HOST
+        Normal Discover previously had NO popover listener even though
+        native poster long-press successfully emitted v176k:open. */}
+    <V176kPopoverHost />
+
     {/* Welcome Screen - No Addons and No Continue Watching */}
     {/* PATCH_V144_CACHE_WELCOME ├óΓé¼ΓÇ¥ also consider cached CW so we don't flash "No Addons" */}
     {!hasContent && continueWatching.length === 0 && cachedCW.length === 0 && !isLoadingDiscover ? (
