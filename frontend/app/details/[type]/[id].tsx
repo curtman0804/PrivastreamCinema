@@ -1277,6 +1277,7 @@ const StreamCard = React.memo(function StreamCardInner({
   return (
     <Pressable
       ref={cardRef}
+      testID="V647_STREAM_CARD"
       style={[styles.streamCard, isFocused && styles.streamCardFocused]}
       onPress={onPress}
       onFocus={() => setIsFocused(true)}
@@ -1499,6 +1500,7 @@ const EpisodeCard = React.memo(function EpisodeCard({
   return (
     <Pressable
       ref={pressableRef}
+      testID="V647_EPISODE_CARD"
       style={[styles.episodeCard, isFocused && styles.episodeCardFocused]}
       onPress={_v176cOnPress}
       onPressIn={_v176cPressIn}
@@ -1558,12 +1560,72 @@ const EpisodeCard = React.memo(function EpisodeCard({
       </View>
       <View style={styles.episodeInfo}>
         <Text style={styles.episodeTitle} numberOfLines={2}>
-          E{episode.episode}: {episode.name || `Episode ${episode.episode}`}
+          {v643bEpisodePosterTitle(episode)}
         </Text>
       </View>
     </Pressable>
   );
 });
+
+
+// V643B_EPISODE_TITLE
+// Episode metadata can expose the useful label as title or name.
+// The SxEy code is already rendered separately on the episode card.
+function v643bEpisodePosterTitle(ep: any): string {
+  const season = Number(ep?.season);
+  const episodeNo = Number(ep?.episode);
+
+  const validNumbers =
+    Number.isFinite(season) &&
+    Number.isFinite(episodeNo);
+
+  const exactPrefix =
+    validNumbers
+      ? new RegExp(
+          '^\\s*S0?' + season +
+          '\\s*E0?' + episodeNo +
+          '\\s*(?:[-??:?]\\s*)?',
+          'i'
+        )
+      : null;
+
+  const pureCode =
+    /^S\d+\s*E\d+$/i;
+
+  for (const value of [ep?.title, ep?.name]) {
+    const raw = String(value ?? '').trim();
+
+    if (!raw) continue;
+
+    let cleaned = raw;
+
+    if (exactPrefix) {
+      // Handles:
+      // S1E3
+      // S1E3 - S1E3
+      // S1E3 - Actual Episode Title
+      for (let i = 0; i < 3; i += 1) {
+        const next =
+          cleaned.replace(exactPrefix, '').trim();
+
+        if (next === cleaned) break;
+
+        cleaned = next;
+      }
+    }
+
+    if (
+      cleaned &&
+      !pureCode.test(cleaned)
+    ) {
+      return cleaned;
+    }
+  }
+
+  return Number.isFinite(episodeNo)
+    ? 'Episode ' + episodeNo
+    : 'Episode';
+}
 
 export default function DetailsScreen() {
   // V311_PERF_PROFILER - capture details-page lifecycle marks and ship

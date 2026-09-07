@@ -15,7 +15,6 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.SoundEffectConstants
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
@@ -591,6 +590,11 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
 
                 val soundDirection = pendingHorizontalDirection
 
+                try {
+                    holder.itemView.setSoundEffectsEnabled(false)
+                } catch (_: Throwable) {
+                }
+
                 if (holder.itemView.requestFocus()) {
                     playHorizontalNavigationSound(soundDirection, holder.itemView)
                     // CARD_FOCUS synchronously calls
@@ -870,18 +874,22 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
         direction: Int,
         targetView: View
     ) {
-        val soundEffect = when {
-            direction < 0 ->
-                SoundEffectConstants.NAVIGATION_LEFT
-
-            direction > 0 ->
-                SoundEffectConstants.NAVIGATION_RIGHT
-
-            else -> return
+        // V643B_SINGLE_SOUND_OWNER
+        // Existing V599/V627 call sites remain exactly where they were:
+        // they run only after a real successful horizontal poster move.
+        try {
+            targetView.setSoundEffectsEnabled(false)
+        } catch (_: Throwable) {
         }
 
         try {
-            targetView.playSoundEffect(soundEffect)
+            val reactContext =
+                context as? ReactContext
+
+            val activity =
+                reactContext?.currentActivity as? MainActivity
+
+            activity?.v643bNativeHorizontalMove(direction)
         } catch (_: Throwable) {
         }
     }
@@ -900,7 +908,12 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                 "row=\"$diagnosticLabel\" view=$id FOCUS_IMMEDIATE position=$position"
             )
 
-            if (holder.itemView.requestFocus()) {
+            try {
+                    holder.itemView.setSoundEffectsEnabled(false)
+                } catch (_: Throwable) {
+                }
+
+                if (holder.itemView.requestFocus()) {
                 playHorizontalNavigationSound(direction, holder.itemView)
                 return
             }
