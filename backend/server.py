@@ -3196,6 +3196,26 @@ async def search_content(
         """Score search results by relevance"""
         name = (item.get('name') or '').lower()
         query_lower = query.lower()
+
+        # V650_TITLE_FIRST_SEARCH
+        # Normalize spacing/punctuation for exact TITLE identity.
+        # This affects search scoring only.
+        name_compact = ''.join(
+            ch for ch in name
+            if ch.isalnum()
+        )
+        query_compact = ''.join(
+            ch for ch in query_lower
+            if ch.isalnum()
+        )
+
+        if (
+            name_compact
+            and query_compact
+            and name_compact == query_compact
+        ):
+            return 100
+
         query_words_lower = query_lower.split()
         
         # Get significant words (non-stop words) from query
@@ -3357,6 +3377,76 @@ async def search_content(
                 if not isinstance(series_resp, Exception) and series_resp.status_code == 200:
                     series_raw = series_resp.json().get('metas', [])[:30]
                 
+                # V650_TITLE_FIRST_SEARCH
+                #
+                # Cinemeta has already returned candidate metadata above.
+                # If the query exactly identifies one of those TITLES,
+                # bypass the cast-only person verifier.
+                _v650_query_compact = ''.join(
+                    ch for ch in q.lower()
+                    if ch.isalnum()
+                )
+
+                _v650_exact_title = any(
+                    ''.join(
+                        ch for ch in
+                        str(item.get('name') or '').lower()
+                        if ch.isalnum()
+                    ) == _v650_query_compact
+                    for item in (movies_raw + series_raw)
+                )
+
+                if _v650_exact_title:
+                    logger.info(
+                        f"V650 exact title detected for '{q}' - "
+                        f"bypassing actor verification"
+                    )
+
+                    movies_title_scored = [
+                        (m, score_result(m, q, False))
+                        for m in movies_raw
+                    ]
+
+                    series_title_scored = [
+                        (s, score_result(s, q, False))
+                        for s in series_raw
+                    ]
+
+                    result_limit = min(max(limit, 1), 30)
+
+                    movies_title = [
+                        m
+                        for m, score in sorted(
+                            movies_title_scored,
+                            key=lambda x: -x[1]
+                        )
+                        if score > 0
+                    ][:result_limit]
+
+                    series_title = [
+                        s
+                        for s, score in sorted(
+                            series_title_scored,
+                            key=lambda x: -x[1]
+                        )
+                        if score > 0
+                    ][:result_limit]
+
+                    if content_type == 'series':
+                        movies_title = []
+
+                    if content_type == 'movie':
+                        series_title = []
+
+                    return {
+                        "movies": movies_title,
+                        "series": series_title,
+                        "hasMore": False,
+                        "total": (
+                            len(movies_title) +
+                            len(series_title)
+                        ),
+                    }
                 logger.info(f"Actor search '{q}': Found {len(movies_raw)} movies, {len(series_raw)} series to verify")
                 
                 # Verify actor is in cast for each result
