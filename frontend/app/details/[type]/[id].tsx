@@ -1201,37 +1201,248 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
   return [..._nonComm, ..._comm];
 }
 
-/* V503_RELIABLE_AUTOPICK - automatic playback favors compatibility over raw resolution. */
+/*
+ * V651_ENGLISH_1080_AUDIO_FIRST
+ *
+ * One selector owns BOTH normal Play and automatic episode Play.
+ *
+ * Required priority:
+ *   1. If any non-foreign playable stream exists, foreign streams
+ *      are excluded completely from automatic selection.
+ *   2. Prefer 1080p.
+ *   3. Within 1080p, prefer the best advertised audio format.
+ *   4. Then prefer reliable/healthy streams.
+ *   5. Foreign is fallback-only when no English/neutral candidate exists.
+ *
+ * Important:
+ * parseStreamInfo() does not recognize every tracker-language spelling.
+ * In particular, "DUBBING PL" was incorrectly treated as English and
+ * caused South Park S1E1 to auto-play Polish audio.
+ */
 function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
-  const playable = (streams || []).filter((s: any) => !!(s && (s.url || s.externalUrl || s.direct_url || s.infoHash || s.info_hash)));
+  const playable = (streams || []).filter((s: any) =>
+    !!(
+      s &&
+      (
+        s.url ||
+        s.externalUrl ||
+        s.direct_url ||
+        s.infoHash ||
+        s.info_hash
+      )
+    )
+  );
+
   if (playable.length === 0) return null;
-  const score = (s: any): number => {
+
+  const blob = (s: any): string =>
+    String(
+      (s?.title || '') + ' ' +
+      (s?.name || '') + ' ' +
+      (s?.filename || '')
+    )
+      .replace(/\\n/g, ' ')
+      .replace(/\\r/g, ' ')
+      .replace(/\r|\n|\t/g, ' ')
+      .toUpperCase();
+
+  const isStrictForeign = (s: any): boolean => {
     const info: any = parseStreamInfo(s);
-    const t = String((s?.title || '') + ' ' + (s?.name || '') + ' ' + (s?.filename || '')).toUpperCase();
+
+    if (info?.isForeign) return true;
+
+    const t = blob(s);
+
+    // V651: tracker/release language spellings that the base parser
+    // does not reliably identify.
+    if (
+      /\bDUBBING[\s._-]+(?:PL|POL|POLISH)\b/.test(t) ||
+      /\bLEKTOR\b/.test(t) ||
+      /\bPOLISH\b/.test(t) ||
+      /\bPOLSKI\b/.test(t) ||
+      /\bPOLSKA\b/.test(t)
+    ) {
+      return true;
+    }
+
+    // Same strict-language wall already used elsewhere in the app.
+    // MULTI/DUAL are fallback-only because their default audio is
+    // not guaranteed to be English.
+    if (
+      /\b(?:RUS|RUSSIAN|HINDI|TAMIL|TELUGU|VOSTFR|VOSTA|VFF|VFQ|TRUEFRENCH|FRENCH|FRA|LATINO|CASTELLANO|SPANISH|ESPANOL|GERMAN|DEUTSCH|GER|DEU|ITALIAN|ITALIANO|ITA|DUBLADO|PORTUGUESE|KOREAN|KOR|JAPANESE|JPN|CHINESE|CHS|CHT|UKRAINIAN|UKR|TURKISH|DUTCH|DUBBED|MULTI|DUAL)\b/.test(t)
+    ) {
+      return true;
+    }
+
+    if (
+      /[\u0400-\u04FF\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(t)
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const nonForeign = playable.filter((s: any) => !isStrictForeign(s));
+
+  // Hard wall: when English/neutral candidates exist, foreign releases
+  // are not allowed to compete on score at all.
+  let pool = nonForeign.length > 0 ? nonForeign : playable;
+
+  // Commentary is fallback-only as well.
+  const nonCommentary = pool.filter(
+    (s: any) => !(parseStreamInfo(s) as any)?.isCommentary
+  );
+
+  if (nonCommentary.length > 0) {
+    pool = nonCommentary;
+  }
+
+  /*
+   * V652_COMPATIBLE_AUDIO_AUTOPICK
+   *
+   * V651 correctly created the English wall, but ranked TrueHD as the
+   * highest audio format. Google TV Streamer then rejected audio/true-hd
+   * with MediaCodecAudioRenderer NO_UNSUPPORTED_TYPE.
+   *
+   * Automatic playback therefore uses a compatibility wall:
+   *   EAC3/DDP/DD+ / AC3 / AAC / Opus = preferred automatic formats
+   *   TrueHD / DTS-X / DTS-HD / DTS = fallback-only
+   *
+   * Manual stream cards are NOT removed or changed.
+   */
+  const isAutoAudioUnsafe = (s: any): boolean => {
+    const t = blob(s);
+
+    return (
+      /\bTRUE[\s._-]?HD\b/.test(t) ||
+      /\bDTS[\s._-]?X\b/.test(t) ||
+      /\bDTSX\b/.test(t) ||
+      /\bDTS[\s._-]?HD[\s._-]?MA\b/.test(t) ||
+      /\bDTS[\s._-]?HD\b/.test(t) ||
+      /\bDTS\b/.test(t)
+    );
+  };
+
+  const _v652SafeAudioPool = pool.filter(
+    (s: any) => !isAutoAudioUnsafe(s)
+  );
+
+  const _v652UsingSafeAudio =
+    _v652SafeAudioPool.length > 0;
+
+  if (_v652UsingSafeAudio) {
+    pool = _v652SafeAudioPool;
+  }
+
+  const qualityRank = (s: any): number => {
+    const q = String(
+      (parseStreamInfo(s) as any)?.quality || ''
+    );
+
+    // User-selected automatic-play priority:
+    // 1080p is preferred over 4K.
+    if (q === '1080p') return 5;
+    if (q === '4K')    return 4;
+    if (q === '720p')  return 3;
+    if (q === 'HD')    return 2;
+    if (q === 'SD')    return 1;
+
+    return 0;
+  };
+
+  const audioRank = (s: any): number => {
+    const t = blob(s);
+
+    // DD+ Atmos: retain Atmos when it is carried by the
+    // compatible EAC3/DDP family rather than TrueHD.
+    if (
+      /\bATMOS\b/.test(t) &&
+      /\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)
+    ) {
+      return 100;
+    }
+
+    if (/\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)) return 90;
+    if (/\b(?:AC-?3|DD ?5)\b/.test(t))       return 80;
+    if (/\bAAC\b/.test(t))                   return 70;
+    if (/\bOPUS\b/.test(t))                  return 60;
+
+    // These only participate if no known-safe candidate exists.
+    if (/\bDTS\b/.test(t))                   return 30;
+    if (/\bTRUE[\s._-]?HD\b/.test(t))        return 20;
+
+    return 0;
+  };
+  const reliabilityRank = (s: any): number => {
+    const info: any = parseStreamInfo(s);
+    const t = blob(s);
+
     let n = 0;
-    if (info?.isForeign) n -= 100000;
-    if (info?.isCommentary) n -= 100000;
-    if (info?.isHDR) n -= 50000;
-    if (/\b(?:BLURAY|BLU-RAY|BDRIP|BD-RIP|BRRIP|BR-RIP|REMUX|BDMV|COMPLETE)\b/.test(t)) n -= 20000;
-    if (info?.quality === '1080p') n += 30000;
-    else if (info?.quality === '4K') n += 10000;
-    else if (info?.quality === '720p') n += 7000;
-    else if (info?.quality === 'HD') n += 5000;
-    if (/\bWEB-?DL\b/.test(t)) n += 1500;
-    else if (/\bWEB-?RIP\b/.test(t)) n += 500;
-    if (/\b(?:H\.?264|AVC|X264)\b/.test(t)) n += 500;
-    if (/\b(?:H\.?265|HEVC|X265)\b/.test(t)) n -= 300;
-    if (/\b(?:TRUE ?HD|DTS[-. ]?X|DTSX|DTS[-. ]?HD(?:[-. ]?MA)?|ATMOS)\b/.test(t)) n -= 3000;
-    else if (/\bDTS\b/.test(t)) n -= 1200;
-    else if (/\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)) n += 800;
-    else if (/\b(?:AC-?3|DD ?5)\b/.test(t)) n += 650;
-    else if (/\bAAC\b/.test(t)) n += 500;
-    if (s?.url || s?.externalUrl || s?.direct_url) n += 250;
+
+    // Direct/debrid-resolved stream is useful only as a tie-breaker.
+    if (s?.url || s?.externalUrl || s?.direct_url) n += 1000;
+
+    // Prefer streaming-service releases for TV reliability.
+    if (/\bWEB-?DL\b/.test(t)) n += 700;
+    else if (/\bWEB-?RIP\b/.test(t)) n += 350;
+
+    // Fire TV compatibility tiebreakers.
+    if (/\b(?:H\.?264|AVC|X264)\b/.test(t)) n += 250;
+    if (/\b(?:H\.?265|HEVC|X265)\b/.test(t)) n -= 100;
+
+    if (info?.isHDR) n -= 150;
+
+    if (
+      /\b(?:BLURAY|BLU-RAY|BDRIP|BD-RIP|BRRIP|BR-RIP|REMUX|BDMV|COMPLETE)\b/.test(t)
+    ) {
+      n -= 100;
+    }
+
+    const seeders = Number(info?.seeders || 0);
+
+    if (Number.isFinite(seeders) && seeders > 0) {
+      n += Math.min(seeders, 500);
+    }
+
     return n;
   };
-  const ranked = playable.map((s: any, i: number) => ({ s, i, n: score(s) })).sort((a: any, b: any) => (b.n - a.n) || (a.i - b.i));
-  try { console.log('[V503 AUTO PICK]', 'score=' + ranked[0].n, '|', String(ranked[0].s?.title || ranked[0].s?.name || '').slice(0, 110)); } catch (_) {}
-  return ranked[0].s as Stream;
+
+  const ranked = pool
+    .map((s: any, i: number) => ({
+      s,
+      i,
+      q: qualityRank(s),
+      a: audioRank(s),
+      r: reliabilityRank(s),
+    }))
+    .sort((x: any, y: any) =>
+      (y.q - x.q) ||
+      (y.a - x.a) ||
+      (y.r - x.r) ||
+      (x.i - y.i)
+    );
+
+  const pick = ranked[0];
+
+  try {
+    const info: any = parseStreamInfo(pick.s);
+
+    console.log(
+      '[V652 AUTO PICK]',
+      'pool=' + (nonForeign.length > 0 ? 'ENGLISH' : 'FOREIGN_FALLBACK'),
+      'audioPool=' + (_v652UsingSafeAudio ? 'SAFE' : 'UNSAFE_FALLBACK'),
+      'english=' + nonForeign.length,
+      'playable=' + playable.length,
+      'quality=' + String(info?.quality || '?'),
+      'audio=' + pick.a,
+      'reliability=' + pick.r,
+      '|',
+      String(pick.s?.title || pick.s?.name || '').slice(0, 140)
+    );
+  } catch (_) {}
+
+  return pick.s as Stream;
 }
 // Stream Card Component - 3-row vertical layout (PATCH_V19A_STREAMCARD_MEMO React.memo)
 // V302_STREAMCARD_REDESIGN_BUILD_TAG â€” top-center play button, removes the
