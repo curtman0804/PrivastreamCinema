@@ -1087,6 +1087,258 @@ async def get_me(current_user: User = Depends(get_current_user)):
     )
 
 
+# ==================== V654 TOS SERVER RESTORE ====================
+# V654_TOS_SERVER_RESTORE
+#
+# Restores the server-side contract already used by ToSGate.tsx:
+#
+#   GET  /api/legal/tos-status?username=<username>
+#   POST /api/legal/tos-accept
+#
+# Existing historical records live in MongoDB collection:
+#   tos_acceptances
+#
+# Acceptance is persisted BEFORE the Resend notification is attempted.
+# A mail failure must never force the user to accept the ToS again.
+
+
+class ToSAcceptRequest(BaseModel):
+    username: str
+    app_version: Optional[str] = None
+    tos_version: Optional[str] = None
+    device_info: Optional[str] = None
+
+
+def _v654_tos_iso(value: Any) -> Optional[str]:
+    """Return an existing ToS timestamp as a JSON-safe ISO string."""
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        text = value.isoformat()
+        if not text.endswith("Z"):
+            text += "Z"
+        return text
+
+    return str(value)
+
+
+@api_router.get("/legal/tos-status")
+async def v654_tos_status(username: str):
+    """
+    Return server-side ToS acceptance for one username.
+
+    This preserves historical records in db.tos_acceptances and is the
+    cross-device source of truth used by the Addons ToS gate.
+    """
+    username = (username or "").strip()
+
+    if not username:
+        return {
+            "accepted": False,
+            "accepted_at": None,
+        }
+
+    record = await db.tos_acceptances.find_one(
+        {"username": username},
+        {"_id": 0},
+    )
+
+    if not record:
+        return {
+            "accepted": False,
+            "accepted_at": None,
+        }
+
+    return {
+        "accepted": True,
+        "accepted_at": _v654_tos_iso(record.get("accepted_at")),
+        "tos_version": record.get("tos_version"),
+    }
+
+
+@api_router.post("/legal/tos-accept")
+async def v654_tos_accept(payload: ToSAcceptRequest, request: Request):
+    """
+    Record ToS acceptance once per username.
+
+    Existing acceptance is authoritative and is never overwritten.
+    Resend notification is attempted only for a NEW acceptance.
+    """
+    username = (payload.username or "").strip()
+
+    if not username:
+        raise HTTPException(
+            status_code=400,
+            detail="Username is required",
+        )
+
+    # Confirm this is an actual Privastream account.
+    user = await db.users.find_one(
+        {"username": username},
+        {"_id": 0},
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    # Idempotent: an existing historical acceptance wins.
+    existing = await db.tos_acceptances.find_one(
+        {"username": username},
+        {"_id": 0},
+    )
+
+    if existing:
+        recorded_at = _v654_tos_iso(existing.get("accepted_at"))
+
+        logger.info(
+            "V654 ToS already accepted username=%s accepted_at=%s",
+            username,
+            recorded_at,
+        )
+
+        return {
+            "ok": True,
+            "recorded_at": recorded_at,
+            "email_status": "already_recorded",
+        }
+
+    accepted_at = datetime.utcnow().isoformat() + "Z"
+
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+    elif request.client:
+        client_ip = request.client.host
+    else:
+        client_ip = None
+
+    user_agent = request.headers.get("user-agent")
+
+    record = {
+        "username": username,
+        "email": user.get("email"),
+        "accepted_at": accepted_at,
+        "tos_version": payload.tos_version,
+        "app_version": payload.app_version,
+        "device_info": payload.device_info,
+        "ip": client_ip,
+        "user_agent": user_agent,
+    }
+
+    # CRITICAL ORDER:
+    # Persist acceptance before attempting email.
+    try:
+        await db.tos_acceptances.insert_one(record)
+    except Exception:
+        logger.exception(
+            "V654 failed recording ToS acceptance username=%s",
+            username,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Could not record acceptance",
+        )
+
+    logger.info(
+        "V654 ToS acceptance recorded username=%s accepted_at=%s",
+        username,
+        accepted_at,
+    )
+
+    email_status = "not_configured"
+
+    resend_api_key = os.environ.get("RESEND_API_KEY", "").strip()
+
+    if resend_api_key:
+        sender = os.environ.get(
+            "TOS_EMAIL_FROM",
+            "onboarding@resend.dev",
+        ).strip()
+
+        recipient = os.environ.get(
+            "TOS_EMAIL_TO",
+            "privastreamsolutions@gmail.com",
+        ).strip()
+
+        subject = (
+            f"[Privastream ToS] {username} accepted at {accepted_at}"
+        )
+
+        email_text = "\n".join([
+            "Privastream Cinema Terms of Service acceptance",
+            "",
+            f"Username: {username}",
+            f"Account email: {user.get('email') or 'Not set'}",
+            f"Accepted: {accepted_at}",
+            f"ToS Version: {payload.tos_version or 'unknown'}",
+            f"App Version: {payload.app_version or 'unknown'}",
+            f"Device: {payload.device_info or 'unknown'}",
+            f"IP: {client_ip or 'unknown'}",
+            f"User Agent: {user_agent or 'unknown'}",
+        ])
+
+        try:
+            http_client = await get_shared_http_client()
+
+            response = await http_client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "from": sender,
+                    "to": [recipient],
+                    "subject": subject,
+                    "text": email_text,
+                },
+                timeout=15.0,
+            )
+
+            if 200 <= response.status_code < 300:
+                email_status = "sent"
+
+                logger.info(
+                    "V654 ToS email sent username=%s status=%s",
+                    username,
+                    response.status_code,
+                )
+            else:
+                email_status = f"failed_http_{response.status_code}"
+
+                logger.warning(
+                    "V654 ToS email failed username=%s status=%s body=%s",
+                    username,
+                    response.status_code,
+                    response.text[:500],
+                )
+
+        except Exception as exc:
+            email_status = "failed_exception"
+
+            logger.warning(
+                "V654 ToS email exception username=%s error=%s",
+                username,
+                type(exc).__name__,
+            )
+
+    else:
+        logger.warning(
+            "V654 RESEND_API_KEY missing; acceptance retained username=%s",
+            username,
+        )
+
+    # Acceptance succeeds even if the notification email did not.
+    return {
+        "ok": True,
+        "recorded_at": accepted_at,
+        "email_status": email_status,
+    }
+
 # ==================== ADMIN USER MANAGEMENT ====================
 
 @api_router.get("/admin/users", response_model=List[UserResponse])
