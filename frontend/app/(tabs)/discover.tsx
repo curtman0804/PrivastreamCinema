@@ -1830,14 +1830,66 @@ function ContinueWatchingItem({
 
       {/* Title below poster */}
       <View style={styles.continueTitleContent}>
-        <Text style={styles.continueTitleText} numberOfLines={2}>
-          {item.title}
-        </Text>
+        {/* V653E_CW_REPEAT_PREFIX_FIX
+            Keep one authoritative S#/E# line directly below the poster.
+            Some saved CW titles contain the same episode prefix more than
+            once (example: "S1E3 - S1E3 - Anatomy Park"). Strip every
+            repeated copy of THIS item's exact S#/E# prefix from the start. */}
         {item.season != null && item.episode != null && item.season > 0 && item.episode > 0 && (
           <Text style={styles.continueEpisode}>
             S{item.season} E{item.episode}
           </Text>
         )}
+
+        <Text style={styles.continueTitleText} numberOfLines={2}>
+          {(() => {
+            const rawTitle = String(item.title || '');
+
+            const normalizedTitle = rawTitle
+              .normalize('NFKC')
+              .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            if (
+              item.season != null &&
+              item.episode != null &&
+              item.season > 0 &&
+              item.episode > 0
+            ) {
+              const s = String(item.season);
+              const e = String(item.episode);
+
+              /*
+               * V653E:
+               *   S1E3 - Anatomy Park
+               *   S1E3 - S1E3 - Anatomy Park
+               *   S01 E03: S1E3 - Anatomy Park
+               *
+               * all become:
+               *   Anatomy Park
+               */
+              const repeatedEpisodePrefix = new RegExp(
+                '^(?:\\s*S\\s*0*' +
+                  s +
+                  '\\s*E\\s*0*' +
+                  e +
+                  '\\s*[^A-Za-z0-9]*)+',
+                'i'
+              );
+
+              const cleanTitle = normalizedTitle
+                .replace(repeatedEpisodePrefix, '')
+                .trim();
+
+              if (cleanTitle) {
+                return cleanTitle;
+              }
+            }
+
+            return normalizedTitle || rawTitle;
+          })()}
+        </Text>
       </View>
     </View>
   );
