@@ -26,6 +26,7 @@ import { useNavigation, CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import Constants from 'expo-constants';
+import { getDevicePlaybackCapabilities } from '../../../src/native/devicePlaybackCapabilities';
 import { useContentStore, getMetaCache, setMetaCache, hydrateMetaFromDisk } from '../../../src/store/contentStore';
 import { v311Perf } from '../../../src/utils/v311_perf'; // V311_PERF_PROFILER
 
@@ -58,6 +59,12 @@ import {
 import { Alert as _V176cAlert } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
+
+// V659_DYNAMIC_DEVICE_CAPABILITIES_DIAG
+const _v659DeviceCaps = getDevicePlaybackCapabilities();
+try {
+  console.log('[V659_CAPS]', JSON.stringify(_v659DeviceCaps));
+} catch (_) {}
 
 // Stremio-style animated indeterminate loading bar. Renders a thin gold
 // segment that slides across a dark track. Pure Animated.Value so it runs
@@ -1255,8 +1262,16 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
 
     // V651: tracker/release language spellings that the base parser
     // does not reliably identify.
+    /*
+     * V665H_PLDUB_FOREIGN_GATE
+     *
+     * Runtime proof: tracker release token "PLDUB" is Polish-dubbed
+     * content but was not recognized by the strict automatic-language
+     * wall. Keep it fallback/manual-only when English/neutral exists.
+     */
     if (
       /\bDUBBING[\s._-]+(?:PL|POL|POLISH)\b/.test(t) ||
+      /\bPLDUB\b/.test(t) ||
       /\bLEKTOR\b/.test(t) ||
       /\bPOLISH\b/.test(t) ||
       /\bPOLSKI\b/.test(t) ||
@@ -1299,6 +1314,231 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
   }
 
   /*
+   * V665_DEVICE_AWARE_AUTOPICK
+   *
+   * One native capability profile drives automatic stream selection.
+   * No model-name blacklist and no global Fire TV penalty.
+   *
+   * Automatic priority:
+   *   English -> SDR -> device-safe resolution -> supported video codec
+   *   -> supported audio -> reliability.
+   *
+   * Manual stream cards remain untouched.
+   */
+  const _v665Caps: any = _v659DeviceCaps;
+
+  const _v665MemoryClassMb =
+    Number(_v665Caps?.memoryClassMb || 0);
+
+  const _v665IsTv =
+    _v665Caps?.isTelevision === true;
+
+  const _v665DisplayWidth =
+    Number(_v665Caps?.display?.maxWidth || 0);
+
+  const _v665DisplayHeight =
+    Number(_v665Caps?.display?.maxHeight || 0);
+
+  const _v665DisplayIs4k =
+    _v665DisplayWidth >= 3840 &&
+    _v665DisplayHeight >= 2160;
+
+  const _v665HasVideoCaps = !!(
+    _v665Caps?.video?.h264 ||
+    _v665Caps?.video?.hevc ||
+    _v665Caps?.video?.vp9 ||
+    _v665Caps?.video?.av1
+  );
+
+  const _v665AudioCaps: any =
+    _v665Caps?.audio || {};
+
+  const _v665HasAudioCaps = [
+    'aac',
+    'ac3',
+    'eac3',
+    'eac3Joc',
+    'opus',
+    'dts',
+    'dtsHd',
+    'trueHd',
+  ].some(
+    (k: string) =>
+      typeof _v665AudioCaps?.[k] === 'boolean'
+  );
+
+  const _v665HasH264 =
+    Number(_v665Caps?.video?.h264?.decoderCount || 0) > 0;
+
+  const _v665HasHevc =
+    Number(_v665Caps?.video?.hevc?.decoderCount || 0) > 0;
+
+  const _v665HasVp9 =
+    Number(_v665Caps?.video?.vp9?.decoderCount || 0) > 0;
+
+  const _v665HasAv1 =
+    Number(_v665Caps?.video?.av1?.decoderCount || 0) > 0;
+
+  const _v665H264Can4k =
+    _v665Caps?.video?.h264?.supports4k30 === true ||
+    _v665Caps?.video?.h264?.supports4k60 === true;
+
+  const _v665HevcCan4k =
+    _v665Caps?.video?.hevc?.supports4k30 === true ||
+    _v665Caps?.video?.hevc?.supports4k60 === true;
+
+  const _v665Vp9Can4k =
+    _v665Caps?.video?.vp9?.supports4k30 === true ||
+    _v665Caps?.video?.vp9?.supports4k60 === true;
+
+  const _v665Av1Can4k =
+    _v665Caps?.video?.av1?.supports4k30 === true ||
+    _v665Caps?.video?.av1?.supports4k60 === true;
+
+  // Preserve the proven V662 constrained-TV boundary.
+  const _v665LowMemoryTv =
+    _v665IsTv &&
+    _v665MemoryClassMb > 0 &&
+    _v665MemoryClassMb <= 192 &&
+    _v665HasH264;
+
+  // Strong 4K TVs can promote 4K only when the actual stream codec
+  // is explicitly reported as 4K-capable by this device.
+  const _v665DeviceCanPrefer4k =
+    _v665IsTv &&
+    !_v665LowMemoryTv &&
+    _v665DisplayIs4k &&
+    _v665HasVideoCaps;
+
+  const _v665CanAuto4kStream = (s: any): boolean => {
+    if (!_v665DeviceCanPrefer4k) return false;
+
+    const t = blob(s);
+
+    if (/\b(?:H\.?264|AVC|X264)\b/.test(t)) {
+      return _v665HasH264 && _v665H264Can4k;
+    }
+
+    if (/\b(?:H\.?265|HEVC|X265)\b/.test(t)) {
+      return _v665HasHevc && _v665HevcCan4k;
+    }
+
+    if (/\bVP9\b/.test(t)) {
+      return _v665HasVp9 && _v665Vp9Can4k;
+    }
+
+    if (/\bAV1\b/.test(t)) {
+      return _v665HasAv1 && _v665Av1Can4k;
+    }
+
+    // Unknown codec: do not guess that automatic 4K is safe.
+    return false;
+  };
+
+  // Automatic playback prefers SDR/no-HDR.
+  // HDR cards remain available manually and become auto fallback only
+  // if this title has no usable SDR candidate.
+  const _v665SdrPool = pool.filter(
+    (s: any) =>
+      !(parseStreamInfo(s) as any)?.isHDR
+  );
+
+  const _v665UsingSdr =
+    _v665SdrPool.length > 0;
+
+  if (_v665UsingSdr) {
+    pool = _v665SdrPool;
+  }
+
+  /*
+   * V665A_KNOWN_UNSUPPORTED_VIDEO_WALL
+   *
+   * Automatic playback must not choose an explicitly advertised codec
+   * or resolution that this device explicitly reports it cannot decode
+   * when another compatible candidate exists.
+   *
+   * Unknown/untagged codecs are NOT treated as unsupported.
+   * Manual stream cards remain untouched.
+   */
+  const _v665aKnownVideoUnsupported = (s: any): boolean => {
+    if (!_v665HasVideoCaps) return false;
+
+    const t = blob(s);
+    const info: any = parseStreamInfo(s);
+    const q = String(info?.quality || '');
+
+    const checkCaps = (caps: any): boolean => {
+      // Advertised codec but no native decoder entry.
+      if (!caps) return true;
+
+      const decoderCount =
+        Number(caps?.decoderCount || 0);
+
+      if (decoderCount <= 0) {
+        return true;
+      }
+
+      // Only reject resolution capability when native reporting gives
+      // us an explicit boolean answer. Null/unknown is not rejection.
+      if (q === '4K') {
+        const has4kAnswer =
+          typeof caps?.supports4k30 === 'boolean' ||
+          typeof caps?.supports4k60 === 'boolean';
+
+        if (
+          has4kAnswer &&
+          caps?.supports4k30 !== true &&
+          caps?.supports4k60 !== true
+        ) {
+          return true;
+        }
+      }
+
+      if (q === '1080p') {
+        if (
+          typeof caps?.supports1080p30 === 'boolean' &&
+          caps?.supports1080p30 !== true
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    if (/\b(?:H\.?264|AVC|X264)\b/.test(t)) {
+      return checkCaps(_v665Caps?.video?.h264);
+    }
+
+    if (/\b(?:H\.?265|HEVC|X265)\b/.test(t)) {
+      return checkCaps(_v665Caps?.video?.hevc);
+    }
+
+    if (/\bVP9\b/.test(t)) {
+      return checkCaps(_v665Caps?.video?.vp9);
+    }
+
+    if (/\bAV1\b/.test(t)) {
+      return checkCaps(_v665Caps?.video?.av1);
+    }
+
+    // Codec not advertised: unknown, not unsupported.
+    return false;
+  };
+
+  const _v665aVideoSafePool = pool.filter(
+    (s: any) =>
+      !_v665aKnownVideoUnsupported(s)
+  );
+
+  const _v665aUsingVideoSafePool =
+    _v665aVideoSafePool.length > 0;
+
+  if (_v665aUsingVideoSafePool) {
+    pool = _v665aVideoSafePool;
+  }
+
+  /*
    * V652_COMPATIBLE_AUDIO_AUTOPICK
    *
    * V651 correctly created the English wall, but ranked TrueHD as the
@@ -1314,14 +1554,88 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
   const isAutoAudioUnsafe = (s: any): boolean => {
     const t = blob(s);
 
-    return (
-      /\bTRUE[\s._-]?HD\b/.test(t) ||
+    // If native audio reporting is unavailable, retain the proven
+    // V652 safe-audio behavior exactly.
+    if (!_v665HasAudioCaps) {
+      return (
+        /\bTRUE[\s._-]?HD\b/.test(t) ||
+        /\bDTS[\s._-]?X\b/.test(t) ||
+        /\bDTSX\b/.test(t) ||
+        /\bDTS[\s._-]?HD[\s._-]?MA\b/.test(t) ||
+        /\bDTS[\s._-]?HD\b/.test(t) ||
+        /\bDTS\b/.test(t)
+      );
+    }
+
+    const a: any = _v665AudioCaps;
+
+    if (/\bTRUE[\s._-]?HD\b/.test(t)) {
+      return a.trueHd !== true;
+    }
+
+    // Native capability module does not expose DTS-X separately.
+    if (
       /\bDTS[\s._-]?X\b/.test(t) ||
-      /\bDTSX\b/.test(t) ||
+      /\bDTSX\b/.test(t)
+    ) {
+      return true;
+    }
+
+    if (
       /\bDTS[\s._-]?HD[\s._-]?MA\b/.test(t) ||
-      /\bDTS[\s._-]?HD\b/.test(t) ||
-      /\bDTS\b/.test(t)
-    );
+      /\bDTS[\s._-]?HD\b/.test(t)
+    ) {
+      return a.dtsHd !== true;
+    }
+
+    if (/\bDTS\b/.test(t)) {
+      return a.dts !== true;
+    }
+
+    /*
+     * V665E_EAC3_ATMOS_JOC_GATE
+     *
+     * Runtime proof: eac3=true alone does not guarantee an
+     * E-AC3 Atmos/JOC track can initialize. Atmos over E-AC3/DDP
+     * requires native eac3Joc support for automatic selection.
+     */
+    if (
+      /\bATMOS\b/.test(t) &&
+      /\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)
+    ) {
+      return a.eac3 !== true || a.eac3Joc !== true;
+    }
+
+    /*
+     * V665G_GENERIC_ATMOS_CARRIER_GATE
+     *
+     * "Atmos" by itself does not identify whether the carrier is
+     * E-AC3/JOC, TrueHD, or something else. Automatic playback must
+     * not guess. Explicit supported carrier tags are handled above;
+     * unqualified Atmos remains manual/fallback-only.
+     */
+    if (/\bATMOS\b/.test(t)) {
+      return true;
+    }
+
+    if (/\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)) {
+      return a.eac3 !== true;
+    }
+
+    if (/\b(?:AC-?3|DD ?5)\b/.test(t)) {
+      return a.ac3 !== true;
+    }
+
+    if (/\bAAC\b/.test(t)) {
+      return a.aac !== true;
+    }
+
+    if (/\bOPUS\b/.test(t)) {
+      return a.opus !== true;
+    }
+
+    // Untagged audio remains eligible. Do not invent a codec.
+    return false;
   };
 
   const _v652SafeAudioPool = pool.filter(
@@ -1340,10 +1654,19 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       (parseStreamInfo(s) as any)?.quality || ''
     );
 
-    // User-selected automatic-play priority:
-    // 1080p is preferred over 4K.
+    /*
+     * V665 device-safe resolution ranking.
+     *
+     * 4K outranks 1080p only when this exact device and this exact
+     * advertised video codec are both proven 4K-capable.
+     *
+     * Constrained TVs and unknown devices retain 1080p-first.
+     */
+    if (q === '4K') {
+      return _v665CanAuto4kStream(s) ? 6 : 4;
+    }
+
     if (q === '1080p') return 5;
-    if (q === '4K')    return 4;
     if (q === '720p')  return 3;
     if (q === 'HD')    return 2;
     if (q === 'SD')    return 1;
@@ -1351,26 +1674,118 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
     return 0;
   };
 
+  /*
+   * V665D_SOURCE_MASTER_PRIORITY
+   *
+   * Equal-resolution automatic-selection preference:
+   *   WEB-DL > ordinary > BluRay/BDRip/BRRip/REMUX > DCPRip
+   *
+   * This is ranking only. Nothing is filtered and manual selection
+   * remains unchanged. HDR/SDR policy remains owned by V665.
+   */
+  const _v665bMasterRank = (s: any): number => {
+    const t = blob(s);
+
+    if (/\bDCP[\s._-]?RIP\b/.test(t)) {
+      return 0;
+    }
+
+    if (
+      /\b(?:BLURAY|BLU-RAY|BDRIP|BD-RIP|BRRIP|BR-RIP|REMUX)\b/.test(t)
+    ) {
+      return 1;
+    }
+
+    if (/\bWEB-?DL\b/.test(t)) {
+      return 3;
+    }
+
+    return 2;
+  };
+
   const audioRank = (s: any): number => {
     const t = blob(s);
 
-    // DD+ Atmos: retain Atmos when it is carried by the
-    // compatible EAC3/DDP family rather than TrueHD.
+    // Missing native capability data => preserve V652 ranking.
+    if (!_v665HasAudioCaps) {
+      if (
+        /\bATMOS\b/.test(t) &&
+        /\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)
+      ) {
+        return 100;
+      }
+
+      if (/\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)) return 90;
+      if (/\b(?:AC-?3|DD ?5)\b/.test(t))       return 80;
+      if (/\bAAC\b/.test(t))                   return 70;
+      if (/\bOPUS\b/.test(t))                  return 60;
+      if (/\bDTS\b/.test(t))                   return 30;
+      if (/\bTRUE[\s._-]?HD\b/.test(t))        return 20;
+
+      return 0;
+    }
+
+    const a: any = _v665AudioCaps;
+
+    if (
+      /\bTRUE[\s._-]?HD\b/.test(t) &&
+      a.trueHd === true
+    ) {
+      return 120;
+    }
+
+    if (
+      (
+        /\bDTS[\s._-]?HD[\s._-]?MA\b/.test(t) ||
+        /\bDTS[\s._-]?HD\b/.test(t)
+      ) &&
+      a.dtsHd === true
+    ) {
+      return 115;
+    }
+
     if (
       /\bATMOS\b/.test(t) &&
-      /\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)
+      /\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t) &&
+      a.eac3 === true
+    ) {
+      return a.eac3Joc === true ? 110 : 100;
+    }
+
+    if (
+      /\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t) &&
+      a.eac3 === true
     ) {
       return 100;
     }
 
-    if (/\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)) return 90;
-    if (/\b(?:AC-?3|DD ?5)\b/.test(t))       return 80;
-    if (/\bAAC\b/.test(t))                   return 70;
-    if (/\bOPUS\b/.test(t))                  return 60;
+    if (
+      /\bDTS\b/.test(t) &&
+      a.dts === true
+    ) {
+      return 90;
+    }
 
-    // These only participate if no known-safe candidate exists.
-    if (/\bDTS\b/.test(t))                   return 30;
-    if (/\bTRUE[\s._-]?HD\b/.test(t))        return 20;
+    if (
+      /\b(?:AC-?3|DD ?5)\b/.test(t) &&
+      a.ac3 === true
+    ) {
+      return 80;
+    }
+
+    if (
+      /\bAAC\b/.test(t) &&
+      a.aac === true
+    ) {
+      return 70;
+    }
+
+    if (
+      /\bOPUS\b/.test(t) &&
+      a.opus === true
+    ) {
+      return 60;
+    }
 
     return 0;
   };
@@ -1387,10 +1802,14 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
     if (/\bWEB-?DL\b/.test(t)) n += 700;
     else if (/\bWEB-?RIP\b/.test(t)) n += 350;
 
-    // Fire TV compatibility tiebreakers.
-    if (/\b(?:H\.?264|AVC|X264)\b/.test(t)) n += 250;
-    if (/\b(?:H\.?265|HEVC|X265)\b/.test(t)) n -= 100;
+    // V665 low-memory TV reliability tiebreaker.
+    // More capable devices do not inherit Fire TV codec penalties.
+    if (_v665LowMemoryTv) {
+      if (/\b(?:H\.?264|AVC|X264)\b/.test(t)) n += 250;
+      if (/\b(?:H\.?265|HEVC|X265)\b/.test(t)) n -= 100;
+    }
 
+    // SDR is already preferred by the V665 automatic-selection wall.
     if (info?.isHDR) n -= 150;
 
     if (
@@ -1408,16 +1827,64 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
     return n;
   };
 
+  /*
+   * V665_DEVICE_VIDEO_COMPAT_RANK
+   *
+   * Constrained TVs preserve V662's proven preference:
+   *   H264 > unknown > HEVC.
+   *
+   * Other devices rank codecs using their actual native decoder inventory.
+   * No stream is removed here.
+   */
+  const _v665VideoCompatRank = (s: any): number => {
+    if (!_v665HasVideoCaps) return 0;
+
+    const t = blob(s);
+
+    const isH264 =
+      /\b(?:H\.?264|AVC|X264)\b/.test(t);
+
+    const isHevc =
+      /\b(?:H\.?265|HEVC|X265)\b/.test(t);
+
+    const isVp9 =
+      /\bVP9\b/.test(t);
+
+    const isAv1 =
+      /\bAV1\b/.test(t);
+
+    if (_v665LowMemoryTv) {
+      if (isH264) return _v665HasH264 ? 4 : 0;
+      if (isHevc) return _v665HasHevc ? 1 : 0;
+      if (isVp9)  return _v665HasVp9  ? 2 : 0;
+      if (isAv1)  return _v665HasAv1  ? 2 : 0;
+
+      return 2;
+    }
+
+    if (isH264) return _v665HasH264 ? 3 : 0;
+    if (isHevc) return _v665HasHevc ? 3 : 0;
+    if (isVp9)  return _v665HasVp9  ? 3 : 0;
+    if (isAv1)  return _v665HasAv1  ? 3 : 0;
+
+    // Untagged video codec is unknown, not automatically unsupported.
+    return 2;
+  };
+
   const ranked = pool
     .map((s: any, i: number) => ({
       s,
       i,
       q: qualityRank(s),
+      m: _v665bMasterRank(s),
+      c: _v665VideoCompatRank(s),
       a: audioRank(s),
       r: reliabilityRank(s),
     }))
     .sort((x: any, y: any) =>
       (y.q - x.q) ||
+      (y.m - x.m) ||
+      (y.c - x.c) ||
       (y.a - x.a) ||
       (y.r - x.r) ||
       (x.i - y.i)
@@ -1432,6 +1899,18 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       '[V652 AUTO PICK]',
       'pool=' + (nonForeign.length > 0 ? 'ENGLISH' : 'FOREIGN_FALLBACK'),
       'audioPool=' + (_v652UsingSafeAudio ? 'SAFE' : 'UNSAFE_FALLBACK'),
+      'videoOrder=ENGLISH>SDR>Q>MASTER>C>A>R',
+      'master=' + pick.m,
+      'deviceProfile=' + (
+        _v665LowMemoryTv
+          ? 'LOW_MEMORY_TV_1080_H264'
+          : _v665DeviceCanPrefer4k
+            ? '4K_TV_DEVICE_AWARE'
+            : '1080_DEFAULT'
+      ),
+      'memoryClassMb=' + _v665MemoryClassMb,
+      'sdrPool=' + (_v665UsingSdr ? 'SDR' : 'HDR_FALLBACK'),
+      'videoCompat=' + pick.c,
       'english=' + nonForeign.length,
       'playable=' + playable.length,
       'quality=' + String(info?.quality || '?'),
@@ -2275,50 +2754,11 @@ export default function DetailsScreen() {
     }
   }, [id, type]);
 
-  /* V180_PREWARM â€” when sortedStreams populates, fire-and-forget POST to
-     /api/stream/start/<infoHash> for the top 3 cached candidates.  The
-     backend (v179b) writes the resolved PM URL to Redis, so by the time
-     the user clicks Play the status poll lands on "ready" immediately
-     instead of waiting through 8-12 s of "resolving".
-
-     Torrentio strips infoHash in debrid mode; pull the 40-hex hash out
-     of behaviorHints.bingeGroup (`torrentio|<hash>`) instead. */
-  const _v180_prewarmedRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (!sortedStreams || sortedStreams.length === 0) return;
-    try {
-      const _backend = (process.env.EXPO_PUBLIC_BACKEND_URL || "").replace(/\/$/, "");
-      if (!_backend) return;
-      let _kicked = 0;
-      for (let i = 0; i < sortedStreams.length && _kicked < 3; i++) {
-        const s: any = sortedStreams[i];
-        const _bh: any = s && s.behaviorHints;
-        let _hash: string = (s && s.infoHash) ? String(s.infoHash).toLowerCase() : "";
-        if (!_hash && _bh && typeof _bh.bingeGroup === "string") {
-          const _m = _bh.bingeGroup.match(/\b([0-9a-f]{40})\b/i);
-          if (_m) _hash = _m[1].toLowerCase();
-        }
-        if (!_hash || _hash.length !== 40) continue;
-        if (_v180_prewarmedRef.current.has(_hash)) continue;
-        _v180_prewarmedRef.current.add(_hash);
-        // Fire-and-forget â€” never await, never bubble errors.
-        try {
-          fetch(`${_backend}/api/stream/start/${_hash}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              season: (typeof season === "number") ? season : undefined,
-              episode: (typeof episode === "number") ? episode : undefined,
-            }),
-          }).catch(() => {});
-        } catch (_) {}
-        _kicked++;
-      }
-      if (_kicked > 0) {
-        console.log("[PREWARM v180] kicked", _kicked, "PM resolves for top cached streams");
-      }
-    } catch (_) { /* never break UI */ }
-  }, [sortedStreams]);
+  /* V656_DETAILS_PM_ONLY_PREWARM_OWNER
+   * Legacy V180 server prewarm removed.
+   * The active V291 hook below owns details-page prewarm through
+   * api.stream.start(), which resolves infoHash playback through Premiumize only.
+   */
 
   useEffect(() => {
     if (seasons.length === 0) return;
@@ -2596,89 +3036,10 @@ export default function DetailsScreen() {
     }
   }, [streams, isLoadingStreams]);
 
-  // PATCH_V151_PRERESOLVE â€” superset of v148.  Fire start_and_wait on the
-  // FIRST stream batch (no isLoadingStreams gate) and pre-warm the top TWO
-  // hashes in parallel so a late-arriving better stream is also ready.
-  //
-  // V291_DISABLED â€” this entire hook hits /api/stream/start_and_wait which
-  // is a backend endpoint that can no longer resolve PM after middle-
-  // isolation.  Each call hangs for the full 8s abort budget.  Killing it
-  // when a Premiumize key is present (the v291 hook above handles client-
-  // side pre-warm instead).
-  const preresolvedHashesRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (!streams || streams.length === 0) return;
-    // V291 â€” bail out entirely when PM key is set; v291 prewarm handles it.
-    (async () => {
-      try {
-        const _pmKey = await isPremiumizeConfigured();
-        if (_pmKey) {
-          false && console.log('[PRERESOLVE v151] skipped â€” PM key present, v291 prewarm handles this');
-          return;
-        }
-      } catch (_) {}
-    })();
-    const sorted = sortStreamsByLanguage(streams);
-    // Pre-resolve top 2 candidates that don't already have a URL
-    const targets = sorted.slice(0, 4).filter((s: any) => s && s.infoHash && !s.url).slice(0, 2);
-    if (targets.length === 0) {
-      // All top candidates already cached â€” record their hashes and skip
-      for (const s of sorted.slice(0, 2)) {
-        if (s?.infoHash) preresolvedHashesRef.current.add(s.infoHash);
-      }
-      return;
-    }
-    // V291 â€” wrap the entire backend-fetch loop in an async PM-key check
-    // so we don't fire the dead start_and_wait endpoint at all.
-    (async () => {
-      try {
-        const _pmKey = await isPremiumizeConfigured();
-        if (_pmKey) return; // V291 â€” bail
-      } catch (_) {}
-    for (const tgt of targets) {
-      if (preresolvedHashesRef.current.has(tgt.infoHash)) continue;
-      preresolvedHashesRef.current.add(tgt.infoHash);
-      (async () => {
-        try {
-          const _authT = await AsyncStorage.getItem('auth_token');
-          const _bUrl = process.env.EXPO_PUBLIC_BACKEND_URL || (Constants.expoConfig as any)?.extra?.backendUrl || '';
-          if (!_bUrl) return;
-          const _hdrs: any = { 'Content-Type': 'application/json', ...(_authT ? { Authorization: `Bearer ${_authT}` } : {}) };
-          const _idP = ((id as string) || '').split(':');
-          const _sn = _idP.length >= 3 ? parseInt(_idP[_idP.length - 2], 10) : NaN;
-          const _en = _idP.length >= 3 ? parseInt(_idP[_idP.length - 1], 10) : NaN;
-          const _t0 = Date.now();
-          false && console.log('[PRERESOLVE v151] start_and_wait hash=', tgt.infoHash.slice(0, 8), 'fileIdx=', tgt.fileIdx ?? null);
-          const _ctrl = new AbortController();
-          const _to = setTimeout(() => _ctrl.abort(), 8000);
-          const _resp = await fetch(`${_bUrl}/api/stream/start_and_wait`, {
-            method: 'POST',
-            headers: _hdrs,
-            signal: _ctrl.signal,
-            body: JSON.stringify({
-              infoHash: tgt.infoHash,
-              fileIdx: tgt.fileIdx != null ? tgt.fileIdx : null,
-              filename: tgt.filename || null,
-              season: isNaN(_sn) ? null : _sn,
-              episode: isNaN(_en) ? null : _en,
-              timeout_ms: 7500,
-            }),
-          });
-          clearTimeout(_to);
-          const _data = await _resp.json().catch(() => ({}));
-          const _dt = Date.now() - _t0;
-          false && console.log('[PRERESOLVE v151] hash=', tgt.infoHash.slice(0, 8), 'status=', _data?.status, 'in', _dt, 'ms');
-        } catch (_e: any) {
-          if (_e?.name === 'AbortError') {
-            false && console.log('[PRERESOLVE v151] aborted (8s budget) hash=', tgt.infoHash.slice(0, 8));
-          } else {
-            false && console.log('[PRERESOLVE v151] failed:', _e?.message || _e);
-          }
-        }
-      })();
-    }
-    })(); // V291 â€” close PM-key gate IIFE
-  }, [streams, id]);
+  /* V656_DETAILS_REMOVE_LEGACY_PRERESOLVE
+   * Obsolete direct-backend pre-resolve hook removed.
+   * The active V291 hook above is the sole details-page PM prewarm path.
+   */
 
   const loadContent = async () => {
     try {
@@ -2745,48 +3106,11 @@ export default function DetailsScreen() {
       }
     } catch (_) {}
     if ((stream as any).upgrade_candidate && stream.infoHash && !stream.url) {
-      try {
-        setIsPlayLoading(true);
-        const _authT = await AsyncStorage.getItem('auth_token');
-        const _bUrl = process.env.EXPO_PUBLIC_BACKEND_URL || (Constants.expoConfig as any)?.extra?.backendUrl || '';
-        const _hdrs: any = { 'Content-Type': 'application/json', ...(_authT ? { Authorization: `Bearer ${_authT}` } : {}) };
-        const _idP = ((id as string) || '').split(':');
-        const _sn = _idP.length >= 3 ? parseInt(_idP[_idP.length - 2], 10) : NaN;
-        const _en = _idP.length >= 3 ? parseInt(_idP[_idP.length - 1], 10) : NaN;
-        console.log('[DETAILS v129] upgrade-race start hash=', stream.infoHash.slice(0, 8));
-        const _resp = await fetch(`${_bUrl}/api/stream/start_and_wait`, {
-          method: 'POST',
-          headers: _hdrs,
-          body: JSON.stringify({
-            infoHash: stream.infoHash,
-            fileIdx: stream.fileIdx != null ? stream.fileIdx : null,
-            filename: stream.filename || null,
-            season: isNaN(_sn) ? null : _sn,
-            episode: isNaN(_en) ? null : _en,
-            timeout_ms: 6500,
-          }),
-        });
-        const _data = await _resp.json().catch(() => ({}));
-        console.log('[DETAILS v129] upgrade-race status=', _data && _data.status);
-        if (_data && _data.status === 'ready' && _data.debrid_url) {
-          // Upgrade wins â€” inject resolved URL, fall through to existing path
-          stream = { ...stream, url: `${_bUrl}${_data.debrid_url}` } as any;
-          console.log('[DETAILS v129] UPGRADED (quality-upgraded)');
-        } else {
-          // Upgrade lost â€” pick top cached stream from this content's streams
-          const _cachedFallback = streams.find((s) => s !== stream && s.url && !(s as any).upgrade_candidate);
-          if (_cachedFallback) {
-            console.log('[DETAILS v129] upgrade lost â€” using cached fallback:', _cachedFallback.name || '');
-            stream = _cachedFallback;
-          } else {
-            console.log('[DETAILS v129] no cached fallback â€” proceeding with infoHash (player resolves)');
-          }
-        }
-      } catch (_v129e) {
-        console.log('[DETAILS v129] upgrade-race threw:', _v129e);
-      }
-      // Note: we deliberately leave setIsPlayLoading(true) â€” router.push
-      // will unmount this screen and the overlay vanishes with it.
+      // V656_DETAILS_PM_ONLY_UPGRADE
+      // Keep the selected upgrade candidate intact. The player resolves
+      // this infoHash through the Premiumize-only api.stream path.
+      setIsPlayLoading(true);
+      console.log('[V656] upgrade candidate proceeding to PM-only player resolve:', stream.infoHash.slice(0, 8));
     }
     const subtitleContentId = isEpisodePage 
       ? `${baseId}:${episodeSeason}:${episodeNumber}`
@@ -2853,6 +3177,89 @@ const nextEpisodeData = nextEpisode ? {
       ovSE: _v384SELine,
     };
     
+    /* V655_ANDROID_RUNTIME_CODEC_FALLBACKS
+     * Android codec support varies by device, firmware, and OS.
+     * Preserve alternate torrent candidates for PM-direct playback.
+     * player.tsx remains authoritative for actual runtime decode failure.
+     */
+    const buildRuntimeCodecFallbackTorrents = (excludeInfoHash?: string) => {
+      const excluded = String(excludeInfoHash || '').toLowerCase();
+      const seen = new Set<string>();
+
+      const seedCount = (s: any): number => {
+        try {
+          const raw = s?.seeders ?? s?.seed ?? s?.seeds ?? 0;
+          const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+          return isFinite(n) ? n : 0;
+        } catch {
+          return 0;
+        }
+      };
+
+      const candidates = streams.filter((s: any) => {
+        const hash = String(s?.infoHash || s?.info_hash || '').toLowerCase();
+        if (!hash) return false;
+        if (excluded && hash === excluded) return false;
+        if (seen.has(hash)) return false;
+        seen.add(hash);
+        return true;
+      });
+
+      const sorted = [...candidates].sort(
+        (a: any, b: any) => seedCount(b) - seedCount(a)
+      );
+
+      const healthy = sorted.filter((s: any) => seedCount(s) >= 10);
+      const unhealthy = sorted.filter((s: any) => seedCount(s) < 10);
+
+      /*
+       * V665F_FIRST_FALLBACK_POLICY_PARITY
+       *
+       * Preserve V655's proven health-first cascade, but choose the
+       * first runtime retry with the same V503/V665 device-aware policy
+       * used by normal Play. Remaining fallbacks keep their existing
+       * seed-ranked order.
+       */
+      const healthOrdered = [...healthy, ...unhealthy];
+      const policyPool = healthy.length > 0 ? healthy : unhealthy;
+      const policyFirst = _v503PickReliableAutoStream(policyPool);
+
+      const policyFirstHash = String(
+        policyFirst?.infoHash || policyFirst?.info_hash || ''
+      ).toLowerCase();
+
+      const fallbackOrder = policyFirstHash
+        ? [
+            policyFirst,
+            ...healthOrdered.filter(
+              (s: any) =>
+                String(s?.infoHash || s?.info_hash || '').toLowerCase() !==
+                policyFirstHash
+            ),
+          ]
+        : healthOrdered;
+
+      try {
+        console.log(
+          '[V665F FALLBACK POLICY]',
+          'healthy=' + healthy.length,
+          'unhealthy=' + unhealthy.length,
+          'first=' + policyFirstHash.slice(0, 12)
+        );
+      } catch (_) {}
+
+      return fallbackOrder
+        .slice(0, 60)
+        .map((s: any) => ({
+          infoHash: s.infoHash || s.info_hash,
+          fileIdx: s.fileIdx,
+          filename: s.filename || '',
+          sources: s.sources || [],
+          name: s.name || '',
+          title: s.title || '',
+        }));
+    };
+
     const buildFallbackUrls = async (): Promise<string[]> => {
       /* V354_HEALTHY_STREAMS_ONLY â€” Only include streams with enough seeders
          to actually stream reliably via /api/stream/torrent-video. Sort the
@@ -2966,7 +3373,41 @@ const nextEpisodeData = nextEpisode ? {
               return /(1xbet|melbet|mostbet|parimatch|ftcam|fxgg|hcam|ctcam|cam\.rip|hdcam|telesync|tsrip|tcrip|tc-?rip|cam-rip|new\.?source|sourceqr|sourcetv|x-?cam|hd-?cam)/i.test(_b);
             };
             const _v300_cleanCached = _v300_cachedCandidates.filter((c) => !_v300_isWm(c.stream));
-            const _v300_picked = (_v300_cleanCached.length > 0 ? _v300_cleanCached : _v300_cachedCandidates)[0];
+
+            /*
+             * V665C_PM_CACHE_POLICY_PARITY
+             *
+             * V300 must not replace the device-aware automatic selection
+             * with the first arbitrary cached sibling. Restrict to cached
+             * candidates first, preserve the existing watermark fallback,
+             * then apply the same V503/V665 policy used by normal Play.
+             */
+            const _v665cCachedPool =
+              _v300_cleanCached.length > 0
+                ? _v300_cleanCached
+                : _v300_cachedCandidates;
+
+            const _v665cPolicyStream =
+              _v503PickReliableAutoStream(
+                _v665cCachedPool.map((c) => c.stream)
+              );
+
+            const _v300_picked =
+              (_v665cPolicyStream
+                ? _v665cCachedPool.find(
+                    (c) => c.stream === _v665cPolicyStream
+                  )
+                : null) ||
+              _v665cCachedPool[0];
+
+            try {
+              console.log(
+                '[V665C PM POLICY]',
+                'cached=' + _v300_cachedCandidates.length,
+                'cleanCached=' + _v300_cleanCached.length,
+                'picked=' + String(_v300_picked?.hash || '').slice(0, 12)
+              );
+            } catch (_) {}
             if (_v300_picked) {
               // Resolve via directdl on the cached candidate.
               try {
@@ -3007,6 +3448,8 @@ const nextEpisodeData = nextEpisode ? {
                        list even for PM-directdl path so that if this direct
                        link fails to play, the cascade kicks in. */
                     const _v353_fb_v300 = await buildFallbackUrls();
+                    const _v655_tor_v300 = buildRuntimeCodecFallbackTorrents(_v300_picked.hash);
+                    console.log('[V655] PM-direct runtime torrent fallbacks=', _v655_tor_v300.length);
                     router.push({
                       pathname: '/player',
                       params: {
@@ -3015,7 +3458,8 @@ const nextEpisodeData = nextEpisode ? {
                         isLive: 'false',
                         contentType: cType,
                         contentId: subtitleContentId,
-                        fallbackStreams: JSON.stringify(_v353_fb_v300),
+                        fallbackStreams: _v655_tor_v300.length > 0 ? '[]' : JSON.stringify(_v353_fb_v300),
+                        fallbackTorrents: _v655_tor_v300.length > 0 ? JSON.stringify(_v655_tor_v300) : '',
                         backdrop: _v384OverlayUri, ..._v384Pass, /* V384 */
                         poster: content?.poster || '',
                         logo: content?.logo || '',
@@ -3111,6 +3555,8 @@ const nextEpisodeData = nextEpisode ? {
             // Got an absolute PM CDN URL â€” push to player directly.
             /* V353_ADD_FALLBACKS â€” see V300 comment above */
             const _v353_fb_v299 = await buildFallbackUrls();
+            const _v655_tor_v299 = buildRuntimeCodecFallbackTorrents(_v299_hash);
+            console.log('[V655] PM-direct runtime torrent fallbacks=', _v655_tor_v299.length);
             router.push({
               pathname: '/player',
               params: {
@@ -3119,7 +3565,8 @@ const nextEpisodeData = nextEpisode ? {
                 isLive: 'false',
                 contentType: cType,
                 contentId: subtitleContentId,
-                fallbackStreams: JSON.stringify(_v353_fb_v299),
+                fallbackStreams: _v655_tor_v299.length > 0 ? '[]' : JSON.stringify(_v353_fb_v299),
+                fallbackTorrents: _v655_tor_v299.length > 0 ? JSON.stringify(_v655_tor_v299) : '',
                 backdrop: _v384OverlayUri, ..._v384Pass, /* V384 */
                 poster: content?.poster || '',
                 logo: content?.logo || '',

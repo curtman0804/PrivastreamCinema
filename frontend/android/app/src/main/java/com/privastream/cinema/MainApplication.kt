@@ -25,6 +25,7 @@ class MainApplication : Application(), ReactApplication {
             PackageList(this).packages.apply {
               add(com.privastream.cinema.PSTVScrollViewPackage())
               add(com.privastream.cinema.PrivastreamTVRowPackage())
+              add(com.privastream.cinema.PrivastreamDeviceCapabilitiesPackage())
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())
             }

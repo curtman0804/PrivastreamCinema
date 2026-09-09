@@ -741,43 +741,33 @@ export const api = {
     },
   },
   stream: {
+    // V656_CLIENT_PM_ONLY_STREAMS
+    // infoHash/magnet playback may resolve through Premiumize only.
+    // Legacy Privastream /api/stream/* P2P endpoints are never called.
     start: async (infoHash: string, fileIdx?: number, filename?: string, sources?: string[], season?: number, episode?: number): Promise<{ status: string; info_hash: string }> => {
-      // V287_PM_MIDDLE_ISOLATION — if a Premiumize key is stored, resolve
-      // on-device.  Backend is never touched for this hash.
-      if (await _hasPMKey()) {
-        const h = _normHash(infoHash);
-        _kickPmResolve({
-          infoHash: h,
-          magnet: _findMagnet(sources),
-          season,
-          episode,
-        });
-        // V289D — return IMMEDIATELY.  Player will poll status() and see
-        // 'downloading' (spinner shown) until _pmResolved.has(h) flips
-        // to 'ready'.  Never block the UI thread on the PM resolve.
-        return { status: 'starting', info_hash: h };
+      const h = _normHash(infoHash);
+      if (!h) {
+        return { status: 'error', info_hash: h };
       }
-      const params = new URLSearchParams();
-      if (fileIdx !== undefined && fileIdx !== null) {
-        params.append('fileIdx', String(fileIdx));
+
+      if (!(await _hasPMKey())) {
+        console.warn(
+          '[V656] Premiumize is required for infoHash playback; server-side P2P is disabled',
+          h.slice(0, 8)
+        );
+        return { status: 'error', info_hash: h };
       }
-      if (filename) {
-        params.append('filename', filename);
-      }
-      const queryString = params.toString();
-      const url = `/api/stream/start/${infoHash}${queryString ? '?' + queryString : ''}`;
-      const body: any = {};
-      if (sources && sources.length > 0) {
-        body.sources = sources;
-      }
-      // Also put fileIdx, filename, season, episode in body for middleware
-      if (fileIdx !== undefined && fileIdx !== null) body.fileIdx = fileIdx;
-      if (filename) body.filename = filename;
-      if (season !== undefined) body.season = season;
-      if (episode !== undefined) body.episode = episode;
-      const response = await apiClient.post(url, body);
-      return response.data;
+
+      _kickPmResolve({
+        infoHash: h,
+        magnet: _findMagnet(sources),
+        season,
+        episode,
+      });
+
+      return { status: 'starting', info_hash: h };
     },
+
     status: async (infoHash: string, season?: number, episode?: number): Promise<{
       status: string;
       progress?: number;
@@ -789,12 +779,9 @@ export const api = {
       video_size?: number;
       downloaded?: number;
     }> => {
-      // V287_PM_MIDDLE_ISOLATION — short-circuit when PM has resolved.
-      // Critically we do NOT return `debrid_url` here (player concatenates
-      // BACKEND_URL with it).  Player will call getVideoUrl(infoHash) which
-      // returns the absolute Premiumize URL directly.
       const h = _normHash(infoHash);
       const k = _pmStateKey(h, season, episode);
+
       if (_pmResolved.has(k)) {
         return {
           status: 'ready',
@@ -805,6 +792,7 @@ export const api = {
           video_size: 1,
         };
       }
+
       if (_pmInFlight.has(k)) {
         return {
           status: 'downloading',
@@ -813,68 +801,46 @@ export const api = {
           peers: 0,
         };
       }
+
       if (_pmFailed.has(k)) {
-        return { status: 'error', progress: 0 };
+        return { status: 'error', progress: 0, peers: 0 };
       }
-      if (await _hasPMKey()) {
-        // Key set but resolve never kicked — return a soft "not_found" so
-        // the player retries / picks another stream rather than hammering
-        // the (now stripped) backend.
-        return { status: 'not_found', progress: 0 };
+
+      if (!(await _hasPMKey())) {
+        return { status: 'error', progress: 0, peers: 0 };
       }
-      const response = await apiClient.get(`/api/stream/status/${infoHash}`);
-      return response.data;
+
+      // Premiumize exists but this candidate was never started.
+      // The player may move to the next candidate; do not contact P2P backend.
+      return { status: 'not_found', progress: 0, peers: 0 };
     },
-    prewarm: async (infoHash: string, sources?: string[]): Promise<{ status: string }> => {
-      try {
-        const body: any = {};
-        if (sources && sources.length > 0) {
-          body.sources = sources;
-        }
-        const response = await apiClient.post(`/api/stream/prewarm/${infoHash}`, body);
-        return response.data;
-      } catch (err) {
-        return { status: 'failed' };
-      }
+
+    prewarm: async (_infoHash: string, _sources?: string[]): Promise<{ status: string }> => {
+      // Legacy torrent prewarm is intentionally disabled.
+      // Premiumize resolution begins when the stream candidate is started.
+      return { status: 'disabled' };
     },
-    getVideoUrl: (infoHash: string, fileIdx?: number, torrServerUrl?: string, season?: number, episode?: number): string => {
-      // V287_PM_MIDDLE_ISOLATION — if Premiumize has resolved this hash,
-      // return the absolute PM URL.  No backend prefix.
+
+    getVideoUrl: (infoHash: string, _fileIdx?: number, _torrServerUrl?: string, season?: number, episode?: number): string => {
       const h = _normHash(infoHash);
       const k = _pmStateKey(h, season, episode);
       const pmUrl = _pmResolved.get(k);
+
       if (pmUrl) return pmUrl;
 
-      if (torrServerUrl) {
-        const magnetLink = `magnet:?xt=urn:btih:${infoHash}`;
-        const idxParam = fileIdx !== undefined && fileIdx !== null ? `&index=${fileIdx}` : '&index=0';
-        return `${torrServerUrl}/stream?link=${encodeURIComponent(magnetLink)}${idxParam}&play`;
-      }
-      
-      // USE HARDCODED URL FOR VIDEO STREAMING
-      const baseUrl = Platform.OS === 'web' ? '' : BACKEND_URL;
-      const params = fileIdx !== undefined && fileIdx !== null ? `?fileIdx=${fileIdx}` : '';
-      return `${baseUrl}/api/stream/video/${infoHash}${params}`;
+      // Fail closed until Premiumize supplies an absolute playback URL.
+      // Never synthesize /api/stream/video or torrent-server URLs.
+      return '';
     },
-    seek: async (infoHash: string, positionBytes: number): Promise<{ status: string }> => {
-      try {
-        const response = await apiClient.post(`/api/stream/seek/${infoHash}`, {
-          position_bytes: positionBytes,
-        });
-        return response.data;
-      } catch (err) {
-        return { status: 'failed' };
-      }
+
+    seek: async (_infoHash: string, _positionBytes: number): Promise<{ status: string }> => {
+      // Premiumize CDN playback seeks directly in the media URL.
+      return { status: 'not_required' };
     },
-    prefetch: async (infoHash: string, positionBytes: number): Promise<{ status: string; wait_ms?: number }> => {
-      try {
-        const response = await apiClient.post(`/api/stream/prefetch/${infoHash}`, {
-          position_bytes: positionBytes,
-        }, { timeout: 35000 });
-        return response.data;
-      } catch (err) {
-        return { status: 'error' };
-      }
+
+    prefetch: async (_infoHash: string, _positionBytes: number): Promise<{ status: string; wait_ms?: number }> => {
+      // No torrent piece-prefetch operation exists in PM-only mode.
+      return { status: 'not_required' };
     },
   },
   debrid: {

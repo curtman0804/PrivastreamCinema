@@ -153,6 +153,10 @@ function SeekableProgressBar({
   const [scrubPosition, setScrubPosition] = useState<number | null>(null);
   const isDraggingRef = useRef(false);
   const lastScrubRef = useRef<number>(0);
+  // PHONE_SCRUB_ANCHORED_DRAG - preserve the thumb position when drag begins.
+  const dragStartPositionRef = useRef<number>(0);
+  const livePositionRef = useRef<number>(position);
+  livePositionRef.current = position;
 
   // V620C_SMOOTH_SCRUB
   // Coalesce pointer traffic to at most one React update/frame.
@@ -219,12 +223,22 @@ function SeekableProgressBar({
       try { onScrubChange?.(true); } catch (_) {}
       // V266_FIX — re-measure on grant in case layout shifted since mount.
       _measureBar();
-      const p = _v264TouchToPos(evt.nativeEvent.pageX ?? 0);
+      // PHONE_SCRUB_ANCHORED_DRAG - finger-down keeps the thumb exactly where it is.
+      const p = livePositionRef.current;
+      dragStartPositionRef.current = p;
       lastScrubRef.current = p;
       setScrubPosition(p);
     },
-    onPanResponderMove: (evt) => {
-      const p = _v264TouchToPos(evt.nativeEvent.pageX ?? 0);
+    onPanResponderMove: (evt, gestureState) => {
+      // PHONE_SCRUB_ANCHORED_DRAG - use finger travel, not the bad absolute bar X.
+      const w = barLayoutRef.current.width;
+      const delta = w > 0 && duration > 0
+        ? (gestureState.dx / w) * duration
+        : 0;
+      const p = Math.max(
+        0,
+        Math.min(duration, dragStartPositionRef.current + delta)
+      );
       lastScrubRef.current = p;
       v620cPendingRef.current = p;
 
@@ -2648,6 +2662,12 @@ export default function PlayerScreen() {
           break;
         case 'up':
         case 'down':
+          // V661_TV_PROGRESS_FOCUS_RESET_ON_VERTICAL_NAV
+          // Native focus moves vertically away from the seek bar. Clear the
+          // seek-only state here as well instead of depending solely on onBlur.
+          progressBarFocusedRef.current = false;
+          v621SeekTargetRef.current = null;
+          v621SeekLastAtRef.current = 0;
           // D-pad events - just show controls (focus navigation handled natively)
           break;
       }
@@ -2708,6 +2728,16 @@ export default function PlayerScreen() {
     if (!show && isScrubbingRef.current) {
       return;
     }
+
+    // V661_TV_PROGRESS_FOCUS_RESET_ON_HIDE
+    // The progress bar is conditionally unmounted with the controls.
+    // Never leave its parent focus/seek state alive after it disappears.
+    if (!show) {
+      progressBarFocusedRef.current = false;
+      v621SeekTargetRef.current = null;
+      v621SeekLastAtRef.current = 0;
+    }
+
     // Clear any existing timeout
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
@@ -3291,52 +3321,10 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
       // Fallback torrents are held in reserve and tried sequentially via
       // tryNextFallbackTorrent() if the primary errors out.
 
-      /* v132-fast-resolve */
-      // v132: try the synchronous start_and_wait endpoint first.  For
-      // PM-cached streams this returns the resolved URL in 200-800ms,
-      // letting us skip the entire torrent-status poll race.  Fall
-      // through to the old behaviour if PM says "buffering" / "uncached".
-      try {
-        const _v132Token = await AsyncStorage.getItem('auth_token');
-        const _v132Backend = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-        const _v132Resp = await fetch(`${_v132Backend}/api/stream/start_and_wait`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(_v132Token ? { Authorization: `Bearer ${_v132Token}` } : {}),
-          },
-          body: JSON.stringify({
-            infoHash,
-            fileIdx: validFileIdx != null ? validFileIdx : null,
-            filename: filename || null,
-            season: seasonNum != null ? seasonNum : null,
-            episode: episodeNum != null ? episodeNum : null,
-            timeout_ms: 5000,
-          }),
-        });
-        const _v132Data = await _v132Resp.json().catch(() => ({}));
-        console.log('[PLAYER v132] start_and_wait status=', _v132Data && _v132Data.status);
-        if (_v132Data && _v132Data.status === 'ready' && _v132Data.debrid_url) {
-          const _v132Url = `${_v132Backend}${_v132Data.debrid_url}`;
-          console.log('[PLAYER v132] FAST RESOLVE: PM ready in budget, skipping poll race');
-          setDownloadProgress(100);
-          setLoadingStatus('');
-          if (_v132Data.video_size) videoFileSizeRef.current = _v132Data.video_size;
-          videoRetryCountRef.current = 0;
-          setStreamUrl(_v132Url);
-          // Keep PM warm via the same lightweight keep-alive the slow path uses
-          pollIntervalRef.current = setTimeout(function _v132KeepAlive() {
-            if (continuePollingRef.current) {
-              api.stream.status(infoHash, seasonNum, episodeNum).catch(() => {});
-              pollIntervalRef.current = setTimeout(_v132KeepAlive, 10000) as any;
-            }
-          }, 10000) as any;
-          return;
-        }
-      } catch (_v132e) {
-        console.log('[PLAYER v132] start_and_wait threw, falling through:', _v132e);
-      }
-
+      // V656_PLAYER_PM_ONLY_PRIMARY
+      // Direct backend /api/stream/start_and_wait bypass removed.
+      // api.stream.start below is the single infoHash entry point and
+      // resolves through Premiumize only under V656.
       await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources, seasonNum, episodeNum);
       
       // Quality ranking: higher = better
@@ -3549,7 +3537,6 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
       let pollCount = 0;
       let smoothProgress = 5;
       let videoUrlSet = false;
-      let hadPeersOnce = false;
       let startTime = Date.now();
       
       const pollStatus = async () => {
@@ -3561,7 +3548,6 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
           const dlRate = status.download_rate || 0;
           setPeers(peerCount);
           setDownloadSpeed(dlRate);
-          if (peerCount > 0) hadPeersOnce = true;
           const elapsedSec = (Date.now() - startTime) / 1000;
           
           if (status.video_size && status.video_size > 0) {
@@ -3625,12 +3611,6 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
             return;
           }
           
-          if (elapsedSec > 15 && !hadPeersOnce && !videoUrlSet) {
-            console.log('[PLAYER] Fallback torrent: no peers after 15s');
-            if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
-            tryNextFallbackTorrent();
-            return;
-          }
           
           if (elapsedSec > 30 && !videoUrlSet) {
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
@@ -3909,10 +3889,6 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
           </View>
         ) : (
           <View style={styles.videoContainer}>
-            <Pressable 
-              style={StyleSheet.absoluteFill}
-              onPress={handleVideoTap}
-            >
               <Video
                 ref={videoRef}
                 source={{ 
@@ -4080,7 +4056,11 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                   <ActivityIndicator size="large" color="#FFFFFF" />
                 </View>
               )}
-            </Pressable>
+            {/* PHONE_TOUCH_SIBLING_OVERLAY */}
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={handleVideoTap}
+            />
 
 
             {/* V427_AUTOSYNC - toast telling the user we auto-adjusted subs */}

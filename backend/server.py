@@ -89,6 +89,29 @@ app = FastAPI(title="PrivastreamCinema API")
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# ==================== V656 SERVER-SIDE P2P KILL SWITCH ====================
+# V656_SERVER_P2P_KILL_SWITCH
+# Production infrastructure must never initiate BitTorrent/P2P.
+# Block the legacy singular /api/stream/* surface before route execution.
+# The plural /api/streams discovery API is intentionally unaffected.
+_V656_P2P_PATH_PREFIX = "/api/stream/"
+
+@app.middleware("http")
+async def v656_block_server_side_p2p(request: Request, call_next):
+    if request.url.path.startswith(_V656_P2P_PATH_PREFIX):
+        logger.warning(
+            "V656_P2P_BLOCK method=%s path=%s",
+            request.method,
+            request.url.path,
+        )
+        return Response(
+            content='{"detail":"Server-side P2P streaming is disabled"}',
+            status_code=410,
+            media_type="application/json",
+        )
+    return await call_next(request)
+# ================== /V656 SERVER-SIDE P2P KILL SWITCH ====================
+
 # Security
 security = HTTPBearer()
 
@@ -692,7 +715,10 @@ class TorrentStreamer:
             logger.error(f"Disk cleanup error: {e}")
 
 # Global torrent streamer instance
-torrent_streamer = TorrentStreamer()
+# V656_NO_SERVER_P2P_RUNTIME
+# Privastream-controlled infrastructure must not initialize a BitTorrent engine.
+# Legacy route implementations remain below but are blocked by the V656 HTTP kill switch.
+torrent_streamer = None
 
 # Background cleanup task
 async def periodic_cleanup():
@@ -887,7 +913,11 @@ def _v178a_acquire_leader_lock() -> bool:
 # ═══ /V178A_LEADER_LOCK ═════════════════════════════════════════════════
 
 def start_torrent_server():
-    """Start the torrent-stream server as a subprocess"""
+    """Legacy torrent-server startup is permanently disabled by V656."""
+    logger.warning("V656: embedded torrent-server startup blocked")
+    return False
+
+    # Legacy implementation retained below for reference only.
     global _torrent_server_process
     
     torrent_server_dir = Path(__file__).parent.parent / 'torrent-server'
@@ -957,13 +987,10 @@ async def create_default_admin():
     gunicorn deployments do not spawn N torrent-servers fighting over
     port 8002.  The admin upsert is idempotent and runs in every
     worker so each has a primed cache."""
-    _v178a_leader = _v178a_acquire_leader_lock()
-    if _v178a_leader:
-        logger.info(f"V178A: PID {os.getpid()} is the LEADER — managing torrent-server + periodic cleanup")
-        start_torrent_server()
-    else:
-        logger.info(f"V178A: PID {os.getpid()} is a FOLLOWER — skipping torrent-server start")
-
+    # V656_P2P_STARTUP_DISABLED
+    # No leader election, torrent-server subprocess, or torrent cleanup task.
+    _v178a_leader = False
+    logger.info("V656: server-side P2P runtime disabled")
     existing = await db.users.find_one({"username": "choyt"})
     if not existing:
         admin_user = User(
@@ -982,11 +1009,8 @@ async def create_default_admin():
             )
             logger.info("Updated choyt to admin status")
     
-    # Start periodic cleanup for torrent downloads (LEADER ONLY — V178A)
-    if _v178a_leader:
-        asyncio.create_task(periodic_cleanup())
-
-
+    # V656: periodic torrent cleanup is not scheduled because
+    # no server-side torrent runtime is permitted.
 
 # ==================== FILE VIEWER ROUTES ====================
 from fastapi.responses import HTMLResponse
@@ -1486,7 +1510,7 @@ async def premiumize_cache_check(request: PremiumizeCacheCheckRequest, current_u
     if not items:
         raise HTTPException(status_code=400, detail="No cache-check items supplied")
     premiumize_key = get_premiumize_key_for_user(current_user)
-    form = [("apikey", premiumize_key)] + [("items[]", item) for item in items]
+    form = {"apikey": premiumize_key, "items[]": items}
     try:
         client = await get_shared_http_client()
         response = await client.post("https://www.premiumize.me/api/cache/check", data=form, timeout=10.0)

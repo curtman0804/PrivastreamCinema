@@ -16,6 +16,7 @@ import {
   type AudioTrack,
   type VideoSource,
 } from 'expo-video';
+import { getDevicePlaybackCapabilities } from '../native/devicePlaybackCapabilities';
 
 // V616A_EXPO_VIDEO_COMPAT
 //
@@ -94,6 +95,11 @@ export const ExpoVideoCompat = forwardRef<
   // audio track, never override their choice for the current source.
   const v616cUserSelectedAudioRef = useRef(false);
 
+  // V658_STALE_PLAYTOEND_GUARD
+  // Ignore playToEnd emitted by the outgoing native source while
+  // replaceAsync() is installing the next movie/episode/stream.
+  const v658SourceReplacingRef = useRef(false);
+
   statusCallbackRef.current = onPlaybackStatusUpdate;
   errorCallbackRef.current = onError;
 
@@ -104,6 +110,32 @@ export const ExpoVideoCompat = forwardRef<
     p.loop = false;
     p.volume = 1;
     p.muted = false;
+
+    // V664_LOW_MEMORY_TV_BUFFER_CAP
+    // Media3's automatic A/V target is ~137.5 MiB. On 192 MiB TV heaps
+    // that can exhaust the process during high-bitrate 4K playback.
+    // Cap only genuinely low-memory televisions; higher-memory TVs and
+    // phones/tablets retain Media3's normal automatic buffering.
+    const caps = getDevicePlaybackCapabilities();
+    const memoryClassMb = Number(caps?.memoryClassMb ?? 0);
+    const isLowMemoryTv =
+      caps?.isTelevision === true &&
+      Number.isFinite(memoryClassMb) &&
+      memoryClassMb > 0 &&
+      memoryClassMb <= 192;
+
+    if (isLowMemoryTv) {
+      p.bufferOptions = {
+        maxBufferBytes: 64 * 1024 * 1024,
+        prioritizeTimeOverSizeThreshold: false,
+      };
+
+      console.log(
+        '[V664_LOW_MEMORY_TV_BUFFER_CAP]',
+        'memoryClassMb=' + memoryClassMb,
+        'maxBufferBytes=67108864'
+      );
+    }
   });
 
   const uri = String(source?.uri || '');
@@ -208,6 +240,7 @@ export const ExpoVideoCompat = forwardRef<
     let cancelled = false;
 
     const replaceSource = async () => {
+      v658SourceReplacingRef.current = true;
       try {
         // New movie/episode/stream => English becomes the preferred
         // starting language again.
@@ -250,6 +283,11 @@ export const ExpoVideoCompat = forwardRef<
           );
 
           errorCallbackRef.current?.(error);
+        }
+      } finally {
+        // A cancelled effect means a newer replacement owns the ref.
+        if (!cancelled) {
+          v658SourceReplacingRef.current = false;
         }
       }
     };
@@ -418,6 +456,10 @@ export const ExpoVideoCompat = forwardRef<
     player,
     'playToEnd',
     () => {
+      if (v658SourceReplacingRef.current) {
+        console.log('[V658_STALE_PLAYTOEND_GUARD] ignored playToEnd during source replacement');
+        return;
+      }
       emitCompatStatus(true);
     }
   );
@@ -432,6 +474,9 @@ export const ExpoVideoCompat = forwardRef<
       // The video surface is visual only. TV focus belongs exclusively
       // to the existing overlay controls.
       focusable={false}
+      // V657_PHONE_TOUCH_THROUGH_VIDEO
+      // Native VideoView is visual-only; parent Pressable owns touch controls.
+      pointerEvents="none"
     />
   );
 });
