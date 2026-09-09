@@ -539,6 +539,13 @@ export const api = {
             if (!result?.streams?.length) throw new Error('No streams');
             return result;
           }), 2500),
+          /*
+           * V670_DIRECT_TORRENTIO_GRACE
+           *
+           * Direct Torrentio is the preferred source. Give it enough time
+           * to return a valid result instead of converting a slightly slow
+           * response into a zero-stream retry cycle.
+           */
           withTimeout(fetch(torrentioUrl, {
             method: 'GET', headers: { 'Accept': 'application/json' },
           }).then(async r => {
@@ -546,7 +553,7 @@ export const api = {
             const result = await r.json();
             if (!result?.streams?.length) throw new Error('No streams');
             return result;
-          }), 2500),
+          }), 5000),
           withTimeout(apiClient.get(`/api/addon-proxy/torrentio/${type}/${id}`).then(r => {
             if (!r.data?.streams?.length) throw new Error('No streams');
             return r.data;
