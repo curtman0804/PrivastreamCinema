@@ -141,11 +141,19 @@ apiClient.interceptors.response.use(
     const status = error.response?.status || 0;
     const isServerError = status >= 500 || status === 0;
 
-    // V351: skip retry entirely for /api/addon-proxy/tpb/* — that proxy is
-    // notoriously flaky, and retries stall navigation 4.5s per click.
-    // Let the caller handle the failure (they can fall through to other addons).
+    /*
+     * V666_STREAM_DISCOVERY_CALLER_OWNS_RETRY
+     *
+     * getAllStreams already runs Backend, Torrentio and TPB+ concurrently,
+     * and contentStore owns the full-fetch retry path when every source is
+     * empty. Do not let the generic Axios interceptor create another hidden
+     * retry chain underneath stream discovery.
+     */
     const _v351url = (config.url || '') + '';
-    if (/\/api\/addon-proxy\/(tpb|thepiratebay)/i.test(_v351url)) {
+    if (
+      /\/api\/streams\//i.test(_v351url) ||
+      /\/api\/addon-proxy\/(torrentio|tpb|thepiratebay)\//i.test(_v351url)
+    ) {
       return Promise.reject(error);
     }
 
@@ -346,7 +354,19 @@ export const api = {
       
       const cacheKey = `streams:${type}:${id}`;
       const cached = (api as any)._streamCache?.get(cacheKey);
-      if (cached && Date.now() - cached.time < 120000) {
+
+      /*
+       * V668_NO_ZERO_STREAM_CACHE
+       *
+       * A failed discovery pass must never poison retries. Only a
+       * non-empty stream snapshot is a valid stream-cache hit.
+       */
+      if (
+        cached &&
+        Array.isArray(cached.streams) &&
+        cached.streams.length > 0 &&
+        Date.now() - cached.time < 120000
+      ) {
         console.log(`[STREAMS] CACHE HIT: ${cached.streams.length} streams`);
         if (onProgress) onProgress(cached.streams);
         return { streams: cached.streams };
@@ -437,7 +457,17 @@ export const api = {
         });
       };
       
-      const backendPromise = apiClient.get(`/api/streams/${type}/${encodedId}`)
+      /*
+       * V669_STREAM_BACKEND_FAST_FAIL
+       *
+       * Torrentio/TPB own fast stream discovery. Do not let a dead
+       * /api/streams request hold the entire discovery attempt for the
+       * global 15-second Axios timeout. V406 owns retries on an empty pass.
+       */
+      const backendPromise = apiClient.get(
+        `/api/streams/${type}/${encodedId}`,
+        { timeout: 3000 }
+      )
         .then(r => {
           const streams = filterForEpisode(r.data.streams || []);
           mergeAndNotify(streams, 'Backend');
@@ -469,7 +499,22 @@ export const api = {
       allStreams.sort((a: any, b: any) => (b.seeders || 0) - (a.seeders || 0));
       
       if (!((api as any)._streamCache)) (api as any)._streamCache = new Map();
-      (api as any)._streamCache.set(cacheKey, { streams: allStreams, time: Date.now() });
+      /*
+       * V668_NO_ZERO_STREAM_CACHE_WRITE
+       *
+       * A zero-stream discovery result is transient failure state, not
+       * reusable data. Leave the cache empty so contentStore's retry can
+       * perform a real discovery pass.
+       */
+      if (allStreams.length > 0) {
+        (api as any)._streamCache.set(
+          cacheKey,
+          { streams: allStreams, time: Date.now() }
+        );
+      } else {
+        (api as any)._streamCache.delete(cacheKey);
+        console.log('[V668] refusing zero-stream cache for', cacheKey);
+      }
       
       return { streams: allStreams };
     },
