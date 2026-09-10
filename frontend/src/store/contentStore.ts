@@ -673,14 +673,15 @@ export const useContentStore = create<ContentState>((set, get) => ({
       return cached;
     }
 
-    // 2. Mark loading + watchdog
+    /*
+     * V666_NO_PREMATURE_ZERO_STREAM_STATE
+     *
+     * Keep Details in "Finding Streams..." until the active fetch actually
+     * settles or progressive results arrive. The old 30s watchdog changed
+     * isLoadingStreams=false while network retries were still running,
+     * causing the first visit to render "0 Streams" before late results landed.
+     */
     _setIf({ isLoadingStreams: true, streams: [], error: null });
-    setTimeout(() => {
-      if (get().isLoadingStreams && _myToken === _v190AbortToken) {
-        console.log('[ContentStore v190] watchdog clearing isLoadingStreams after 30s');
-        _setIf({ isLoadingStreams: false, error: null });
-      }
-    }, 30000);
 
     // 3. Disk cache
     const diskCached = await loadStreamsFromDisk(cacheKey);
