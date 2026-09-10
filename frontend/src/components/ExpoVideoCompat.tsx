@@ -100,6 +100,16 @@ export const ExpoVideoCompat = forwardRef<
   // replaceAsync() is installing the next movie/episode/stream.
   const v658SourceReplacingRef = useRef(false);
 
+  // V690C_NEAR_EOF_FALLBACK
+  //
+  // Some progressive files can stop a few hundred milliseconds
+  // before Media3 publishes STATE_ENDED. Preserve expo-av's
+  // didJustFinish contract without treating a manual pause as EOF.
+  const v690IntentionalPauseRef = useRef(false);
+  const v690EndFallbackFiredRef = useRef(false);
+  const v690EndFallbackTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
   statusCallbackRef.current = onPlaybackStatusUpdate;
   errorCallbackRef.current = onError;
 
@@ -159,9 +169,14 @@ export const ExpoVideoCompat = forwardRef<
 
         statusCallbackRef.current?.({
           // Compatibility fields consumed by player.tsx.
+          // V695_END_STATUS_COMPAT
+          // expo-video maps a clean STATE_ENDED to status='idle'
+          // before emitting playToEnd. A successful didJustFinish
+          // callback must remain an expo-av-style loaded status.
           isLoaded:
-            playerStatus !== 'idle' &&
-            playerStatus !== 'error',
+            didJustFinish ||
+            (playerStatus !== 'idle' &&
+              playerStatus !== 'error'),
 
           isPlaying: !!player.playing,
 
@@ -188,14 +203,160 @@ export const ExpoVideoCompat = forwardRef<
     [player]
   );
 
+  const v690ClearEndFallbackTimer = useCallback(() => {
+    if (v690EndFallbackTimerRef.current) {
+      clearTimeout(v690EndFallbackTimerRef.current);
+      v690EndFallbackTimerRef.current = null;
+    }
+  }, []);
+
+  const v690ScheduleNearEofFallback = useCallback(
+    (reason: 'timeUpdate' | 'playingChange') => {
+      if (
+        extensionHint === 'm3u8' ||
+        v658SourceReplacingRef.current ||
+        v690IntentionalPauseRef.current ||
+        v690EndFallbackFiredRef.current ||
+        v690EndFallbackTimerRef.current
+      ) {
+        return;
+      }
+
+      const startCurrentSeconds =
+        Number(player.currentTime);
+
+      const startDurationSeconds =
+        Number(player.duration);
+
+      if (
+        !Number.isFinite(startCurrentSeconds) ||
+        !Number.isFinite(startDurationSeconds) ||
+        startDurationSeconds <= 0
+      ) {
+        return;
+      }
+
+      const startRemainingMs =
+        (startDurationSeconds - startCurrentSeconds) * 1000;
+
+      if (
+        startRemainingMs < -250 ||
+        startRemainingMs > 750
+      ) {
+        return;
+      }
+
+      const startPositionMs =
+        Math.round(startCurrentSeconds * 1000);
+
+      v690EndFallbackTimerRef.current =
+        setTimeout(() => {
+          v690EndFallbackTimerRef.current = null;
+
+          if (
+            v658SourceReplacingRef.current ||
+            v690IntentionalPauseRef.current ||
+            v690EndFallbackFiredRef.current
+          ) {
+            return;
+          }
+
+          const finalCurrentSeconds =
+            Number(player.currentTime);
+
+          const finalDurationSeconds =
+            Number(player.duration);
+
+          if (
+            !Number.isFinite(finalCurrentSeconds) ||
+            !Number.isFinite(finalDurationSeconds) ||
+            finalDurationSeconds <= 0
+          ) {
+            return;
+          }
+
+          const finalRemainingMs =
+            (finalDurationSeconds - finalCurrentSeconds) * 1000;
+
+          if (
+            finalRemainingMs < -250 ||
+            finalRemainingMs > 750
+          ) {
+            return;
+          }
+
+          const finalPositionMs =
+            Math.round(finalCurrentSeconds * 1000);
+
+          const progressedMs =
+            finalPositionMs - startPositionMs;
+
+          const stopped =
+            !player.playing;
+
+          const stalled =
+            progressedMs <= 150;
+
+          const status =
+            String(player.status || '');
+
+          /*
+           * Do not convert an actual buffering condition near EOF
+           * into completion. If playback resumes, a later timeUpdate
+           * can arm a fresh watchdog.
+           */
+          if (
+            status === 'loading' ||
+            (!stopped && !stalled)
+          ) {
+            return;
+          }
+
+          v690EndFallbackFiredRef.current = true;
+
+          console.log(
+            '[V690C_NEAR_EOF_FALLBACK] didJustFinish=true',
+            'reason=' + reason,
+            'startPositionMs=' + startPositionMs,
+            'positionMs=' + finalPositionMs,
+            'durationMs=' +
+              Math.round(finalDurationSeconds * 1000),
+            'remainingMs=' +
+              Math.round(finalRemainingMs),
+            'progressedMs=' + progressedMs,
+            'playing=' +
+              String(player.playing),
+            'status=' + status
+          );
+
+          emitCompatStatus(true);
+        }, 1800);
+    },
+    [
+      player,
+      extensionHint,
+      emitCompatStatus,
+    ]
+  );
+
+  useEffect(() => {
+    return () => {
+      v690ClearEndFallbackTimer();
+    };
+  }, [v690ClearEndFallbackTimer]);
+
   useImperativeHandle(
     ref,
     () => ({
       pauseAsync: async () => {
+        v690IntentionalPauseRef.current = true;
+        v690ClearEndFallbackTimer();
         player.pause();
       },
 
       playAsync: async () => {
+        v690IntentionalPauseRef.current = false;
+        v690ClearEndFallbackTimer();
         player.play();
       },
 
@@ -241,6 +402,9 @@ export const ExpoVideoCompat = forwardRef<
 
     const replaceSource = async () => {
       v658SourceReplacingRef.current = true;
+      v690IntentionalPauseRef.current = false;
+      v690EndFallbackFiredRef.current = false;
+      v690ClearEndFallbackTimer();
       try {
         // New movie/episode/stream => English becomes the preferred
         // starting language again.
@@ -339,13 +503,20 @@ export const ExpoVideoCompat = forwardRef<
     'timeUpdate',
     () => {
       emitCompatStatus(false);
+      v690ScheduleNearEofFallback('timeUpdate');
     }
   );
 
   useEventListener(
     player,
     'playingChange',
-    () => {
+    ({ isPlaying }) => {
+      if (isPlaying) {
+        v690ClearEndFallbackTimer();
+      } else {
+        v690ScheduleNearEofFallback('playingChange');
+      }
+
       emitCompatStatus(false);
     }
   );
@@ -460,6 +631,19 @@ export const ExpoVideoCompat = forwardRef<
         console.log('[V658_STALE_PLAYTOEND_GUARD] ignored playToEnd during source replacement');
         return;
       }
+
+      v690ClearEndFallbackTimer();
+
+      if (v690EndFallbackFiredRef.current) {
+        return;
+      }
+
+      v690EndFallbackFiredRef.current = true;
+
+      console.log(
+        '[V690C_NATIVE_PLAYTOEND] didJustFinish=true'
+      );
+
       emitCompatStatus(true);
     }
   );

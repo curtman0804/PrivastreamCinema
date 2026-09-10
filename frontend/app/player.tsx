@@ -1127,6 +1127,12 @@ export default function PlayerScreen() {
   const _v391DoneRef = useRef(false);
   const _v500IntroMarkerRef = useRef<{ startMs: number; endMs: number } | null>(null);
   const _v500IntroLookupRef = useRef('');
+  /* V685_DYNAMIC_SEGMENTS - release-specific credits marker. */
+  const _v685CreditsMarkerRef = useRef<{
+    startMs: number;
+    endMs: number;
+    confidence?: number;
+  } | null>(null);
   /* V393_REMOTE_DEBUG - no-adb diagnostics: reports skip-intro state to the
      patch server so issues can be debugged without logcat. Remove later. */
   const _v393LastRef = useRef('');
@@ -1273,55 +1279,338 @@ export default function PlayerScreen() {
   const durationRef = useRef(duration);
   durationRef.current = duration;
 
-  /* V500_EXACT_INTRO_MARKERS - episode-specific TheIntroDB markers only.
-     No learned/fixed-duration fallback and no automatic skipping. */
+  /* V685_DYNAMIC_SEGMENTS
+     Dynamic release fingerprints are authoritative.
+     TheIntroDB remains intro-only fallback. Playback is never
+     blocked while markers are being resolved. */
   useEffect(() => {
     _v500IntroLookupRef.current = '';
     _v500IntroMarkerRef.current = null;
+    _v685CreditsMarkerRef.current = null;
     _v391DoneRef.current = false;
     _v391SkipVisibleRef.current = false;
     setV391SkipVisible(false);
   }, [contentId, seriesId, season, episode]);
 
   const _v500EnsureIntroMarker = (actualDurationMs: number) => {
-    if (contentType !== 'series' || !actualDurationMs || actualDurationMs <= 0) return;
+    if (
+      contentType !== 'series' ||
+      !actualDurationMs ||
+      actualDurationMs <= 0
+    ) return;
+
     const cidParts = String(contentId || '').split(':');
     const imdbId = String(seriesId || cidParts[0] || '').trim();
-    const seasonNum = parseInt(String(season || (cidParts.length >= 3 ? cidParts[cidParts.length - 2] : '')), 10);
-    const episodeNum = parseInt(String(episode || (cidParts.length >= 3 ? cidParts[cidParts.length - 1] : '')), 10);
-    if (!/^tt\d{7,8}$/i.test(imdbId) || !Number.isFinite(seasonNum) || !Number.isFinite(episodeNum)) return;
+
+    const seasonNum = parseInt(
+      String(
+        season ||
+        (cidParts.length >= 3
+          ? cidParts[cidParts.length - 2]
+          : '')
+      ),
+      10
+    );
+
+    const episodeNum = parseInt(
+      String(
+        episode ||
+        (cidParts.length >= 3
+          ? cidParts[cidParts.length - 1]
+          : '')
+      ),
+      10
+    );
+
+    if (
+      !/^tt\d{7,8}$/i.test(imdbId) ||
+      !Number.isFinite(seasonNum) ||
+      !Number.isFinite(episodeNum)
+    ) return;
+
     const durationMs = Math.round(actualDurationMs);
-    const lookupKey = imdbId + ':' + seasonNum + ':' + episodeNum + ':' + Math.round(durationMs / 1000);
+
+    const lookupKey =
+      imdbId + ':' +
+      seasonNum + ':' +
+      episodeNum + ':' +
+      Math.round(durationMs / 1000);
+
     if (_v500IntroLookupRef.current === lookupKey) return;
+
     _v500IntroLookupRef.current = lookupKey;
+
     (async () => {
+      let dynamicIntroLoaded = false;
+      const episodeContentId =
+        imdbId + ':' + seasonNum + ':' + episodeNum;
+
+      /*
+       * The backend reads the authenticated user's saved
+       * watch_progress URL. Retry briefly in case playback has
+       * started before the first progress save reaches Mongo.
+       */
       try {
-        const markerUrl = 'https://api.theintrodb.org/v3/media?imdb_id=' + encodeURIComponent(imdbId) + '&season=' + seasonNum + '&episode=' + episodeNum + '&duration_ms=' + durationMs;
-        const response = await fetch(markerUrl, { headers: { Accept: 'application/json' } });
-        if (!response.ok) throw new Error('INTRODB_HTTP_' + response.status);
-        const data = await response.json();
+        const token = await AsyncStorage.getItem('auth_token');
+
+        if (token) {
+          const backend =
+            (
+              process.env.EXPO_PUBLIC_BACKEND_URL ||
+              'http://5.161.49.99:8001'
+            ).replace(/\/$/, '');
+
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            await new Promise(resolve =>
+              setTimeout(resolve, attempt === 1 ? 1500 : 2000)
+            );
+
+            if (_v500IntroLookupRef.current !== lookupKey) return;
+
+            try {
+              const response = await fetch(
+                backend + '/api/playback/segments/analyze',
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                  },
+                  body: JSON.stringify({
+                    content_id: episodeContentId,
+                  }),
+                }
+              );
+
+              if (_v500IntroLookupRef.current !== lookupKey) return;
+
+              if (!response.ok) {
+                console.log(
+                  '[SEGMENTS V685] Dynamic HTTP ' +
+                  response.status +
+                  ' attempt=' + attempt +
+                  ' for ' + episodeContentId
+                );
+
+                continue;
+              }
+
+              const data: any = await response.json();
+
+              if (_v500IntroLookupRef.current !== lookupKey) return;
+
+              if (data?.status !== 'ready') {
+                console.log(
+                  '[SEGMENTS V685] Dynamic status=' +
+                  String(data?.status || 'unknown') +
+                  ' for ' + episodeContentId
+                );
+
+                break;
+              }
+
+              const dynamicIntro = data?.intro;
+
+              if (dynamicIntro) {
+                const startMs = Math.round(
+                  Number(dynamicIntro.start_ms)
+                );
+
+                const endMs = Math.round(
+                  Number(dynamicIntro.end_ms)
+                );
+
+                if (
+                  Number.isFinite(startMs) &&
+                  Number.isFinite(endMs) &&
+                  startMs >= 0 &&
+                  endMs > startMs &&
+                  endMs <= durationMs
+                ) {
+                  _v500IntroMarkerRef.current = {
+                    startMs,
+                    endMs,
+                  };
+
+                  dynamicIntroLoaded = true;
+
+                  console.log(
+                    '[SEGMENTS V685] Dynamic intro ' +
+                    episodeContentId + ' ' +
+                    startMs + '-' + endMs +
+                    'ms confidence=' +
+                    String(dynamicIntro.confidence ?? '')
+                  );
+                }
+              }
+
+              const dynamicCredits = data?.credits;
+
+              if (dynamicCredits) {
+                const startMs = Math.round(
+                  Number(dynamicCredits.start_ms)
+                );
+
+                const rawEndMs = Math.round(
+                  Number(dynamicCredits.end_ms)
+                );
+
+                const endMs = Number.isFinite(rawEndMs)
+                  ? Math.min(rawEndMs, durationMs)
+                  : durationMs;
+
+                if (
+                  Number.isFinite(startMs) &&
+                  startMs >= 0 &&
+                  startMs < endMs &&
+                  startMs < durationMs
+                ) {
+                  _v685CreditsMarkerRef.current = {
+                    startMs,
+                    endMs,
+                    confidence: Number(
+                      dynamicCredits.confidence
+                    ),
+                  };
+
+                  console.log(
+                    '[SEGMENTS V685] Dynamic credits ' +
+                    episodeContentId +
+                    ' start=' + startMs +
+                    'ms end=' + endMs +
+                    'ms confidence=' +
+                    String(dynamicCredits.confidence ?? '')
+                  );
+                }
+              }
+
+              break;
+            } catch (attemptError: any) {
+              console.log(
+                '[SEGMENTS V685] Dynamic attempt failed ' +
+                attempt + ':',
+                String(
+                  attemptError?.message ||
+                  attemptError
+                )
+              );
+            }
+          }
+        }
+      } catch (error: any) {
+        console.log(
+          '[SEGMENTS V685] Dynamic lookup failed:',
+          String(error?.message || error)
+        );
+      }
+
+      if (dynamicIntroLoaded) return;
+
+      /* Intro-only TheIntroDB fallback. */
+      try {
         if (_v500IntroLookupRef.current !== lookupKey) return;
-        const intros = Array.isArray(data?.intro) ? data.intro : [];
+
+        const markerUrl =
+          'https://api.theintrodb.org/v3/media?imdb_id=' +
+          encodeURIComponent(imdbId) +
+          '&season=' + seasonNum +
+          '&episode=' + episodeNum +
+          '&duration_ms=' + durationMs;
+
+        const response = await fetch(
+          markerUrl,
+          {
+            headers: {
+              Accept: 'application/json',
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            'INTRODB_HTTP_' + response.status
+          );
+        }
+
+        const data = await response.json();
+
+        if (_v500IntroLookupRef.current !== lookupKey) return;
+
+        const intros =
+          Array.isArray(data?.intro)
+            ? data.intro
+            : [];
+
         const segment = intros.find((x: any) => {
-          const startMs = x?.start_ms == null ? 0 : Number(x.start_ms);
+          const startMs =
+            x?.start_ms == null
+              ? 0
+              : Number(x.start_ms);
+
           const endMs = Number(x?.end_ms);
-          return Number.isFinite(startMs) && Number.isFinite(endMs) && startMs >= 0 && endMs > startMs && endMs <= durationMs;
+
+          return (
+            Number.isFinite(startMs) &&
+            Number.isFinite(endMs) &&
+            startMs >= 0 &&
+            endMs > startMs &&
+            endMs <= durationMs
+          );
         });
+
         if (!segment) {
           _v500IntroMarkerRef.current = null;
-          console.log('[INTRO V500] No exact marker for ' + imdbId + ' S' + seasonNum + 'E' + episodeNum);
+
+          console.log(
+            '[INTRO V500] No fallback marker for ' +
+            imdbId +
+            ' S' + seasonNum +
+            'E' + episodeNum
+          );
+
           return;
         }
-        const startMs = Math.round(segment.start_ms == null ? 0 : Number(segment.start_ms));
-        const endMs = Math.round(Number(segment.end_ms));
-        _v500IntroMarkerRef.current = { startMs, endMs };
-        console.log('[INTRO V500] Exact marker ' + imdbId + ' S' + seasonNum + 'E' + episodeNum + ' ' + startMs + '-' + endMs + 'ms duration=' + durationMs);
+
+        const startMs = Math.round(
+          segment.start_ms == null
+            ? 0
+            : Number(segment.start_ms)
+        );
+
+        const endMs = Math.round(
+          Number(segment.end_ms)
+        );
+
+        _v500IntroMarkerRef.current = {
+          startMs,
+          endMs,
+        };
+
+        console.log(
+          '[INTRO V500] Fallback marker ' +
+          imdbId +
+          ' S' + seasonNum +
+          'E' + episodeNum +
+          ' ' + startMs +
+          '-' + endMs +
+          'ms duration=' + durationMs
+        );
       } catch (error: any) {
-        if (_v500IntroLookupRef.current === lookupKey) _v500IntroMarkerRef.current = null;
-        console.log('[INTRO V500] Lookup failed:', String(error?.message || error));
+        if (
+          _v500IntroLookupRef.current === lookupKey
+        ) {
+          _v500IntroMarkerRef.current = null;
+        }
+
+        console.log(
+          '[INTRO V500] Fallback lookup failed:',
+          String(error?.message || error)
+        );
       }
     })();
   };
+
   const progressBarFocusedRef = useRef(false);
   const showControlsWithTimeoutRef = useRef<(() => void) | null>(null);
   // V266_STICKY_CONTROLS_DURING_SCRUB — set true while the user is
@@ -1691,10 +1980,8 @@ export default function PlayerScreen() {
     episode?: string;
   }>(null);
   
-  // Credits detection settings - show popup near the end
-  const CREDITS_TIME_REMAINING_MS = 5000; // Show popup when 5 seconds remaining
-  const CREDITS_PERCENTAGE = 0.98; // Or when 98% complete
-  const MIN_DURATION_FOR_CREDITS = 180000; // Only detect credits for videos > 3 minutes
+  /* V685_DYNAMIC_CREDITS - no fixed 98% / 5-second fallback. */
+  const _v685NaturalEndRef = useRef(false);
 
   /* v136-prewarm */
   // Pre-warm the next episode's stream cache AND start_and_wait as soon
@@ -1710,6 +1997,7 @@ export default function PlayerScreen() {
       countdownRef.current = null;
     }
     creditsShownRef.current = false;
+    _v685NaturalEndRef.current = false;
     preWarmStartedRef.current = '';
     preResolveRef.current = null;
     setShowNextEpisodeModal(false);
@@ -2031,39 +2319,51 @@ export default function PlayerScreen() {
           + 's resume=' + String(parsedResumePosition));
       }
 
-      // Credits detection - show "Up Next" popup when credits start
+      // V685_DYNAMIC_CREDITS - validated marker only.
       const currentDuration = status.durationMillis || 0;
       const currentPosition = status.positionMillis || 0;
-      const timeRemaining = currentDuration - currentPosition;
-      const percentComplete = currentDuration > 0 ? currentPosition / currentDuration : 0;
-      
-      // Only show credits popup for series with next episode, and only once
+      const creditsMarker = _v685CreditsMarkerRef.current;
+
       if (
-        nextEpisodeId && 
-        contentType === 'series' && 
-        !creditsShownRef.current && 
+        nextEpisodeId &&
+        contentType === 'series' &&
+        creditsMarker &&
+        !creditsShownRef.current &&
         !showNextEpisodeModal &&
-        currentDuration > MIN_DURATION_FOR_CREDITS && // Video must be > 5 min
-        (timeRemaining <= CREDITS_TIME_REMAINING_MS || percentComplete >= CREDITS_PERCENTAGE)
+        currentPosition >= creditsMarker.startMs &&
+        currentPosition < creditsMarker.endMs
       ) {
-        console.log(`[PLAYER] Credits detected! Time remaining: ${(timeRemaining/1000).toFixed(0)}s, ${(percentComplete*100).toFixed(1)}% complete`);
+        console.log(
+          '[SEGMENTS V685] Credits boundary reached at ' +
+          Math.round(currentPosition / 1000) +
+          's marker=' +
+          Math.round(creditsMarker.startMs / 1000) +
+          's confidence=' +
+          String(creditsMarker.confidence ?? '')
+        );
+
         creditsShownRef.current = true;
         showCreditsPopup();
       }
-      
-      // Check if playback ended
+
+      // V685_NATURAL_END - file completion always returns
+      // to the CURRENT episode Details screen.
       if (status.didJustFinish) {
-        console.log('[PLAYER] Playback ended');
+        console.log(
+          '[SEGMENTS V685] Natural playback end -> current Details'
+        );
+
+        _v685NaturalEndRef.current = true;
         setIsEnded(true);
-        // If credits popup was never shown and there's a next episode, show it NOW
-        if (nextEpisodeId && contentType === 'series' && !creditsShownRef.current && !showNextEpisodeModal) {
-          console.log('[PLAYER] Playback finished without credits popup — showing now');
-          creditsShownRef.current = true;
-          showCreditsPopup();
-        } else if (!showNextEpisodeModal) {
-          // Modal was dismissed or never shown, go back
-          _v389SmartBack(); /* V389_SMART_BACK */
+
+        if (countdownRef.current) {
+          clearInterval(countdownRef.current);
+          countdownRef.current = null;
         }
+
+        setShowNextEpisodeModal(false);
+        _v389SmartBack(); /* V389_SMART_BACK */
+        return;
       }
     }
   };
@@ -2245,6 +2545,9 @@ export default function PlayerScreen() {
     // Start countdown - auto-play next episode when countdown ends
     countdownRef.current = setInterval(() => {
       setCountdown(prev => {
+        if (_v685NaturalEndRef.current) {
+          return 0;
+        }
         if (prev <= 1) {
           // Time's up - AUTO-PLAY NEXT EPISODE
           if (countdownRef.current) clearInterval(countdownRef.current);
@@ -2301,17 +2604,24 @@ export default function PlayerScreen() {
   }, [router, nextEpisodeId, infoHash, nextEpisodeTitle]);
   
   // Handle playback end - show modal or go back (fallback for short videos)
+  /* V685_NATURAL_END - web parity. */
   const handlePlaybackEnd = useCallback(() => {
-    if (nextEpisodeId && contentType === 'series' && !creditsShownRef.current) {
-      // Credits weren't detected (short video), show popup now
-      showCreditsPopup();
-    } else if (!showNextEpisodeModal) {
-      // No next episode or popup was dismissed - go back
-      _v389SmartBack(); /* V389_SMART_BACK */
+    if (_v685NaturalEndRef.current) return;
+
+    _v685NaturalEndRef.current = true;
+
+    console.log(
+      '[SEGMENTS V685] Web natural playback end -> current Details'
+    );
+
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
     }
-  }, [nextEpisodeId, contentType, router, showNextEpisodeModal, showCreditsPopup]);
-  
-  // Dismiss credits popup (keep watching) - DON'T reset creditsShownRef
+
+    setShowNextEpisodeModal(false);
+    _v389SmartBack(); /* V389_SMART_BACK */
+  }, [_v389SmartBack]);  // Dismiss credits popup (keep watching) - DON'T reset creditsShownRef
   const dismissCreditsPopup = () => {
     // Clear countdown
     if (countdownRef.current) {
@@ -3799,28 +4109,38 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                 const video = e.target;
                 const currentTime = video.currentTime * 1000; // Convert to ms
                 const totalDuration = video.duration * 1000; // Convert to ms
-                const timeRemaining = totalDuration - currentTime;
-                const percentComplete = totalDuration > 0 ? currentTime / totalDuration : 0;
                 
                 // Update position for subtitles
                 setPosition(currentTime);
                 setDuration(totalDuration);
+                _v500EnsureIntroMarker(totalDuration);
                 
                 // Save watch progress periodically
                 if (!video.paused && totalDuration > 0) {
                   saveWatchProgress(currentTime, totalDuration);
                 }
                 
-                // Credits detection for web
+                // V685_DYNAMIC_CREDITS - web parity.
+                const creditsMarker =
+                  _v685CreditsMarkerRef.current;
+
                 if (
-                  nextEpisodeId && 
-                  contentType === 'series' && 
-                  !creditsShownRef.current && 
+                  nextEpisodeId &&
+                  contentType === 'series' &&
+                  creditsMarker &&
+                  !creditsShownRef.current &&
                   !showNextEpisodeModal &&
-                  totalDuration > MIN_DURATION_FOR_CREDITS &&
-                  (timeRemaining <= CREDITS_TIME_REMAINING_MS || percentComplete >= CREDITS_PERCENTAGE)
+                  currentTime >= creditsMarker.startMs &&
+                  currentTime < creditsMarker.endMs
                 ) {
-                  console.log(`[PLAYER-WEB] Credits detected! Time remaining: ${(timeRemaining/1000).toFixed(0)}s, ${(percentComplete*100).toFixed(1)}% complete`);
+                  console.log(
+                    '[SEGMENTS V685] Web credits boundary reached at ' +
+                    Math.round(currentTime / 1000) +
+                    's marker=' +
+                    Math.round(creditsMarker.startMs / 1000) +
+                    's'
+                  );
+
                   creditsShownRef.current = true;
                   showCreditsPopup();
                 }
