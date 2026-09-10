@@ -49,7 +49,8 @@ import * as _blobCache from '../utils/blobCache'; // V348_BLOB_CACHE
 })();
 
 import { api, ContentItem, DiscoverResponse, Addon, LibraryResponse, SearchResult, Stream } from '../api/client';
-import { getCached, setCache, CACHE_DURATIONS } from '../utils/cache';
+import { getCached, setCache, clearCache, CACHE_DURATIONS } from '../utils/cache';
+import { getParentalModeEnabled } from '../utils/parentalControls'; // V706C2I2
 
 // ============================================================
 // MODULE-LEVEL CACHES — persist across screen mounts/unmounts
@@ -458,6 +459,17 @@ export const useContentStore = create<ContentState>((set, get) => ({
     // posters can never bleed into choyt's session.
     await _v244RefreshUserScope();
 
+    // V706C2I2_STORE_PARENTAL_POLICY
+    // Persistent Discover cache is scoped by BOTH user and policy state.
+    const _v706c2i2ParentalModeEnabled =
+      await getParentalModeEnabled();
+
+    const _v706c2i2DiscoverCacheKey =
+      'discover_data:' +
+      _v244CurrentUserId +
+      ':parental:' +
+      (_v706c2i2ParentalModeEnabled ? '1' : '0');
+
     const currentData = get().discoverData;
 
     // Background background-refresh path (already have data)
@@ -481,7 +493,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
           } catch (_) {}
           set({ discoverData: data, discoverDataUid: _v244CurrentUserId }); // v245 ownership
           // v244 — scope the disk cache key to the current user.
-          setCache('discover_data:' + _v244CurrentUserId, data, CACHE_DURATIONS.MEDIUM);
+          setCache(_v706c2i2DiscoverCacheKey, data, CACHE_DURATIONS.MEDIUM);
         }
       } catch (err) {
         console.log('[ContentStore] Background refresh error:', err);
@@ -492,7 +504,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     // First open: try local cache for instant paint
     if (!currentData && !forceRefresh) {
       // v244 — read SCOPED cache so we never load the previous user's data.
-      const cached = await getCached<DiscoverResponse>('discover_data:' + _v244CurrentUserId);
+      const cached = await getCached<DiscoverResponse>(_v706c2i2DiscoverCacheKey);
       if (cached) {
         set({ discoverData: cached, discoverDataUid: _v244CurrentUserId, isLoadingDiscover: false }); // v245
       }
@@ -523,7 +535,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
         } else {
           set({ discoverData: firstPage, discoverDataUid: _v244CurrentUserId, isLoadingDiscover: false }); // v245
           // v244 — scoped key.
-          setCache('discover_data:' + _v244CurrentUserId, firstPage, CACHE_DURATIONS.MEDIUM);
+          setCache(_v706c2i2DiscoverCacheKey, firstPage, CACHE_DURATIONS.MEDIUM);
         }
         _v244LastDiscoverRefresh = Date.now();
 }
@@ -646,6 +658,42 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   fetchStreams: async (type: string, id: string) => {
+    // V706C2I2_STREAM_PARENTAL_GATE
+    // Authorize before dedup, memory cache, disk cache, prefetch, or network.
+    try {
+      const _v706c2i2Allowed = await
+        (api.content as any).isAllowedByParentalMode(type, id);
+
+      if (!_v706c2i2Allowed) {
+        set({
+          streams: [],
+          isLoadingStreams: false,
+          error: null,
+        });
+
+        console.log(
+          '[V706C2I2] streams blocked by Parental Mode',
+          type,
+          id
+        );
+
+        return [];
+      }
+    } catch (error) {
+      // Certification lookup failure = unknown = blocked.
+      console.warn(
+        '[V706C2I2] stream policy lookup failed closed',
+        error
+      );
+
+      set({
+        streams: [],
+        isLoadingStreams: false,
+        error: null,
+      });
+
+      return [];
+    }
     // V257_FETCH_DEDUP — if another fetchStreams call for the same (type,id)
     // is already in flight, await it instead of starting a duplicate.
     // This catches the Discover-prefetch + Details-mount race that was
@@ -847,6 +895,15 @@ export const useContentStore = create<ContentState>((set, get) => ({
       if (soft) set({ discoverNukeStamp: Date.now() } as any);
       else set({ discoverData: null, isLoadingDiscover: false, discoverNukeStamp: Date.now() } as any);
     } catch (_) {}
+
+    // V706C2I2_PARENTAL_DISCOVER_NUKE
+    // Purge legacy plus BOTH policy-scoped Discover snapshots so a
+    // mode change cannot resurrect data produced under the other policy.
+    try { await AsyncStorage.removeItem('@ps_discover_v1'); } catch (_) {}
+    try { await clearCache('discover_data:' + _v244CurrentUserId); } catch (_) {}
+    try { await clearCache('discover_data:' + _v244CurrentUserId + ':parental:1'); } catch (_) {}
+    try { await clearCache('discover_data:' + _v244CurrentUserId + ':parental:0'); } catch (_) {}
+
     try {
       const AS = require('@react-native-async-storage/async-storage').default;
       const keys = await AS.getAllKeys();

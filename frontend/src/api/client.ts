@@ -1,5 +1,9 @@
 import axios from 'axios';
 import AsyncStorage from '../utils/mmkvStorage';
+import {
+  getParentalModeEnabled,
+  isCertificationAllowedForParentalMode,
+} from '../utils/parentalControls'; // V706C2E / V706C2J
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 // V287_PREMIUMIZE_MIDDLE_ISOLATION
@@ -205,6 +209,9 @@ export interface ContentItem {
   poster: string;
   year?: string;
   imdbRating?: string | number;
+  usCertification?: string | null;
+  usCertifications?: string[];
+  parentalBlocked?: boolean;
   description?: string;
   genre?: string[];
   cast?: string[];
@@ -303,6 +310,331 @@ export interface SearchResult {
   imdbRating?: number;
 }
 
+// ============================================================
+// V706C2E_DISCOVER_PARENTAL_POLICY
+// ============================================================
+
+type V706C2ECertificationRecord = {
+  id: string;
+  type: 'movie' | 'series';
+  tmdb_id?: number | null;
+  certification?: string | null;
+  certifications?: string[];
+  status?: string;
+  source?: string;
+};
+
+const _v706c2eCertificationCache =
+  new Map<string, V706C2ECertificationRecord>();
+
+function _v706c2eContentRef(
+  item: ContentItem
+): {
+  key: string;
+  id: string;
+  type: 'movie' | 'series';
+} | null {
+  const type = item?.type;
+
+  if (type !== 'movie' && type !== 'series') {
+    return null;
+  }
+
+  const rawId = String(
+    item?.imdb_id || item?.id || ''
+  ).trim();
+
+  // Episode IDs can arrive as tt1234567:season:episode.
+  // Certification applies to the parent IMDb title.
+  const baseId = rawId.includes(':')
+    ? rawId.split(':')[0]
+    : rawId;
+
+  if (!/^tt\d+$/i.test(baseId)) {
+    return null;
+  }
+
+  const id = baseId.toLowerCase();
+
+  return {
+    key: `${type}:${id}`,
+    id,
+    type,
+  };
+}
+
+async function _v706c2eLoadCertifications(
+  items: ContentItem[]
+): Promise<void> {
+  const missing = new Map<
+    string,
+    { id: string; type: 'movie' | 'series' }
+  >();
+
+  for (const item of items || []) {
+    const ref = _v706c2eContentRef(item);
+
+    if (!ref) continue;
+
+    if (_v706c2eCertificationCache.has(ref.key)) {
+      continue;
+    }
+
+    missing.set(ref.key, {
+      id: ref.id,
+      type: ref.type,
+    });
+  }
+
+  const pending = [...missing.values()];
+
+  // Backend hard-cap is 200. Stay safely below it.
+  for (let offset = 0; offset < pending.length; offset += 120) {
+    const chunk = pending.slice(offset, offset + 120);
+
+    try {
+      const response = await apiClient.post(
+        '/api/content/certifications',
+        { items: chunk },
+        { timeout: 120000 }
+      );
+
+      const records =
+        response?.data?.certifications &&
+        typeof response.data.certifications === 'object'
+          ? response.data.certifications
+          : {};
+
+      for (const request of chunk) {
+        const key = `${request.type}:${request.id}`;
+        const raw = records[key];
+
+        if (!raw || typeof raw !== 'object') {
+          continue;
+        }
+
+        _v706c2eCertificationCache.set(key, {
+          id: request.id,
+          type: request.type,
+          tmdb_id: raw.tmdb_id ?? null,
+          certification: raw.certification ?? null,
+          certifications: Array.isArray(raw.certifications)
+            ? raw.certifications
+            : [],
+          status: raw.status,
+          source: raw.source,
+        });
+      }
+    } catch (error) {
+      // Locked policy is fail-closed while Parental Mode is ON.
+      // Network failures are intentionally NOT cached so the next
+      // refresh can recover immediately.
+      console.warn(
+        '[V706C2E] certification lookup unavailable; failing closed',
+        error
+      );
+    }
+  }
+}
+
+function _v706c2eIsAllowed(
+  item: ContentItem
+): boolean {
+  const ref = _v706c2eContentRef(item);
+
+  // Movie/series without a usable IMDb identity is UNKNOWN.
+  if (!ref) {
+    return false;
+  }
+
+  const record = _v706c2eCertificationCache.get(ref.key);
+
+  // Missing certification response is UNKNOWN.
+  if (!record) {
+    return false;
+  }
+
+  // V706C2J_CANONICAL_CERT_POLICY
+  // Policy uses the backend-selected official US certification.
+  // Historical alternate release certifications do not make the
+  // title stricter than its selected certification.
+  return isCertificationAllowedForParentalMode(
+    ref.type,
+    record.certification
+  );
+}
+
+function _v706c2eAttachCertification(
+  item: ContentItem
+): ContentItem {
+  const ref = _v706c2eContentRef(item);
+
+  if (!ref) {
+    return {
+      ...item,
+      usCertification: null,
+      usCertifications: [],
+      parentalBlocked: true,
+    };
+  }
+
+  const record = _v706c2eCertificationCache.get(ref.key);
+
+  return {
+    ...item,
+    usCertification: record?.certification ?? null,
+    usCertifications: record?.certifications || [],
+    parentalBlocked: !_v706c2eIsAllowed(item),
+  };
+}
+
+async function _v706c2eFilterDiscover(
+  data: DiscoverResponse
+): Promise<DiscoverResponse> {
+  const allItems: ContentItem[] = [
+    ...(data?.continueWatching || []),
+  ];
+
+  for (const service of Object.values(data?.services || {})) {
+    allItems.push(...(service?.movies || []));
+    allItems.push(...(service?.series || []));
+  }
+
+  await _v706c2eLoadCertifications(allItems);
+
+  const services: DiscoverResponse['services'] = {};
+
+  for (const [serviceName, service] of Object.entries(
+    data?.services || {}
+  )) {
+    const movies = (service?.movies || [])
+      .map(_v706c2eAttachCertification)
+      .filter(_v706c2eIsAllowed);
+
+    const series = (service?.series || [])
+      .map(_v706c2eAttachCertification)
+      .filter(_v706c2eIsAllowed);
+
+    services[serviceName] = {
+      ...service,
+      movies,
+      series,
+    };
+  }
+
+  const continueWatching = (data?.continueWatching || [])
+    .map(_v706c2eAttachCertification)
+    .filter(_v706c2eIsAllowed);
+
+  return {
+    ...data,
+    continueWatching,
+    services,
+  };
+}
+
+// ============================================================
+// V706C2G_SEARCH_PARENTAL_POLICY
+// ============================================================
+
+type V706C2GSearchResponse = {
+  movies: SearchResult[];
+  series: SearchResult[];
+  hasMore: boolean;
+  total: number;
+};
+
+async function _v706c2gFilterSearch(
+  data: V706C2GSearchResponse
+): Promise<V706C2GSearchResponse> {
+  const movies = Array.isArray(data?.movies)
+    ? data.movies
+    : [];
+
+  const series = Array.isArray(data?.series)
+    ? data.series
+    : [];
+
+  // SearchResult is structurally compatible with ContentItem
+  // for the fields required by the certification resolver.
+  await _v706c2eLoadCertifications([
+    ...(movies as ContentItem[]),
+    ...(series as ContentItem[]),
+  ]);
+
+  return {
+    ...data,
+    movies: movies.filter((item) =>
+      _v706c2eIsAllowed(item as ContentItem)
+    ),
+    series: series.filter((item) =>
+      _v706c2eIsAllowed(item as ContentItem)
+    ),
+  };
+}
+
+async function _v706c2gIsAllowedById(
+  contentType: string,
+  contentId: string
+): Promise<boolean> {
+  const parentalModeEnabled =
+    await getParentalModeEnabled();
+
+  // OFF means unrestricted.
+  if (!parentalModeEnabled) {
+    return true;
+  }
+
+  const rawType = String(contentType || '')
+    .trim()
+    .toLowerCase();
+
+  const id = String(contentId || '').trim();
+
+  // V706C2N2_LIVE_TV_ADULT_POLICY
+  // Explicit adult-addon namespaces are blocked whenever Parental
+  // Mode is ON, regardless of the route/content type supplied.
+  const explicitAdultId =
+    id.startsWith('pt:') ||
+    id.startsWith('jt:') ||
+    id.startsWith('porn') ||
+    id.startsWith('xxx:');
+
+  if (explicitAdultId) {
+    return false;
+  }
+
+  // In this application `tv` is LIVE TV, not a TMDB television
+  // series. Live channels have no movie/series certification and
+  // are therefore outside the mainstream certification ceiling.
+  if (rawType === 'tv') {
+    return true;
+  }
+
+  const normalizedType = rawType;
+
+  // Mainstream certification policy applies only to movie/series.
+  // Unknown content types remain fail-closed.
+  if (
+    normalizedType !== 'movie' &&
+    normalizedType !== 'series'
+  ) {
+    return false;
+  }
+
+  const probe: ContentItem = {
+    id,
+    imdb_id: id,
+    name: '',
+    poster: '',
+    type: normalizedType,
+  };
+
+  await _v706c2eLoadCertifications([probe]);
+
+  return _v706c2eIsAllowed(probe);
+}
+
 export const api = {
   auth: {
     login: async (username: string, password: string): Promise<AuthResponse> => {
@@ -316,12 +648,46 @@ export const api = {
   },
   content: {
     getDiscover: async (): Promise<DiscoverResponse> => {
-      const response = await apiClient.get('/api/content/discover-organized', { timeout: 120000 });
-      return response.data;
+      // V706C2E:
+      // Parental Mode ON  -> explicit adult addon catalogs hidden.
+      // Parental Mode OFF -> installed adult addon catalogs allowed.
+      const parentalModeEnabled = await getParentalModeEnabled();
+
+      const response = await apiClient.get('/api/content/discover-organized', {
+        params: {
+          adult: parentalModeEnabled ? 0 : 1,
+        },
+        timeout: 120000,
+      });
+
+      const data = response.data as DiscoverResponse;
+
+      if (!parentalModeEnabled) {
+        return data;
+      }
+
+      return _v706c2eFilterDiscover(data);
     },
+    isAllowedByParentalMode: async (
+      type: string,
+      id: string
+    ): Promise<boolean> => {
+      return _v706c2gIsAllowedById(type, id);
+    },
+
     search: async (query: string, skip: number = 0, limit: number = 30): Promise<{ movies: SearchResult[]; series: SearchResult[]; hasMore: boolean; total: number }> => {
       const response = await apiClient.get(`/api/content/search?q=${encodeURIComponent(query)}&skip=${skip}&limit=${limit}`);
-      return response.data;
+
+      const data = response.data as V706C2GSearchResponse;
+
+      const parentalModeEnabled =
+        await getParentalModeEnabled();
+
+      if (!parentalModeEnabled) {
+        return data;
+      }
+
+      return _v706c2gFilterSearch(data);
     },
     getMeta: async (type: string, id: string): Promise<ContentItem> => {
       const cacheKey = `meta:${type}:${id}`;

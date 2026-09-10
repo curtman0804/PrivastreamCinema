@@ -142,16 +142,81 @@ function LogoSkeleton() {
 // mount their <Image>, the bytes are already in expo-image's
 // memory-disk cache ├óΓÇáΓÇÖ near-instant paint.
 // ============================================================
+// ============================================================
+// V706C2Q3_PARENTAL_SAFE_BOOT_CACHE
+// ============================================================
+// The old v144/v271 cache is not policy-scoped. Never paint it
+// while Parental Mode is ON. Missing/error mode reads fail closed.
+async function _v706c2q3GetParentalModeEnabled(): Promise<boolean> {
+  try {
+    const parental = require('../../src/utils/parentalControls');
+    return (await parental.getParentalModeEnabled()) !== false;
+  } catch (_) {
+    return true;
+  }
+}
+
+// V706C2Q3_PARENTAL_FILTERED_CW
+async function _v706c2q3FilterWatchProgress(
+  items: any[]
+): Promise<any[]> {
+  const source = Array.isArray(items) ? items : [];
+
+  const parentalModeEnabled =
+    await _v706c2q3GetParentalModeEnabled();
+
+  if (!parentalModeEnabled) {
+    return source;
+  }
+
+  const decisions = await Promise.all(
+    source.map(async (item: any) => {
+      const type = String(
+        item?.content_type || item?.type || ''
+      ).trim();
+
+      const id = String(
+        item?.content_id ||
+        item?.imdb_id ||
+        item?.id ||
+        ''
+      ).trim();
+
+      if (!type || !id) {
+        return false;
+      }
+
+      try {
+        return (
+          await (api.content as any).isAllowedByParentalMode(
+            type,
+            id
+          )
+        ) === true;
+      } catch (_) {
+        return false;
+      }
+    })
+  );
+
+  return source.filter(
+    (_item: any, index: number) =>
+      decisions[index] === true
+  );
+}
 type _V271Snapshot = { discover: any | null; cw: any[] | null };
 const _v271BootSnapshotPromise: Promise<_V271Snapshot> = (async () => {
   try {
+    const _v706c2q3BootParentalModeEnabled =
+      await _v706c2q3GetParentalModeEnabled();
+
     const [d, c] = await Promise.all([
       AsyncStorage.getItem('@ps_discover_v1'),
       AsyncStorage.getItem('@ps_cw_v1'),
     ]);
     const snap: _V271Snapshot = {
-      discover: d ? (() => { try { return JSON.parse(d); } catch (_) { return null; } })() : null,
-      cw: c ? (() => { try { return JSON.parse(c); } catch (_) { return null; } })() : null,
+      discover: !_v706c2q3BootParentalModeEnabled && d ? (() => { try { return JSON.parse(d); } catch (_) { return null; } })() : null,
+      cw: !_v706c2q3BootParentalModeEnabled && c ? (() => { try { return JSON.parse(c); } catch (_) { return null; } })() : null,
     };
     // Kick off poster prefetch on top ~24 posters from the cached
     // snapshot.  Fire-and-forget ├óΓé¼ΓÇ¥ expo-image dedupes URLs internally.
@@ -261,6 +326,15 @@ export default function DiscoverScreen() {
     }
   }, [discoverNukeStamp]);
   const [cachedCW, setCachedCW] = useState<WatchProgress[]>([]);
+  // V706C2Q3_CLEAR_LOCAL_CW_ON_POLICY_NUKE
+  // Policy changes already bump discoverNukeStamp. Drop both local
+  // CW layers immediately so a blocked poster cannot survive the toggle.
+  useEffect(() => {
+    if (discoverNukeStamp) {
+      try { setCachedCW([]); } catch (_) {}
+      try { setContinueWatching([]); } catch (_) {}
+    }
+  }, [discoverNukeStamp]);
   const scrollViewRef = useRef<any>(null);
   const sectionPositions = useRef<Record<string, number>>({});
   const lastFocusedSection = useRef<string>('');
@@ -339,9 +413,12 @@ export default function DiscoverScreen() {
       /* V365_CW_INSTANT_CLEAR - shield the fresh list from the refetch
          race: recently-cleared ids stay tombstoned until the background
          DELETE has had time to commit server-side (5 min TTL). */
-      const _v204Next = (response.continueWatching || []).filter(
+      const _v706c2q3RawCW = (response.continueWatching || []).filter(
         (it: any) => !_v365IsCleared(it && it.content_id)
       );
+
+      const _v204Next =
+        await _v706c2q3FilterWatchProgress(_v706c2q3RawCW);
       // V274_CW_INSTANT_REMOVE ├óΓé¼ΓÇ¥ fresh CW data arrived; if it has items,
       // the force-hidden gate is no longer needed (user added something
       // new, or backend returned content they haven't seen locally).
@@ -478,8 +555,13 @@ export default function DiscoverScreen() {
     (async () => {
       try {
         const snap = await _v271BootSnapshotPromise;
-        if (snap.discover) setCachedDiscover(snap.discover);
-        if (snap.cw) setCachedCW(snap.cw);
+        const _v706c2q3HydrateParentalModeEnabled =
+          await _v706c2q3GetParentalModeEnabled();
+
+        if (!_v706c2q3HydrateParentalModeEnabled) {
+          if (snap.discover) setCachedDiscover(snap.discover);
+          if (snap.cw) setCachedCW(snap.cw);
+        }
       } catch (_) {}
     })();
   }, []);

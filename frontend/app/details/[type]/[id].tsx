@@ -540,6 +540,58 @@ function _v441_pickMovieFile(videos: any[], movieTitle: string, movieYear: any):
 const _v440_movieTitleMatch = _v441_movieTitleMatch;
 const _v440_pickMovieFile = _v441_pickMovieFile;
 // V441_END
+/*
+ * V672_HARD_REJECT_SAMPLE_MEDIA
+ *
+ * Sample/trailer/preview media is never valid episode/movie playback.
+ * Explicitly labelled stream cards are removed before paint. Premiumize
+ * file selection uses the actual basename so a parent torrent folder
+ * cannot make sample.mp4 look like S03E03.
+ */
+function _v672MediaBasename(value: any): string {
+  const raw = String(value || '').split(/[?#]/)[0].replace(/\\/g, '/');
+  const base = raw.split('/').pop() || raw;
+  try {
+    return decodeURIComponent(base);
+  } catch (_) {
+    return base;
+  }
+}
+
+function _v672IsSampleLikeMedia(value: any): boolean {
+  const base = _v672MediaBasename(value);
+  return /(?:^|[._\-\s])(sample|trailer|preview|teaser|featurette)(?:[._\-\s]|$)/i.test(base);
+}
+
+function _v672IsSampleLikeStream(stream: any): boolean {
+  const blob = [
+    stream?.title,
+    stream?.name,
+    stream?.filename,
+    stream?.url,
+    stream?.externalUrl,
+    stream?.directUrl,
+  ].filter(Boolean).join(' ');
+
+  return /(?:^|[._\-\s\/\\])(sample|trailer|preview|teaser|featurette)(?:[._\-\s\/\\]|$)/i.test(blob);
+}
+
+function _v672CleanStreamPool(input: Stream[]): Stream[] {
+  const source = Array.isArray(input) ? input : [];
+  const clean = source.filter((s: any) => !_v672IsSampleLikeStream(s));
+
+  if (clean.length !== source.length) {
+    console.log(
+      '[V672 SAMPLE FILTER] dropped',
+      source.length - clean.length,
+      'explicit sample/trailer stream(s) of',
+      source.length
+    );
+  }
+
+  return clean;
+}
+
 function sortStreamsByLanguage(streams: Stream[]): Stream[] {
   /* V324_FORCE_4K - quality histogram of input streams so we can see
      whether 4K options are even reaching the scorer. */
@@ -571,6 +623,7 @@ function sortStreamsByLanguage(streams: Stream[]): Stream[] {
   return _v312_result;
 }
 function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
+  streams = _v672CleanStreamPool(streams);
   // V292/V296 â€” gambling/spam watermark detection.  These rips have
   // hard-burned 1xbet/etc logos that ruin viewing.  We DETECT them
   // with these regexes so V296 can decide whether to hard-drop them
@@ -2604,18 +2657,18 @@ export default function DetailsScreen() {
   // V349 STREMIO-TRICK: defer sort to after nav animation.
   // Details page paints INSTANTLY with meta + unsorted streams;
   // sort runs in background, list re-orders when done. No JS-thread block on click.
-  const [sortedStreams, _setSortedStreams] = useState<Stream[]>(streams || []);
+  const [sortedStreams, _setSortedStreams] = useState<Stream[]>(_v672CleanStreamPool(streams || []));
   useEffect(() => {
     if (!streams || streams.length === 0) { _setSortedStreams([]); return; }
     // 1) Show unsorted immediately for progressive paint
-    _setSortedStreams(streams);
+    _setSortedStreams(_v672CleanStreamPool(streams));
     // 2) Sort after navigation transition + focus animations finish
     const handle = InteractionManager.runAfterInteractions(() => {
       try {
         const sorted = sortStreamsByLanguage(streams);
         _setSortedStreams(sorted);
       } catch (_) {
-        _setSortedStreams(streams);
+        _setSortedStreams(_v672CleanStreamPool(streams));
       }
     });
     return () => { try { handle.cancel(); } catch (_) {} };
@@ -2641,9 +2694,114 @@ export default function DetailsScreen() {
   // v121j-overlay-removed
 
   const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
+
+  /*
+   * V667_FIRST_FRAME_STREAM_OWNERSHIP
+   *
+   * useEffect runs after the first render, so V188 cannot prevent that
+   * first frame from seeing streams=[] + isLoadingStreams=false.
+   *
+   * Track which Details route has actually started its stream request.
+   * A newly-entered route is treated as loading immediately, before the
+   * mount effect runs. This also hides stale streams from the prior route.
+   */
+  const [_v667StreamRequestKey, _setV667StreamRequestKey] =
+    useState<string | null>(null);
+
+  const _v667ExpectedStreamKey =
+    type && id && (type === 'movie' || type === 'tv' || isEpisodePage)
+      ? `${type}/${String(id)}`
+      : null;
+
+  const _v667EffectiveStreamLoading =
+    isLoadingStreams ||
+    (
+      !!_v667ExpectedStreamKey &&
+      _v667StreamRequestKey !== _v667ExpectedStreamKey
+    );
   const baseId = isEpisodePage ? id?.split(':')[0] : id;
   const episodeSeason = isEpisodePage ? parseInt(id?.split(':')[1] || '1') : null;
   const episodeNumber = isEpisodePage ? parseInt(id?.split(':')[2] || '1') : null;
+
+  // V706C2N4_DETAILS_PARENTAL_ACCESS_GATE
+  const _v706c2n4AccessKey =
+    type && id
+      ? `${String(type)}/${String(id)}`
+      : '';
+
+  const [
+    _v706c2n4AccessDecision,
+    _setV706c2n4AccessDecision,
+  ] = useState<{ key: string; allowed: boolean } | null>(null);
+
+  const _v706c2n4AccessAllowed =
+    _v706c2n4AccessDecision?.key === _v706c2n4AccessKey
+      ? _v706c2n4AccessDecision.allowed
+      : null;
+
+  useEffect(() => {
+    let active = true;
+
+    // Cancel stream work owned by the previous Details route before
+    // deciding whether this route may access any content.
+    try {
+      useContentStore.getState().cancelInFlightStreams();
+    } catch (_) {}
+
+    if (!_v706c2n4AccessKey || !type || !id) {
+      _setV706c2n4AccessDecision({
+        key: _v706c2n4AccessKey,
+        allowed: false,
+      });
+
+      return () => {
+        active = false;
+      };
+    }
+
+    void (async () => {
+      let allowed = false;
+
+      try {
+        allowed = await
+          (api.content as any).isAllowedByParentalMode(
+            String(type),
+            String(id)
+          );
+      } catch (error) {
+        console.warn(
+          '[V706C2N4] Details policy lookup failed closed',
+          error
+        );
+        allowed = false;
+      }
+
+      if (!active) return;
+
+      _setV706c2n4AccessDecision({
+        key: _v706c2n4AccessKey,
+        allowed,
+      });
+
+      if (!allowed) {
+        try {
+          (useContentStore as any).setState({
+            streams: [],
+            isLoadingStreams: false,
+            error: null,
+          });
+        } catch (_) {}
+
+        try {
+          router.replace('/(tabs)/discover');
+        } catch (_) {}
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [_v706c2n4AccessKey, type, id]);
 
   const currentEpisode = useMemo(() => {
     if (!isEpisodePage || !content?.videos || !episodeSeason || !episodeNumber) return null;
@@ -2718,6 +2876,7 @@ export default function DetailsScreen() {
      background.  v170b's registry means the click will await the same
      in-flight promise -- streams paint instantly with no spinner. */
   useEffect(() => {
+    if (_v706c2n4AccessAllowed !== true) return;
     if (type !== 'series') return;
     if (isEpisodePage) return;            // only on series root
     if (!baseId) return;
@@ -2728,9 +2887,11 @@ export default function DetailsScreen() {
       const pf = useContentStore.getState().prefetchStreams;
       if (typeof pf === 'function') pf('series', epId);
     } catch (_) { /* prefetch is best-effort */ }
-  }, [type, isEpisodePage, baseId, selectedSeason, targetEpisodeNumber]);
+  }, [_v706c2n4AccessAllowed, type, isEpisodePage, baseId, selectedSeason, targetEpisodeNumber]);
 
   useEffect(() => {
+    if (_v706c2n4AccessAllowed !== true) return;
+
     // If we have cached meta with background, skip the meta fetch entirely
     const hasCachedMeta = cachedMeta && cachedMeta.background;
     if (!hasCachedMeta) {
@@ -2744,6 +2905,9 @@ export default function DetailsScreen() {
     // PATCH_V39_DEFER_MOUNT_IO â€” defer library fetch off the mount path
     setTimeout(() => { try { fetchLibrary(); } catch (_) {} }, 0);
     if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
+      if (_v667ExpectedStreamKey) {
+        _setV667StreamRequestKey(_v667ExpectedStreamKey);
+      }
       // V188_NO_ZERO_FLASH â€” sync-seed loading state so the very first render
       // shows "Finding Streams..." instead of momentarily flashing "0 Streams"
       // (which can happen if streams=[] is left over from a prior failed load).
@@ -2752,7 +2916,7 @@ export default function DetailsScreen() {
       // instantly; streams load in the background and populate as they arrive.
       const _v37StreamsTimer = setTimeout(() => { try { fetchStreams(type, id); } catch (_) {} }, 0);
     }
-  }, [id, type]);
+  }, [id, type, _v706c2n4AccessAllowed]);
 
   /* V656_DETAILS_PM_ONLY_PREWARM_OWNER
    * Legacy V180 server prewarm removed.
@@ -3056,6 +3220,13 @@ export default function DetailsScreen() {
   };
 
   const handleStreamSelect = async (stream: Stream) => {
+    if (_v672IsSampleLikeStream(stream)) {
+      console.warn(
+        '[V672] blocked explicit sample/trailer stream selection',
+        String((stream as any)?.title || (stream as any)?.name || '').slice(0, 120)
+      );
+      return;
+    }
     // V298_INLINE_PM_KEY_SEED_BUILD_TAG â€” eliminate the race between V297's
     // mount useEffect (async, may not finish before user taps Play) and the
     // PM short-circuit in client.ts.  We re-check + write the key INLINE,
@@ -3197,6 +3368,7 @@ const nextEpisodeData = nextEpisode ? {
       };
 
       const candidates = streams.filter((s: any) => {
+        if (_v672IsSampleLikeStream(s)) return false;
         const hash = String(s?.infoHash || s?.info_hash || '').toLowerCase();
         if (!hash) return false;
         if (excluded && hash === excluded) return false;
@@ -3275,7 +3447,7 @@ const nextEpisodeData = nextEpisode ? {
           return isFinite(n) ? n : 0;
         } catch { return 0; }
       };
-      const others = streams.filter(s => s !== stream).filter(s => s.url || s.directUrl);
+      const others = streams.filter(s => s !== stream).filter(s => !_v672IsSampleLikeStream(s)).filter(s => s.url || s.directUrl);
       // Sort by seeders DESC so cascade tries healthy torrents first.
       const bySeeds = [...others].sort((a, b) => _v354_seed(b) - _v354_seed(a));
       // Prefer streams with >=5 seeders; if pool exhausted, include the rest.
@@ -3337,6 +3509,7 @@ const nextEpisodeData = nextEpisode ? {
           const _v300_seen = new Set<string>();
           const _v300_pushCand = (s: any) => {
             if (!s || !s.infoHash) return;
+            if (_v672IsSampleLikeStream(s)) return;
             const h = String(s.infoHash).toLowerCase();
             if (_v300_seen.has(h)) return;
             _v300_seen.add(h);
@@ -3419,7 +3592,15 @@ const nextEpisodeData = nextEpisode ? {
                 if (_v300_j2 && _v300_j2.status === 'success' && Array.isArray(_v300_j2.content) && _v300_j2.content.length > 0) {
                   const _v300_videoExt = /\.(mkv|mp4|avi|mov|m4v|ts|m2ts|webm)$/i;
                   let _v300_videos: any[] = _v300_j2.content.filter((c: any) => c && c.link && _v300_videoExt.test(c.path || c.link || ''));
-                  if (_v300_videos.length === 0) _v300_videos = _v300_j2.content.filter((c: any) => c && c.link);
+                  _v300_videos = _v300_videos.filter(
+                    (v: any) => !_v672IsSampleLikeMedia(v.path || v.link)
+                  );
+                  if (_v300_videos.length === 0) {
+                    console.warn(
+                      '[V672] V300 rejected PM result: no non-sample video files',
+                      _v300_picked.hash.slice(0, 12)
+                    );
+                  }
                   // S/E match for series
                   const _v300_idParts = ((id as string) || '').split(':');
                   const _v300_sn = _v300_idParts.length >= 3 ? parseInt(_v300_idParts[_v300_idParts.length - 2], 10) : NaN;
@@ -3428,10 +3609,13 @@ const nextEpisodeData = nextEpisode ? {
                   if (!isNaN(_v300_sn) && !isNaN(_v300_en)) {
                     const _v300_sePad = `S${String(_v300_sn).padStart(2,'0')}E${String(_v300_en).padStart(2,'0')}`;
                     const _v300_seAlt = `${_v300_sn}x${String(_v300_en).padStart(2,'0')}`;
-                    _v300_file = _v300_videos.find((v: any) =>
-                      (v.path || '').toUpperCase().includes(_v300_sePad) ||
-                      (v.path || '').toLowerCase().includes(_v300_seAlt.toLowerCase())
-                    );
+                    _v300_file = _v300_videos.find((v: any) => {
+                      const _v672Name = _v672MediaBasename(v.path || v.link);
+                      return (
+                        _v672Name.toUpperCase().includes(_v300_sePad) ||
+                        _v672Name.toLowerCase().includes(_v300_seAlt.toLowerCase())
+                      );
+                    });
                   }
                   if (!_v300_file) {
                     // V441_MOVIE_TITLE_MATCH_PACK_GUARD
@@ -3513,7 +3697,15 @@ const nextEpisodeData = nextEpisode ? {
             if (_v299_j && _v299_j.status === 'success' && Array.isArray(_v299_j.content) && _v299_j.content.length > 0) {
               const _v299_videoExt = /\.(mkv|mp4|avi|mov|m4v|ts|m2ts|webm)$/i;
               let _v299_videos: any[] = _v299_j.content.filter((c: any) => c && c.link && _v299_videoExt.test(c.path || c.link || ''));
-              if (_v299_videos.length === 0) _v299_videos = _v299_j.content.filter((c: any) => c && c.link);
+              _v299_videos = _v299_videos.filter(
+                (v: any) => !_v672IsSampleLikeMedia(v.path || v.link)
+              );
+              if (_v299_videos.length === 0) {
+                console.warn(
+                  '[V672] V299 rejected PM result: no non-sample video files',
+                  _v299_hash.slice(0, 12)
+                );
+              }
               // Match S/E for series
               const _v299_idParts = ((id as string) || '').split(':');
               const _v299_sn = _v299_idParts.length >= 3 ? parseInt(_v299_idParts[_v299_idParts.length - 2], 10) : NaN;
@@ -3524,10 +3716,13 @@ const nextEpisodeData = nextEpisode ? {
                 const _v299_e = String(_v299_en).padStart(2, '0');
                 const _v299_seCode = `S${_v299_s}E${_v299_e}`;
                 const _v299_seAlt = `${_v299_sn}x${_v299_e}`;
-                _v299_picked = _v299_videos.find((v: any) =>
-                  (v.path || '').toUpperCase().includes(_v299_seCode) ||
-                  (v.path || '').toLowerCase().includes(_v299_seAlt.toLowerCase())
-                );
+                _v299_picked = _v299_videos.find((v: any) => {
+                  const _v672Name = _v672MediaBasename(v.path || v.link);
+                  return (
+                    _v672Name.toUpperCase().includes(_v299_seCode) ||
+                    _v672Name.toLowerCase().includes(_v299_seAlt.toLowerCase())
+                  );
+                });
               }
               if (!_v299_picked) {
                 // V441_MOVIE_TITLE_MATCH_PACK_GUARD
@@ -3883,6 +4078,11 @@ const nextEpisodeData = nextEpisode ? {
 
   // V186_BACK_INSTANT â€” render a flat placeholder once the user has pressed
   // back.  The heavy subtree dismounts on this frame; navigation runs next.
+  // V706C2N4_FIRST_FRAME_ACCESS_BLOCK
+  if (_v706c2n4AccessAllowed !== true) {
+    return <View style={styles.container} />;
+  }
+
   if (_v186Closing) {
     return <View style={styles.container} />;
   }
@@ -4175,7 +4375,7 @@ const nextEpisodeData = nextEpisode ? {
               {/* Play button on left + stream count */}
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                 {/* V169_STREAM_COUNT_USES_SORTED â€” use filtered list for gating */}
-                {!isLoadingStreams && sortedStreams.length > 0 && (
+                {!_v667EffectiveStreamLoading && sortedStreams.length > 0 && (
                   <FocusableButton
                     onPress={async () => {
                       /* v238b â€” Play button picks the FIRST resolved stream
@@ -4275,11 +4475,11 @@ const nextEpisodeData = nextEpisode ? {
                 )}
                 <Text style={styles.sectionTitle}>
                   {/* V169_STREAM_COUNT_USES_SORTED â€” display filtered count to match list */}
-                  {isLoadingStreams ? (type === 'tv' ? 'Verifying Live Streams...' : 'Finding Streams...') : `${sortedStreams.length} Stream${sortedStreams.length !== 1 ? 's' : ''}`}
+                  {_v667EffectiveStreamLoading ? (type === 'tv' ? 'Verifying Live Streams...' : 'Finding Streams...') : `${sortedStreams.length} Stream${sortedStreams.length !== 1 ? 's' : ''}`}
                 </Text>
               </View>
               
-              {isLoadingStreams ? (
+              {_v667EffectiveStreamLoading ? (
                 <View style={styles.streamLoading}>
                   <ActivityIndicator size="small" color="#B8A05C" />
                   <Text style={styles.streamLoadingText}>

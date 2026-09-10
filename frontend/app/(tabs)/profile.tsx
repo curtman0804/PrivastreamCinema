@@ -19,6 +19,7 @@ import {
   Alert,
   ScrollView,
   Platform,
+  Modal,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,12 +31,14 @@ import { useContentStore } from '../../src/store/contentStore';
 import AsyncStorage from '../../src/utils/mmkvStorage';
 import { colors } from '../../src/styles/colors';
 import { PrivacySettingsBlock } from '../../src/components/PrivacySettingsBlock';
+import ParentalControlsScreen from '../parental-controls';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
+  const [parentalOpen, setParentalOpen] = useState(false);
 
   const handleLogout = () => {
     const doLogout = async () => {
@@ -101,6 +104,20 @@ export default function ProfileScreen() {
           <PrivacySettingsBlock />
         </View>
 
+        {/* V704_PARENTAL_CONTROLS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>CONTENT</Text>
+          <View style={styles.menuCard}>
+            <MenuItem
+              icon="lock-closed-outline"
+              title="Parental Controls"
+              subtitle="PIN-protected parental settings"
+              onPress={() => setParentalOpen(true)}
+              isTV={isTV}
+            />
+          </View>
+        </View>
+
         {/* General Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>GENERAL</Text>
@@ -130,6 +147,31 @@ export default function ProfileScreen() {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* V705G2_PARENTAL_PROFILE_MODAL */}
+      <Modal
+        visible={parentalOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setParentalOpen(false)}
+      >
+        <View style={styles.parentalModalOverlay}>
+          <View
+            style={[
+              styles.parentalModalCard,
+              isTV && styles.parentalModalCardTV,
+            ]}
+          >
+            {parentalOpen && (
+              <ParentalControlsScreen
+                embedded
+                onClose={() => setParentalOpen(false)}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -188,5 +230,30 @@ const styles = StyleSheet.create({
   menuTitle: { fontSize: 16, fontWeight: '500', color: colors.primary },
   menuTitleDanger: { color: colors.error },
   menuSubtitle: { fontSize: 13, color: colors.primaryDark, marginTop: 2 },
+  // V705G2_PARENTAL_PROFILE_MODAL
+  parentalModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  parentalModalCard: {
+    width: '94%',
+    maxWidth: 720,
+    height: '90%',
+    maxHeight: 640,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    overflow: 'hidden',
+  },
+  parentalModalCardTV: {
+    width: '72%',
+    maxWidth: 760,
+    height: '88%',
+    maxHeight: 620,
+  },
   bottomPadding: { height: 40 },
 });
