@@ -380,6 +380,7 @@ interface ContentState {
   searchHasMore: boolean;
   searchSkip: number;
   currentSearchQuery: string;
+  currentSearchMode: string; // V711F2_SEARCH_INTENT
   streams: Stream[];
   selectedItem: ContentItem | null;
   currentPlaying: CurrentPlaying | null;
@@ -394,7 +395,7 @@ interface ContentState {
   fetchDiscover: (forceRefresh?: boolean) => Promise<void>;
   fetchAddons: (forceRefresh?: boolean) => Promise<void>;
   fetchLibrary: (forceRefresh?: boolean) => Promise<void>;
-  search: (query: string) => Promise<void>;
+  search: (query: string, mode?: string) => Promise<void>;
   loadMoreSearch: () => Promise<void>;
   fetchStreams: (type: string, id: string) => Promise<Stream[]>;
   // V199_TRUE_WIPE / V204_SOFT_NUKE
@@ -423,6 +424,7 @@ const initialState = {
   searchHasMore: false,
   searchSkip: 0,
   currentSearchQuery: '',
+  currentSearchMode: 'auto',
   currentPlaying: null,
   selectedItem: null,
   streams: [],
@@ -439,6 +441,8 @@ const initialState = {
   currentStreamsKey: null as string | null,
 };
 
+let _v711SearchGeneration = 0; // V711F2_SEARCH_STALE_GUARD
+
 export const useContentStore = create<ContentState>((set, get) => ({
   ...initialState,
 
@@ -447,6 +451,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   resetStore: () => {
+    _v711SearchGeneration += 1;
     set(initialState);
   },
 
@@ -602,14 +607,17 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
-  search: async (query: string) => {
+  search: async (query: string, mode: string = 'auto') => {
     if (!query.trim()) {
-      set({ searchResults: [], searchMovies: [], searchSeries: [], searchHasMore: false, searchSkip: 0, currentSearchQuery: '' });
+      _v711SearchGeneration += 1;
+      set({ searchResults: [], searchMovies: [], searchSeries: [], searchHasMore: false, searchSkip: 0, currentSearchQuery: '', currentSearchMode: 'auto', isLoadingSearch: false, isLoadingMoreSearch: false });
       return;
     }
-    set({ isLoadingSearch: true, error: null, currentSearchQuery: query, searchSkip: 0 });
+    const generation = ++_v711SearchGeneration;
+    set({ isLoadingSearch: true, isLoadingMoreSearch: false, error: null, currentSearchQuery: query, currentSearchMode: mode, searchSkip: 0 });
     try {
-      const data = await api.content.search(query, 0, 30);
+      const data = await api.content.search(query, 0, 30, mode);
+      if (generation !== _v711SearchGeneration) return;
       const movies = data.movies || [];
       const series = data.series || [];
       const results = [...movies, ...series];
@@ -622,18 +630,23 @@ export const useContentStore = create<ContentState>((set, get) => ({
         isLoadingSearch: false 
       });
     } catch (error: any) {
+      if (generation !== _v711SearchGeneration) return;
       console.log('[ContentStore] search error:', error);
       set({ error: error.message, isLoadingSearch: false });
     }
   },
 
   loadMoreSearch: async () => {
-    const { currentSearchQuery, searchSkip, searchMovies, searchSeries, isLoadingMoreSearch } = get();
+    const { currentSearchQuery, currentSearchMode, searchSkip, searchMovies, searchSeries, isLoadingMoreSearch } = get();
     if (!currentSearchQuery || isLoadingMoreSearch) return;
+    const generation = _v711SearchGeneration;
     
     set({ isLoadingMoreSearch: true });
     try {
-      const data = await api.content.search(currentSearchQuery, searchSkip, 30);
+      const data = await api.content.search(currentSearchQuery, searchSkip, 30, currentSearchMode || 'auto');
+      if (generation !== _v711SearchGeneration) return;
+      const current = get();
+      if (current.currentSearchQuery !== currentSearchQuery || current.currentSearchMode !== currentSearchMode) return;
       const newMovies = data.movies || [];
       const newSeries = data.series || [];
       // v241 — dedup by id when appending (genre responses overlap)
@@ -652,6 +665,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
         isLoadingMoreSearch: false 
       });
     } catch (error: any) {
+      if (generation !== _v711SearchGeneration) return;
       console.log('[ContentStore] loadMoreSearch error:', error);
       set({ error: error.message, isLoadingMoreSearch: false });
     }
@@ -948,7 +962,8 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   clearSearch: () => {
-    set({ searchResults: [], searchMovies: [], searchSeries: [], searchHasMore: false, searchSkip: 0, currentSearchQuery: '' });
+    _v711SearchGeneration += 1;
+    set({ searchResults: [], searchMovies: [], searchSeries: [], searchHasMore: false, searchSkip: 0, currentSearchQuery: '', currentSearchMode: 'auto', isLoadingSearch: false, isLoadingMoreSearch: false });
   },
 
   setCurrentPlaying: (info: CurrentPlaying | null) => {

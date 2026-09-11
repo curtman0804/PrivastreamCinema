@@ -1,4 +1,4 @@
-﻿// PATCH_V53_STREMIO_PATTERN â€” clean SearchBar matching Stremio's Android TV
+// PATCH_V53_STREMIO_PATTERN â€” clean SearchBar matching Stremio's Android TV
 // search pattern: bare TextInput is directly D-pad-focusable. No Pressable
 // wrapper, no on-screen keyboard. The system Gboard for TV pops up natively
 // when the TextInput is focused.
@@ -88,7 +88,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             onBlur={() => setIsClearFocused(false)}
             style={[styles.clearButton, isClearFocused && styles.clearButtonFocused]}
           >
-            <Ionicons name="close-circle" size={22} color={isClearFocused ? '#FFFFFF' : '#888888'} />
+            <Ionicons name="close-circle" size={22} color="#B8A05C" />
           </Pressable>
         )}
       </View>
@@ -99,7 +99,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         onBlur={() => setIsSearchFocused(false)}
         style={[styles.searchButton, isSearchFocused && styles.searchButtonFocused]}
       >
-        <Ionicons name="search" size={20} color="#000" />
+        <Ionicons name="search" size={20} color="#B8A05C" />
       </Pressable>
     </View>
   );
@@ -141,13 +141,13 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   clearButtonFocused: {
-    /* v122-search-focus */
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    /* V711F2_SEARCH_GOLD_FOCUS */
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184,160,92,0.15)',
     transform: [{ scale: 1.15 }],
   },
   searchButton: {
-    backgroundColor: '#B8A05C',
+    backgroundColor: 'transparent',
     borderRadius: 12,
     width: 48,
     height: 48,
@@ -157,7 +157,9 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   searchButtonFocused: {
-    borderColor: '#FFFFFF',
+    /* V711F2_SEARCH_GOLD_FOCUS */
+    borderColor: '#B8A05C',
+    backgroundColor: 'rgba(184,160,92,0.15)',
     transform: [{ scale: 1.1 }],
   },
 });

@@ -19,7 +19,20 @@ import { SearchResult } from '../../src/api/client';
 
 export default function SearchScreen() {
   const router = useRouter();
-  const { q: queryParam } = useLocalSearchParams<{ q?: string }>();
+  const { q: queryParam, mode: modeParam } =
+    useLocalSearchParams<{ q?: string; mode?: string }>();
+
+  const routeSearchMode = (() => {
+    const requested = String(modeParam || '').trim().toLowerCase();
+
+    return ['title', 'person', 'cast', 'director', 'genre'].includes(requested)
+      ? requested
+      : 'auto';
+  })();
+
+  const initialSearchKey = queryParam
+    ? `${queryParam}::${routeSearchMode}`
+    : ''; // V711F2_SEARCH_INTENT
   const searchResults = useContentStore(s => s.searchResults);
   const searchMovies = useContentStore(s => s.searchMovies);
   const searchSeries = useContentStore(s => s.searchSeries);
@@ -29,7 +42,8 @@ export default function SearchScreen() {
   const [hasSearched, setHasSearched] = useState(false);
   const [currentQuery, setCurrentQuery] = useState<string>('');
   const [isPreparingBadges, setIsPreparingBadges] = useState(false);
-  const hasTriggeredInitialSearch = useRef(false);
+  const lastTriggeredInitialSearchKey = useRef('');
+  const searchRunId = useRef(0); // V710_FAST_FIRST_PAGE_SEARCH
   // V112_SEARCH_NAV: pagination + row-snap nav (parity with Discover screen)
   const loadMoreSearch = useContentStore(s => s.loadMoreSearch);
   const searchHasMore = useContentStore(s => s.searchHasMore);
@@ -54,16 +68,20 @@ export default function SearchScreen() {
 
     if (ids.length === 0) return;
 
-    await v612AwaitReleaseStatuses(ids, 8000);
+    await v612AwaitReleaseStatuses(ids, 1200);
   }, []);
   // V612B_SEARCH_ATOMIC_FULL_RESULTS
   // Finish the same pagination Search previously performed in the
   // background BEFORE releasing the loading screen. This prevents
   // later-page titles from appearing/disappearing around badge work.
-  const completeSearchPages = useCallback(async () => {
+  const completeSearchPages = useCallback(async (ownerRunId: number) => {
     let loadedPages = 0;
 
     while (loadedPages < 15) {
+      if (searchRunId.current !== ownerRunId) {
+        break;
+      }
+
       const before = useContentStore.getState();
 
       const totalBefore =
@@ -80,6 +98,11 @@ export default function SearchScreen() {
       }
 
       await loadMoreSearch();
+
+      if (searchRunId.current !== ownerRunId) {
+        break;
+      }
+
       loadedPages += 1;
       pagesLoaded.current = loadedPages;
 
@@ -98,11 +121,12 @@ export default function SearchScreen() {
   }, [loadMoreSearch]);
   // Auto-trigger search when navigated to with a query parameter
   useEffect(() => {
-    if (queryParam && !hasTriggeredInitialSearch.current) {
-      hasTriggeredInitialSearch.current = true;
+    if (queryParam && lastTriggeredInitialSearchKey.current !== initialSearchKey) {
+      lastTriggeredInitialSearchKey.current = initialSearchKey;
       const decodedQuery = decodeURIComponent(queryParam);
       setCurrentQuery(decodedQuery);
       setHasSearched(true);
+      const runId = ++searchRunId.current;
       // V612_SEARCH_BADGE_ATOMIC_PAINT
       // Keep Search in its loading state until movie badge statuses are hot.
       setIsPreparingBadges(true);
@@ -110,23 +134,42 @@ export default function SearchScreen() {
       InteractionManager.runAfterInteractions(() => {
         void (async () => {
           try {
-            await search(decodedQuery);
-            await completeSearchPages();
+            await search(decodedQuery, routeSearchMode);
             await prepareSearchCinemaBadges();
+
+            if (searchRunId.current === runId) {
+              void (async () => {
+                try {
+                  await completeSearchPages(runId);
+
+                  if (searchRunId.current === runId) {
+                    await prepareSearchCinemaBadges();
+                  }
+                } catch (error) {
+                  console.log(
+                    '[V710_FAST_FIRST_PAGE_SEARCH] background pagination error:',
+                    error
+                  );
+                }
+              })();
+            }
           } finally {
-            setIsPreparingBadges(false);
+            if (searchRunId.current === runId) {
+              setIsPreparingBadges(false);
+            }
           }
         })();
       });
     }
-  }, [queryParam, search, completeSearchPages, prepareSearchCinemaBadges]);
+  }, [queryParam, initialSearchKey, routeSearchMode, search, completeSearchPages, prepareSearchCinemaBadges]);
 
   // Reset when component unmounts
   useEffect(() => {
     return () => {
-      hasTriggeredInitialSearch.current = false;
+      searchRunId.current += 1;
+      lastTriggeredInitialSearchKey.current = '';
     };
-  }, [queryParam]);
+  }, []);
 
   // V612B_SEARCH_ATOMIC_FULL_RESULTS
   // Background pagination removed. completeSearchPages() now owns
@@ -149,6 +192,7 @@ export default function SearchScreen() {
 
   const handleSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
+      searchRunId.current += 1;
       clearSearch();
       setHasSearched(false);
       setCurrentQuery('');
@@ -156,10 +200,11 @@ export default function SearchScreen() {
     }
     setCurrentQuery(query);
     setHasSearched(true);
+    const runId = ++searchRunId.current;
     setIsPreparingBadges(true);
 
     try {
-      await search(query);
+      await search(query, 'auto');
     // v238 â€” if a multi-word query returned ZERO movies AND ZERO series,
     // retry once with a more lenient form (drop short stop-words like
     // "of", "the", "a", "an" â€” addons that index titles literally will
@@ -173,13 +218,31 @@ export default function SearchScreen() {
         .join(' ');
       if (lean && lean !== query.trim()) {
         console.log('[search v238] retrying with stripped query:', lean);
-        await search(lean);
+        await search(lean, 'auto');
       }
     }
-      await completeSearchPages();
       await prepareSearchCinemaBadges();
+
+      if (searchRunId.current === runId) {
+        void (async () => {
+          try {
+            await completeSearchPages(runId);
+
+            if (searchRunId.current === runId) {
+              await prepareSearchCinemaBadges();
+            }
+          } catch (error) {
+            console.log(
+              '[V710_FAST_FIRST_PAGE_SEARCH] background pagination error:',
+              error
+            );
+          }
+        })();
+      }
     } finally {
-      setIsPreparingBadges(false);
+      if (searchRunId.current === runId) {
+        setIsPreparingBadges(false);
+      }
     }
     // V450_SEARCH_UX - jump the selector to the first result poster so the
     // user does NOT have to D-pad DOWN through the SearchBar chain.  Reuses

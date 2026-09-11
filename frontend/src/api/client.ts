@@ -675,8 +675,8 @@ export const api = {
       return _v706c2gIsAllowedById(type, id);
     },
 
-    search: async (query: string, skip: number = 0, limit: number = 30): Promise<{ movies: SearchResult[]; series: SearchResult[]; hasMore: boolean; total: number }> => {
-      const response = await apiClient.get(`/api/content/search?q=${encodeURIComponent(query)}&skip=${skip}&limit=${limit}`);
+    search: async (query: string, skip: number = 0, limit: number = 30, mode: string = 'auto'): Promise<{ movies: SearchResult[]; series: SearchResult[]; hasMore: boolean; total: number }> => { // V711F2_SEARCH_INTENT
+      const response = await apiClient.get(`/api/content/search?q=${encodeURIComponent(query)}&skip=${skip}&limit=${limit}&mode=${encodeURIComponent(mode)}`);
 
       const data = response.data as V706C2GSearchResponse;
 
@@ -702,6 +702,70 @@ export const api = {
       const response = await apiClient.get(`/api/content/meta/${type}/${encodedId}`);
       
       (api as any)._metaCache.set(cacheKey, { data: response.data, time: Date.now() });
+      return response.data;
+    },
+
+    // V707_DETAILS_RATINGS_FRONTEND - independent Details enrichment.
+    getRatings: async (type: string, id: string): Promise<{
+      id: string;
+      type: 'movie' | 'series';
+      certification: string | null;
+      certifications: string[];
+      certification_status: string;
+      certification_source: string;
+      imdb_score: number | null;
+      tomatoes_score: number | null;
+      tomatoes_provider: 'mdblist' | 'omdb' | null;
+      tomatoes_status: string;
+      tomatoes_votes: number | null;
+      tomatoes_url: string | null;
+    }> => {
+      const encodedType = encodeURIComponent(type);
+      const encodedId = encodeURIComponent(id);
+
+      // V708: tiny session-only Details ratings cache.
+      // No Discover/Search prefetching and no extra provider request.
+      const ratingsCacheKey = `${type}:${id}`;
+
+      if (!(api as any)._ratingsCache) {
+        (api as any)._ratingsCache = new Map();
+      }
+
+      const ratingsCache = (api as any)._ratingsCache as Map<
+        string,
+        { data: any; time: number }
+      >;
+
+      const cachedRatings = ratingsCache.get(ratingsCacheKey);
+
+      if (
+        cachedRatings &&
+        Date.now() - cachedRatings.time < 10 * 60 * 1000
+      ) {
+        return cachedRatings.data;
+      }
+
+      const response = await apiClient.get(
+        `/api/content/ratings/${encodedType}/${encodedId}`
+      );
+
+      // Cap the cache so long-running TV sessions cannot grow it forever.
+      if (
+        ratingsCache.size >= 100 &&
+        !ratingsCache.has(ratingsCacheKey)
+      ) {
+        const firstKey = ratingsCache.keys().next().value as string | undefined;
+
+        if (firstKey !== undefined) {
+          ratingsCache.delete(firstKey);
+        }
+      }
+
+      ratingsCache.set(ratingsCacheKey, {
+        data: response.data,
+        time: Date.now(),
+      });
+
       return response.data;
     },
   },

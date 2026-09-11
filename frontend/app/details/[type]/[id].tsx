@@ -2618,6 +2618,13 @@ export default function DetailsScreen() {
   
   const [content, setContent] = useState<ContentItem | null>(initialContent);
 
+  // V707_DETAILS_RATINGS_FRONTEND - independent Details enrichment state.
+  const [v707DetailsRatings, setV707DetailsRatings] = useState<{
+    certification: string | null;
+    imdb_score: number | null;
+    tomatoes_score: number | null;
+  } | null>(null);
+
   // PATCH_V244_META_HYDRATE â€” on cold start, in-memory _metaCache is
   // empty so Details would paint with just (paramName + paramPoster)
   // while waiting ~7s for the network /meta call.  Try the 24h disk
@@ -2917,6 +2924,71 @@ export default function DetailsScreen() {
       const _v37StreamsTimer = setTimeout(() => { try { fetchStreams(type, id); } catch (_) {} }, 0);
     }
   }, [id, type, _v706c2n4AccessAllowed]);
+
+  // V707 Details enrichment starts only after the existing parental gate allows access.
+  // It never blocks normal metadata, streams, prewarm, or playback.
+  useEffect(() => {
+    let cancelled = false;
+
+    setV707DetailsRatings(null);
+
+    if (_v706c2n4AccessAllowed !== true) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (type !== 'movie' && type !== 'series') {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Prefer hydrated metadata IMDb ID when available; otherwise use the route ID.
+    // Episode suffixes are stripped before calling the backend ratings endpoint.
+    const ratingsImdbId = String(
+      content?.imdb_id ||
+      (isEpisodePage ? baseId : id) ||
+      ''
+    ).split(':')[0];
+
+    if (!/^tt\d+$/.test(ratingsImdbId)) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void api.content
+      .getRatings(type, ratingsImdbId)
+      .then((data) => {
+        if (cancelled) return;
+
+        setV707DetailsRatings({
+          certification: data.certification,
+          imdb_score: data.imdb_score,
+          tomatoes_score: data.tomatoes_score,
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+
+        console.log(
+          '[V707] Details ratings enrichment failed:',
+          String((error as any)?.message || error)
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    type,
+    id,
+    baseId,
+    isEpisodePage,
+    content?.imdb_id,
+    _v706c2n4AccessAllowed,
+  ]);
 
   /* V656_DETAILS_PM_ONLY_PREWARM_OWNER
    * Legacy V180 server prewarm removed.
@@ -4034,6 +4106,41 @@ const nextEpisodeData = nextEpisode ? {
     ? parseFloat(content.imdbRating) 
     : content?.imdbRating;
 
+  // V708: preserve existing metadata IMDb when valid;
+  // use the independently enriched IMDb score only as fallback.
+  const v708EnrichedImdbRaw = v707DetailsRatings?.imdb_score;
+
+  const v708EnrichedImdbScore =
+    typeof v708EnrichedImdbRaw === 'number' &&
+    Number.isFinite(v708EnrichedImdbRaw) &&
+    v708EnrichedImdbRaw > 0 &&
+    v708EnrichedImdbRaw <= 10
+      ? v708EnrichedImdbRaw
+      : null;
+
+  const v708DisplayRating =
+    typeof rating === 'number' &&
+    Number.isFinite(rating) &&
+    rating > 0 &&
+    rating <= 10
+      ? rating
+      : v708EnrichedImdbScore;
+
+  const v707TomatoesRaw = v707DetailsRatings?.tomatoes_score;
+
+  const v707TomatoesScore =
+    typeof v707TomatoesRaw === 'number' &&
+    Number.isFinite(v707TomatoesRaw) &&
+    v707TomatoesRaw >= 0 &&
+    v707TomatoesRaw <= 100
+      ? Math.round(v707TomatoesRaw)
+      : null;
+
+  const v707Certification =
+    v707DetailsRatings?.certification ||
+    content?.usCertification ||
+    null;
+
   // Render stream item for FlatList
   const renderStreamItem = ({ item }: { item: Stream }) => (
     <StreamCard stream={item} onPress={() => handleStreamSelect(item)} />
@@ -4217,10 +4324,16 @@ const nextEpisodeData = nextEpisode ? {
           </View>
 
           <View style={styles.metaRow}>
-            {rating && rating > 0 && (
+            {v708DisplayRating !== null && (
               <View style={styles.imdbBadge}>
                 <Text style={styles.imdbLabel}>IMDb</Text>
-                <Text style={styles.imdbRating}>{rating.toFixed(1)}</Text>
+                <Text style={styles.imdbRating}>{v708DisplayRating.toFixed(1)}</Text>
+              </View>
+            )}
+            {v707TomatoesScore !== null && (
+              <View style={styles.rtBadge}>
+                <Text style={styles.rtIcon}>{'🍅'}</Text>
+                <Text style={styles.rtRating}>{v707TomatoesScore}%</Text>
               </View>
             )}
             {content?.year && (
@@ -4228,6 +4341,9 @@ const nextEpisodeData = nextEpisode ? {
             )}
             {content?.runtime && (
               <Text style={styles.metaText}>{content.runtime}</Text>
+            )}
+            {v707Certification && (
+              <Text style={styles.metaText}>{v707Certification}</Text>
             )}
           </View>
 
@@ -4280,7 +4396,7 @@ const nextEpisodeData = nextEpisode ? {
               <Text style={styles.chipLabel}>Genre</Text>
               <View style={styles.chipRow}>
                 {content.genre.slice(0, 4).map((g: string, i: number) => (
-                  <ChipButton key={`genre-${i}`} label={g} hasTVPreferredFocus={i === 0} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g } })} />
+                  <ChipButton key={`genre-${i}`} label={g} hasTVPreferredFocus={i === 0} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g, mode: 'genre' } })} />
                 ))}
               </View>
             </View>
@@ -4292,7 +4408,7 @@ const nextEpisodeData = nextEpisode ? {
               <Text style={styles.chipLabel}>Director</Text>
               <View style={styles.chipRow}>
                 {content.director.slice(0, 3).map((d: string, i: number) => (
-                  <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d } })} />
+                  <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d, mode: 'director' } })} />
                 ))}
               </View>
             </View>
@@ -4304,7 +4420,7 @@ const nextEpisodeData = nextEpisode ? {
               <Text style={styles.chipLabel}>Cast</Text>
               <View style={styles.chipRow}>
                 {content.cast.slice(0, 6).map((c: string, i: number) => (
-                  <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c } })} />
+                  <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c, mode: 'cast' } })} />
                 ))}
               </View>
             </View>
@@ -4662,6 +4778,23 @@ const styles = StyleSheet.create({
   },
   imdbRating: {
     color: '#F5C518',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  rtBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255, 99, 71, 0.16)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  rtIcon: {
+    fontSize: 14,
+  },
+  rtRating: {
+    color: '#FF6B5E',
     fontSize: 14,
     fontWeight: '600',
   },

@@ -1648,13 +1648,25 @@ async def install_addon(addon_data: AddonInstall, current_user: User = Depends(g
             "logo": manifest_data.get('logo'),
             "types": manifest_data.get('types', []),
             "resources": manifest_data.get('resources', []),
-            "catalogs": manifest_data.get('catalogs', [])
+            "catalogs": manifest_data.get('catalogs', []),
+            "idPrefixes": manifest_data.get('idPrefixes', []),
+            "behaviorHints": manifest_data.get('behaviorHints', {})
         },
         "installed": True,
         "installedAt": datetime.utcnow().isoformat()
     }
     
     await db.addons.insert_one(addon)
+
+    # V704G_DISCOVER_CACHE_INVALIDATION
+    # An addon change invalidates both parental-policy variants.
+    for discover_key in (
+        current_user.id,
+        f"{current_user.id}:adult:0",
+        f"{current_user.id}:adult:1",
+    ):
+        _discover_cache.pop(discover_key, None)
+
     addon.pop('_id', None)
     return addon
 
@@ -1684,6 +1696,16 @@ async def uninstall_addon(addon_id: str, current_user: User = Depends(get_curren
     result = await db.addons.delete_one({"id": addon_id, "userId": current_user.id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Addon not found")
+
+    # V704G_DISCOVER_CACHE_INVALIDATION
+    # Never leave either Adult OFF/ON Discover response stale.
+    for discover_key in (
+        current_user.id,
+        f"{current_user.id}:adult:0",
+        f"{current_user.id}:adult:1",
+    ):
+        _discover_cache.pop(discover_key, None)
+
     return {"success": True}
 
 @api_router.get("/addons/{addon_id}/stream/{content_type}/{content_id}")
@@ -3017,15 +3039,61 @@ async def get_subtitles(content_type: str, content_id: str, current_user: User =
         return {"subtitles": []}
 
 
+# ==================== V704 PARENTAL CONTROLS ====================
+def _v704_is_adult_addon(manifest: dict, manifest_url: str = "") -> bool:
+    """Classify explicitly adult addon catalogs without guessing from movie ratings."""
+    manifest = manifest or {}
+
+    hints = manifest.get("behaviorHints") or {}
+    if isinstance(hints, dict):
+        adult_hint = hints.get("adult")
+        if adult_hint is True or str(adult_hint).strip().lower() == "true":
+            return True
+
+    addon_id = str(manifest.get("id") or "").strip().lower()
+
+    known_adult_ids = {
+        "org.stremio.porn",
+        "pw.ers.porntube",
+        "stremio_porn_plus",
+    }
+
+    if addon_id in known_adult_ids:
+        return True
+
+    for prefix in manifest.get("idPrefixes") or []:
+        p = str(prefix or "").strip().lower()
+        if p.startswith("porn_") or p.startswith("porn_id"):
+            return True
+
+    for catalog in manifest.get("catalogs") or []:
+        if not isinstance(catalog, dict):
+            continue
+        cid = str(catalog.get("id") or "").strip().lower()
+        if cid.startswith("porn_") or cid.startswith("porn_id"):
+            return True
+
+    url = str(manifest_url or "").lower()
+    known_adult_hosts = (
+        "stremio-porn-jrm3.onrender.com",
+        "dirty-pink.ers.pw",
+        "1fe84bc728af-stremio-porn.baby-beamup.club",
+    )
+
+    return any(host in url for host in known_adult_hosts)
+
+
 # ==================== CONTENT ROUTES ====================
 
 @api_router.get("/content/discover-organized")
-async def get_discover(current_user: User = Depends(get_current_user)):
+async def get_discover(adult: int = 0, current_user: User = Depends(get_current_user)):
     """Get discover page content from installed addons - organized by service.
     Uses parallel fetching and in-memory caching for speed."""
     
     # Check cache first
-    cache_key = current_user.id
+    # V704: Adult OFF is the safe/default request policy.
+    adult_enabled = bool(adult == 1)
+    cache_key = f"{current_user.id}:adult:{1 if adult_enabled else 0}"
     cached = _discover_cache.get(cache_key)
     if cached and cached["expires"] > datetime.utcnow():
         logger.info(f"Discover cache HIT for user {current_user.username}")
@@ -3078,6 +3146,24 @@ async def get_discover(current_user: User = Depends(get_current_user)):
     
     for addon in addons:
         manifest = addon.get('manifest', {})
+
+        # V704_PARENTAL_CONTROLS
+        # Do not even create catalog fetch tasks for explicitly
+        # adult addons unless this request came from an unlocked
+        # Adult Content setting.
+        if (
+            not adult_enabled
+            and _v704_is_adult_addon(
+                manifest,
+                addon.get('manifestUrl', '')
+            )
+        ):
+            logger.info(
+                f"[V704] Adult addon suppressed for {current_user.username}: "
+                f"{manifest.get('id', 'unknown')}"
+            )
+            continue
+
         addon_id = manifest.get('id', '').lower()
         addon_name = manifest.get('name', 'Unknown')
         base_url = get_base_url(addon['manifestUrl'])
@@ -3358,465 +3444,1032 @@ async def get_category_content(
 
 @api_router.get("/content/search")
 async def search_content(
-    q: str, 
+    q: str,
     skip: int = 0,
     limit: int = 30,
-    content_type: str = None,  # 'movie' or 'series' to filter
+    content_type: str = None,
+    mode: str = "auto",
     current_user: User = Depends(get_current_user)
 ):
-    """Search content via Cinemeta - supports title search and cast/director/genre searches with pagination"""
-    if not q or len(q) < 2:
-        return {"movies": [], "series": [], "hasMore": False, "total": 0}
-    
-    # Common words to ignore when matching
-    STOP_WORDS = {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'is', 'it'}
-    
-    # Detect if this looks like a person name search (cast/director)
-    # Person names usually: 2-3 words, each capitalized, no common movie words
-    query_words = q.split()
-    MOVIE_WORDS = {'movie', 'film', 'show', 'series', 'season', 'episode', 'part', 'vol', 'volume', '2', '3', 'ii', 'iii', 'things', 'the', 'of', 'and', 'a', 'in', 'on', 'at', 'to'}
-    # Also exclude common show/movie title patterns
-    TITLE_PATTERNS = ['stranger things', 'breaking bad', 'game of thrones', 'the walking dead', 'stranger', 'squid']
-    is_likely_person_name = (
-        len(query_words) >= 2 and 
-        len(query_words) <= 4 and
-        all(word[0].isupper() if word else False for word in query_words) and
-        not any(word.lower() in MOVIE_WORDS for word in query_words) and
-        not any(pattern in q.lower() for pattern in TITLE_PATTERNS)
-    )
-    
-    # Detect genre searches - map to Cinemeta genre IDs
-    GENRE_MAP = {
-        'action': 'Action',
-        'comedy': 'Comedy', 
-        'drama': 'Drama',
-        'horror': 'Horror',
-        'thriller': 'Thriller',
-        'romance': 'Romance',
-        'sci-fi': 'Sci-Fi',
-        'science fiction': 'Sci-Fi',
-        'fantasy': 'Fantasy',
-        'adventure': 'Adventure',
-        'animation': 'Animation',
-        'animated': 'Animation',
-        'documentary': 'Documentary',
-        'crime': 'Crime',
-        'mystery': 'Mystery',
-        'western': 'Western',
-        'musical': 'Musical',
-        'war': 'War',
-        'history': 'History',
-        'historical': 'History',
-        'biography': 'Biography',
-        'family': 'Family',
-        'sport': 'Sport',
-        'sports': 'Sport',
-        'music': 'Music',
-    }
-    
-    query_lower = q.lower().strip()
-    is_genre_search = query_lower in GENRE_MAP
-    genre_name = GENRE_MAP.get(query_lower)
-    
-    logger.info(f"Search query: '{q}' - skip={skip}, limit={limit}, type={content_type}, is_genre={is_genre_search}")
-    
-    # If it's a genre search, fetch from genre catalog with pagination
-    if is_genre_search and genre_name:
-        try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                # Fetch genre-specific catalogs from Cinemeta with skip parameter
-                # Format: /catalog/{type}/top/genre={genre}/skip={skip}.json
-                if skip > 0:
-                    movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/genre={genre_name}/skip={skip}.json"
-                    series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/genre={genre_name}/skip={skip}.json"
-                else:
-                    movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/genre={genre_name}.json"
-                    series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/genre={genre_name}.json"
-                
-                logger.info(f"Fetching genre catalog: {movie_url}")
-                
-                # Fetch based on content_type filter
-                movies = []
-                series = []
-                
-                if content_type != 'series':
-                    movie_resp = await client.get(movie_url)
-                    if movie_resp.status_code == 200:
-                        movies = movie_resp.json().get('metas', [])
-                        logger.info(f"Genre '{genre_name}' movies: {len(movies)}")
-                
-                if content_type != 'movie':
-                    series_resp = await client.get(series_url)
-                    if series_resp.status_code == 200:
-                        series = series_resp.json().get('metas', [])
-                        logger.info(f"Genre '{genre_name}' series: {len(series)}")
-                
-                # Apply limit
-                movies = movies[:limit]
-                series = series[:limit]
-                
-                # Determine if there's more content
-                has_more = len(movies) >= limit or len(series) >= limit
-                
-                return {
-                    "movies": movies,
-                    "series": series,
-                    "hasMore": has_more,
-                    "total": len(movies) + len(series)
-                }
-        except Exception as e:
-            logger.error(f"Genre search error: {str(e)}")
-            # Fall back to regular search
-    
-    def score_result(item, query, trust_cinemeta=False):
-        """Score search results by relevance"""
-        name = (item.get('name') or '').lower()
-        query_lower = query.lower()
+    """
+    V711D_STREMIO_SEARCH
 
-        # V650_TITLE_FIRST_SEARCH
-        # Normalize spacing/punctuation for exact TITLE identity.
-        # This affects search scoring only.
-        name_compact = ''.join(
-            ch for ch in name
+    Modes:
+      auto      - genre -> exact title -> person -> regular title
+      title     - Cinemeta title search only
+      person    - TMDB person credits (cast + directing)
+      cast      - TMDB cast credits only
+      director  - TMDB directing credits only
+      genre     - Cinemeta genre catalog
+
+    Person searching is case-insensitive and no longer depends on whether
+    the user capitalized a name.
+    """
+    import urllib.parse
+
+    q = str(q or "").strip()
+
+    if len(q) < 2:
+        return {
+            "movies": [],
+            "series": [],
+            "hasMore": False,
+            "total": 0,
+        }
+
+    try:
+        skip = max(0, int(skip or 0))
+    except Exception:
+        skip = 0
+
+    try:
+        limit = min(max(1, int(limit or 30)), 50)
+    except Exception:
+        limit = 30
+
+    requested_mode = str(mode or "auto").strip().lower()
+
+    valid_modes = {
+        "auto",
+        "title",
+        "person",
+        "cast",
+        "director",
+        "genre",
+    }
+
+    if requested_mode not in valid_modes:
+        requested_mode = "auto"
+
+    if content_type not in (None, "movie", "series"):
+        content_type = None
+
+    query_lower = q.lower().strip()
+
+    STOP_WORDS = {
+        "the", "a", "an", "and", "or", "of", "in",
+        "on", "at", "to", "for", "is", "it",
+    }
+
+    GENRE_MAP = {
+        "action": "Action",
+        "comedy": "Comedy",
+        "drama": "Drama",
+        "horror": "Horror",
+        "thriller": "Thriller",
+        "romance": "Romance",
+        "sci-fi": "Sci-Fi",
+        "science fiction": "Sci-Fi",
+        "fantasy": "Fantasy",
+        "adventure": "Adventure",
+        "animation": "Animation",
+        "animated": "Animation",
+        "documentary": "Documentary",
+        "crime": "Crime",
+        "mystery": "Mystery",
+        "western": "Western",
+        "musical": "Musical",
+        "war": "War",
+        "history": "History",
+        "historical": "History",
+        "biography": "Biography",
+        "family": "Family",
+        "sport": "Sport",
+        "sports": "Sport",
+        "music": "Music",
+    }
+
+    logger.info(
+        f"[V711D] Search q='{q}' mode={requested_mode} "
+        f"skip={skip} limit={limit} type={content_type}"
+    )
+
+    def _compact(value):
+        return "".join(
+            ch
+            for ch in str(value or "").lower()
             if ch.isalnum()
         )
-        query_compact = ''.join(
-            ch for ch in query_lower
-            if ch.isalnum()
-        )
+
+    def _score_title(item):
+        name = str(item.get("name") or "").lower()
+        compact_name = _compact(name)
+        compact_query = _compact(q)
 
         if (
-            name_compact
-            and query_compact
-            and name_compact == query_compact
+            compact_name
+            and compact_query
+            and compact_name == compact_query
         ):
             return 100
 
-        query_words_lower = query_lower.split()
-        
-        # Get significant words (non-stop words) from query
-        significant_words = [w for w in query_words_lower if w not in STOP_WORDS and len(w) > 1]
-        
-        # If no significant words, use all words
-        if not significant_words:
-            significant_words = query_words_lower
-        
-        # Exact match gets highest score
+        words = query_lower.split()
+
+        significant = [
+            word
+            for word in words
+            if word not in STOP_WORDS and len(word) > 1
+        ]
+
+        if not significant:
+            significant = words
+
         if name == query_lower:
             return 100
-        
-        # Title starts with query
+
         if name.startswith(query_lower):
             return 95
-        
-        # Full query appears in title
+
         if query_lower in name:
             return 90
-        
-        # All significant words must appear in title
-        all_significant_present = all(word in name for word in significant_words)
-        if all_significant_present:
-            # Bonus for shorter titles (more specific match)
+
+        if significant and all(word in name for word in significant):
             length_bonus = max(0, 20 - len(name.split()))
             return 80 + length_bonus
-        
-        # For person name or genre searches, trust Cinemeta's results
-        # Cinemeta searches across cast, director, and other metadata
-        if trust_cinemeta:
-            # Give a base score - Cinemeta returned this for a reason (cast match, etc)
-            # Use release year as tiebreaker - prefer newer content
-            year_str = item.get('releaseInfo') or item.get('year') or '0'
-            try:
-                year = int(str(year_str)[:4])
-                year_bonus = (year - 1950) / 10  # Higher score for newer movies
-            except:
-                year_bonus = 0
-            return 50 + min(year_bonus, 10)
-        
-        # If not matching and not trusting Cinemeta, reject
+
         return 0
-    
-    async def check_has_streams(content_type: str, content_id: str) -> bool:
-        """Quick check if content has any streams available"""
-        try:
-            # Try multiple sources for stream availability
-            async with httpx.AsyncClient(follow_redirects=True, timeout=6.0) as client:
-                # Try ApiBay (The Pirate Bay) - fast and usually available
-                if content_type == 'movie':
-                    # For movies, we'll assume popular titles have streams
-                    # Check via a quick ApiBay search using the IMDB ID
-                    try:
-                        url = f"https://apibay.org/q.php?q={content_id}"
-                        response = await client.get(url, timeout=4.0)
-                        if response.status_code == 200:
-                            results = response.json()
-                            if isinstance(results, list) and len(results) > 0:
-                                # Check if we got real results (not "No results")
-                                if results[0].get('id') != '0':
-                                    return True
-                    except:
-                        pass
-                
-                # Try 1337x addon as backup
-                try:
-                    url = f"https://1337x-api.strem.fun/stream/{content_type}/{content_id}.json"
-                    response = await client.get(url, timeout=4.0)
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data.get('streams') and len(data.get('streams', [])) > 0:
-                            return True
-                except:
-                    pass
-                
-                # For series, assume most popular series have streams
-                if content_type == 'series':
-                    return True  # Most series in Cinemeta have streams available
-                    
-        except:
-            pass
-        return False
-    
-    async def verify_actor_in_cast(client: httpx.AsyncClient, content_type: str, content_id: str, actor_name: str):
-        """Verify that an actor appears in the cast of a specific content item"""
-        try:
-            url = f"https://v3-cinemeta.strem.io/meta/{content_type}/{content_id}.json"
-            response = await client.get(url, timeout=8.0)
-            if response.status_code == 200:
-                data = response.json()
-                meta = data.get('meta', {})
-                cast = meta.get('cast', [])
-                
-                # Normalize actor name for comparison
-                actor_lower = actor_name.lower().strip()
-                actor_parts = actor_lower.split()
-                
-                # For person searches, require at least first and last name
-                if len(actor_parts) < 2:
-                    return False
-                
-                # Check each cast member
-                for cast_member in cast:
-                    if isinstance(cast_member, str):
-                        cast_lower = cast_member.lower().strip()
-                    elif isinstance(cast_member, dict):
-                        cast_lower = cast_member.get('name', '').lower().strip()
-                    else:
-                        continue
-                    
-                    cast_parts = cast_lower.split()
-                    
-                    # Require exact match on full name
-                    if actor_lower == cast_lower:
-                        return True
-                    
-                    # Or match if first name AND last name both appear in cast member name
-                    # This handles "David Harbour" matching "David K. Harbour" or similar
-                    first_name = actor_parts[0]
-                    last_name = actor_parts[-1]
-                    
-                    # Both first and last name must be in the cast member's name
-                    # And the cast member name must be similar length (to avoid "David" matching "David Holmes")
-                    first_match = first_name in cast_parts or any(p.startswith(first_name) for p in cast_parts)
-                    last_match = last_name in cast_parts or any(p.startswith(last_name) for p in cast_parts)
-                    
-                    if first_match and last_match:
-                        # Additional check: cast name shouldn't be much longer than search name
-                        if len(cast_parts) <= len(actor_parts) + 1:
-                            return True
-                        
-                return False
-        except Exception as e:
-            logger.debug(f"Error verifying actor for {content_id}: {e}")
-            return False
-    
-    # Handle actor/person searches with verification
-    if is_likely_person_name:
-        logger.info(f"Actor search detected for: '{q}'")
-        try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-                encoded_q = q.replace(' ', '%20')
-                movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/search={encoded_q}.json"
-                series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/search={encoded_q}.json"
-                
-                movie_resp, series_resp = await asyncio.gather(
-                    client.get(movie_url),
-                    client.get(series_url),
-                    return_exceptions=True
-                )
-                
-                movies_raw = []
-                series_raw = []
-                
-                if not isinstance(movie_resp, Exception) and movie_resp.status_code == 200:
-                    movies_raw = movie_resp.json().get('metas', [])[:30]  # Limit for verification
-                
-                if not isinstance(series_resp, Exception) and series_resp.status_code == 200:
-                    series_raw = series_resp.json().get('metas', [])[:30]
-                
-                # V650_TITLE_FIRST_SEARCH
-                #
-                # Cinemeta has already returned candidate metadata above.
-                # If the query exactly identifies one of those TITLES,
-                # bypass the cast-only person verifier.
-                _v650_query_compact = ''.join(
-                    ch for ch in q.lower()
-                    if ch.isalnum()
-                )
 
-                _v650_exact_title = any(
-                    ''.join(
-                        ch for ch in
-                        str(item.get('name') or '').lower()
-                        if ch.isalnum()
-                    ) == _v650_query_compact
-                    for item in (movies_raw + series_raw)
-                )
+    # ------------------------------------------------------------
+    # Cinemeta title search
+    # ------------------------------------------------------------
 
-                if _v650_exact_title:
-                    logger.info(
-                        f"V650 exact title detected for '{q}' - "
-                        f"bypassing actor verification"
-                    )
+    async def _title_search():
+        encoded = urllib.parse.quote(q, safe="")
 
-                    movies_title_scored = [
-                        (m, score_result(m, q, False))
-                        for m in movies_raw
-                    ]
+        movie_url = (
+            "https://v3-cinemeta.strem.io/"
+            f"catalog/movie/top/search={encoded}.json"
+        )
 
-                    series_title_scored = [
-                        (s, score_result(s, q, False))
-                        for s in series_raw
-                    ]
+        series_url = (
+            "https://v3-cinemeta.strem.io/"
+            f"catalog/series/top/search={encoded}.json"
+        )
 
-                    result_limit = min(max(limit, 1), 30)
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=15.0
+        ) as client:
 
-                    movies_title = [
-                        m
-                        for m, score in sorted(
-                            movies_title_scored,
-                            key=lambda x: -x[1]
-                        )
-                        if score > 0
-                    ][:result_limit]
-
-                    series_title = [
-                        s
-                        for s, score in sorted(
-                            series_title_scored,
-                            key=lambda x: -x[1]
-                        )
-                        if score > 0
-                    ][:result_limit]
-
-                    if content_type == 'series':
-                        movies_title = []
-
-                    if content_type == 'movie':
-                        series_title = []
-
-                    return {
-                        "movies": movies_title,
-                        "series": series_title,
-                        "hasMore": False,
-                        "total": (
-                            len(movies_title) +
-                            len(series_title)
-                        ),
-                    }
-                logger.info(f"Actor search '{q}': Found {len(movies_raw)} movies, {len(series_raw)} series to verify")
-                
-                # Verify actor is in cast for each result
-                async def verify_and_return_movie(m):
-                    content_id = m.get('imdb_id') or m.get('id')
-                    if content_id and await verify_actor_in_cast(client, 'movie', content_id, q):
-                        # Skip stream check for actor search - too slow and unreliable
-                        return m
-                    return None
-                
-                async def verify_and_return_series(s):
-                    content_id = s.get('imdb_id') or s.get('id')
-                    if content_id and await verify_actor_in_cast(client, 'series', content_id, q):
-                        return s
-                    return None
-                
-                # Run verifications in parallel
-                movie_checks = await asyncio.gather(*[verify_and_return_movie(m) for m in movies_raw])
-                series_checks = await asyncio.gather(*[verify_and_return_series(s) for s in series_raw])
-                
-                verified_movies = [m for m in movie_checks if m is not None]
-                verified_series = [s for s in series_checks if s is not None]
-                
-                logger.info(f"Actor search '{q}': Verified {len(verified_movies)} movies, {len(verified_series)} series")
-                
-                # Apply pagination
-                total_count = len(verified_movies) + len(verified_series)
-                has_more = False  # Actor search doesn't support pagination currently
-                
-                return {
-                    "movies": verified_movies[:limit],
-                    "series": verified_series[:limit],
-                    "hasMore": has_more,
-                    "total": total_count
-                }
-        except Exception as e:
-            logger.error(f"Actor search error: {str(e)}")
-            # Fall through to regular search
-    
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-            # URL encode the query properly
-            encoded_q = q.replace(' ', '%20')
-            movie_url = f"https://v3-cinemeta.strem.io/catalog/movie/top/search={encoded_q}.json"
-            series_url = f"https://v3-cinemeta.strem.io/catalog/series/top/search={encoded_q}.json"
-            
             movie_resp, series_resp = await asyncio.gather(
                 client.get(movie_url),
                 client.get(series_url),
-                return_exceptions=True
+                return_exceptions=True,
             )
-            
-            movies = []
-            series = []
-            
-            if not isinstance(movie_resp, Exception) and movie_resp.status_code == 200:
-                movies = movie_resp.json().get('metas', [])
-            
-            if not isinstance(series_resp, Exception) and series_resp.status_code == 200:
-                series = series_resp.json().get('metas', [])
-            
-            # Score and sort results by relevance
-            movies_scored = [(m, score_result(m, q, trust_cinemeta=False)) for m in movies]
-            series_scored = [(s, score_result(s, q, trust_cinemeta=False)) for s in series]
-            
-            # Only include results with score > 0
-            result_limit = 15
-            movies_filtered = [m for m, score in sorted(movies_scored, key=lambda x: -x[1]) if score > 0][:result_limit]
-            series_filtered = [s for s, score in sorted(series_scored, key=lambda x: -x[1]) if score > 0][:result_limit]
-            
-            # V613_SEARCH_METADATA_FIRST
-            # Search is a metadata/catalog operation, not a stream-availability
-            # test. A valid Cinemeta title must remain searchable even when
-            # torrent providers have no stream for it yet.
-            #
-            # Stream availability is resolved later when the user opens the
-            # title. This also prevents new theatrical releases from randomly
-            # disappearing from Search as external torrent indexes fluctuate.
-            logger.info(
-                f"V613 Search '{q}': returning "
-                f"{len(movies_filtered)} movies, {len(series_filtered)} series "
-                f"without stream-availability filtering"
+
+        movies_raw = []
+        series_raw = []
+
+        if (
+            not isinstance(movie_resp, Exception)
+            and movie_resp.status_code == 200
+        ):
+            movies_raw = (
+                movie_resp.json().get("metas", []) or []
+            )
+
+        if (
+            not isinstance(series_resp, Exception)
+            and series_resp.status_code == 200
+        ):
+            series_raw = (
+                series_resp.json().get("metas", []) or []
+            )
+
+        exact_title = any(
+            _compact(item.get("name")) == _compact(q)
+            for item in (movies_raw + series_raw)
+        )
+
+        movie_scored = sorted(
+            [
+                (item, _score_title(item))
+                for item in movies_raw
+            ],
+            key=lambda pair: -pair[1],
+        )
+
+        series_scored = sorted(
+            [
+                (item, _score_title(item))
+                for item in series_raw
+            ],
+            key=lambda pair: -pair[1],
+        )
+
+        movies_all = [
+            item
+            for item, score in movie_scored
+            if score > 0
+        ]
+
+        series_all = [
+            item
+            for item, score in series_scored
+            if score > 0
+        ]
+
+        if content_type == "series":
+            movies_all = []
+
+        if content_type == "movie":
+            series_all = []
+
+        movies_page = movies_all[skip:skip + limit]
+        series_page = series_all[skip:skip + limit]
+
+        has_more = (
+            skip + limit < len(movies_all)
+            or skip + limit < len(series_all)
+        )
+
+        return {
+            "movies": movies_page,
+            "series": series_page,
+            "hasMore": has_more,
+            "total": len(movies_all) + len(series_all),
+        }, exact_title
+
+    # ------------------------------------------------------------
+    # Cinemeta genre search
+    # ------------------------------------------------------------
+
+    async def _genre_search(genre_name):
+        encoded_genre = urllib.parse.quote(
+            str(genre_name),
+            safe="-"
+        )
+
+        if skip > 0:
+            movie_url = (
+                "https://v3-cinemeta.strem.io/catalog/movie/top/"
+                f"genre={encoded_genre}/skip={skip}.json"
+            )
+
+            series_url = (
+                "https://v3-cinemeta.strem.io/catalog/series/top/"
+                f"genre={encoded_genre}/skip={skip}.json"
+            )
+        else:
+            movie_url = (
+                "https://v3-cinemeta.strem.io/catalog/movie/top/"
+                f"genre={encoded_genre}.json"
+            )
+
+            series_url = (
+                "https://v3-cinemeta.strem.io/catalog/series/top/"
+                f"genre={encoded_genre}.json"
+            )
+
+        movies = []
+        series = []
+
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=20.0
+        ) as client:
+
+            tasks = []
+
+            if content_type != "series":
+                tasks.append(("movie", client.get(movie_url)))
+
+            if content_type != "movie":
+                tasks.append(("series", client.get(series_url)))
+
+            responses = await asyncio.gather(
+                *[task for _, task in tasks],
+                return_exceptions=True,
+            )
+
+            for (kind, _), response in zip(tasks, responses):
+                if (
+                    isinstance(response, Exception)
+                    or response.status_code != 200
+                ):
+                    continue
+
+                metas = response.json().get("metas", []) or []
+
+                if kind == "movie":
+                    movies = metas[:limit]
+                else:
+                    series = metas[:limit]
+
+        has_more = (
+            len(movies) >= limit
+            or len(series) >= limit
+        )
+
+        logger.info(
+            f"[V711D] Genre '{genre_name}' -> "
+            f"{len(movies)} movies / {len(series)} series"
+        )
+
+        return {
+            "movies": movies,
+            "series": series,
+            "hasMore": has_more,
+            "total": len(movies) + len(series),
+        }
+
+    # ------------------------------------------------------------
+    # TMDB support
+    # ------------------------------------------------------------
+
+    tmdb_api_key = os.environ.get(
+        "TMDB_API_KEY",
+        ""
+    ).strip()
+
+    async def _tmdb_json(client, path, params=None):
+        if not tmdb_api_key:
+            return {}
+
+        payload = dict(params or {})
+        payload["api_key"] = tmdb_api_key
+
+        response = await client.get(
+            f"https://api.themoviedb.org/3{path}",
+            params=payload,
+        )
+
+        response.raise_for_status()
+
+        return response.json()
+
+    async def _resolve_person(client, allow_partial=False):
+        try:
+            data = await _tmdb_json(
+                client,
+                "/search/person",
+                {
+                    "query": q,
+                    "language": "en-US",
+                    "page": 1,
+                    "include_adult": "false",
+                },
+            )
+        except Exception as exc:
+            logger.warning(
+                f"[V711D] TMDB person lookup failed for '{q}': {exc}"
+            )
+            return None, False
+
+        results = data.get("results", []) or []
+
+        exact = [
+            person
+            for person in results
+            if str(person.get("name") or "").strip().lower()
+            == query_lower
+        ]
+
+        if exact:
+            return exact[0], True
+
+        if allow_partial and results:
+            return results[0], False
+
+        return None, False
+
+    # ------------------------------------------------------------
+    # Stable in-process caches
+    # ------------------------------------------------------------
+
+    person_credit_cache = globals().setdefault(
+        "_V711_PERSON_CREDIT_CACHE",
+        {}
+    )
+
+    external_id_cache = globals().setdefault(
+        "_V711_EXTERNAL_ID_CACHE",
+        {}
+    )
+
+    async def _person_credits(client, person_id):
+        now = time.time()
+
+        cached = person_credit_cache.get(str(person_id))
+
+        if cached:
+            cached_at, payload = cached
+
+            if now - cached_at < 3600:
+                return payload
+
+        payload = await _tmdb_json(
+            client,
+            f"/person/{person_id}/combined_credits",
+            {"language": "en-US"},
+        )
+
+        person_credit_cache[str(person_id)] = (
+            now,
+            payload,
+        )
+
+        return payload
+
+    async def _external_imdb_id(client, item):
+        media_type = item.get("media_type")
+        tmdb_id = item.get("id")
+
+        if media_type not in ("movie", "tv") or not tmdb_id:
+            return None
+
+        cache_key = f"{media_type}:{tmdb_id}"
+
+        if cache_key in external_id_cache:
+            return external_id_cache[cache_key]
+
+        try:
+            path = (
+                f"/movie/{tmdb_id}/external_ids"
+                if media_type == "movie"
+                else f"/tv/{tmdb_id}/external_ids"
+            )
+
+            data = await _tmdb_json(
+                client,
+                path,
+            )
+
+            imdb_id = str(
+                data.get("imdb_id") or ""
+            ).strip()
+
+            if not imdb_id.startswith("tt"):
+                imdb_id = None
+
+        except Exception as exc:
+            logger.debug(
+                f"[V711D] external-id lookup failed "
+                f"{media_type}/{tmdb_id}: {exc}"
+            )
+
+            imdb_id = None
+
+        external_id_cache[cache_key] = imdb_id
+
+        return imdb_id
+
+    # ------------------------------------------------------------
+    # Person ranking
+    # ------------------------------------------------------------
+
+    def _int_value(value, default=0):
+        try:
+            return int(value)
+        except Exception:
+            return default
+
+    def _float_value(value, default=0.0):
+        try:
+            return float(value)
+        except Exception:
+            return default
+
+    def _year_value(item):
+        raw = (
+            item.get("release_date")
+            or item.get("first_air_date")
+            or ""
+        )
+
+        try:
+            return int(str(raw)[:4])
+        except Exception:
+            return 0
+
+    def _is_self_credit(item):
+        character = str(
+            item.get("character") or ""
+        ).strip().lower()
+
+        if not character:
+            return False
+
+        return (
+            character.startswith("self")
+            or "himself" in character
+            or "herself" in character
+            or "archive footage" in character
+            or "archive audio" in character
+        )
+
+    def _dedupe(items, role):
+        deduped = {}
+
+        for original in items:
+            if original.get("media_type") not in ("movie", "tv"):
+                continue
+
+            tmdb_id = original.get("id")
+
+            if not tmdb_id:
+                continue
+
+            item = dict(original)
+            item["_v711_role"] = role
+
+            key = (
+                item.get("media_type"),
+                tmdb_id,
+            )
+
+            previous = deduped.get(key)
+
+            if previous is None:
+                deduped[key] = item
+                continue
+
+            if item.get("media_type") == "tv":
+                if _int_value(item.get("episode_count")) > _int_value(
+                    previous.get("episode_count")
+                ):
+                    deduped[key] = item
+            else:
+                new_order = _int_value(
+                    item.get("order"),
+                    999
+                )
+
+                old_order = _int_value(
+                    previous.get("order"),
+                    999
+                )
+
+                if new_order < old_order:
+                    deduped[key] = item
+
+        return list(deduped.values())
+
+    def _role_priority(item, preferred_role):
+        role = item.get("_v711_role")
+
+        return 0 if role == preferred_role else 1
+
+    def _movie_rank(item, preferred_role):
+        role = item.get("_v711_role")
+
+        self_penalty = (
+            3
+            if role == "cast" and _is_self_credit(item)
+            else 0
+        )
+
+        character = str(
+            item.get("character") or ""
+        ).strip()
+
+        empty_character_penalty = (
+            1
+            if role == "cast" and not character
+            else 0
+        )
+
+        if role == "director":
+            role_bucket = 0
+        else:
+            order = _int_value(
+                item.get("order"),
+                999
+            )
+
+            if order <= 2:
+                role_bucket = 0
+            elif order <= 5:
+                role_bucket = 1
+            elif order < 999:
+                role_bucket = 2
+            else:
+                role_bucket = 3
+
+        return (
+            _role_priority(item, preferred_role),
+            self_penalty,
+            empty_character_penalty,
+            role_bucket,
+            -_int_value(item.get("vote_count")),
+            -_float_value(item.get("popularity")),
+            -_year_value(item),
+            str(
+                item.get("title")
+                or item.get("name")
+                or ""
+            ).lower(),
+        )
+
+    def _series_rank(item, preferred_role):
+        role = item.get("_v711_role")
+
+        self_penalty = (
+            3
+            if role == "cast" and _is_self_credit(item)
+            else 0
+        )
+
+        character = str(
+            item.get("character") or ""
+        ).strip()
+
+        empty_character_penalty = (
+            1
+            if role == "cast" and not character
+            else 0
+        )
+
+        episodes = _int_value(
+            item.get("episode_count")
+        )
+
+        return (
+            _role_priority(item, preferred_role),
+            self_penalty,
+            empty_character_penalty,
+            -episodes,
+            -_int_value(item.get("vote_count")),
+            -_float_value(item.get("popularity")),
+            -_year_value(item),
+            str(
+                item.get("name")
+                or item.get("title")
+                or ""
+            ).lower(),
+        )
+
+    async def _person_search(person, person_mode):
+        person_id = person.get("id")
+        person_name = str(
+            person.get("name") or q
+        )
+
+        known_department = str(
+            person.get("known_for_department") or ""
+        ).strip().lower()
+
+        if not person_id:
+            return {
+                "movies": [],
+                "series": [],
+                "hasMore": False,
+                "total": 0,
+            }
+
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=15.0
+        ) as client:
+
+            credits = await _person_credits(
+                client,
+                person_id,
+            )
+
+            cast_all = _dedupe(
+                credits.get("cast", []) or [],
+                "cast",
+            )
+
+            directors_raw = [
+                credit
+                for credit in (credits.get("crew", []) or [])
+                if str(
+                    credit.get("job") or ""
+                ).strip().lower() == "director"
+            ]
+
+            director_all = _dedupe(
+                directors_raw,
+                "director",
+            )
+
+            if person_mode == "cast":
+                combined = cast_all
+                preferred_role = "cast"
+
+            elif person_mode == "director":
+                combined = director_all
+                preferred_role = "director"
+
+            else:
+                preferred_role = (
+                    "director"
+                    if known_department == "directing"
+                    else "cast"
+                )
+
+                combined_map = {}
+
+                primary = (
+                    director_all
+                    if preferred_role == "director"
+                    else cast_all
+                )
+
+                secondary = (
+                    cast_all
+                    if preferred_role == "director"
+                    else director_all
+                )
+
+                for item in primary + secondary:
+                    key = (
+                        item.get("media_type"),
+                        item.get("id"),
+                    )
+
+                    if key not in combined_map:
+                        combined_map[key] = item
+
+                combined = list(
+                    combined_map.values()
+                )
+
+            movies_all = [
+                item
+                for item in combined
+                if item.get("media_type") == "movie"
+            ]
+
+            series_all = [
+                item
+                for item in combined
+                if item.get("media_type") == "tv"
+            ]
+
+            movies_all.sort(
+                key=lambda item: _movie_rank(
+                    item,
+                    preferred_role,
+                )
+            )
+
+            series_all.sort(
+                key=lambda item: _series_rank(
+                    item,
+                    preferred_role,
+                )
+            )
+
+            if content_type == "series":
+                movies_all = []
+
+            if content_type == "movie":
+                series_all = []
+
+            movie_slice = movies_all[
+                skip:skip + limit
+            ]
+
+            series_slice = series_all[
+                skip:skip + limit
+            ]
+
+            semaphore = asyncio.Semaphore(12)
+
+            async def convert(item):
+                async with semaphore:
+                    imdb_id = await _external_imdb_id(
+                        client,
+                        item,
+                    )
+
+                if not imdb_id:
+                    return None
+
+                media_type = item.get("media_type")
+
+                name = str(
+                    item.get("title")
+                    or item.get("name")
+                    or item.get("original_title")
+                    or item.get("original_name")
+                    or ""
+                ).strip()
+
+                poster_path = str(
+                    item.get("poster_path") or ""
+                ).strip()
+
+                poster = (
+                    "https://image.tmdb.org/t/p/w500"
+                    + poster_path
+                    if poster_path
+                    else ""
+                )
+
+                raw_date = str(
+                    item.get("release_date")
+                    or item.get("first_air_date")
+                    or ""
+                )
+
+                year = (
+                    raw_date[:4]
+                    if len(raw_date) >= 4
+                    else ""
+                )
+
+                return {
+                    "id": imdb_id,
+                    "imdb_id": imdb_id,
+                    "name": name,
+                    "poster": poster,
+                    "type": (
+                        "movie"
+                        if media_type == "movie"
+                        else "series"
+                    ),
+                    "year": year,
+                }
+
+            movie_results, series_results = await asyncio.gather(
+                asyncio.gather(
+                    *[
+                        convert(item)
+                        for item in movie_slice
+                    ]
+                ),
+                asyncio.gather(
+                    *[
+                        convert(item)
+                        for item in series_slice
+                    ]
+                ),
+            )
+
+        movies = [
+            item
+            for item in movie_results
+            if item is not None
+        ]
+
+        series = [
+            item
+            for item in series_results
+            if item is not None
+        ]
+
+        total = (
+            len(movies_all)
+            + len(series_all)
+        )
+
+        has_more = (
+            skip + limit < len(movies_all)
+            or skip + limit < len(series_all)
+        )
+
+        logger.info(
+            f"[V711D] Person '{person_name}' "
+            f"mode={person_mode} -> "
+            f"{len(movies)} movies / "
+            f"{len(series)} series "
+            f"(total credits={total}, hasMore={has_more})"
+        )
+
+        return {
+            "movies": movies,
+            "series": series,
+            "hasMore": has_more,
+            "total": total,
+        }
+
+    # ============================================================
+    # ROUTING
+    # ============================================================
+
+    # Explicit genre intent from Details.
+    if requested_mode == "genre":
+        return await _genre_search(
+            GENRE_MAP.get(query_lower) or q
+        )
+
+    # Typed exact genre names.
+    if (
+        requested_mode == "auto"
+        and query_lower in GENRE_MAP
+    ):
+        return await _genre_search(
+            GENRE_MAP[query_lower]
+        )
+
+    # Explicit person intent bypasses Cinemeta completely.
+    if requested_mode in (
+        "person",
+        "cast",
+        "director",
+    ):
+        if not tmdb_api_key:
+            logger.error(
+                "[V711D] TMDB_API_KEY missing for person search"
             )
 
             return {
-                "movies": movies_filtered,
-                "series": series_filtered,
+                "movies": [],
+                "series": [],
                 "hasMore": False,
-                "total": len(movies_filtered) + len(series_filtered),
+                "total": 0,
             }
-    except Exception as e:
-        logger.error(f"Search error: {str(e)}")
-        return {"movies": [], "series": []}
 
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=15.0
+        ) as client:
+
+            person, _ = await _resolve_person(
+                client,
+                allow_partial=True,
+            )
+
+        if person:
+            return await _person_search(
+                person,
+                requested_mode,
+            )
+
+        return {
+            "movies": [],
+            "series": [],
+            "hasMore": False,
+            "total": 0,
+        }
+
+    # Title-only intent.
+    if requested_mode == "title":
+        result, _ = await _title_search()
+
+        return result
+
+    # AUTO:
+    # 1. Search titles.
+    # 2. Exact title wins.
+    # 3. Otherwise an exact TMDB person wins.
+    # 4. If title search found nothing, allow TMDB's best person match.
+    # 5. Otherwise keep title results.
+    title_result, exact_title = await _title_search()
+
+    # V711E_PERSON_TITLE_COLLISION
+    #
+    # A real person may share their name with obscure metadata titles
+    # (for example "Will Smith"). AUTO must not return a tiny literal-title
+    # set before checking whether TMDB identifies the query as an exact
+    # person name.
+    #
+    # Explicit mode=title still preserves literal-title searching.
+
+    person = None
+    exact_person = False
+
+    if tmdb_api_key:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=15.0
+        ) as client:
+
+            person, exact_person = await _resolve_person(
+                client,
+                allow_partial=(
+                    not exact_title
+                    and title_result.get("total", 0) == 0
+                ),
+            )
+
+    if person and exact_person:
+        logger.info(
+            f"[V711E] Exact person wins AUTO collision for "
+            f"'{q}' -> {person.get('name')}"
+        )
+
+        return await _person_search(
+            person,
+            "person",
+        )
+
+    if exact_title:
+        logger.info(
+            f"[V711E] Exact title selected for '{q}'"
+        )
+
+        return title_result
+
+    if (
+        person
+        and title_result.get("total", 0) == 0
+    ):
+        logger.info(
+            f"[V711E] Person fallback selected for "
+            f"'{q}' -> {person.get('name')}"
+        )
+
+        return await _person_search(
+            person,
+            "person",
+        )
+
+    return title_result
 @api_router.get("/content/meta/{content_type}/{content_id}")
 async def get_meta(content_type: str, content_id: str, current_user: User = Depends(get_current_user)):
     """Get metadata for content including episodes for series"""
