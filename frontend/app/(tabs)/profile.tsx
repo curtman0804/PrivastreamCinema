@@ -39,6 +39,7 @@ export default function ProfileScreen() {
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
   const [parentalOpen, setParentalOpen] = useState(false);
+  const [parentalKeypadOpen, setParentalKeypadOpen] = useState(true);
 
   const handleLogout = () => {
     const doLogout = async () => {
@@ -154,19 +155,29 @@ export default function ProfileScreen() {
         transparent
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => setParentalOpen(false)}
+        onRequestClose={() => {
+          setParentalOpen(false);
+          setParentalKeypadOpen(true);
+        }}
       >
         <View style={styles.parentalModalOverlay}>
           <View
             style={[
               styles.parentalModalCard,
               isTV && styles.parentalModalCardTV,
+              isTV &&
+                parentalKeypadOpen &&
+                styles.parentalModalCardTVKeypad,
             ]}
           >
             {parentalOpen && (
               <ParentalControlsScreen
                 embedded
-                onClose={() => setParentalOpen(false)}
+                onKeypadVisibilityChange={setParentalKeypadOpen}
+                onClose={() => {
+                  setParentalOpen(false);
+                  setParentalKeypadOpen(true);
+                }}
               />
             )}
           </View>
@@ -250,10 +261,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   parentalModalCardTV: {
-    width: '72%',
-    maxWidth: 760,
-    height: '88%',
-    maxHeight: 620,
+    width: '64%',
+    maxWidth: 680,
+    height: '76%',
+    maxHeight: 450,
+  },
+  parentalModalCardTVKeypad: {
+    height: 376,
+    maxHeight: 376,
   },
   bottomPadding: { height: 40 },
 });

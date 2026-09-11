@@ -10,8 +10,10 @@ import * as Crypto from 'expo-crypto';
 import AsyncStorage from './mmkvStorage';
 
 const PIN_KEY_PREFIX = '@ps_parental_pin_v1';
+// V709B2: authoritative PIN survives logout/login on this device.
+const DEVICE_PIN_KEY = '@ps_parental_pin_v2_device';
 const ADULT_KEY_PREFIX = '@ps_adult_content_v1';
-const PARENTAL_MODE_KEY_PREFIX = '@ps_parental_mode_v1';
+const PARENTAL_MODE_KEY_PREFIX = '@ps_parental_mode_v2';
 
 type PinRecord = {
   version: 1;
@@ -57,25 +59,51 @@ async function digestPin(pin: string, salt: string): Promise<string> {
 
 export async function isParentalPinConfigured(): Promise<boolean> {
   try {
-    const key = await scopedKey(PIN_KEY_PREFIX);
-    const raw = await AsyncStorage.getItem(key);
+    const deviceRaw = await AsyncStorage.getItem(DEVICE_PIN_KEY);
 
-    if (!raw) return false;
+    if (deviceRaw) {
+      const parsed = JSON.parse(deviceRaw) as PinRecord;
 
-    const parsed = JSON.parse(raw) as PinRecord;
+      if (
+        parsed?.version === 1 &&
+        typeof parsed?.salt === 'string' &&
+        parsed.salt.length > 0 &&
+        typeof parsed?.hash === 'string' &&
+        parsed.hash.length > 0
+      ) {
+        return true;
+      }
+    }
 
-    return (
+    // Migrate the current account's previous scoped PIN.
+    const legacyKey = await scopedKey(PIN_KEY_PREFIX);
+    let legacyRaw = await AsyncStorage.getItem(legacyKey);
+
+    // Older timing bugs could write the PIN under __anon__.
+    if (!legacyRaw) {
+      legacyRaw = await AsyncStorage.getItem(PIN_KEY_PREFIX + ':__anon__');
+    }
+
+    if (!legacyRaw) return false;
+
+    const parsed = JSON.parse(legacyRaw) as PinRecord;
+
+    const valid = (
       parsed?.version === 1 &&
       typeof parsed?.salt === 'string' &&
       parsed.salt.length > 0 &&
       typeof parsed?.hash === 'string' &&
       parsed.hash.length > 0
     );
+
+    if (!valid) return false;
+
+    await AsyncStorage.setItem(DEVICE_PIN_KEY, legacyRaw);
+    return true;
   } catch (_) {
     return false;
   }
 }
-
 export async function setParentalPin(pin: string): Promise<void> {
   if (!isValidPin(pin)) {
     throw new Error('PIN must contain exactly four digits.');
@@ -91,16 +119,34 @@ export async function setParentalPin(pin: string): Promise<void> {
     hash,
   };
 
-  const key = await scopedKey(PIN_KEY_PREFIX);
-  await AsyncStorage.setItem(key, JSON.stringify(record));
-}
+  const serialized = JSON.stringify(record);
 
+  await AsyncStorage.setItem(DEVICE_PIN_KEY, serialized);
+
+  // Maintain the current scoped copy for rollback compatibility.
+  try {
+    const legacyKey = await scopedKey(PIN_KEY_PREFIX);
+    await AsyncStorage.setItem(legacyKey, serialized);
+  } catch (_) {}
+}
 export async function verifyParentalPin(pin: string): Promise<boolean> {
   if (!isValidPin(pin)) return false;
 
   try {
-    const key = await scopedKey(PIN_KEY_PREFIX);
-    const raw = await AsyncStorage.getItem(key);
+    let raw = await AsyncStorage.getItem(DEVICE_PIN_KEY);
+
+    if (!raw) {
+      const legacyKey = await scopedKey(PIN_KEY_PREFIX);
+      raw = await AsyncStorage.getItem(legacyKey);
+
+      if (!raw) {
+        raw = await AsyncStorage.getItem(PIN_KEY_PREFIX + ':__anon__');
+      }
+
+      if (raw) {
+        await AsyncStorage.setItem(DEVICE_PIN_KEY, raw);
+      }
+    }
 
     if (!raw) return false;
 
@@ -114,19 +160,21 @@ export async function verifyParentalPin(pin: string): Promise<boolean> {
       return false;
     }
 
-    const candidate = await digestPin(pin, parsed.salt);
-
-    return candidate === parsed.hash;
+    const hash = await digestPin(pin, parsed.salt);
+    return hash === parsed.hash;
   } catch (_) {
     return false;
   }
 }
-
 export async function removeParentalPin(): Promise<void> {
-  const key = await scopedKey(PIN_KEY_PREFIX);
-  await AsyncStorage.removeItem(key);
-}
+  await AsyncStorage.removeItem(DEVICE_PIN_KEY);
 
+  try {
+    const legacyKey = await scopedKey(PIN_KEY_PREFIX);
+    await AsyncStorage.removeItem(legacyKey);
+    await AsyncStorage.removeItem(PIN_KEY_PREFIX + ':__anon__');
+  } catch (_) {}
+}
 export async function getAdultContentEnabled(): Promise<boolean> {
   try {
     const key = await scopedKey(ADULT_KEY_PREFIX);
@@ -160,17 +208,12 @@ export async function getParentalModeEnabled(): Promise<boolean> {
     const key = await scopedKey(PARENTAL_MODE_KEY_PREFIX);
     const raw = await AsyncStorage.getItem(key);
 
-    if (raw == null) {
-      return true;
-    }
-
+    // Missing V709 state means normal unrestricted mode.
     return raw === '1';
   } catch (_) {
-    // Storage/read failures fail closed.
-    return true;
+    return false;
   }
 }
-
 export async function setParentalModeEnabled(
   enabled: boolean
 ): Promise<void> {

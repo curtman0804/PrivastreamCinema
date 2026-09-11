@@ -38,10 +38,15 @@ const DIGITS = ['1','2','3','4','5','6','7','8','9','back','0','clear'];
 type ParentalControlsScreenProps = {
   embedded?: boolean;
   onClose?: () => void;
+  onKeypadVisibilityChange?: (visible: boolean) => void;
 };
 
 export default function ParentalControlsScreen(
-  { embedded = false, onClose }: ParentalControlsScreenProps = {}
+  {
+    embedded = false,
+    onClose,
+    onKeypadVisibilityChange,
+  }: ParentalControlsScreenProps = {}
 ) {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
@@ -59,13 +64,14 @@ export default function ParentalControlsScreen(
   const [loading, setLoading] = useState(true);
   const [configured, setConfigured] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
-  const [parentalModeEnabled, setParentalModeEnabledState] = useState(true);
+  const [parentalModeEnabled, setParentalModeEnabledState] = useState(false);
 
   const [mode, setMode] = useState<PinMode>('unlock');
   const [pin, setPin] = useState('');
   const [pendingPin, setPendingPin] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [toggleFeedback, setToggleFeedback] = useState<'idle' | 'saving' | 'success'>('idle');
 
   useEffect(() => {
     let cancelled = false;
@@ -75,12 +81,6 @@ export default function ParentalControlsScreen(
         const hasPin = await isParentalPinConfigured();
         let parentalMode = await getParentalModeEnabled();
 
-        // V706C2D_PARENTAL_MODE_MODAL
-        // Unrestricted mode may never remain enabled without a PIN.
-        if (!hasPin && !parentalMode) {
-          await setParentalModeEnabled(true);
-          parentalMode = true;
-        }
 
         if (cancelled) return;
 
@@ -148,9 +148,6 @@ export default function ParentalControlsScreen(
 
         await setParentalPin(value);
 
-        // New PINs always begin with the safe policy enabled.
-        await setParentalModeEnabled(true);
-        setParentalModeEnabledState(true);
 
         setConfigured(true);
         setUnlocked(true);
@@ -231,28 +228,35 @@ export default function ParentalControlsScreen(
     if (saving) return;
 
     setSaving(true);
+    setToggleFeedback('saving');
 
     try {
-      // V706C2L_CANCEL_STREAMS_BEFORE_POLICY_CHANGE
       useContentStore.getState().cancelInFlightStreams();
 
       await setParentalModeEnabled(enabled);
       setParentalModeEnabledState(enabled);
 
-      // Remove every stale Discover representation, then force a new
-      // server request using the new Parental Mode policy.
       await refreshDiscoverPolicy();
-    } catch (e) {
-      console.warn('[V706C2D_PARENTAL] Failed to change Parental Mode', e);
 
-      // V704E: the preference write happens before the forced
-      // Discover refresh. If that refresh fails, restore BOTH
-      // persistent state and UI state to the previous value.
+      setToggleFeedback('success');
+
+      setTimeout(() => {
+        setToggleFeedback((current) =>
+          current === 'success' ? 'idle' : current
+        );
+      }, 1500);
+    } catch (e) {
+      console.warn(
+        '[V709B2_PARENTAL] Failed to change Parental Mode',
+        e
+      );
+
       try {
         await setParentalModeEnabled(!enabled);
       } catch (_) {}
 
       setParentalModeEnabledState(!enabled);
+      setToggleFeedback('idle');
 
       Alert.alert(
         'Unable to Update',
@@ -262,19 +266,18 @@ export default function ParentalControlsScreen(
       setSaving(false);
     }
   };
-
   const requestRemovePin = () => {
     const execute = async () => {
       setSaving(true);
 
       try {
-        // Removing the PIN returns the app to the safe policy.
+        // Removing the PIN returns the app to normal unrestricted mode.
         useContentStore.getState().cancelInFlightStreams();
 
-        await setParentalModeEnabled(true);
+        await setParentalModeEnabled(false);
         await removeParentalPin();
 
-        setParentalModeEnabledState(true);
+        setParentalModeEnabledState(false);
         setConfigured(false);
         setUnlocked(false);
         setPendingPin('');
@@ -291,7 +294,7 @@ export default function ParentalControlsScreen(
       if (
         typeof window !== 'undefined' &&
         window.confirm(
-          'Remove the parental PIN? Parental Mode will be turned ON.'
+          'Remove the parental PIN? Parental Mode will be turned OFF.'
         )
       ) {
         void execute();
@@ -301,7 +304,7 @@ export default function ParentalControlsScreen(
 
     Alert.alert(
       'Remove Parental PIN',
-      'Parental Mode will be turned ON and a new PIN will be required to turn it off again.',
+      'Parental Mode will be turned OFF. A new PIN will be required the next time you open Parental Controls.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -343,6 +346,12 @@ export default function ParentalControlsScreen(
   })();
 
   const showKeypad = !unlocked || mode === 'change' || mode === 'changeConfirm';
+
+  // V709H3_DYNAMIC_PARENTAL_HEIGHT
+  useEffect(() => {
+    if (!embedded) return;
+    onKeypadVisibilityChange?.(showKeypad);
+  }, [embedded, onKeypadVisibilityChange, showKeypad]);
 
   if (loading) {
     return (
@@ -393,7 +402,7 @@ export default function ParentalControlsScreen(
           <View style={[styles.pinCard, embedded && styles.pinCardEmbedded]}>
             <Ionicons
               name="lock-closed-outline"
-              size={40}
+              size={embedded ? 28 : 40}
               color={colors.primary}
             />
 
@@ -412,8 +421,20 @@ export default function ParentalControlsScreen(
               ))}
             </View>
 
-            {!!error && (
-              <Text style={styles.errorText}>{error}</Text>
+            {embedded ? (
+              <View style={styles.errorSlotEmbedded}>
+                {!!error && (
+                  <Text
+                    style={[styles.errorText, styles.errorTextEmbedded]}
+                  >
+                    {error}
+                  </Text>
+                )}
+              </View>
+            ) : (
+              !!error && (
+                <Text style={styles.errorText}>{error}</Text>
+              )
             )}
 
             <View style={[styles.keypad, embedded && styles.keypadEmbedded]}>
@@ -424,6 +445,7 @@ export default function ParentalControlsScreen(
                 return (
                   <Pressable
                     key={digit}
+                    hasTVPreferredFocus={isTV && digit === '1'}
                     disabled={saving}
                     onPress={() => pushDigit(digit)}
                     style={({ focused, pressed }: any) => [
@@ -436,7 +458,7 @@ export default function ParentalControlsScreen(
                     {isBack ? (
                       <Ionicons
                         name="backspace-outline"
-                        size={24}
+                        size={embedded ? 20 : 24}
                         color={colors.primary}
                       />
                     ) : isClear ? (
@@ -483,32 +505,51 @@ export default function ParentalControlsScreen(
                   </Text>
                 </View>
 
-                <Pressable
-                  disabled={saving}
-                  onPress={() => {
-                    void changeParentalMode(!parentalModeEnabled);
-                  }}
-                  style={({ focused, pressed }: any) => [
-                    styles.toggle,
-                    parentalModeEnabled && styles.toggleOn,
-                    focused && styles.toggleFocused,
-                    pressed && styles.togglePressed,
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.toggleKnob,
-                      parentalModeEnabled && styles.toggleKnobOn,
+                <View style={styles.toggleColumn}>
+                  <Pressable
+                    hasTVPreferredFocus={isTV && !showKeypad}
+                    disabled={saving}
+                    onPress={() => {
+                      void changeParentalMode(!parentalModeEnabled);
+                    }}
+                    style={({ focused, pressed }: any) => [
+                      styles.toggle,
+                      parentalModeEnabled && styles.toggleOn,
+                      focused && styles.toggleFocused,
+                      pressed && styles.togglePressed,
                     ]}
-                  />
-                </Pressable>
+                  >
+                    <View
+                      style={[
+                        styles.toggleKnob,
+                        parentalModeEnabled && styles.toggleKnobOn,
+                      ]}
+                    />
+                  </Pressable>
+
+                </View>
               </View>
 
-              <Text style={styles.note}>
-                {parentalModeEnabled
-                  ? 'Blocks R, NC-17, TV-MA, NR/Unrated, unknown ratings, and explicit adult-addon content.'
-                  : 'Unrestricted mode allows mainstream ratings and installed adult-addon content.'}
-              </Text>
+              <View style={styles.noteRow}>
+                <Text style={[styles.note, styles.noteInRow]}>
+                  {parentalModeEnabled
+                    ? 'Blocks R, NC-17, TV-MA, NR/Unrated, unknown ratings, and explicit adult-addon content.'
+                    : 'Unrestricted mode allows mainstream ratings and installed adult-addon content.'}
+                </Text>
+
+                <View style={styles.noteFeedback}>
+                  {toggleFeedback === 'saving' && (
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.primary}
+                    />
+                  )}
+
+                  {toggleFeedback === 'success' && (
+                    <Text style={styles.toggleSuccess}>Success!</Text>
+                  )}
+                </View>
+              </View>
             </View>
 
             <View style={[styles.section, embedded && styles.sectionEmbedded]}>
@@ -562,11 +603,7 @@ export default function ParentalControlsScreen(
           </>
         )}
 
-        {saving && (
-          <View style={styles.savingRow}>
-            <ActivityIndicator color={colors.primary} />
-          </View>
-        )}
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -837,41 +874,53 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   headerEmbedded: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   titleEmbedded: {
     fontSize: 20,
   },
   contentEmbedded: {
-    maxWidth: 640,
-    padding: 10,
-    paddingBottom: 10,
+    maxWidth: 620,
+    paddingTop: 6,
+    paddingHorizontal: 16,
+    paddingBottom: 6,
   },
   pinCardEmbedded: {
-    padding: 10,
+    padding: 6,
   },
   pinTitleEmbedded: {
-    fontSize: 18,
-    marginTop: 4,
-  },
-  pinSubtitleEmbedded: {
-    fontSize: 12,
+    fontSize: 17,
     marginTop: 2,
   },
+  pinSubtitleEmbedded: {
+    fontSize: 11,
+    marginTop: 1,
+  },
   pinDotsEmbedded: {
-    gap: 12,
-    marginTop: 10,
-    marginBottom: 8,
+    gap: 10,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  errorSlotEmbedded: {
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorTextEmbedded: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 0,
+    textAlign: 'center',
   },
   keypadEmbedded: {
-    width: 252,
-    gap: 6,
+    width: 230,
+    gap: 4,
   },
   keyEmbedded: {
-    width: 78,
-    height: 44,
-    borderRadius: 10,
+    width: 74,
+    height: 38,
+    borderRadius: 9,
     borderWidth: 2,
   },
   secondaryButtonEmbedded: {
@@ -889,6 +938,39 @@ const styles = StyleSheet.create({
   actionButtonEmbedded: {
     minHeight: 50,
     borderWidth: 2,
+  },
+  toggleColumn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 72,
+  },
+  noteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  noteInRow: {
+    flex: 1,
+    marginTop: 0,
+  },
+  noteFeedback: {
+    width: 72,
+    height: 22,
+    marginLeft: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleFeedback: {
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleSuccess: {
+    height: 22,
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   savingRow: {
     marginTop: 10,
