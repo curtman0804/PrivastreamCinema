@@ -823,11 +823,23 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
                   ? String(it.poster)
                   : null;
 
-              const canonicalPoster =
-                _v614GetPoster(
-                  posterId,
+              // V714D_CANONICAL_SEARCH_POSTERS
+              // If the supplied item already carries the Cinemeta/MetaHub
+              // canonical artwork, use it immediately. This prevents a stale
+              // persisted registry value from winning the first TV paint.
+              const suppliedIsCanonicalMetaHub =
+                !!suppliedPoster &&
+                /^https:\/\/images\.metahub\.space\/poster\//i.test(
                   suppliedPoster
                 );
+
+              const canonicalPoster =
+                suppliedIsCanonicalMetaHub
+                  ? suppliedPoster
+                  : _v614GetPoster(
+                      posterId,
+                      suppliedPoster
+                    );
 
               return {
                 id: String(

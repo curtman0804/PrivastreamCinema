@@ -680,14 +680,48 @@ export const api = {
 
       const data = response.data as V706C2GSearchResponse;
 
+      // V714D_CANONICAL_SEARCH_POSTERS
+      // Cinemeta/Discover use MetaHub artwork for canonical IMDb titles.
+      // Normalize Search to that same deterministic poster before the row paints.
+      const canonicalizePoster = (item: SearchResult): SearchResult => {
+        const rawId = String(
+          (item as any)?.imdb_id ||
+          item?.id ||
+          ''
+        ).trim();
+
+        const baseId = rawId.includes(':')
+          ? rawId.split(':')[0]
+          : rawId;
+
+        if (!/^tt\d+$/.test(baseId)) {
+          return item;
+        }
+
+        return {
+          ...item,
+          poster: `https://images.metahub.space/poster/small/${baseId}/img`,
+        };
+      };
+
+      const canonicalData: V706C2GSearchResponse = {
+        ...data,
+        movies: Array.isArray(data?.movies)
+          ? data.movies.map(canonicalizePoster)
+          : [],
+        series: Array.isArray(data?.series)
+          ? data.series.map(canonicalizePoster)
+          : [],
+      };
+
       const parentalModeEnabled =
         await getParentalModeEnabled();
 
       if (!parentalModeEnabled) {
-        return data;
+        return canonicalData;
       }
 
-      return _v706c2gFilterSearch(data);
+      return _v706c2gFilterSearch(canonicalData);
     },
     getMeta: async (type: string, id: string): Promise<ContentItem> => {
       const cacheKey = `meta:${type}:${id}`;
