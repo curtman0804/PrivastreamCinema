@@ -4624,7 +4624,12 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                     <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
                   </TVFocusButton>
                   
-                  <Text style={styles.titleText} numberOfLines={1}>{title || 'Playing'}</Text>
+                  {/* V713_CENTERED_PLAYER_TITLE - physical screen center */}
+                  <View style={styles.titleCenterWrap} pointerEvents="none">
+                    <Text style={styles.titleText} numberOfLines={1}>
+                      {title || 'Playing'}
+                    </Text>
+                  </View>
                   
                   <View style={styles.topRightControls}>
                     {/* v464 ASPECT_RATIO_TOGGLE - next to real CC */}
@@ -5379,12 +5384,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
   },
+  titleCenterWrap: {
+    position: 'absolute',
+    left: '25%',
+    right: '25%',
+    top: 16,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   titleText: {
-    flex: 1,
+    width: '100%',
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-    marginHorizontal: 12,
     textAlign: 'center',
   },
   topRightControls: {
