@@ -91,6 +91,10 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
     // target holder is attached/focused, then drain them one step at a time.
     private var pendingHorizontalTarget: Int = -1
     private var pendingHorizontalDirection: Int = 0
+    // V720_VISIBLE_COLUMN_MODEL
+    // If a holder is late attaching, preserve the intended physical
+    // screen column instead of reconstructing geometry from adapter index.
+    private var pendingHorizontalTargetLeftPx: Int = Int.MIN_VALUE
     private var pendingHorizontalRetryPosted: Boolean = false
 
     // V600_PENDING_FOCUS_ESCAPE
@@ -515,6 +519,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
 
         pendingHorizontalTarget = -1
         pendingHorizontalDirection = 0
+        pendingHorizontalTargetLeftPx = Int.MIN_VALUE
         pendingHorizontalRetryPosted = false
         pendingHorizontalRetryCount = 0
         queuedHorizontalDirection = 0
@@ -533,6 +538,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
 
         pendingHorizontalTarget = -1
         pendingHorizontalDirection = 0
+        pendingHorizontalTargetLeftPx = Int.MIN_VALUE
         pendingHorizontalRetryPosted = false
         pendingHorizontalRetryCount = 0
 
@@ -636,7 +642,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                         "position=$target direction=$pendingHorizontalDirection"
                 )
 
-                positionForTarget(target)
+                positionHorizontalTarget(target, pendingHorizontalTargetLeftPx)
             }
 
             schedulePendingHorizontalFocus()
@@ -656,10 +662,7 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
         }
 
         // V598_FOCUS_TRUTH
-        //
-        // Horizontal movement must never let a speculative logical index run
-        // ahead of the card Android actually focused.  This makes held-repeat
-        // and single-click input obey the same column state.
+        // Always begin from the card Android actually owns.
         val focusedBeforeMove = currentAdapterFocus()
         if (
             focusedBeforeMove in 0 until count &&
@@ -674,19 +677,20 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
             logicalFocusPosition = current
         }
 
-        val target = (current + delta).coerceIn(0, count - 1)
+        val target =
+            (current + delta).coerceIn(0, count - 1)
 
-        diagState("MOVE_BEFORE delta=$delta", current, target)
+        diagState(
+            "MOVE_BEFORE delta=$delta",
+            current,
+            target
+        )
 
-        // At the true LEFT edge there is nowhere else to go.
-        //
-        // At the temporary RIGHT edge, however, ServiceRow may already be
-        // fetching another page. If the physical RIGHT key is still held,
-        // remember the intent so replaceOrAppend() can continue automatically
-        // as soon as new items exist.
+        // True adapter edge: no adjacent poster exists.
         if (target == current) {
             logicalFocusPosition = current
 
+            // Preserve existing proactive pagination behavior.
             if (
                 delta > 0 &&
                 current == count - 1 &&
@@ -710,12 +714,10 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
             waitingForRightAppend = false
         }
 
-        val stridePx = px(cardWidthDp + gapDp)
+        val stridePx =
+            px(cardWidthDp + gapDp)
 
-        // V598G_PRELOAD_BEFORE_LAYOUT
-        // Start the directional warm-up BEFORE RecyclerView lays out the newly
-        // entering edge card. On a hard reverse this gives Glide the maximum
-        // available head start instead of waiting until after scrollBy().
+        // Keep the existing directional poster warm-up.
         val directionChanged =
             lastPreloadDirection != 0 &&
                 lastPreloadDirection != delta
@@ -728,50 +730,123 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
             )
         }
 
-        preloadPosters(target, delta, directionChanged)
+        preloadPosters(
+            target,
+            delta,
+            directionChanged
+        )
 
-        when {
-            // Walking RIGHT after the sixth visible poster:
-            // shift content left one exact column.
-            delta > 0 && current >= anchorColumn -> {
-                Log.e(
-                    "PSTVROW",
-                    "row=\"$diagnosticLabel\" view=$id EXPLICIT_SCROLL dx=$stridePx " +
-                        "from=$current to=$target"
-                )
-                recycler.scrollBy(stridePx, 0)
-            }
+        // V720_VISIBLE_COLUMN_MODEL
+        //
+        // Navigation is based on the selector's PHYSICAL SCREEN COLUMN,
+        // never the absolute adapter index.
+        //
+        // RIGHT:
+        //   inside window -> selector moves right
+        //   right column   -> selector stays; posters scroll left
+        //
+        // LEFT:
+        //   inside window -> selector moves left
+        //   left column   -> selector stays; posters scroll right
+        //
+        // This is deliberately symmetric and contains no snap-to-origin.
+        val currentView =
+            layoutManager.findViewByPosition(current)
 
+        if (currentView == null) {
+            Log.e(
+                "PSTVROW",
+                "row=\"$diagnosticLabel\" view=$id V720_CURRENT_VIEW_MISS " +
+                    "current=$current target=$target delta=$delta"
+            )
 
-            // Walking LEFT while still beyond the sixth-column anchor:
-            // shift content right one exact column.
-            delta < 0 && current > anchorColumn -> {
-                Log.e(
-                    "PSTVROW",
-                    "row=\"$diagnosticLabel\" view=$id EXPLICIT_SCROLL dx=${-stridePx} " +
-                        "from=$current to=$target"
-                )
-                recycler.scrollBy(-stridePx, 0)
-            }
-
-            // Inside posters 1..6 there is deliberately no horizontal scroll.
+            logicalFocusPosition = current
+            return
         }
 
-        diagState("MOVE_AFTER_SCROLL delta=$delta", current, target)
+        val leftEdgePx =
+            px(leftPaddingDp)
+
+        val rightEdgePx =
+            anchorOffsetPx()
+
+        val currentLeft =
+            currentView.left
+
+        // Resolve the nearest visible selector column from physical X.
+        // A small residual pixel discrepancy therefore cannot switch the
+        // navigation mode or cause an index-based snap.
+        val currentColumn =
+            (
+                (currentLeft - leftEdgePx).toFloat() /
+                    stridePx.toFloat()
+            )
+                .roundToInt()
+                .coerceIn(0, anchorColumn)
+
+        val proposedColumn =
+            currentColumn + delta
+
+        val scrollDx =
+            when {
+                proposedColumn > anchorColumn ->
+                    stridePx
+
+                proposedColumn < 0 ->
+                    -stridePx
+
+                else ->
+                    0
+            }
+
+        val targetColumn =
+            proposedColumn.coerceIn(
+                0,
+                anchorColumn
+            )
+
+        val targetLeftPx =
+            leftEdgePx +
+                (targetColumn * stridePx)
+
+        Log.e(
+            "PSTVROW",
+            "row=\"$diagnosticLabel\" view=$id V720_VISIBLE_MOVE " +
+                "delta=$delta from=$current to=$target " +
+                "currentLeft=$currentLeft currentColumn=$currentColumn " +
+                "targetColumn=$targetColumn targetLeft=$targetLeftPx " +
+                "scrollDx=$scrollDx"
+        )
+
+        if (scrollDx != 0) {
+            recycler.scrollBy(
+                scrollDx,
+                0
+            )
+        }
+
+        diagState(
+            "MOVE_AFTER_SCROLL delta=$delta",
+            current,
+            target
+        )
 
         logicalFocusPosition = target
 
-        // V598G_PRELOAD_BEFORE_LAYOUT
-        // Warm-up now starts before scrollBy(), above. Do not issue a second
-        // preload pass after RecyclerView has already laid out the edge card.
-
-        focusAttachedPosition(target, delta)
+        focusAttachedPosition(
+            target,
+            delta,
+            targetLeftPx
+        )
 
         recycler.post {
-            diagState("MOVE_POST_FOCUS delta=$delta", current, target)
+            diagState(
+                "MOVE_POST_FOCUS delta=$delta",
+                current,
+                target
+            )
         }
     }
-
     /**
      * V590_HORIZONTAL_STRIDE
      *
@@ -896,44 +971,87 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
 
     private fun focusAttachedPosition(
         position: Int,
-        direction: Int
+        direction: Int,
+        targetLeftPx: Int
     ) {
         if (position !in 0 until rowAdapter.itemCount) return
 
-        val holder = recycler.findViewHolderForAdapterPosition(position)
+        val holder =
+            recycler.findViewHolderForAdapterPosition(position)
 
         if (holder != null) {
             Log.e(
                 "PSTVROW",
-                "row=\"$diagnosticLabel\" view=$id FOCUS_IMMEDIATE position=$position"
+                "row=\"$diagnosticLabel\" view=$id FOCUS_IMMEDIATE " +
+                    "position=$position targetLeft=$targetLeftPx"
             )
 
             try {
-                    holder.itemView.setSoundEffectsEnabled(false)
-                } catch (_: Throwable) {
-                }
+                holder.itemView.setSoundEffectsEnabled(false)
+            } catch (_: Throwable) {
+            }
 
-                if (holder.itemView.requestFocus()) {
-                playHorizontalNavigationSound(direction, holder.itemView)
+            if (holder.itemView.requestFocus()) {
+                playHorizontalNavigationSound(
+                    direction,
+                    holder.itemView
+                )
                 return
             }
         }
 
         Log.e(
             "PSTVROW",
-            "row=\"$diagnosticLabel\" view=$id FOCUS_MISS position=$position"
+            "row=\"$diagnosticLabel\" view=$id FOCUS_MISS " +
+                "position=$position targetLeft=$targetLeftPx"
         )
 
         pendingHorizontalTarget = position
         pendingHorizontalDirection = direction
+        pendingHorizontalTargetLeftPx = targetLeftPx
         pendingHorizontalRetryCount = 0
 
-        // Force the exact adapter item to the exact column; once it attaches,
-        // focus completes automatically and queued physical repeats continue.
-        positionForTarget(position)
+        positionHorizontalTarget(
+            position,
+            targetLeftPx
+        )
+
         schedulePendingHorizontalFocus()
     }
 
+    // V720_VISIBLE_COLUMN_RETRY
+    // Slow attachment fallback keeps the same physical selector column.
+    private fun positionHorizontalTarget(
+        position: Int,
+        targetLeftPx: Int
+    ) {
+        if (
+            position !in 0 until rowAdapter.itemCount ||
+            targetLeftPx == Int.MIN_VALUE
+        ) {
+            return
+        }
+
+        // Poster zero owns leftPadding as its item margin.
+        // Other posters have no left margin.
+        val layoutOffsetPx =
+            if (position == 0)
+                targetLeftPx - px(leftPaddingDp)
+            else
+                targetLeftPx
+
+        Log.e(
+            "PSTVROW",
+            "row=\"$diagnosticLabel\" view=$id V720_RETRY_POSITION " +
+                "position=$position targetLeft=$targetLeftPx " +
+                "layoutOffset=$layoutOffsetPx"
+        )
+
+        layoutManager.scrollToPositionWithOffset(
+            position,
+            layoutOffsetPx
+        )
+    }
     /**
      * Exact Stremio-style geometry requested:
      *
@@ -1937,52 +2055,53 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                                 rowAdapter.restoreAttachedPostersIfBlank()
                             }
 
-                            // V598A_FOCUS_GEOMETRY_INVARIANT
+                            // V720_VISIBLE_COLUMN_FOCUS_WINDOW
                             //
-                            // A row can regain focus vertically while preserving
-                            // an old RecyclerView scroll offset. Android may then
-                            // focus a deep adapter item in column 1 instead of the
-                            // required pinned column 6. Every later relative
-                            // scroll would preserve that bad geometry.
+                            // Vertical navigation remains Android-owned.
+                            // If Android enters this shifted rail on a card
+                            // that is already inside the visible selector
+                            // window, preserve that exact screen column.
                             //
-                            // Enforce the horizontal column invariant on EVERY
-                            // focus gain. This does not consume or synthesize
-                            // UP/DOWN; it only repairs this row's horizontal
-                            // position when the focused card is physically wrong.
-                            val stridePx = px(cardWidthDp + gapDp)
-                            val expectedLeft =
-                                if (p <= anchorColumn)
-                                    px(leftPaddingDp) + (p * stridePx)
-                                else
-                                    anchorOffsetPx()
+                            // Only clamp a card that is physically outside
+                            // the usable left/right selector edges.
+                            val v720LeftEdgePx =
+                                px(leftPaddingDp)
 
-                            if (v.left != expectedLeft) {
+                            val v720RightEdgePx =
+                                anchorOffsetPx()
+
+                            val v720ClampDx =
+                                when {
+                                    v.left < v720LeftEdgePx ->
+                                        v.left - v720LeftEdgePx
+
+                                    v.left > v720RightEdgePx ->
+                                        v.left - v720RightEdgePx
+
+                                    else ->
+                                        0
+                                }
+
+                            if (v720ClampDx != 0) {
                                 Log.e(
                                     "PSTVROW",
-                                    "row=\"$diagnosticLabel\" view=$id FOCUS_GEOMETRY_REPAIR " +
-                                        "position=$p actualLeft=${v.left} expectedLeft=$expectedLeft " +
-                                        "offset=${recycler.computeHorizontalScrollOffset()}"
+                                    "row=\"$diagnosticLabel\" view=$id V720_WINDOW_CLAMP " +
+                                        "position=$p dx=$v720ClampDx " +
+                                        "left=${v.left} leftEdge=$v720LeftEdgePx " +
+                                        "rightEdge=$v720RightEdgePx"
                                 )
 
-                                recycler.post {
-                                    if (
-                                        logicalFocusPosition == p &&
-                                        v.hasFocus()
-                                    ) {
-                                        positionForTarget(p)
+                                recycler.scrollBy(
+                                    v720ClampDx,
+                                    0
+                                )
 
-                                        recycler.post {
-                                            Log.e(
-                                                "PSTVROW",
-                                                "row=\"$diagnosticLabel\" view=$id FOCUS_GEOMETRY_REPAIRED " +
-                                                    "position=$p left=${v.left} expectedLeft=$expectedLeft " +
-                                                    "offset=${recycler.computeHorizontalScrollOffset()}"
-                                            )
-                                        }
-                                    }
-                                }
+                                Log.e(
+                                    "PSTVROW",
+                                    "row=\"$diagnosticLabel\" view=$id V720_WINDOW_CLAMPED " +
+                                        "position=$p left=${v.left}"
+                                )
                             }
-
                             Log.e(
                                 "PSTVROW",
                                 "row=\"$diagnosticLabel\" view=$id CARD_FOCUS position=$p left=${v.left} top=${v.top}"
