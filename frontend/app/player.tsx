@@ -1344,6 +1344,109 @@ export default function PlayerScreen() {
       let dynamicIntroLoaded = false;
       const episodeContentId =
         imdbId + ':' + seasonNum + ':' + episodeNum;
+      /* V724_PARALLEL_INTRO_FALLBACK
+       * Start TheIntroDB immediately so Skip Intro can be ready before
+       * the intro begins. Dynamic fingerprints remain authoritative and
+       * replace this marker if/when the backend result arrives. */
+      (async () => {
+        try {
+          if (_v500IntroLookupRef.current !== lookupKey) return;
+
+          const markerUrl =
+            'https://api.theintrodb.org/v3/media?imdb_id=' +
+            encodeURIComponent(imdbId) +
+            '&season=' + seasonNum +
+            '&episode=' + episodeNum +
+            '&duration_ms=' + durationMs;
+
+          const response = await fetch(
+            markerUrl,
+            {
+              headers: {
+                Accept: 'application/json',
+              },
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(
+              'INTRODB_HTTP_' + response.status
+            );
+          }
+
+          const data = await response.json();
+
+          if (_v500IntroLookupRef.current !== lookupKey) return;
+
+          /* Do not replace an authoritative dynamic marker. */
+          if (dynamicIntroLoaded) return;
+
+          const intros =
+            Array.isArray(data?.intro)
+              ? data.intro
+              : [];
+
+          const segment = intros.find((x: any) => {
+            const startMs =
+              x?.start_ms == null
+                ? 0
+                : Number(x.start_ms);
+
+            const endMs = Number(x?.end_ms);
+
+            return (
+              Number.isFinite(startMs) &&
+              Number.isFinite(endMs) &&
+              startMs >= 0 &&
+              endMs > startMs &&
+              endMs <= durationMs
+            );
+          });
+
+          if (!segment) {
+            console.log(
+              '[INTRO V724] No early fallback marker for ' +
+              imdbId +
+              ' S' + seasonNum +
+              'E' + episodeNum
+            );
+            return;
+          }
+
+          const startMs = Math.round(
+            segment.start_ms == null
+              ? 0
+              : Number(segment.start_ms)
+          );
+
+          const endMs = Math.round(
+            Number(segment.end_ms)
+          );
+
+          if (_v500IntroLookupRef.current !== lookupKey) return;
+          if (dynamicIntroLoaded) return;
+
+          _v500IntroMarkerRef.current = {
+            startMs,
+            endMs,
+          };
+
+          console.log(
+            '[INTRO V724] Early fallback marker ' +
+            imdbId +
+            ' S' + seasonNum +
+            'E' + episodeNum +
+            ' ' + startMs +
+            '-' + endMs +
+            'ms duration=' + durationMs
+          );
+        } catch (error: any) {
+          console.log(
+            '[INTRO V724] Early fallback lookup failed:',
+            String(error?.message || error)
+          );
+        }
+      })();
 
       /*
        * The backend reads the authenticated user's saved
@@ -1505,109 +1608,7 @@ export default function PlayerScreen() {
         );
       }
 
-      if (dynamicIntroLoaded) return;
 
-      /* Intro-only TheIntroDB fallback. */
-      try {
-        if (_v500IntroLookupRef.current !== lookupKey) return;
-
-        const markerUrl =
-          'https://api.theintrodb.org/v3/media?imdb_id=' +
-          encodeURIComponent(imdbId) +
-          '&season=' + seasonNum +
-          '&episode=' + episodeNum +
-          '&duration_ms=' + durationMs;
-
-        const response = await fetch(
-          markerUrl,
-          {
-            headers: {
-              Accept: 'application/json',
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            'INTRODB_HTTP_' + response.status
-          );
-        }
-
-        const data = await response.json();
-
-        if (_v500IntroLookupRef.current !== lookupKey) return;
-
-        const intros =
-          Array.isArray(data?.intro)
-            ? data.intro
-            : [];
-
-        const segment = intros.find((x: any) => {
-          const startMs =
-            x?.start_ms == null
-              ? 0
-              : Number(x.start_ms);
-
-          const endMs = Number(x?.end_ms);
-
-          return (
-            Number.isFinite(startMs) &&
-            Number.isFinite(endMs) &&
-            startMs >= 0 &&
-            endMs > startMs &&
-            endMs <= durationMs
-          );
-        });
-
-        if (!segment) {
-          _v500IntroMarkerRef.current = null;
-
-          console.log(
-            '[INTRO V500] No fallback marker for ' +
-            imdbId +
-            ' S' + seasonNum +
-            'E' + episodeNum
-          );
-
-          return;
-        }
-
-        const startMs = Math.round(
-          segment.start_ms == null
-            ? 0
-            : Number(segment.start_ms)
-        );
-
-        const endMs = Math.round(
-          Number(segment.end_ms)
-        );
-
-        _v500IntroMarkerRef.current = {
-          startMs,
-          endMs,
-        };
-
-        console.log(
-          '[INTRO V500] Fallback marker ' +
-          imdbId +
-          ' S' + seasonNum +
-          'E' + episodeNum +
-          ' ' + startMs +
-          '-' + endMs +
-          'ms duration=' + durationMs
-        );
-      } catch (error: any) {
-        if (
-          _v500IntroLookupRef.current === lookupKey
-        ) {
-          _v500IntroMarkerRef.current = null;
-        }
-
-        console.log(
-          '[INTRO V500] Fallback lookup failed:',
-          String(error?.message || error)
-        );
-      }
     })();
   };
 
