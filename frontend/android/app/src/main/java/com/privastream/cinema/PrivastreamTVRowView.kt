@@ -2044,7 +2044,53 @@ class PrivastreamTVRowView(context: Context) : FrameLayout(context) {
                     if (hasFocus) {
                         val p = recycler.getChildAdapterPosition(v)
 
-                        if (p != RecyclerView.NO_POSITION) {
+                        // V721_TRANSIENT_OFFSCREEN_FOCUS_GUARD
+                        //
+                        // React-Native Screens can briefly move Android
+                        // focus through offscreen RecyclerView children while
+                        // the Discover screen is transitioning to Details.
+                        //
+                        // V720 must NOT interpret that transition churn as
+                        // real row navigation. Doing so scrolls the rail even
+                        // though the user never pressed LEFT or RIGHT.
+                        //
+                        // Genuine horizontal navigation is excluded because
+                        // physicalHorizontalDirection is non-zero.
+                        //
+                        // Genuine vertical re-entry is excluded because a
+                        // real ROW_BLUR clears logicalFocusPosition to -1.
+                        val v721HasLogicalOwner =
+                            logicalFocusPosition in 0 until rowAdapter.itemCount
+
+                        val v721CandidateOutsideWindow =
+                            p != RecyclerView.NO_POSITION &&
+                                (
+                                    v.left < px(leftPaddingDp) ||
+                                    v.left > anchorOffsetPx()
+                                )
+
+                        val v721TransientOffscreenFocus =
+                            v721HasLogicalOwner &&
+                                p != RecyclerView.NO_POSITION &&
+                                p != logicalFocusPosition &&
+                                physicalHorizontalDirection == 0 &&
+                                v721CandidateOutsideWindow
+
+                        if (v721TransientOffscreenFocus) {
+                            Log.e(
+                                "PSTVROW",
+                                "row=\"$diagnosticLabel\" view=$id " +
+                                    "V721_TRANSIENT_FOCUS_IGNORED " +
+                                    "owner=$logicalFocusPosition candidate=$p " +
+                                    "candidateLeft=${v.left} " +
+                                    "offset=${recycler.computeHorizontalScrollOffset()}"
+                            )
+                        }
+
+                        if (
+                            p != RecyclerView.NO_POSITION &&
+                            !v721TransientOffscreenFocus
+                        ) {
                             logicalFocusPosition = p
                             drainQueuedHorizontalAfterFocus(p)
 
