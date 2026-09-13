@@ -3148,9 +3148,8 @@ async def get_discover(adult: int = 0, current_user: User = Depends(get_current_
         manifest = addon.get('manifest', {})
 
         # V704_PARENTAL_CONTROLS
-        # Do not even create catalog fetch tasks for explicitly
-        # adult addons unless this request came from an unlocked
-        # Adult Content setting.
+        # Do not create catalog fetch tasks for explicitly adult
+        # addons unless Adult Content is enabled for this request.
         if (
             not adult_enabled
             and _v704_is_adult_addon(
@@ -4588,8 +4587,36 @@ async def get_watch_progress(current_user: User = Depends(get_current_user)):
     # Stremio shows items with ANY progress (time_offset > 0)
     # We filter out items that are mostly watched (>95%) 
     # but show everything else regardless of how little was watched
+    # V716_SERIES_CONTINUE_WATCHING
+    # progress_items is already newest-first. Keep only the newest
+    # progress record for each series BEFORE completion filtering.
+    # This prevents an older episode from resurfacing after the
+    # newest watched episode is completed.
+    latest_progress_items = []
+    seen_series = set()
+
+    for item in progress_items:
+        content_type = str(item.get("content_type") or "").strip().lower()
+        series_key = str(item.get("series_id") or "").strip()
+
+        # Legacy series records may identify the parent through
+        # content_id formatted as parentId:season:episode.
+        if content_type == "series" and not series_key:
+            content_id = str(item.get("content_id") or "").strip()
+            if ":" in content_id:
+                series_key = content_id.split(":", 1)[0]
+
+        if content_type == "series" and series_key:
+            normalized_series_key = series_key.lower()
+            if normalized_series_key in seen_series:
+                continue
+            seen_series.add(normalized_series_key)
+
+        # Movies remain independent. Series keep newest record only.
+        latest_progress_items.append(item)
+
     continue_watching = [
-        item for item in progress_items 
+        item for item in latest_progress_items
         if item.get("progress", 0) > 0 and item.get("percent_watched", 0) <= 95
     ]
     
@@ -5892,6 +5919,360 @@ async def _v609_classify_movie(
     return status
 
 
+
+# ==================== V706 CERTIFICATION METADATA ====================
+#
+# Additive metadata service only.
+# Existing Discover/Search/Details/playback behavior is NOT changed here.
+#
+# Source:
+#   TMDB /find               -> IMDb ID to TMDB ID
+#   movie release_dates      -> US movie certification
+#   TV content_ratings       -> US television rating
+#
+# Results are batched and cached server-side so the frontend never needs
+# one HTTP request per poster.
+# =====================================================================
+
+_V706_CERTIFICATION_CACHE = {}
+
+_V706_CERTIFICATION_KNOWN_TTL_SECONDS = 7 * 24 * 60 * 60
+_V706_CERTIFICATION_UNKNOWN_TTL_SECONDS = 60 * 60
+
+
+def _v706_normalize_certification(value):
+    raw = str(value or "").strip().upper()
+
+    if not raw:
+        return None
+
+    aliases = {
+        "PG13": "PG-13",
+        "NC17": "NC-17",
+        "NOT RATED": "NR",
+        "NOT-RATED": "NR",
+        "UNRATED": "NR",
+        "TVY": "TV-Y",
+        "TVY7": "TV-Y7",
+        "TVY7-FV": "TV-Y7-FV",
+        "TVG": "TV-G",
+        "TVPG": "TV-PG",
+        "TV14": "TV-14",
+        "TVMA": "TV-MA",
+    }
+
+    return aliases.get(raw, raw)
+
+
+def _v706_unique(values):
+    seen = set()
+    output = []
+
+    for value in values:
+        normalized = _v706_normalize_certification(value)
+
+        if not normalized or normalized in seen:
+            continue
+
+        seen.add(normalized)
+        output.append(normalized)
+
+    return output
+
+
+async def _v706_get_us_certification(
+    content_type,
+    imdb_id,
+    tmdb_client,
+    tmdb_api_key,
+):
+    kind = str(content_type or "").strip().lower()
+
+    if kind == "tv":
+        kind = "series"
+
+    imdb_id = str(imdb_id or "").strip()
+
+    cache_key = f"{kind}:{imdb_id}"
+    now_ts = time.time()
+
+    cached = _V706_CERTIFICATION_CACHE.get(cache_key)
+
+    if cached:
+        checked = float(cached.get("checked") or 0)
+        ttl = int(cached.get("ttl") or 0)
+
+        if ttl > 0 and now_ts - checked < ttl:
+            return cached["data"]
+
+    base = {
+        "id": imdb_id,
+        "type": kind,
+        "tmdb_id": None,
+        "certification": None,
+        "certifications": [],
+        "status": "unknown",
+        "source": "tmdb",
+    }
+
+    if kind not in ("movie", "series"):
+        return base
+
+    if not imdb_id.startswith("tt"):
+        return base
+
+    find_data = await _v611_tmdb_json(
+        tmdb_client,
+        f"https://api.themoviedb.org/3/find/{imdb_id}",
+        {
+            "api_key": tmdb_api_key,
+            "external_source": "imdb_id",
+            "language": "en-US",
+        },
+    )
+
+    result_key = "movie_results" if kind == "movie" else "tv_results"
+    matches = find_data.get(result_key, [])
+
+    if not matches:
+        cached_data = dict(base)
+
+        _V706_CERTIFICATION_CACHE[cache_key] = {
+            "checked": now_ts,
+            "ttl": _V706_CERTIFICATION_UNKNOWN_TTL_SECONDS,
+            "data": cached_data,
+        }
+
+        return cached_data
+
+    tmdb_id = matches[0].get("id")
+
+    if tmdb_id is None:
+        return base
+
+    try:
+        tmdb_id = int(tmdb_id)
+    except Exception:
+        return base
+
+    certifications = []
+
+    if kind == "movie":
+        rating_data = await _v611_tmdb_json(
+            tmdb_client,
+            f"https://api.themoviedb.org/3/movie/{tmdb_id}/release_dates",
+            {
+                "api_key": tmdb_api_key,
+            },
+        )
+
+        #
+        # Prefer the certification associated with the normal US theatrical
+        # release for DISPLAY purposes, then limited/premiere/home releases.
+        # We still return every unique US certification so the parental
+        # policy can make its own conservative decision later.
+        #
+        type_priority = {
+            3: 0,  # theatrical
+            2: 1,  # theatrical limited
+            1: 2,  # premiere
+            4: 3,  # digital
+            5: 4,  # physical
+            6: 5,  # TV
+        }
+
+        ranked = []
+        sequence = 0
+
+        for country in rating_data.get("results", []):
+            if str(country.get("iso_3166_1") or "").upper() != "US":
+                continue
+
+            for release in country.get("release_dates", []):
+                certification = _v706_normalize_certification(
+                    release.get("certification")
+                )
+
+                if not certification:
+                    continue
+
+                release_type = release.get("type")
+
+                try:
+                    release_type = int(release_type)
+                except Exception:
+                    release_type = 999
+
+                ranked.append(
+                    (
+                        type_priority.get(release_type, 999),
+                        sequence,
+                        certification,
+                    )
+                )
+
+                sequence += 1
+
+        ranked.sort(key=lambda row: (row[0], row[1]))
+        certifications = _v706_unique(row[2] for row in ranked)
+
+    else:
+        rating_data = await _v611_tmdb_json(
+            tmdb_client,
+            f"https://api.themoviedb.org/3/tv/{tmdb_id}/content_ratings",
+            {
+                "api_key": tmdb_api_key,
+            },
+        )
+
+        us_ratings = []
+
+        for entry in rating_data.get("results", []):
+            if str(entry.get("iso_3166_1") or "").upper() != "US":
+                continue
+
+            rating = _v706_normalize_certification(entry.get("rating"))
+
+            if rating:
+                us_ratings.append(rating)
+
+        certifications = _v706_unique(us_ratings)
+
+    certification = certifications[0] if certifications else None
+
+    data = {
+        "id": imdb_id,
+        "type": kind,
+        "tmdb_id": tmdb_id,
+        "certification": certification,
+        "certifications": certifications,
+        "status": "known" if certification else "unknown",
+        "source": "tmdb",
+    }
+
+    _V706_CERTIFICATION_CACHE[cache_key] = {
+        "checked": now_ts,
+        "ttl": (
+            _V706_CERTIFICATION_KNOWN_TTL_SECONDS
+            if certification
+            else _V706_CERTIFICATION_UNKNOWN_TTL_SECONDS
+        ),
+        "data": data,
+    }
+
+    return data
+
+
+@api_router.post("/content/certifications")
+async def get_content_certifications(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    body = await request.json()
+    raw_items = body.get("items", [])
+
+    if not isinstance(raw_items, list):
+        raise HTTPException(
+            status_code=400,
+            detail="items must be an array",
+        )
+
+    #
+    # One batch is intentionally capped. Discover/Search can deduplicate
+    # their IMDb IDs and make another batch later if ever necessary.
+    #
+    raw_items = raw_items[:200]
+
+    requests_by_key = {}
+
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+
+        content_id = str(
+            raw.get("id")
+            or raw.get("imdb_id")
+            or ""
+        ).strip()
+
+        content_type = str(
+            raw.get("type")
+            or ""
+        ).strip().lower()
+
+        if content_type == "tv":
+            content_type = "series"
+
+        if not content_id:
+            continue
+
+        key = f"{content_type}:{content_id}"
+
+        if key not in requests_by_key:
+            requests_by_key[key] = {
+                "id": content_id,
+                "type": content_type,
+            }
+
+    if not requests_by_key:
+        return {"certifications": {}}
+
+    tmdb_api_key = os.environ.get("TMDB_API_KEY", "").strip()
+
+    if not tmdb_api_key:
+        logger.error("[V706] TMDB_API_KEY is not configured")
+
+        raise HTTPException(
+            status_code=503,
+            detail="Content certification unavailable",
+        )
+
+    tmdb_client = await get_shared_http_client()
+    semaphore = asyncio.Semaphore(8)
+
+    async def resolve(key, item):
+        async with semaphore:
+            try:
+                data = await _v706_get_us_certification(
+                    item["type"],
+                    item["id"],
+                    tmdb_client,
+                    tmdb_api_key,
+                )
+
+                return key, data
+
+            except Exception as exc:
+                logger.warning(
+                    f"[V706] certification UNKNOWN "
+                    f"type={item['type']} id={item['id']}: {exc}"
+                )
+
+                return key, {
+                    "id": item["id"],
+                    "type": item["type"],
+                    "tmdb_id": None,
+                    "certification": None,
+                    "certifications": [],
+                    "status": "unknown",
+                    "source": "tmdb",
+                }
+
+    resolved = await asyncio.gather(
+        *(
+            resolve(key, item)
+            for key, item in requests_by_key.items()
+        )
+    )
+
+    return {
+        "certifications": {
+            key: data
+            for key, data in resolved
+        }
+    }
+
+
 @api_router.post("/movie/release_status")
 async def movie_release_status(request: Request):
     body = await request.json()
@@ -5965,6 +6346,532 @@ async def movie_release_status(request: Request):
 
     return dict(zip(ids, statuses))
 
+
+# ==================== V682 DYNAMIC PLAYBACK SEGMENTS ====================
+# Release-aware intro/credits analysis. The client never supplies a media URL:
+# the authenticated user's saved watch_progress URL is used transiently.
+from segment_analyzer import extract_signature as _v682_extract_signature
+from segment_analyzer import compare_signatures as _v682_compare_signatures
+
+_V682_SEGMENT_SCHEMA = 1
+
+class PlaybackSegmentsAnalyzeRequest(BaseModel):
+    content_id: str
+    duration_ms: Optional[int] = None
+    info_hash: Optional[str] = None
+    file_idx: Optional[int] = None
+    filename: Optional[str] = None
+
+
+def _v682_episode_identity(content_id: str, progress: Dict[str, Any]):
+    cid = str(content_id or "").strip()
+    parts = cid.split(":")
+    series_id = str(progress.get("series_id") or (parts[0] if parts else "") or "").strip()
+
+    season = progress.get("season")
+    episode = progress.get("episode")
+
+    try:
+        if season is None and len(parts) >= 3:
+            season = int(parts[-2])
+        elif season is not None:
+            season = int(season)
+    except (TypeError, ValueError):
+        season = None
+
+    try:
+        if episode is None and len(parts) >= 3:
+            episode = int(parts[-1])
+        elif episode is not None:
+            episode = int(episode)
+    except (TypeError, ValueError):
+        episode = None
+
+    return series_id, season, episode
+
+
+def _v682_release_key(
+    progress: Dict[str, Any],
+    request: PlaybackSegmentsAnalyzeRequest,
+    media_url: str,
+    duration_ms: int,
+) -> str:
+    info_hash = str(
+        request.info_hash
+        or progress.get("stream_info_hash")
+        or ""
+    ).strip().lower()
+
+    file_idx = (
+        request.file_idx
+        if request.file_idx is not None
+        else progress.get("stream_file_idx")
+    )
+
+    filename = str(
+        request.filename
+        or progress.get("stream_filename")
+        or ""
+    ).strip()
+
+    if info_hash:
+        material = f"hash:{info_hash}|file:{file_idx}|duration:{duration_ms}"
+    else:
+        # Signed query parameters are intentionally excluded. The path is used
+        # only to derive a one-way release identity and is never persisted.
+        from urllib.parse import urlparse
+        parsed = urlparse(str(media_url))
+        path_digest = hashlib.sha256(
+            str(parsed.path or "").encode("utf-8")
+        ).hexdigest()
+        material = (
+            f"path:{path_digest}|filename:{filename}|duration:{duration_ms}"
+        )
+
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+async def _v682_signature_for_release(
+    *,
+    release_key: str,
+    content_id: str,
+    series_id: str,
+    season: int,
+    episode: int,
+    duration_sec: float,
+    media_url: str,
+):
+    cached = await db.playback_segment_signatures.find_one(
+        {
+            "release_key": release_key,
+            "schema_version": _V682_SEGMENT_SCHEMA,
+        },
+        {"_id": 0, "signature": 1},
+    )
+
+    if cached and isinstance(cached.get("signature"), dict):
+        return cached["signature"], True
+
+    signature = await asyncio.to_thread(
+        _v682_extract_signature,
+        media_url,
+        duration_sec,
+    )
+
+    # No signed CDN URL is stored in this collection.
+    await db.playback_segment_signatures.update_one(
+        {"release_key": release_key},
+        {
+            "$set": {
+                "release_key": release_key,
+                "schema_version": _V682_SEGMENT_SCHEMA,
+                "content_id": content_id,
+                "series_id": series_id,
+                "season": season,
+                "episode": episode,
+                "duration_sec": duration_sec,
+                "signature": signature,
+                "updated_at": datetime.utcnow(),
+            }
+        },
+        upsert=True,
+    )
+
+    return signature, False
+
+
+def _v682_marker_payload(
+    *,
+    release_key: str,
+    content_id: str,
+    series_id: str,
+    season: int,
+    episode: int,
+    duration_ms: int,
+    intro: Optional[Dict[str, Any]],
+    credits: Optional[Dict[str, Any]],
+    reference_release_key: Optional[str],
+):
+    return {
+        "status": "ready" if (intro or credits) else "learning",
+        "schema_version": _V682_SEGMENT_SCHEMA,
+        "release_key": release_key,
+        "content_id": content_id,
+        "series_id": series_id,
+        "season": season,
+        "episode": episode,
+        "duration_ms": duration_ms,
+        "intro": intro,
+        "credits": credits,
+        "reference_release_key": reference_release_key,
+    }
+
+
+@api_router.post("/playback/segments/analyze")
+async def analyze_playback_segments(
+    request: PlaybackSegmentsAnalyzeRequest,
+    current_user: User = Depends(get_current_user),
+):
+    content_id = str(request.content_id or "").strip()
+
+    if not content_id:
+        raise HTTPException(status_code=400, detail="content_id is required")
+
+    progress = await db.watch_progress.find_one(
+        {
+            "user_id": current_user.id,
+            "content_id": content_id,
+        },
+        {"_id": 0},
+    )
+
+    if not progress:
+        raise HTTPException(
+            status_code=404,
+            detail="Watch progress not found for this content",
+        )
+
+    series_id, season, episode = _v682_episode_identity(content_id, progress)
+
+    if not series_id or season is None or episode is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Dynamic segment analysis requires a series episode",
+        )
+
+    media_url = str(progress.get("stream_url") or "").strip()
+
+    if not media_url:
+        raise HTTPException(
+            status_code=409,
+            detail="No active saved stream URL is available for this episode",
+        )
+
+    try:
+        duration_sec = float(progress.get("duration") or 0)
+    except (TypeError, ValueError):
+        duration_sec = 0.0
+
+    if duration_sec <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail="No valid playback duration is available for this episode",
+        )
+
+    duration_ms = int(round(duration_sec * 1000.0))
+    release_key = _v682_release_key(
+        progress,
+        request,
+        media_url,
+        duration_ms,
+    )
+
+    cached_marker = await db.playback_segment_markers.find_one(
+        {
+            "release_key": release_key,
+            "schema_version": _V682_SEGMENT_SCHEMA,
+        },
+        {"_id": 0},
+    )
+
+    if cached_marker and cached_marker.get("status") == "ready":
+        cached_marker["cache_hit"] = True
+        return cached_marker
+
+    try:
+        current_signature, signature_cache_hit = await _v682_signature_for_release(
+            release_key=release_key,
+            content_id=content_id,
+            series_id=series_id,
+            season=season,
+            episode=episode,
+            duration_sec=duration_sec,
+            media_url=media_url,
+        )
+    except ValueError as exc:
+        logger.warning(
+            "[V682_SEGMENTS] media rejected user=%s content=%s error=%s",
+            current_user.id,
+            content_id,
+            str(exc),
+        )
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.warning(
+            "[V682_SEGMENTS] current signature failed user=%s content=%s error=%s",
+            current_user.id,
+            content_id,
+            str(exc),
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to analyze the current playback release",
+        )
+
+    reference_docs = await db.playback_segment_signatures.find(
+        {
+            "schema_version": _V682_SEGMENT_SCHEMA,
+            "series_id": series_id,
+            "season": season,
+            "episode": {"$ne": episode},
+            "release_key": {"$ne": release_key},
+        },
+        {"_id": 0},
+    ).sort("updated_at", -1).to_list(length=8)
+
+    # Cold-start: if this season has no cached reference signature yet, try
+    # recent saved episodes for this same authenticated user. Expired signed
+    # URLs are skipped rather than weakening the confidence gate.
+    if not reference_docs:
+        candidate_progress = await db.watch_progress.find(
+            {
+                "user_id": current_user.id,
+                "content_id": {
+                    "$regex": f"^{series_id}:{season}:",
+                    "$ne": content_id,
+                },
+                "stream_url": {"$nin": [None, ""]},
+                "duration": {"$gt": 0},
+            },
+            {"_id": 0},
+        ).sort("updated_at", -1).to_list(length=4)
+
+        for ref_progress in candidate_progress:
+            ref_content_id = str(ref_progress.get("content_id") or "").strip()
+            ref_url = str(ref_progress.get("stream_url") or "").strip()
+
+            if not ref_content_id or not ref_url:
+                continue
+
+            ref_series_id, ref_season, ref_episode = _v682_episode_identity(
+                ref_content_id,
+                ref_progress,
+            )
+
+            if (
+                ref_series_id != series_id
+                or ref_season != season
+                or ref_episode is None
+                or ref_episode == episode
+            ):
+                continue
+
+            try:
+                ref_duration_sec = float(ref_progress.get("duration") or 0)
+            except (TypeError, ValueError):
+                ref_duration_sec = 0.0
+
+            if ref_duration_sec <= 0:
+                continue
+
+            ref_duration_ms = int(round(ref_duration_sec * 1000.0))
+            ref_request = PlaybackSegmentsAnalyzeRequest(
+                content_id=ref_content_id,
+            )
+            ref_release_key = _v682_release_key(
+                ref_progress,
+                ref_request,
+                ref_url,
+                ref_duration_ms,
+            )
+
+            try:
+                ref_signature, _ = await _v682_signature_for_release(
+                    release_key=ref_release_key,
+                    content_id=ref_content_id,
+                    series_id=series_id,
+                    season=season,
+                    episode=int(ref_episode),
+                    duration_sec=ref_duration_sec,
+                    media_url=ref_url,
+                )
+            except Exception as exc:
+                logger.info(
+                    "[V682_SEGMENTS] reference skipped content=%s error=%s",
+                    ref_content_id,
+                    str(exc),
+                )
+                continue
+
+            reference_docs.append(
+                {
+                    "release_key": ref_release_key,
+                    "content_id": ref_content_id,
+                    "series_id": series_id,
+                    "season": season,
+                    "episode": int(ref_episode),
+                    "duration_sec": ref_duration_sec,
+                    "signature": ref_signature,
+                }
+            )
+            break
+
+    best_intro = None
+    best_intro_score = -1.0
+    best_intro_reference = None
+
+    best_credits = None
+    best_credits_score = -1.0
+    best_credits_reference = None
+
+    for ref_doc in reference_docs:
+        ref_signature = ref_doc.get("signature")
+        ref_release_key = str(ref_doc.get("release_key") or "")
+
+        if not isinstance(ref_signature, dict):
+            continue
+
+        try:
+            comparison = await asyncio.to_thread(
+                _v682_compare_signatures,
+                ref_signature,
+                current_signature,
+            )
+        except Exception as exc:
+            logger.info(
+                "[V682_SEGMENTS] comparison skipped ref=%s content=%s error=%s",
+                ref_release_key[:12],
+                content_id,
+                str(exc),
+            )
+            continue
+
+        intro_cmp = comparison.get("intro")
+
+        if isinstance(intro_cmp, dict):
+            intro_score = float(intro_cmp.get("confidence") or 0.0)
+
+            if (
+                intro_score >= 0.90
+                and float(intro_cmp.get("core_score") or 0.0) >= 0.85
+                and intro_score > best_intro_score
+            ):
+                best_intro_score = intro_score
+                best_intro_reference = ref_release_key
+                best_intro = {
+                    "start_ms": int(round(float(intro_cmp["b_start_sec"]) * 1000.0)),
+                    "end_ms": int(round(float(intro_cmp["b_end_sec"]) * 1000.0)),
+                    "confidence": round(intro_score, 6),
+                    "core_score": round(
+                        float(intro_cmp.get("core_score") or 0.0),
+                        6,
+                    ),
+                    "source": "audio_fingerprint",
+                }
+
+        credits_cmp = comparison.get("credits")
+
+        if isinstance(credits_cmp, dict):
+            credits_conf = float(credits_cmp.get("audio_confidence") or 0.0)
+            credits_core = float(credits_cmp.get("audio_core_score") or 0.0)
+            remaining_delta = float(
+                credits_cmp.get("remaining_delta_sec") or 999.0
+            )
+            credits_length = float(
+                credits_cmp.get("audio_length_sec") or 0.0
+            )
+            credits_pair_score = float(
+                credits_cmp.get("pair_score") or 0.0
+            )
+
+            # V723_CORROBORATED_CREDITS
+            # Preserve the original strong-audio acceptance rule.
+            # A near-threshold recurring-audio match is accepted only when
+            # the independent visual credits boundary corroborates it tightly.
+            strong_credits = (
+                credits_conf >= 0.90
+                and credits_core >= 0.85
+                and remaining_delta <= 6.0
+            )
+
+            corroborated_credits = (
+                credits_conf >= 0.87
+                and credits_core >= 0.80
+                and credits_length >= 18.0
+                and remaining_delta <= 2.5
+                and credits_pair_score >= 12.0
+            )
+
+            if strong_credits or corroborated_credits:
+                credits_score = (
+                    credits_conf
+                    + credits_core
+                    + max(0.0, 6.0 - remaining_delta) / 6.0
+                )
+
+                if credits_score > best_credits_score:
+                    best_credits_score = credits_score
+                    best_credits_reference = ref_release_key
+                    best_credits = {
+                        "start_ms": int(
+                            round(float(credits_cmp["b_start_sec"]) * 1000.0)
+                        ),
+                        "end_ms": duration_ms,
+                        "confidence": round(credits_conf, 6),
+                        "core_score": round(credits_core, 6),
+                        "audio_length_sec": round(credits_length, 3),
+                        "remaining_delta_sec": round(remaining_delta, 3),
+                        "pair_score": round(credits_pair_score, 6),
+                        "gate": (
+                            "strong"
+                            if strong_credits
+                            else "corroborated"
+                        ),
+                        "source": "audio_visual_fingerprint",
+                    }
+
+    reference_release_key = (
+        best_credits_reference
+        or best_intro_reference
+        or (
+            str(reference_docs[0].get("release_key") or "")
+            if reference_docs
+            else None
+        )
+    )
+
+    payload = _v682_marker_payload(
+        release_key=release_key,
+        content_id=content_id,
+        series_id=series_id,
+        season=int(season),
+        episode=int(episode),
+        duration_ms=duration_ms,
+        intro=best_intro,
+        credits=best_credits,
+        reference_release_key=reference_release_key,
+    )
+    payload["cache_hit"] = False
+    payload["signature_cache_hit"] = signature_cache_hit
+
+    # Persist only successful marker results. A "learning" response must be
+    # retried later after another same-season reference becomes available.
+    # media_url is never included.
+    if payload["status"] == "ready":
+        await db.playback_segment_markers.update_one(
+            {"release_key": release_key},
+            {
+                "$set": {
+                    **payload,
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+            upsert=True,
+        )
+
+    logger.info(
+        "[V682_SEGMENTS] user=%s content=%s status=%s intro=%s credits=%s refs=%s",
+        current_user.id,
+        content_id,
+        payload["status"],
+        bool(best_intro),
+        bool(best_credits),
+        len(reference_docs),
+    )
+
+    return payload
+# ================== /V682 DYNAMIC PLAYBACK SEGMENTS ====================
+
 # ==================== ROOT ====================
 
 @api_router.get("/")
@@ -6007,6 +6914,595 @@ async def download_file(filename: str):
 
 
 # Include the router in the main app
+
+# V707_DETAILS_RATINGS_START
+import asyncio as _v708_asyncio
+#
+# Details-page metadata enrichment only.
+#
+# Rotten Tomatoes:
+#   primary  = MDBList ratings[] source "tomatoes"
+#   fallback = OMDb Ratings[] Source "Rotten Tomatoes"
+#
+# Certification:
+#   existing V706 TMDB US certification helper.
+#
+# This route is deliberately separate from normal /content/meta,
+# Discover, Search, streams, playback, and parental filtering.
+#
+
+import os as _v707_os
+import re as _v707_re
+import time as _v707_time
+import httpx as _v707_httpx
+from fastapi import Depends as _v707_Depends
+from fastapi import HTTPException as _v707_HTTPException
+
+
+_V707_RT_CACHE = {}
+
+_V707_RT_KNOWN_TTL = 7 * 24 * 60 * 60
+_V707_RT_UNKNOWN_TTL = 60 * 60
+
+
+def _v707_normalize_percent(value):
+    if isinstance(value, bool):
+        return None
+
+    if isinstance(value, (int, float)):
+        number = float(value)
+
+        if 0 <= number <= 100:
+            return int(round(number))
+
+        return None
+
+    if isinstance(value, str):
+        match = _v707_re.fullmatch(
+            r"\s*(\d{1,3})(?:\.\d+)?%\s*",
+            value,
+        )
+
+        if not match:
+            return None
+
+        number = int(match.group(1))
+
+        if 0 <= number <= 100:
+            return number
+
+    return None
+
+
+def _v707_base_rating(status="unknown"):
+    return {
+        "score": None,
+        "provider": None,
+        "status": status,
+        "votes": None,
+        "url": None,
+    }
+
+
+def _v708_normalize_imdb(value):
+    if value is None:
+        return None
+
+    text = str(value).strip()
+
+    if not text or text.upper() == "N/A":
+        return None
+
+    try:
+        score = float(text)
+    except (TypeError, ValueError):
+        return None
+
+    if score < 0.0 or score > 10.0:
+        return None
+
+    return round(score, 1)
+
+
+async def _v707_try_mdblist(
+    client,
+    content_type,
+    imdb_id,
+):
+    api_key = str(
+        _v707_os.getenv("MDBLIST_API_KEY") or ""
+    ).strip()
+
+    if not api_key:
+        return {
+            **_v707_base_rating("unconfigured"),
+            "imdb_score": None,
+            "attempt_ok": False,
+        }
+
+    provider_type = (
+        "movie"
+        if content_type == "movie"
+        else "show"
+    )
+
+    try:
+        response = await client.get(
+            (
+                "https://api.mdblist.com/imdb/"
+                f"{provider_type}/{imdb_id}"
+            ),
+            params={"apikey": api_key},
+            timeout=8.0,
+        )
+    except Exception as exc:
+        print(
+            "[V708] MDBList request error",
+            content_type,
+            imdb_id,
+            type(exc).__name__,
+        )
+
+        return {
+            **_v707_base_rating("provider_error"),
+            "imdb_score": None,
+            "attempt_ok": False,
+        }
+
+    if response.status_code != 200:
+        print(
+            "[V708] MDBList HTTP",
+            response.status_code,
+            content_type,
+            imdb_id,
+        )
+
+        return {
+            **_v707_base_rating(
+                f"http_{response.status_code}"
+            ),
+            "imdb_score": None,
+            "attempt_ok": False,
+        }
+
+    try:
+        payload = response.json()
+    except Exception:
+        return {
+            **_v707_base_rating("invalid_json"),
+            "imdb_score": None,
+            "attempt_ok": False,
+        }
+
+    ratings = payload.get("ratings") or []
+
+    tomatoes = None
+    imdb_score = None
+
+    if isinstance(ratings, list):
+        for row in ratings:
+            if not isinstance(row, dict):
+                continue
+
+            source = str(
+                row.get("source") or ""
+            ).strip().lower()
+
+            if (
+                source == "imdb"
+                and imdb_score is None
+            ):
+                imdb_score = _v708_normalize_imdb(
+                    row.get("value")
+                )
+
+            if (
+                source == "tomatoes"
+                and tomatoes is None
+            ):
+                tomatoes = row
+
+    if tomatoes is None:
+        return {
+            **_v707_base_rating("missing"),
+            "imdb_score": imdb_score,
+            "attempt_ok": True,
+        }
+
+    score = _v707_normalize_percent(
+        tomatoes.get("score")
+    )
+
+    if score is None:
+        score = _v707_normalize_percent(
+            tomatoes.get("value")
+        )
+
+    if score is None:
+        return {
+            **_v707_base_rating("missing"),
+            "imdb_score": imdb_score,
+            "attempt_ok": True,
+        }
+
+    return {
+        "score": score,
+        "provider": "mdblist",
+        "status": "known",
+        "votes": tomatoes.get("votes"),
+        "url": tomatoes.get("url"),
+        "imdb_score": imdb_score,
+        "attempt_ok": True,
+    }
+
+
+async def _v707_try_omdb(
+    client,
+    imdb_id,
+):
+    api_key = str(
+        _v707_os.getenv("OMDB_API_KEY") or ""
+    ).strip()
+
+    if not api_key:
+        return {
+            **_v707_base_rating("unconfigured"),
+            "imdb_score": None,
+            "attempt_ok": False,
+        }
+
+    try:
+        response = await client.get(
+            "https://www.omdbapi.com/",
+            params={
+                "apikey": api_key,
+                "i": imdb_id,
+                "r": "json",
+            },
+            timeout=8.0,
+        )
+    except Exception as exc:
+        print(
+            "[V708] OMDb request error",
+            imdb_id,
+            type(exc).__name__,
+        )
+
+        return {
+            **_v707_base_rating("provider_error"),
+            "imdb_score": None,
+            "attempt_ok": False,
+        }
+
+    if response.status_code != 200:
+        print(
+            "[V708] OMDb HTTP",
+            response.status_code,
+            imdb_id,
+        )
+
+        return {
+            **_v707_base_rating(
+                f"http_{response.status_code}"
+            ),
+            "imdb_score": None,
+            "attempt_ok": False,
+        }
+
+    try:
+        payload = response.json()
+    except Exception:
+        return {
+            **_v707_base_rating("invalid_json"),
+            "imdb_score": None,
+            "attempt_ok": False,
+        }
+
+    if str(
+        payload.get("Response") or ""
+    ).strip().lower() != "true":
+        print(
+            "[V708] OMDb response false",
+            imdb_id,
+            str(payload.get("Error") or "")[:120],
+        )
+
+        return {
+            **_v707_base_rating("provider_error"),
+            "imdb_score": None,
+            "attempt_ok": False,
+        }
+
+    imdb_score = _v708_normalize_imdb(
+        payload.get("imdbRating")
+    )
+
+    ratings = payload.get("Ratings") or []
+
+    rotten = None
+
+    if isinstance(ratings, list):
+        for row in ratings:
+            if not isinstance(row, dict):
+                continue
+
+            source = str(
+                row.get("Source") or ""
+            ).strip().lower()
+
+            if source == "rotten tomatoes":
+                rotten = row
+                break
+
+    if rotten is None:
+        return {
+            **_v707_base_rating("missing"),
+            "imdb_score": imdb_score,
+            "attempt_ok": True,
+        }
+
+    score = _v707_normalize_percent(
+        rotten.get("Value")
+    )
+
+    if score is None:
+        return {
+            **_v707_base_rating("missing"),
+            "imdb_score": imdb_score,
+            "attempt_ok": True,
+        }
+
+    return {
+        "score": score,
+        "provider": "omdb",
+        "status": "known",
+        "votes": None,
+        "url": None,
+        "imdb_score": imdb_score,
+        "attempt_ok": True,
+    }
+
+
+async def _v707_get_rotten_tomatoes(
+    client,
+    content_type,
+    imdb_id,
+):
+    cache_key = f"{content_type}:{imdb_id}"
+    now = _v707_time.time()
+
+    cached = _V707_RT_CACHE.get(cache_key)
+
+    if cached:
+        age = now - float(
+            cached.get("checked_at") or 0
+        )
+
+        ttl = int(
+            cached.get("ttl") or 0
+        )
+
+        if ttl > 0 and age < ttl:
+            return cached["data"]
+
+    mdblist = await _v707_try_mdblist(
+        client,
+        content_type,
+        imdb_id,
+    )
+
+    #
+    # MDBList remains primary.
+    # If it has both values, there is no reason
+    # to spend another OMDb request.
+    #
+    if (
+        mdblist.get("score") is not None
+        and mdblist.get("imdb_score") is not None
+    ):
+        result = {
+            key: value
+            for key, value in mdblist.items()
+            if key != "attempt_ok"
+        }
+
+        _V707_RT_CACHE[cache_key] = {
+            "checked_at": now,
+            "ttl": _V707_RT_KNOWN_TTL,
+            "data": result,
+        }
+
+        return result
+
+    #
+    # OMDb is fallback only when MDBList is missing
+    # Rotten Tomatoes, IMDb, or both.
+    #
+    omdb = await _v707_try_omdb(
+        client,
+        imdb_id,
+    )
+
+    imdb_score = mdblist.get(
+        "imdb_score"
+    )
+
+    if imdb_score is None:
+        imdb_score = omdb.get(
+            "imdb_score"
+        )
+
+    if mdblist.get("score") is not None:
+        selected = mdblist
+    elif omdb.get("score") is not None:
+        selected = omdb
+    else:
+        selected = None
+
+    if selected is not None:
+        result = {
+            key: value
+            for key, value in selected.items()
+            if key != "attempt_ok"
+        }
+
+        result["imdb_score"] = imdb_score
+
+        cache_safe = bool(
+            imdb_score is not None
+            or omdb.get("attempt_ok")
+        )
+
+        if cache_safe:
+            _V707_RT_CACHE[cache_key] = {
+                "checked_at": now,
+                "ttl": _V707_RT_KNOWN_TTL,
+                "data": result,
+            }
+
+        return result
+
+    both_answered = bool(
+        mdblist.get("attempt_ok")
+        and omdb.get("attempt_ok")
+    )
+
+    result = _v707_base_rating(
+        "unknown"
+        if both_answered
+        else "provider_error"
+    )
+
+    result["imdb_score"] = imdb_score
+
+    if both_answered:
+        _V707_RT_CACHE[cache_key] = {
+            "checked_at": now,
+            "ttl": _V707_RT_UNKNOWN_TTL,
+            "data": result,
+        }
+
+    return result
+
+
+@api_router.get(
+    "/content/ratings/{content_type}/{content_id}"
+)
+async def _v707_content_ratings(
+    content_type: str,
+    content_id: str,
+    current_user=_v707_Depends(get_current_user),
+):
+    kind = str(
+        content_type or ""
+    ).strip().lower()
+
+    if kind not in ("movie", "series"):
+        raise _v707_HTTPException(
+            status_code=400,
+            detail="Ratings support movie or series only",
+        )
+
+    imdb_id = str(
+        content_id or ""
+    ).strip()
+
+    if ":" in imdb_id:
+        imdb_id = imdb_id.split(":", 1)[0]
+
+    if not _v707_re.fullmatch(
+        r"tt\d+",
+        imdb_id,
+    ):
+        raise _v707_HTTPException(
+            status_code=400,
+            detail="Ratings require an IMDb ID",
+        )
+
+    certification = None
+    certifications = []
+    certification_status = "unknown"
+
+    tmdb_api_key = str(
+        _v707_os.getenv("TMDB_API_KEY") or ""
+    ).strip()
+
+    async with _v707_httpx.AsyncClient(
+        follow_redirects=True,
+    ) as client:
+
+        #
+        # V708: independent external requests start together.
+        #
+        rotten_task = _v708_asyncio.create_task(
+            _v707_get_rotten_tomatoes(
+                client,
+                kind,
+                imdb_id,
+            )
+        )
+
+        cert_task = None
+
+        if tmdb_api_key:
+            cert_task = _v708_asyncio.create_task(
+                _v706_get_us_certification(
+                    kind,
+                    imdb_id,
+                    client,
+                    tmdb_api_key,
+                )
+            )
+
+        if cert_task is not None:
+            try:
+                cert = await cert_task
+
+                certification = cert.get(
+                    "certification"
+                )
+
+                certifications = cert.get(
+                    "certifications"
+                ) or []
+
+                certification_status = str(
+                    cert.get("status")
+                    or "unknown"
+                )
+
+            except Exception as exc:
+                print(
+                    "[V708] certification lookup error",
+                    kind,
+                    imdb_id,
+                    type(exc).__name__,
+                )
+
+        rotten = await rotten_task
+
+    return {
+        "id": imdb_id,
+        "type": kind,
+
+        "certification": certification,
+        "certifications": certifications,
+        "certification_status": certification_status,
+        "certification_source": "tmdb",
+
+        "imdb_score": rotten.get("imdb_score"),
+
+        "tomatoes_score": rotten.get("score"),
+        "tomatoes_provider": rotten.get("provider"),
+        "tomatoes_status": rotten.get("status"),
+        "tomatoes_votes": rotten.get("votes"),
+        "tomatoes_url": rotten.get("url"),
+    }
+
+
+# V707_DETAILS_RATINGS_END
+
+
 app.include_router(api_router)
 
 app.add_middleware(
