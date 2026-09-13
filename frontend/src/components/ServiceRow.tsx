@@ -329,10 +329,18 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
         const type = String(it.type || '').toLowerCase();
         if (type && type !== 'movie') continue;
 
-        const id = String(it.imdb_id || it.id || '');
-        if (!id.startsWith('tt')) continue;
+        // V715_INCINEMA_SHARED_IDENTITY
+        // Release status requires an IMDb id, but catalog sources may
+        // carry that IMDb alias in imdb_id, id, or content_id.
+        const releaseId =
+          v634GetStatusIds(it).find(
+            (candidate) =>
+              String(candidate).startsWith('tt')
+          ) || '';
 
-        ids.add(id);
+        if (!releaseId) continue;
+
+        ids.add(releaseId);
       }
 
       const scheduleRefresh = () => {
@@ -793,14 +801,14 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
                 );
 
               /*
-               * IN CINEMA remains independent.
+               * V715_INCINEMA_SHARED_IDENTITY
+               * IN CINEMA remains independent state, but uses the same
+               * item aliases as watched/library before selecting the IMDb id.
                */
               const releaseId =
-                String(
-                  (it as any).imdb_id ||
-                    (it as any).id ||
-                    ''
-                );
+                statusIds.find(
+                  (id) => String(id).startsWith('tt')
+                ) || '';
 
               const inCinema =
                 v610GetReleaseStatus(
