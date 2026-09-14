@@ -16,6 +16,9 @@ import jwt
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 import asyncio
+import ipaddress
+import socket
+from urllib.parse import urljoin, urlsplit
 try:
     import libtorrent as lt
     LIBTORRENT_AVAILABLE = True
@@ -883,6 +886,147 @@ def get_base_url(manifest_url: str) -> str:
         return manifest_url[:-14]
     return manifest_url.rsplit('/', 1)[0]
 
+
+# ==================== V726 OUTBOUND ADDON SECURITY ====================
+# Server-side addon egress is restricted to explicitly approved HTTPS
+# endpoints. V726_EXTRA_ADDON_HOSTS may contain additional exact hosts.
+_V726_ALLOWED_ADDON_HOSTS = frozenset({
+    "7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club",
+    "cinemeta-catalogs.strem.io",
+    "mediafusion.elfhosted.com",
+    "thepiratebay-plus.strem.fun",
+    "torrentio.strem.fun",
+    "v3-cinemeta.strem.io",
+})
+
+_V726_EXTRA_ADDON_HOSTS = frozenset(
+    host.strip().rstrip(".").lower()
+    for host in os.environ.get("V726_EXTRA_ADDON_HOSTS", "").split(",")
+    if host.strip()
+)
+
+_V726_REDIRECT_CODES = {301, 302, 303, 307, 308}
+_V726_MAX_REDIRECTS = 3
+
+
+def _v726_addon_host_allowed(host: str) -> bool:
+    host = str(host or "").strip().rstrip(".").lower()
+
+    if not host:
+        return False
+
+    return (
+        host in _V726_ALLOWED_ADDON_HOSTS
+        or host in _V726_EXTRA_ADDON_HOSTS
+    )
+
+
+async def _v726_validate_addon_url(url: str) -> str:
+    value = str(url or "").strip()
+
+    if not value or len(value) > 8192:
+        raise ValueError("Addon URL is empty or too long")
+
+    if "\\" in value:
+        raise ValueError("Addon URL contains a backslash")
+
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        raise ValueError("Addon URL contains control characters")
+
+    if any(ch.isspace() for ch in value):
+        raise ValueError("Addon URL contains whitespace")
+
+    try:
+        parsed = urlsplit(value)
+        host = str(parsed.hostname or "").strip().rstrip(".").lower()
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Addon URL could not be parsed") from exc
+
+    if parsed.scheme.lower() != "https":
+        raise ValueError("Addon URL must use HTTPS")
+
+    if not parsed.netloc or not host:
+        raise ValueError("Addon URL has no hostname")
+
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("Addon URL credentials are not allowed")
+
+    if port not in (None, 443):
+        raise ValueError("Addon URL must use HTTPS port 443")
+
+    if not _v726_addon_host_allowed(host):
+        raise ValueError("Addon hostname is not approved")
+
+    try:
+        addresses = await asyncio.to_thread(
+            socket.getaddrinfo,
+            host,
+            443,
+            0,
+            socket.SOCK_STREAM,
+        )
+    except socket.gaierror as exc:
+        raise ValueError("Addon hostname could not be resolved") from exc
+
+    resolved_ips = {
+        str(entry[4][0]).split("%", 1)[0]
+        for entry in addresses
+        if entry and len(entry) >= 5 and entry[4]
+    }
+
+    if not resolved_ips:
+        raise ValueError("Addon hostname resolved to no addresses")
+
+    for raw_ip in resolved_ips:
+        try:
+            address = ipaddress.ip_address(raw_ip)
+        except ValueError as exc:
+            raise ValueError(
+                "Addon hostname returned an invalid address"
+            ) from exc
+
+        if not address.is_global:
+            raise ValueError(
+                "Addon hostname resolved to a non-public address"
+            )
+
+    return value
+
+
+async def _v726_safe_addon_get(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    timeout: float,
+) -> httpx.Response:
+    current_url = str(url or "").strip()
+
+    for redirect_count in range(_V726_MAX_REDIRECTS + 1):
+        current_url = await _v726_validate_addon_url(current_url)
+
+        response = await client.get(
+            current_url,
+            timeout=timeout,
+            follow_redirects=False,
+        )
+
+        if response.status_code not in _V726_REDIRECT_CODES:
+            return response
+
+        location = response.headers.get("location")
+
+        if not location:
+            return response
+
+        if redirect_count >= _V726_MAX_REDIRECTS:
+            raise ValueError("Addon URL exceeded redirect limit")
+
+        current_url = urljoin(current_url, location)
+
+    raise ValueError("Addon redirect handling failed")
+# ================== /V726 OUTBOUND ADDON SECURITY ====================
+
 def get_fallback_manifest(url: str) -> Optional[Dict]:
     """Check if we have a fallback manifest for this URL"""
     for key, manifest in FALLBACK_MANIFESTS.items():
@@ -1620,17 +1764,52 @@ async def install_addon(addon_data: AddonInstall, current_user: User = Depends(g
     """Install an addon from manifest URL"""
     manifest_url = addon_data.manifestUrl.strip()
     manifest_data = None
+
+    try:
+        manifest_url = await _v726_validate_addon_url(manifest_url)
+    except ValueError as exc:
+        logger.warning(
+            "V726_ADDON_INSTALL_BLOCK user=%s reason=%s",
+            current_user.id,
+            str(exc),
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="Addon URL is not permitted",
+        )
     
     # Try to fetch manifest from URL
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-            response = await client.get(manifest_url)
+        async with httpx.AsyncClient(
+            follow_redirects=False,
+            timeout=15.0,
+            trust_env=False,
+        ) as client:
+            response = await _v726_safe_addon_get(
+                client,
+                manifest_url,
+                timeout=15.0,
+            )
             if response.status_code == 200:
                 content_type = response.headers.get('content-type', '')
                 if 'json' in content_type or response.text.strip().startswith('{'):
                     manifest_data = response.json()
-    except Exception as e:
-        logger.warning(f"Failed to fetch manifest from {manifest_url}: {e}")
+    except ValueError as exc:
+        logger.warning(
+            "V726_ADDON_REDIRECT_BLOCK user=%s reason=%s",
+            current_user.id,
+            str(exc),
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="Addon redirect destination is not permitted",
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to fetch addon manifest for user %s: %s",
+            current_user.id,
+            type(exc).__name__,
+        )
     
     # If fetch failed, try fallback manifest
     if not manifest_data:
@@ -1747,8 +1926,16 @@ async def get_addon_streams(
     stream_url = f"{base_url}/stream/{content_type}/{content_id}.json"
     
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=12.0) as client:
-            response = await client.get(stream_url)
+        async with httpx.AsyncClient(
+            follow_redirects=False,
+            timeout=12.0,
+            trust_env=False,
+        ) as client:
+            response = await _v726_safe_addon_get(
+                client,
+                stream_url,
+                timeout=12.0,
+            )
             if response.status_code == 200:
                 return response.json()
             else:
@@ -2032,6 +2219,13 @@ async def get_all_streams(
     # Handle URL-based content IDs (like from OnlyPorn addon)
     # These need to be fetched from the jaxxx addon which resolves the actual stream URL
     if content_id.startswith('http://') or content_id.startswith('https://'):
+        logger.warning(
+            "V726_URL_CONTENT_BLOCK user=%s",
+            current_user.id,
+        )
+        return {"streams": []}
+
+        # Legacy URL extraction remains below but is unreachable.
         logger.info(f"URL-based content ID detected: {content_id[:60]}...")
         
         # Determine site name for labeling
@@ -2333,7 +2527,8 @@ async def get_all_streams(
             
             base_url = get_base_url(addon['manifestUrl'])
             stream_url = f"{base_url}/stream/{content_type}/{content_id}.json"
-            
+            stream_url = await _v726_validate_addon_url(stream_url)
+
             # Check if this is a Cloudflare-protected domain
             cf_protected_domains = ['torrentio.strem.fun', 'strem.fun']
             needs_bypass = any(domain in base_url for domain in cf_protected_domains)
@@ -2373,7 +2568,11 @@ async def get_all_streams(
                         browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
                     )
                     response = await asyncio.to_thread(
-                        lambda: scraper.get(stream_url, timeout=15)
+                        lambda: scraper.get(
+                            stream_url,
+                            timeout=15,
+                            allow_redirects=False,
+                        )
                     )
                     if response.status_code == 200:
                         data = response.json()
@@ -2389,8 +2588,16 @@ async def get_all_streams(
                 return []
             else:
                 # Standard fetch for non-protected addons
-                async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-                    response = await client.get(stream_url)
+                async with httpx.AsyncClient(
+                    follow_redirects=False,
+                    timeout=20.0,
+                    trust_env=False,
+                ) as client:
+                    response = await _v726_safe_addon_get(
+                        client,
+                        stream_url,
+                        timeout=20.0,
+                    )
                     if response.status_code == 200:
                         data = response.json()
                         streams = data.get('streams', [])
@@ -3156,7 +3363,11 @@ async def get_discover(adult: int = 0, current_user: User = Depends(get_current_
     async def fetch_catalog(url: str) -> list:
         """Fetch a single catalog URL and return metas"""
         try:
-            response = await http_client.get(url)
+            response = await _v726_safe_addon_get(
+                http_client,
+                url,
+                timeout=15.0,
+            )
             if response.status_code == 200:
                 return response.json().get('metas', [])
         except Exception as e:
@@ -3367,8 +3578,16 @@ async def get_category_content(
                 
                 logger.info(f"Fetching category: {url}")
                 
-                async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-                    response = await client.get(url)
+                async with httpx.AsyncClient(
+                    follow_redirects=False,
+                    timeout=30.0,
+                    trust_env=False,
+                ) as client:
+                    response = await _v726_safe_addon_get(
+                        client,
+                        url,
+                        timeout=30.0,
+                    )
                     if response.status_code == 200:
                         metas = response.json().get('metas', [])
                         # Filter out items with empty names or IDs
@@ -3381,7 +3600,11 @@ async def get_category_content(
                             # Quick check: fetch page 1 to compare
                             first_page_url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
                             try:
-                                first_resp = await client.get(first_page_url)
+                                first_resp = await _v726_safe_addon_get(
+                                    client,
+                                    first_page_url,
+                                    timeout=30.0,
+                                )
                                 if first_resp.status_code == 200:
                                     first_metas = first_resp.json().get('metas', [])
                                     if first_metas and metas[0].get('id') == first_metas[0].get('id'):
@@ -3443,8 +3666,16 @@ async def get_category_content(
                 else:
                     url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
                 
-                async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-                    response = await client.get(url)
+                async with httpx.AsyncClient(
+                    follow_redirects=False,
+                    timeout=30.0,
+                    trust_env=False,
+                ) as client:
+                    response = await _v726_safe_addon_get(
+                        client,
+                        url,
+                        timeout=30.0,
+                    )
                     if response.status_code == 200:
                         metas = response.json().get('metas', [])
                         metas = [m for m in metas if m.get('name') and m.get('id')]
