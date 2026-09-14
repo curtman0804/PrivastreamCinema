@@ -96,6 +96,12 @@ api_router = APIRouter(prefix="/api")
 # The plural /api/streams discovery API is intentionally unaffected.
 _V656_P2P_PATH_PREFIX = "/api/stream/"
 
+# V725_HETZNER_PROXY_KILL_SWITCH
+# The legacy media proxy routes accept caller-controlled destination URLs.
+# They are currently unused and must not provide arbitrary outbound network
+# access from production infrastructure.
+_V725_PROXY_PATH_PREFIX = "/api/proxy/"
+
 @app.middleware("http")
 async def v656_block_server_side_p2p(request: Request, call_next):
     if request.url.path.startswith(_V656_P2P_PATH_PREFIX):
@@ -109,6 +115,19 @@ async def v656_block_server_side_p2p(request: Request, call_next):
             status_code=410,
             media_type="application/json",
         )
+
+    if request.url.path.startswith(_V725_PROXY_PATH_PREFIX):
+        logger.warning(
+            "V725_PROXY_BLOCK method=%s path=%s",
+            request.method,
+            request.url.path,
+        )
+        return Response(
+            content='{"detail":"Server-side media proxying is disabled"}',
+            status_code=410,
+            media_type="application/json",
+        )
+
     return await call_next(request)
 # ================== /V656 SERVER-SIDE P2P KILL SWITCH ====================
 
