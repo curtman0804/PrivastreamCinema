@@ -1,0 +1,17 @@
+[Unit]
+Description=Privastream direct Hetzner egress
+After=network-online.target
+Wants=network-online.target
+Before=wg-quick@privastream.service privastream-tunnel-control.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/privastream-egress/apply.sh up
+ExecStop=/opt/privastream-egress/apply.sh down
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

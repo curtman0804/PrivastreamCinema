@@ -1,0 +1,56 @@
+# V739B5I3_PRIVASTREAM_TUNNEL_CONTROL
+#
+# DORMANT UNIT:
+# Validated but not daemon-reloaded, enabled, or started by V739B5I3.
+
+[Unit]
+Description=Privastream Tunnel Peer Control
+
+Requires=privastream-egress.service wg-quick@privastream.service
+
+After=network-online.target
+After=privastream-egress.service
+After=wg-quick@privastream.service
+
+PartOf=wg-quick@privastream.service
+
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/privastream-tunnel-control/control.env
+
+WorkingDirectory=/var/lib/privastream-tunnel-control
+
+ExecStartPre=/usr/bin/test -r /etc/privastream-tunnel-control/control.token
+ExecStartPre=/usr/bin/test -r /etc/wireguard/privastream-server.pub
+
+ExecStart=/usr/bin/python3 /opt/privastream-tunnel-control/control.py serve
+
+Restart=no
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+
+ReadWritePaths=/var/lib/privastream-tunnel-control
+
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+
+[Install]
+WantedBy=multi-user.target
