@@ -12,6 +12,7 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
 import hashlib
+import base64  # V739B1_TUNNEL_PROVISIONING
 import jwt
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
@@ -802,6 +803,30 @@ class PremiumizeDirectDLRequest(BaseModel):
 class PremiumizeConfigureRequest(BaseModel):
     api_key: str
 
+
+# ==================== V739B1 TUNNEL PROVISIONING MODELS ====================
+# V739B1_TUNNEL_PROVISIONING
+#
+# The Android installation owns its WireGuard PRIVATE key.
+# The backend receives only the corresponding PUBLIC key.
+# No tunnel private key is stored in MongoDB or returned by this API.
+class TunnelProvisionRequest(BaseModel):
+    device_id: str
+    public_key: str
+    platform: Optional[str] = None
+    app_version: Optional[str] = None
+
+
+class TunnelProvisionResponse(BaseModel):
+    device_id: str
+    address: str
+    dns: str
+    server_public_key: str
+    endpoint: str
+    allowed_ips: str
+    persistent_keepalive: int
+    app_only_package: str
+
 class AddonInstall(BaseModel):
     manifestUrl: str
 
@@ -891,6 +916,10 @@ def get_base_url(manifest_url: str) -> str:
 # Server-side addon egress is restricted to explicitly approved HTTPS
 # endpoints. V726_EXTRA_ADDON_HOSTS may contain additional exact hosts.
 _V726_ALLOWED_ADDON_HOSTS = frozenset({
+    "07b88951aaab-jaxxx-v2.baby-beamup.club",
+    "1fe84bc728af-stremio-porn.baby-beamup.club",
+    "dirty-pink.ers.pw",
+    "ptube.ers.pw",
     "7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club",
     "cinemeta-catalogs.strem.io",
     "mediafusion.elfhosted.com",
@@ -1273,6 +1302,348 @@ async def get_me(current_user: User = Depends(get_current_user)):
         created_at=current_user.created_at
     )
 
+
+# ==================== V739B1 PRIVASTREAM TUNNEL PROVISIONING ====================
+# V739B1_TUNNEL_PROVISIONING
+#
+# Security boundary:
+# - Requires the normal Privastream JWT.
+# - Device generates and retains its own WireGuard private key.
+# - This server receives only the device public key.
+# - Peer creation belongs to the separate Privastream VPN control plane.
+# - Missing/unreachable provisioning service FAILS CLOSED.
+# - Existing playback/Premiumize/addon paths are not used as a fallback.
+
+
+def _v739b_validate_wireguard_public_key(value: str) -> str:
+    key = (value or "").strip()
+
+    if not key:
+        raise HTTPException(
+            status_code=400,
+            detail="Tunnel public key is required",
+        )
+
+    try:
+        decoded = base64.b64decode(
+            key.encode("ascii"),
+            validate=True,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid tunnel public key",
+        )
+
+    if len(decoded) != 32:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid tunnel public key",
+        )
+
+    return key
+
+
+def _v739b_validate_device_id(value: str) -> str:
+    raw = (value or "").strip()
+
+    try:
+        parsed = uuid.UUID(raw)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid tunnel device id",
+        )
+
+    canonical = str(parsed)
+
+    if raw.lower() != canonical:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid tunnel device id",
+        )
+
+    return canonical
+
+
+# V739B1A_FULL_TUNNEL_VALIDATION
+def _v739b_validate_full_tunnel_allowed_ips(value: str) -> str:
+    raw = (value or "").strip()
+
+    if not raw:
+        logger.error("V739B control plane returned empty allowed_ips")
+        raise HTTPException(
+            status_code=503,
+            detail="Privastream tunnel is unavailable",
+        )
+
+    parts = [
+        part.strip()
+        for part in raw.split(",")
+        if part.strip()
+    ]
+
+    # Exactly two routes are permitted:
+    # all IPv4 + all IPv6.
+    if len(parts) != 2:
+        logger.error(
+            "V739B control plane did not return exactly two default routes"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Privastream tunnel is unavailable",
+        )
+
+    try:
+        networks = {
+            str(
+                ipaddress.ip_network(
+                    part,
+                    strict=True,
+                )
+            )
+            for part in parts
+        }
+    except ValueError:
+        logger.error(
+            "V739B control plane returned invalid allowed_ips"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Privastream tunnel is unavailable",
+        )
+
+    required = {
+        "0.0.0.0/0",
+        "::/0",
+    }
+
+    if networks != required:
+        logger.error(
+            "V739B control plane rejected: full tunnel routes missing"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Privastream tunnel is unavailable",
+        )
+
+    # Return one deterministic representation to Android.
+    return "0.0.0.0/0, ::/0"
+
+
+@api_router.post(
+    "/tunnel/provision",
+    response_model=TunnelProvisionResponse,
+)
+async def v739b_tunnel_provision(
+    request: TunnelProvisionRequest,
+    current_user: User = Depends(get_current_user),
+):
+    device_id = _v739b_validate_device_id(
+        request.device_id
+    )
+
+    public_key = _v739b_validate_wireguard_public_key(
+        request.public_key
+    )
+
+    control_url = os.environ.get(
+        "PRIVASTREAM_TUNNEL_PROVISION_URL",
+        "",
+    ).strip().rstrip("/")
+
+    control_token = os.environ.get(
+        "PRIVASTREAM_TUNNEL_PROVISION_TOKEN",
+        "",
+    ).strip()
+
+    # V739B fail-closed:
+    # Never manufacture a tunnel config locally and never fall back.
+    if not control_url or not control_token:
+        logger.error(
+            "V739B tunnel provisioning unavailable: "
+            "control plane is not configured"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Privastream tunnel is unavailable",
+        )
+
+    try:
+        parsed_control = urlsplit(control_url)
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Privastream tunnel is unavailable",
+        )
+
+    if (
+        parsed_control.scheme.lower() != "https"
+        or not parsed_control.hostname
+        or parsed_control.username is not None
+        or parsed_control.password is not None
+    ):
+        logger.error(
+            "V739B tunnel provisioning control URL is invalid"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Privastream tunnel is unavailable",
+        )
+
+    # A device id may never silently cross account ownership.
+    existing = await db.tunnel_devices.find_one(
+        {"device_id": device_id},
+        {
+            "_id": 0,
+            "user_id": 1,
+        },
+    )
+
+    if (
+        existing
+        and existing.get("user_id") != current_user.id
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Tunnel device is already registered",
+        )
+
+    control_payload = {
+        "user_id": current_user.id,
+        "device_id": device_id,
+        "public_key": public_key,
+        "platform": (request.platform or "").strip() or None,
+        "app_version": (request.app_version or "").strip() or None,
+    }
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=12.0,
+            follow_redirects=False,
+            trust_env=False,
+        ) as client:
+            response = await client.post(
+                f"{control_url}/v1/peers/provision",
+                headers={
+                    "Authorization": f"Bearer {control_token}",
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                json=control_payload,
+            )
+
+        if response.status_code != 200:
+            logger.warning(
+                "V739B tunnel control plane rejected provisioning "
+                "for user %s device %s with HTTP %s",
+                current_user.id,
+                device_id,
+                response.status_code,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Privastream tunnel is unavailable",
+            )
+
+        data = response.json()
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        logger.warning(
+            "V739B tunnel provisioning failed for user %s "
+            "device %s: %s",
+            current_user.id,
+            device_id,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Privastream tunnel is unavailable",
+        )
+
+    required = (
+        "address",
+        "dns",
+        "server_public_key",
+        "endpoint",
+        "allowed_ips",
+    )
+
+    for field in required:
+        if not str(data.get(field) or "").strip():
+            logger.error(
+                "V739B control plane response missing field %s",
+                field,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Privastream tunnel is unavailable",
+            )
+
+    allowed_ips = _v739b_validate_full_tunnel_allowed_ips(
+        str(data["allowed_ips"])
+    )
+
+    server_public_key = _v739b_validate_wireguard_public_key(
+        str(data["server_public_key"])
+    )
+
+    try:
+        keepalive = int(
+            data.get("persistent_keepalive", 25)
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Privastream tunnel is unavailable",
+        )
+
+    if keepalive < 0 or keepalive > 65535:
+        raise HTTPException(
+            status_code=503,
+            detail="Privastream tunnel is unavailable",
+        )
+
+    now = datetime.utcnow()
+
+    await db.tunnel_devices.update_one(
+        {
+            "user_id": current_user.id,
+            "device_id": device_id,
+        },
+        {
+            "$set": {
+                "public_key": public_key,
+                "platform": (
+                    request.platform or ""
+                ).strip() or None,
+                "app_version": (
+                    request.app_version or ""
+                ).strip() or None,
+                "address": str(data["address"]).strip(),
+                "updated_at": now,
+                "active": True,
+            },
+            "$setOnInsert": {
+                "created_at": now,
+            },
+        },
+        upsert=True,
+    )
+
+    return TunnelProvisionResponse(
+        device_id=device_id,
+        address=str(data["address"]).strip(),
+        dns=str(data["dns"]).strip(),
+        server_public_key=server_public_key,
+        endpoint=str(data["endpoint"]).strip(),
+        allowed_ips=allowed_ips,
+        persistent_keepalive=keepalive,
+        app_only_package="com.privastream.cinema",
+    )
 
 # ==================== V654 TOS SERVER RESTORE ====================
 # V654_TOS_SERVER_RESTORE
@@ -1944,81 +2315,467 @@ async def get_addon_streams(
         logger.error(f"Error fetching streams: {str(e)}")
         return {"streams": []}
 
+# ================= V727B2C REDTUBE EGRESS HARDENING =================
+# Exact RedTube hosts only; HTTPS/443 only; no credentials; all DNS
+# answers must be globally routable; redirects are manually revalidated.
+_V727B2C_REDTUBE_PAGE_HOSTS = frozenset({
+    "www.redtube.com",
+})
+
+_V727B2C_REDTUBE_MEDIA_HOSTS = frozenset({
+    "ev.phncdn.com",
+})
+
+_V727B2C_REDIRECT_CODES = {301, 302, 303, 307, 308}
+_V727B2C_MAX_REDIRECTS = 3
+
+
+async def _v727b2c_validate_redtube_https_url(
+    url: str,
+    allowed_hosts,
+) -> str:
+    value = str(url or "").strip()
+
+    if not value or len(value) > 8192:
+        raise ValueError("RedTube URL is empty or too long")
+
+    if "\\" in value:
+        raise ValueError("RedTube URL contains a backslash")
+
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        raise ValueError("RedTube URL contains control characters")
+
+    if any(ch.isspace() for ch in value):
+        raise ValueError("RedTube URL contains whitespace")
+
+    try:
+        parsed = urlsplit(value)
+        host = str(parsed.hostname or "").strip().rstrip(".").lower()
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("RedTube URL could not be parsed") from exc
+
+    if parsed.scheme.lower() != "https":
+        raise ValueError("RedTube URL must use HTTPS")
+
+    if not parsed.netloc or not host:
+        raise ValueError("RedTube URL has no hostname")
+
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("RedTube URL credentials are not allowed")
+
+    if port not in (None, 443):
+        raise ValueError("RedTube URL must use HTTPS port 443")
+
+    if host not in allowed_hosts:
+        raise ValueError("RedTube hostname is not approved")
+
+    try:
+        addresses = await asyncio.to_thread(
+            socket.getaddrinfo,
+            host,
+            443,
+            0,
+            socket.SOCK_STREAM,
+        )
+    except socket.gaierror as exc:
+        raise ValueError(
+            "RedTube hostname could not be resolved"
+        ) from exc
+
+    resolved_ips = {
+        str(entry[4][0]).split("%", 1)[0]
+        for entry in addresses
+        if entry and len(entry) >= 5 and entry[4]
+    }
+
+    if not resolved_ips:
+        raise ValueError(
+            "RedTube hostname resolved to no addresses"
+        )
+
+    for raw_ip in resolved_ips:
+        try:
+            address = ipaddress.ip_address(raw_ip)
+        except ValueError as exc:
+            raise ValueError(
+                "RedTube hostname returned an invalid address"
+            ) from exc
+
+        if not address.is_global:
+            raise ValueError(
+                "RedTube hostname resolved to a non-public address"
+            )
+
+    return value
+
+
+async def _v727b2c_safe_redtube_get(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    headers: Dict[str, str],
+    timeout: float,
+    allowed_hosts,
+) -> httpx.Response:
+    current_url = str(url or "").strip()
+
+    for redirect_count in range(
+        _V727B2C_MAX_REDIRECTS + 1
+    ):
+        current_url = (
+            await _v727b2c_validate_redtube_https_url(
+                current_url,
+                allowed_hosts,
+            )
+        )
+
+        response = await client.get(
+            current_url,
+            headers=headers,
+            timeout=timeout,
+            follow_redirects=False,
+        )
+
+        if response.status_code not in _V727B2C_REDIRECT_CODES:
+            return response
+
+        location = response.headers.get("location")
+
+        if not location:
+            return response
+
+        if redirect_count >= _V727B2C_MAX_REDIRECTS:
+            raise ValueError(
+                "RedTube URL exceeded redirect limit"
+            )
+
+        current_url = urljoin(
+            current_url,
+            location,
+        )
+
+    raise ValueError(
+        "RedTube redirect handling failed"
+    )
+
+
+async def _v727b2c_validate_redtube_media_url(
+    url: str,
+) -> str:
+    value = await _v727b2c_validate_redtube_https_url(
+        url,
+        _V727B2C_REDTUBE_MEDIA_HOSTS,
+    )
+
+    parsed = urlsplit(value)
+
+    if not parsed.path.lower().endswith(".mp4"):
+        raise ValueError(
+            "RedTube media URL is not an MP4"
+        )
+
+    if not parsed.query:
+        raise ValueError(
+            "RedTube media URL has no signed query"
+        )
+
+    return value
+
+
 async def extract_redtube_video(video_id: str) -> List[Dict]:
-    """Extract actual video URLs from RedTube"""
+    """Extract actual video URLs from RedTube."""
     import re
     import json
-    
+
+    video_id = str(video_id or "").strip()
+
+    # V727B2C_REDTUBE_EGRESS_HARDENING
+    if not re.fullmatch(r"[0-9]{1,20}", video_id):
+        logger.warning(
+            "V727B2C RedTube video id rejected"
+        )
+        return []
+
     try:
         url = f"https://www.redtube.com/{video_id}"
+
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": (
+                "text/html,application/xhtml+xml,"
+                "application/xml;q=0.9,*/*;q=0.8"
+            ),
         }
-        
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-            response = await client.get(url, headers=headers)
+
+        async with httpx.AsyncClient(
+            follow_redirects=False,
+            timeout=15.0,
+            trust_env=False,
+        ) as client:
+            response = await _v727b2c_safe_redtube_get(
+                client,
+                url,
+                headers=headers,
+                timeout=15.0,
+                allowed_hosts=_V727B2C_REDTUBE_PAGE_HOSTS,
+            )
+
             if response.status_code == 200:
                 html = response.text
                 streams = []
-                
-                # Look for mediaDefinitions JSON
-                media_match = re.search(r'"mediaDefinitions"\s*:\s*\[(.*?)\]', html, re.DOTALL)
+
+                media_match = re.search(
+                    r'"mediaDefinitions"\s*:\s*\[(.*?)\]',
+                    html,
+                    re.DOTALL,
+                )
+
                 if media_match:
                     try:
-                        media_json = '[' + media_match.group(1) + ']'
-                        media_data = json.loads(media_json)
-                        
+                        media_json = (
+                            "[" +
+                            media_match.group(1) +
+                            "]"
+                        )
+
+                        media_data = json.loads(
+                            media_json
+                        )
+
                         for item in media_data:
-                            if isinstance(item, dict) and item.get('videoUrl'):
-                                format_type = item.get('format', 'Unknown')
-                                media_url = item.get('videoUrl', '')
-                                
-                                # Convert relative URLs to absolute
-                                if media_url.startswith('/'):
-                                    media_url = f"https://www.redtube.com{media_url}"
-                                media_url = media_url.replace('\\/', '/')
-                                
-                                # Fetch the actual video URLs from the media endpoint
-                                try:
-                                    media_resp = await client.get(media_url, headers=headers, timeout=10.0)
-                                    if media_resp.status_code == 200:
-                                        video_list = media_resp.json()
-                                        for video_item in video_list:
-                                            if isinstance(video_item, dict) and video_item.get('videoUrl'):
-                                                quality = video_item.get('quality', 'Unknown')
-                                                actual_url = video_item.get('videoUrl', '')
-                                                fmt = video_item.get('format', format_type)
-                                                
-                                                streams.append({
-                                                    "name": f"RedTube {quality}p",
-                                                    "title": f"RedTube • {quality}p {fmt.upper()}",
-                                                    "url": actual_url,
-                                                    "addon": "RedTube"
-                                                })
-                                except Exception as e:
-                                    logger.warning(f"Error fetching media endpoint: {e}")
-                                    
-                    except Exception as e:
-                        logger.warning(f"Error parsing mediaDefinitions: {e}")
-                
-                # Remove duplicates based on URL
+                            if (
+                                not isinstance(item, dict)
+                                or not item.get("videoUrl")
+                            ):
+                                continue
+
+                            format_type = item.get(
+                                "format",
+                                "Unknown",
+                            )
+
+                            media_url = str(
+                                item.get(
+                                    "videoUrl",
+                                    "",
+                                )
+                            )
+
+                            if media_url.startswith("/"):
+                                media_url = urljoin(
+                                    url,
+                                    media_url,
+                                )
+
+                            media_url = media_url.replace(
+                                "\\/",
+                                "/",
+                            )
+
+                            try:
+                                media_url = await (
+                                    _v727b2c_validate_redtube_https_url(
+                                        media_url,
+                                        _V727B2C_REDTUBE_PAGE_HOSTS,
+                                    )
+                                )
+
+                                media_resp = await (
+                                    _v727b2c_safe_redtube_get(
+                                        client,
+                                        media_url,
+                                        headers=headers,
+                                        timeout=10.0,
+                                        allowed_hosts=(
+                                            _V727B2C_REDTUBE_PAGE_HOSTS
+                                        ),
+                                    )
+                                )
+
+                                if media_resp.status_code != 200:
+                                    continue
+
+                                video_list = media_resp.json()
+
+                                if not isinstance(
+                                    video_list,
+                                    list,
+                                ):
+                                    continue
+
+                                for video_item in video_list:
+                                    if (
+                                        not isinstance(
+                                            video_item,
+                                            dict,
+                                        )
+                                        or not video_item.get(
+                                            "videoUrl"
+                                        )
+                                    ):
+                                        continue
+
+                                    quality = video_item.get(
+                                        "quality",
+                                        "Unknown",
+                                    )
+
+                                    fmt = video_item.get(
+                                        "format",
+                                        format_type,
+                                    )
+
+                                    try:
+                                        actual_url = await (
+                                            _v727b2c_validate_redtube_media_url(
+                                                str(
+                                                    video_item.get(
+                                                        "videoUrl",
+                                                        "",
+                                                    )
+                                                )
+                                            )
+                                        )
+                                    except Exception as media_exc:
+                                        logger.warning(
+                                            "V727B2C legacy RedTube "
+                                            "media URL rejected: %s",
+                                            type(media_exc).__name__,
+                                        )
+                                        continue
+
+                                    streams.append({
+                                        "name": (
+                                            f"RedTube {quality}p"
+                                        ),
+                                        "title": (
+                                            f"RedTube {quality}p "
+                                            f"{str(fmt).upper()}"
+                                        ),
+                                        "url": actual_url,
+                                        "externalUrl": actual_url,
+                                        "headers": {
+                                            "Referer": url,
+                                        },
+                                        "addon": "RedTube",
+                                    })
+
+                            except Exception as endpoint_exc:
+                                logger.warning(
+                                    "V727B2C RedTube media endpoint "
+                                    "rejected/failed: %s",
+                                    type(endpoint_exc).__name__,
+                                )
+
+                    except Exception as parse_exc:
+                        logger.warning(
+                            "Error parsing mediaDefinitions: %s",
+                            type(parse_exc).__name__,
+                        )
+
+                # V727B2A_REDTUBE_VIDEO_SRC_FALLBACK
+                if not streams:
+                    video_match = re.search(
+                        r"""<video\b[^>]*\bsrc=["']([^"']+)["']""",
+                        html,
+                        re.IGNORECASE,
+                    )
+
+                    if video_match:
+                        try:
+                            from html import (
+                                unescape as _v727b2a_html_unescape,
+                            )
+
+                            media_url = (
+                                _v727b2a_html_unescape(
+                                    video_match.group(1)
+                                )
+                                .replace(
+                                    "\\/",
+                                    "/",
+                                )
+                            )
+
+                            if media_url.startswith("//"):
+                                media_url = (
+                                    "https:" +
+                                    media_url
+                                )
+
+                            media_url = await (
+                                _v727b2c_validate_redtube_media_url(
+                                    media_url
+                                )
+                            )
+
+                            streams.append({
+                                "name": "RedTube Direct",
+                                "title": "RedTube Direct MP4",
+                                "url": media_url,
+                                "externalUrl": media_url,
+                                "headers": {
+                                    "Referer": url,
+                                },
+                                "addon": "RedTube",
+                            })
+
+                            logger.info(
+                                "V727B2A RedTube direct MP4 "
+                                "discovered for video %s",
+                                video_id,
+                            )
+
+                        except Exception as media_exc:
+                            logger.warning(
+                                "V727B2C RedTube video src "
+                                "rejected/failed: %s",
+                                type(media_exc).__name__,
+                            )
+
                 seen_urls = set()
                 unique_streams = []
-                for s in streams:
-                    if s['url'] not in seen_urls:
-                        seen_urls.add(s['url'])
-                        unique_streams.append(s)
-                
+
+                for stream in streams:
+                    stream_url = stream.get("url")
+
+                    if (
+                        stream_url
+                        and stream_url not in seen_urls
+                    ):
+                        seen_urls.add(
+                            stream_url
+                        )
+                        unique_streams.append(
+                            stream
+                        )
+
                 if unique_streams:
-                    logger.info(f"Extracted {len(unique_streams)} streams from RedTube for video {video_id}")
+                    logger.info(
+                        "Extracted %s streams from RedTube "
+                        "for video %s",
+                        len(unique_streams),
+                        video_id,
+                    )
                     return unique_streams
-                else:
-                    logger.warning(f"No streams found in RedTube page for {video_id}")
-                    
-    except Exception as e:
-        logger.warning(f"Error extracting RedTube video {video_id}: {e}")
-    
+
+                logger.warning(
+                    "No streams found in RedTube page for %s",
+                    video_id,
+                )
+
+    except Exception as exc:
+        logger.warning(
+            "Error extracting RedTube video %s: %s",
+            video_id,
+            type(exc).__name__,
+        )
+
     return []
 
 async def extract_xhamster_video(video_url: str) -> list:
@@ -2191,6 +2948,52 @@ async def proxy_addon_streams(
     return {"streams": []}
 
 
+# ================= V737_PORNTUBE_NATIVE_ROUTING =================
+# PornTube owns its pt:* and porndb:* identifiers.  Do not send
+# these IDs to Cinemeta or fan them out to unrelated addons.
+#
+# Outbound access remains behind the existing V726 HTTPS/DNS/
+# exact-host validation.  No media bytes are proxied here.
+async def _v737_fetch_porntube_native(
+    resource: str,
+    content_type: str,
+    content_id: str,
+):
+    if resource not in ("meta", "stream"):
+        return None
+
+    if content_type != "movie":
+        return None
+
+    if not (
+        content_id.startswith("pt:")
+        or content_id.startswith("porndb:")
+    ):
+        return None
+
+    import urllib.parse
+
+    encoded_id = urllib.parse.quote(
+        content_id,
+        safe="",
+    )
+
+    url = (
+        "https://ptube.ers.pw/"
+        f"{resource}/movie/{encoded_id}.json"
+    )
+
+    async with httpx.AsyncClient(
+        follow_redirects=False,
+        timeout=15.0,
+        trust_env=False,
+    ) as client:
+        return await _v726_safe_addon_get(
+            client,
+            url,
+            timeout=15.0,
+        )
+
 @api_router.get("/streams/{content_type}/{content_id:path}")
 async def get_all_streams(
     content_type: str,
@@ -2198,6 +3001,71 @@ async def get_all_streams(
     current_user: User = Depends(get_current_user)
 ):
     """Fetch streams from ALL installed addons + built-in Torrentio-style aggregation"""
+    # V737_PORNTUBE_NATIVE_ROUTING
+    # A pt:* / porndb:* ID belongs to PornTube.  Query that addon
+    # directly instead of waiting on unrelated Torrentio/TPB/addons.
+    if (
+        content_type == "movie"
+        and (
+            content_id.startswith("pt:")
+            or content_id.startswith("porndb:")
+        )
+    ):
+        try:
+            response = await _v737_fetch_porntube_native(
+                "stream",
+                content_type,
+                content_id,
+            )
+
+            if response is not None and response.status_code == 200:
+                data = response.json()
+                streams = data.get("streams", []) or []
+
+                for stream in streams:
+                    if isinstance(stream, dict):
+                        stream.setdefault(
+                            "addon",
+                            "Porn Tube",
+                        )
+
+                logger.info(
+                    "V737_PORNTUBE_STREAM id=%s count=%s",
+                    content_id[:80],
+                    len(streams),
+                )
+
+                return {
+                    "streams": streams,
+                }
+
+            status = (
+                response.status_code
+                if response is not None
+                else 0
+            )
+
+            logger.info(
+                "V737_PORNTUBE_STREAM_EMPTY id=%s status=%s",
+                content_id[:80],
+                status,
+            )
+
+            return {
+                "streams": [],
+            }
+
+        except Exception as e:
+            logger.warning(
+                "V737_PORNTUBE_STREAM_ERROR id=%s error=%s",
+                content_id[:80],
+                type(e).__name__,
+            )
+
+            return {
+                "streams": [],
+            }
+
     
     # Check stream cache first (2 minute TTL)
     stream_cache_key = f"streams:{content_type}:{content_id}:{current_user.id}"
@@ -2219,12 +3087,169 @@ async def get_all_streams(
     # Handle URL-based content IDs (like from OnlyPorn addon)
     # These need to be fetched from the jaxxx addon which resolves the actual stream URL
     if content_id.startswith('http://') or content_id.startswith('https://'):
-        logger.warning(
-            "V726_URL_CONTENT_BLOCK user=%s",
-            current_user.id,
-        )
-        return {"streams": []}
+        # V727B1_ONLYPORN_SAFE_URL_STREAMS
+        # Never fetch the content URL itself. Treat it as opaque addon input
+        # and send it only as one encoded path component to the user's
+        # installed, exact approved OnlyPorn/Jaxxx addon.
+        if content_type != 'movie':
+            logger.warning(
+                "V727B1_ONLYPORN_BLOCK reason=content-type user=%s",
+                current_user.id,
+            )
+            return {"streams": []}
 
+        try:
+            import urllib.parse
+
+            parsed_content = urllib.parse.urlparse(content_id)
+            source_host = (
+                parsed_content.hostname or ''
+            ).lower().rstrip('.')
+
+            allowed_source_hosts = (
+                'eporner.com',
+                'xhamster.com',
+                'porntrex.com',
+            )
+
+            source_allowed = any(
+                source_host == allowed_host
+                or source_host.endswith('.' + allowed_host)
+                for allowed_host in allowed_source_hosts
+            )
+
+            if (
+                parsed_content.scheme not in ('http', 'https')
+                or not source_allowed
+            ):
+                logger.warning(
+                    "V727B1_ONLYPORN_BLOCK reason=source-host user=%s",
+                    current_user.id,
+                )
+                return {"streams": []}
+
+            jaxxx_addon = await db.addons.find_one({
+                "userId": current_user.id,
+                "manifest.id": "org.masterchief.onlyporn",
+            })
+
+            if not jaxxx_addon:
+                logger.warning(
+                    "V727B1_ONLYPORN_BLOCK reason=addon-not-installed user=%s",
+                    current_user.id,
+                )
+                return {"streams": []}
+
+            manifest_url = str(
+                jaxxx_addon.get('manifestUrl') or ''
+            ).strip()
+
+            parsed_manifest = urllib.parse.urlparse(
+                manifest_url
+            )
+
+            manifest_host = (
+                parsed_manifest.hostname or ''
+            ).lower().rstrip('.')
+
+            approved_jaxxx_host = (
+                '07b88951aaab-jaxxx-v2.baby-beamup.club'
+            )
+
+            if (
+                parsed_manifest.scheme != 'https'
+                or manifest_host != approved_jaxxx_host
+            ):
+                logger.warning(
+                    "V727B1_ONLYPORN_BLOCK reason=addon-host user=%s",
+                    current_user.id,
+                )
+                return {"streams": []}
+
+            base_url = get_base_url(
+                manifest_url
+            )
+
+            encoded_id = urllib.parse.quote(
+                content_id,
+                safe='',
+            )
+
+            stream_url = (
+                f"{base_url}/stream/"
+                f"{content_type}/{encoded_id}.json"
+            )
+
+            stream_url = await _v726_validate_addon_url(
+                stream_url
+            )
+
+            async with httpx.AsyncClient(
+                follow_redirects=False,
+                timeout=20.0,
+                trust_env=False,
+            ) as client:
+                response = await _v726_safe_addon_get(
+                    client,
+                    stream_url,
+                    timeout=20.0,
+                )
+
+            if response.status_code != 200:
+                logger.warning(
+                    "V727B1_ONLYPORN_STREAM status=%s user=%s",
+                    response.status_code,
+                    current_user.id,
+                )
+                return {"streams": []}
+
+            data = response.json()
+
+            raw_streams = (
+                data.get('streams', [])
+                if isinstance(data, dict)
+                else []
+            )
+
+            if not isinstance(raw_streams, list):
+                raw_streams = []
+
+            streams = []
+
+            for stream in raw_streams:
+                if not isinstance(stream, dict):
+                    continue
+
+                normalized_stream = dict(stream)
+                normalized_stream['addon'] = 'OnlyPorn'
+                streams.append(normalized_stream)
+
+            payload = {
+                "streams": streams,
+            }
+
+            # Preserve V668's rule: never cache a zero-stream result.
+            if streams:
+                _discover_cache[stream_cache_key] = {
+                    "data": payload,
+                    "expires": datetime.utcnow() + timedelta(seconds=120),
+                }
+
+            logger.info(
+                "V727B1_ONLYPORN_STREAM streams=%s user=%s",
+                len(streams),
+                current_user.id,
+            )
+
+            return payload
+
+        except Exception as e:
+            logger.warning(
+                "V727B1_ONLYPORN_STREAM_ERROR type=%s user=%s",
+                type(e).__name__,
+                current_user.id,
+            )
+            return {"streams": []}
         # Legacy URL extraction remains below but is unreachable.
         logger.info(f"URL-based content ID detected: {content_id[:60]}...")
         
@@ -3304,6 +4329,8 @@ def _v704_is_adult_addon(manifest: dict, manifest_url: str = "") -> bool:
         "stremio-porn-jrm3.onrender.com",
         "dirty-pink.ers.pw",
         "1fe84bc728af-stremio-porn.baby-beamup.club",
+        "07b88951aaab-jaxxx-v2.baby-beamup.club",
+        "ptube.ers.pw",
     )
 
     return any(host in url for host in known_adult_hosts)
@@ -3374,6 +4401,93 @@ async def get_discover(adult: int = 0, current_user: User = Depends(get_current_
             logger.warning(f"Fetch failed for {url}: {e}")
         return []
     
+    # V727A1_ADULT_CATALOG_RETRY
+    # Some adult addon providers intermittently return an empty
+    # catalog response. Retry an empty adult catalog once only.
+    async def fetch_adult_catalog(url: str) -> list:
+        metas = await fetch_catalog(url)
+        if metas:
+            return metas
+
+        # V727A3_REDTUBE_FRESH_CLIENT_RETRY
+        # Porn+ currently has an unhealthy origin behind Cloudflare.
+        # The shared keep-alive connection repeatedly receives HTTP 500,
+        # while fresh connections can receive Cloudflare's stale cached
+        # 100-item catalog. Restrict this fallback to the exact approved
+        # Porn+ addon host; other adult providers keep the cheap one-retry
+        # behavior.
+        porn_plus_host = "1fe84bc728af-stremio-porn.baby-beamup.club"
+
+        if porn_plus_host not in url.lower():
+            await asyncio.sleep(0.20)
+            return await fetch_catalog(url)
+
+        retry_delays = (
+            0.0,
+            0.20,
+            0.40,
+            0.75,
+            1.25,
+            2.0,
+            3.0,
+            4.0,
+        )
+
+        for attempt, delay in enumerate(retry_delays, start=1):
+            if delay:
+                await asyncio.sleep(delay)
+
+            try:
+                async with httpx.AsyncClient(
+                    follow_redirects=False,
+                    timeout=15.0,
+                    trust_env=False,
+                    headers={
+                        "Accept": "application/json,text/plain,*/*",
+                        "User-Agent": "PrivastreamCinema/1.0",
+                    },
+                ) as fresh_client:
+                    response = await _v726_safe_addon_get(
+                        fresh_client,
+                        url,
+                        timeout=15.0,
+                    )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    fresh_metas = data.get('metas', [])
+
+                    if fresh_metas:
+                        logger.info(
+                            "V727A3 RedTube catalog recovered on fresh attempt %s",
+                            attempt,
+                        )
+                        return fresh_metas
+
+                logger.warning(
+                    "V727A3 RedTube fresh attempt %s returned status=%s",
+                    attempt,
+                    response.status_code,
+                )
+
+            except Exception as e:
+                logger.warning(
+                    "V727A3 RedTube fresh attempt %s failed: %s",
+                    attempt,
+                    type(e).__name__,
+                )
+
+        logger.warning(
+            "V727A3 RedTube catalog unavailable after fresh-client retries"
+        )
+        return []
+
+    # V727A2_GENERIC_CATALOG_ROWS
+    # De-duplicate identical installed catalog sources while preserving
+    # distinct catalogs as distinct Discover rows.
+    seen_generic_catalogs = set()
+    used_generic_section_names = set()
+
     for addon in addons:
         manifest = addon.get('manifest', {})
 
@@ -3460,21 +4574,69 @@ async def get_discover(adult: int = 0, current_user: User = Depends(get_current_
                 catalog_type = catalog.get('type', '')
                 catalog_id = catalog.get('id', '')
                 catalog_name = catalog.get('name', addon_name)
-                
+
                 if not catalog_type or not catalog_id:
                     continue
-                
+
+                # V727A2_GENERIC_CATALOG_IDENTITY
+                # Two install codes resolving to the same addon/catalog
+                # must not duplicate the row.
+                generic_identity = (
+                    addon_id or base_url.lower(),
+                    catalog_type,
+                    catalog_id,
+                )
+
+                if generic_identity in seen_generic_catalogs:
+                    logger.info(
+                        "V727A2 duplicate generic catalog skipped: %s/%s/%s",
+                        addon_id,
+                        catalog_type,
+                        catalog_id,
+                    )
+                    continue
+
+                seen_generic_catalogs.add(generic_identity)
+
+                section_name = str(
+                    catalog_name or addon_name or catalog_id
+                ).strip()
+
+                if not section_name:
+                    section_name = f"{addon_name} {catalog_id}"
+
+                # Preserve separate rows if unrelated catalogs happen to
+                # advertise the same human-readable display name.
+                if section_name in used_generic_section_names:
+                    candidate = f"{section_name} ({addon_name})"
+                    if candidate in used_generic_section_names:
+                        candidate = f"{section_name} [{catalog_id}]"
+                    section_name = candidate
+
+                used_generic_section_names.add(section_name)
+
                 url = f"{base_url}/catalog/{catalog_type}/{catalog_id}.json"
-                
-                fetch_tasks.append(fetch_catalog(url))
+
+                is_adult_catalog = _v704_is_adult_addon(
+                    manifest,
+                    addon.get('manifestUrl', '')
+                )
+
+                if is_adult_catalog:
+                    fetch_tasks.append(fetch_adult_catalog(url))
+                else:
+                    fetch_tasks.append(fetch_catalog(url))
+
                 task_metadata.append({
-                    "section": catalog_name,
+                    "section": section_name,
                     "type": catalog_type,
                     "source": "generic",
                     "catalog_id": catalog_id,
-                    "base_url": base_url
+                    "base_url": base_url,
+                    "addon_id": addon_id,
+                    "adult": is_adult_catalog,
                 })
-    
+
     # FIRE ALL FETCHES IN PARALLEL
     start_time = time.time()
     logger.info(f"Firing {len(fetch_tasks)} catalog fetches in parallel...")
@@ -3493,10 +4655,17 @@ async def get_discover(adult: int = 0, current_user: User = Depends(get_current_
         section_name = meta["section"]
         catalog_type = meta["type"]
         
-        # For generic addons, limit to 30 items and filter
+        # V727A2_GENERIC_ROWS_100
+        # Remove unusable provider shell records, then expose up to the
+        # same 100-item row size already supported by Discover.
         if meta["source"] == "generic":
-            metas = metas[:30]
-            metas = [m for m in metas if m.get('name') and m.get('id')]
+            metas = [
+                m for m in metas
+                if isinstance(m, dict)
+                and m.get('name')
+                and m.get('id')
+            ]
+            metas = metas[:100]
         
         if not metas:
             continue
@@ -4722,6 +5891,78 @@ async def search_content(
 @api_router.get("/content/meta/{content_type}/{content_id}")
 async def get_meta(content_type: str, content_id: str, current_user: User = Depends(get_current_user)):
     """Get metadata for content including episodes for series"""
+    # V737_PORNTUBE_NATIVE_ROUTING
+    # PornTube metadata is authoritative for its native IDs and carries
+    # the poster/background that Cinemeta cannot provide for these IDs.
+    if (
+        content_type == "movie"
+        and (
+            content_id.startswith("pt:")
+            or content_id.startswith("porndb:")
+        )
+    ):
+        try:
+            response = await _v737_fetch_porntube_native(
+                "meta",
+                content_type,
+                content_id,
+            )
+
+            if response is not None and response.status_code == 200:
+                data = response.json()
+                meta = data.get("meta", {}) or {}
+
+                if meta:
+                    logger.info(
+                        "V737_PORNTUBE_META id=%s poster=%s",
+                        content_id[:80],
+                        bool(meta.get("poster")),
+                    )
+
+                    _discover_cache[
+                        f"meta:{content_type}:{content_id}"
+                    ] = {
+                        "data": meta,
+                        "expires": (
+                            datetime.utcnow()
+                            + timedelta(seconds=600)
+                        ),
+                    }
+
+                    return meta
+
+            status = (
+                response.status_code
+                if response is not None
+                else 0
+            )
+
+            logger.info(
+                "V737_PORNTUBE_META_MISS id=%s status=%s",
+                content_id[:80],
+                status,
+            )
+
+            raise HTTPException(
+                status_code=404,
+                detail="PornTube metadata not found",
+            )
+
+        except HTTPException:
+            raise
+
+        except Exception as e:
+            logger.warning(
+                "V737_PORNTUBE_META_ERROR id=%s error=%s",
+                content_id[:80],
+                type(e).__name__,
+            )
+
+            raise HTTPException(
+                status_code=404,
+                detail="PornTube metadata not found",
+            )
+
     
     # Check meta cache (10 minute TTL)
     meta_cache_key = f"meta:{content_type}:{content_id}"

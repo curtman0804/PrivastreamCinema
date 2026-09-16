@@ -371,10 +371,13 @@ export default function PlayerScreen() {
     title, 
     infoHash, 
     directUrl, 
-    isLive, 
-    contentType, 
+    isLive,
+    contentType,
     contentId,
+    identityTitle,
+    identityYear,
     fallbackStreams,
+    requestHeaders,
     // File selection for torrents
     fileIdx,
     filename,
@@ -404,7 +407,10 @@ export default function PlayerScreen() {
     isLive?: string;
     contentType?: string;
     contentId?: string;
+    identityTitle?: string;
+    identityYear?: string;
     fallbackStreams?: string;
+    requestHeaders?: string;
     fileIdx?: string;
     filename?: string;
     nextEpisodeId?: string;
@@ -422,6 +428,111 @@ export default function PlayerScreen() {
     fallbackTorrents?: string;
   }>();
   const router = useRouter();
+
+  // V727B2B2_REDTUBE_REQUEST_HEADERS
+  //
+  // This is intentionally NOT a generic addon-header pass-through.
+  // Only the exact RedTube URL + content ID + Referer relationship
+  // proven by the backend is accepted.
+  const v727b2b2RedTubeHeaders =
+    useMemo<Record<string, string> | undefined>(
+      () => {
+        if (Platform.OS === 'web') {
+          return undefined;
+        }
+
+        const rawHeaders =
+          typeof requestHeaders === 'string'
+            ? requestHeaders.trim()
+            : '';
+
+        const rawDirectUrl =
+          typeof directUrl === 'string'
+            ? directUrl.trim()
+            : '';
+
+        const rawContentId =
+          typeof contentId === 'string'
+            ? contentId.trim()
+            : '';
+
+        if (!rawHeaders || !rawDirectUrl || !rawContentId) {
+          return undefined;
+        }
+
+        const contentMatch =
+          /^porn_id:RedTube-movie-([0-9]+)$/.exec(
+            rawContentId
+          );
+
+        if (!contentMatch) {
+          return undefined;
+        }
+
+        let parsedHeaders: unknown;
+
+        try {
+          parsedHeaders = JSON.parse(rawHeaders);
+        } catch (_) {
+          return undefined;
+        }
+
+        if (
+          !parsedHeaders ||
+          Array.isArray(parsedHeaders) ||
+          typeof parsedHeaders !== 'object'
+        ) {
+          return undefined;
+        }
+
+        const headerObject =
+          parsedHeaders as Record<string, unknown>;
+
+        const headerKeys =
+          Object.keys(headerObject);
+
+        if (
+          headerKeys.length !== 1 ||
+          headerKeys[0] !== 'Referer'
+        ) {
+          return undefined;
+        }
+
+        const referer =
+          typeof headerObject.Referer === 'string'
+            ? headerObject.Referer.trim()
+            : '';
+
+        const refererMatch =
+          /^https:\/\/www\.redtube\.com\/([0-9]+)$/.exec(
+            referer
+          );
+
+        if (
+          !refererMatch ||
+          refererMatch[1] !== contentMatch[1]
+        ) {
+          return undefined;
+        }
+
+        if (
+          !/^https:\/\/ev\.phncdn\.com\/[^?#]+\.mp4\?[^#]+$/i.test(
+            rawDirectUrl
+          )
+        ) {
+          return undefined;
+        }
+
+        return {
+          Referer: referer,
+        };
+      },
+      [
+        requestHeaders,
+        directUrl,
+        contentId,
+      ]
+    );
 
   /* V502_BINGE_NEXT_CHAIN - recover authoritative following-episode metadata
      when direct /player binge navigation does not carry nextEpisode* params. */
@@ -1460,7 +1571,7 @@ export default function PlayerScreen() {
           const backend =
             (
               process.env.EXPO_PUBLIC_BACKEND_URL ||
-              'http://5.161.49.99:8001'
+              'https://api.privastreamsolutions.com'
             ).replace(/\/$/, '');
 
           for (let attempt = 1; attempt <= 3; attempt++) {
@@ -1855,7 +1966,7 @@ export default function PlayerScreen() {
          so fetch() gets an absolute URL. */
       let _v422Url = subtitleUrl;
       if (_v422Url && _v422Url.startsWith('/api/')) {
-        const _base = (process.env.EXPO_PUBLIC_BACKEND_URL || 'http://5.161.49.99:8001').replace(/\/$/, '');
+        const _base = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.privastreamsolutions.com').replace(/\/$/, '');
         _v422Url = _base + _v422Url;
       }
       console.log('[SUBTITLES] Fetching subtitle file:', _v422Url);
@@ -2056,6 +2167,8 @@ export default function PlayerScreen() {
             fallbackStreams: list.filter((s: any) => s.infoHash !== _top.infoHash).slice(0, 20) /* V174_WIDEN_FALLBACK */,
             contentId: _nid,
             title: nextEpisodeTitle || `Episode ${_parts[_parts.length - 1] || ''}`,
+            identityTitle: String(identityTitle || ovName || ''),
+            identityYear: String(identityYear || ''),
             poster: (nextEpisodePoster || poster || '') as string,
             backdrop: (backdrop || '') as string,
             season: _parts[_parts.length - 2] || '',
@@ -2083,7 +2196,7 @@ export default function PlayerScreen() {
             if (startData && startData.status === 'ready' && startData.debrid_url) {
               if (preWarmStartedRef.current !== _warmKey) return;
               const _cur = preResolveRef.current || ({} as any);
-              preResolveRef.current = { ..._cur, directUrl: `${_backendUrl}${startData.debrid_url}`, infoHash: _top.infoHash };
+              preResolveRef.current = { ..._cur, infoHash: _top.infoHash };
               console.log('[PREWARM v136] DONE - directUrl ready, next episode will be INSTANT');
             } else if (list.length >= 2) {
               // Try list[1] if list[0] didn't resolve
@@ -2113,11 +2226,13 @@ export default function PlayerScreen() {
                     fallbackStreams: list.filter((s: any) => s.infoHash !== _alt.infoHash).slice(0, 20) /* V174_WIDEN_FALLBACK */,
                     contentId: _nid,
                     title: nextEpisodeTitle || `Episode ${_parts[_parts.length - 1] || ''}`,
+            identityTitle: String(identityTitle || ovName || ''),
+            identityYear: String(identityYear || ''),
                     poster: (nextEpisodePoster || poster || '') as string,
                     backdrop: (backdrop || '') as string,
                     season: _parts[_parts.length - 2] || '',
                     episode: _parts[_parts.length - 1] || '',
-                    directUrl: `${_backendUrl}${altData.debrid_url}`,
+                    /* V745 strict identity: legacy direct URL intentionally ignored */
                   };
                   console.log('[PREWARM v136] DONE via alt - directUrl ready, next episode INSTANT');
                 }
@@ -2484,6 +2599,8 @@ export default function PlayerScreen() {
               fallbackStreams: list.filter((_s: any) => _s.infoHash !== _h).slice(0, 20) /* V174_WIDEN_FALLBACK */,
               contentId: nextEpisodeId as string,
               title: baseTitle, poster: basePoster, backdrop: baseBackdrop,
+              identityTitle: String(identityTitle || ovName || ''),
+              identityYear: String(identityYear || ''),
               season: _nextSeason, episode: _nextEpisodeNum,
             };
             console.log('[PLAYER v128] hash-only ref committed for', String(_h).slice(0, 8), 'upgrade=', !!stream.upgrade_candidate);
@@ -2515,7 +2632,7 @@ export default function PlayerScreen() {
           console.log('[PLAYER v128] list[0] status=', r0 && r0.status, 'upgrade=', !!list[0].upgrade_candidate);
           if (r0 && r0.status === 'ready' && r0.debrid_url) {
             const _cur = preResolveRef.current || ({} as any);
-            preResolveRef.current = { ..._cur, directUrl: `${_backendUrl}${r0.debrid_url}`, infoHash: list[0].infoHash };
+            preResolveRef.current = { ..._cur, infoHash: list[0].infoHash };
             console.log('[PLAYER v128] UPGRADED via list[0]', list[0].upgrade_candidate ? '(quality-upgraded)' : '(cached)');
             return;
           }
@@ -2528,7 +2645,7 @@ export default function PlayerScreen() {
             console.log('[PLAYER v128] list[1] status=', r1 && r1.status);
             if (r1 && r1.status === 'ready' && r1.debrid_url) {
               const _cur = preResolveRef.current || ({} as any);
-              preResolveRef.current = { ..._cur, directUrl: `${_backendUrl}${r1.debrid_url}`, infoHash: list[1].infoHash };
+              preResolveRef.current = { ..._cur, infoHash: list[1].infoHash };
               console.log('[PLAYER v128] UPGRADED via list[1] (cached fallback)');
               return;
             }
@@ -2561,7 +2678,7 @@ export default function PlayerScreen() {
           // Keep the dismiss(2) so the back-stack stays clean (v124w).
           const _pre = preResolveRef.current;
           try { (router as any).dismiss && (router as any).dismiss(2); } catch (_) {}
-          if (_pre && (_pre.directUrl || _pre.infoHash)) {
+          if (_pre && _pre.infoHash) {
             const _baseIdCN = ((nextEpisodeId as string) || '').split(':')[0];
             const _params: any = {
               title: _pre.title || nextEpisodeTitle || '',
@@ -2569,23 +2686,21 @@ export default function PlayerScreen() {
               backdrop: _pre.backdrop || (backdrop || '') as string,
               contentType: 'series',
               contentId: _pre.contentId || (nextEpisodeId as string),
+              identityTitle: _pre.identityTitle || String(identityTitle || ovName || ''),
+              identityYear: _pre.identityYear || String(identityYear || ''),
               seriesId: _baseIdCN,
               season: _pre.season || '',
               episode: _pre.episode || '',
               isLive: 'false',
             };
-            if (_pre.directUrl) {
-              _params.directUrl = _pre.directUrl;
-            } else if (_pre.infoHash) {
-              _params.infoHash = _pre.infoHash;
-              _params.fileIdx = _pre.fileIdx != null ? String(_pre.fileIdx) : '';
-              _params.filename = _pre.filename || '';
-              _params.sources = JSON.stringify(_pre.sources || []);
-            }
+            _params.infoHash = _pre.infoHash;
+            _params.fileIdx = _pre.fileIdx != null ? String(_pre.fileIdx) : '';
+            _params.filename = _pre.filename || '';
+            _params.sources = JSON.stringify(_pre.sources || []);
             if (_pre.fallbackStreams && _pre.fallbackStreams.length > 0) {
               _params.fallbackStreams = JSON.stringify(_pre.fallbackStreams);
             }
-            console.log('[PLAYER v126] BINGE FAST PATH: direct /player nav,', _pre.directUrl ? 'pre-resolved URL' : 'hash-only');
+            console.log('[V745] BINGE FAST PATH: strict hash-only /player nav');
             preResolveRef.current = null;
             /* V181_BINGE_REPLACE — replace instead of push so the old player
                unmounts atomically; eliminates the black-frame flash. */
@@ -2655,7 +2770,7 @@ export default function PlayerScreen() {
     // populated preResolveRef, go straight to /player and skip details/id.tsx.
     const _preM = preResolveRef.current;
     try { (router as any).dismiss && (router as any).dismiss(2); } catch (_) {}
-    if (_preM && (_preM.directUrl || _preM.infoHash)) {
+    if (_preM && _preM.infoHash) {
       const _baseIdM = ((nextEpisodeId as string) || '').split(':')[0];
       const _paramsM: any = {
         title: _preM.title || nextEpisodeTitle || '',
@@ -2663,23 +2778,21 @@ export default function PlayerScreen() {
         backdrop: _preM.backdrop || (backdrop || '') as string,
         contentType: 'series',
         contentId: _preM.contentId || (nextEpisodeId as string),
+        identityTitle: _preM.identityTitle || String(identityTitle || ovName || ''),
+        identityYear: _preM.identityYear || String(identityYear || ''),
         seriesId: _baseIdM,
         season: _preM.season || '',
         episode: _preM.episode || '',
         isLive: 'false',
       };
-      if (_preM.directUrl) {
-        _paramsM.directUrl = _preM.directUrl;
-      } else if (_preM.infoHash) {
-        _paramsM.infoHash = _preM.infoHash;
-        _paramsM.fileIdx = _preM.fileIdx != null ? String(_preM.fileIdx) : '';
-        _paramsM.filename = _preM.filename || '';
-        _paramsM.sources = JSON.stringify(_preM.sources || []);
-      }
+      _paramsM.infoHash = _preM.infoHash;
+      _paramsM.fileIdx = _preM.fileIdx != null ? String(_preM.fileIdx) : '';
+      _paramsM.filename = _preM.filename || '';
+      _paramsM.sources = JSON.stringify(_preM.sources || []);
       if (_preM.fallbackStreams && _preM.fallbackStreams.length > 0) {
         _paramsM.fallbackStreams = JSON.stringify(_preM.fallbackStreams);
       }
-      console.log('[PLAYER v126] BINGE FAST PATH (manual): direct /player nav,', _preM.directUrl ? 'pre-resolved URL' : 'hash-only');
+      console.log('[V745] BINGE FAST PATH (manual): strict hash-only /player nav');
       preResolveRef.current = null;
       /* V181_BINGE_REPLACE — manual next-episode also uses replace. */
       router.replace({ pathname: '/player', params: _paramsM } as any);
@@ -3636,7 +3749,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
       // Direct backend /api/stream/start_and_wait bypass removed.
       // api.stream.start below is the single infoHash entry point and
       // resolves through Premiumize only under V656.
-      await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources, seasonNum, episodeNum);
+      await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources, seasonNum, episodeNum, String(identityTitle || ovName || ''), String(identityYear || ''));
       
       // Quality ranking: higher = better
       const qualityRank = (label: string): number => {
@@ -3842,7 +3955,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
       console.log(`[PLAYER] Starting fallback torrent: ${hash.slice(0,8)}... fileIdx=${fIdx} (attempt ${retryCount + 1})`);
       setDownloadProgress(5);
       
-      await api.stream.start(hash, fIdx, fname || undefined, srcs, fallbackSeasonNum, fallbackEpisodeNum);
+      await api.stream.start(hash, fIdx, fname || undefined, srcs, fallbackSeasonNum, fallbackEpisodeNum, String(identityTitle || ovName || ''), String(identityYear || ''));
       const videoUrl = api.stream.getVideoUrl(hash, fIdx, undefined, fallbackSeasonNum, fallbackEpisodeNum);
       
       let pollCount = 0;
@@ -4214,6 +4327,17 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                 ref={videoRef}
                 source={{ 
                   uri: streamUrl,
+
+                  // V727B2B2_REDTUBE_REQUEST_HEADERS
+                  // Never carry RedTube's Referer onto another stream.
+                  ...(v727b2b2RedTubeHeaders &&
+                  typeof directUrl === 'string' &&
+                  streamUrl === directUrl
+                    ? {
+                        headers: v727b2b2RedTubeHeaders,
+                      }
+                    : {}),
+
                   // Help ExoPlayer detect format - important for MKV/x265 streams
                   overrideFileExtensionAndroid: (isLiveTV || streamUrl.includes('.m3u8') || isLive === 'true') ? 'm3u8' : 'mp4',
                   /* PATCH_V152_NO_UA_OVERRIDE — removed desktop Chrome UA override.

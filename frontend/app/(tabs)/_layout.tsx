@@ -4,8 +4,9 @@ import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid, findNodeHandle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ensurePrivastreamTunnel } from '../../src/native/privastreamTunnelGate';
 
-// V261_TAB_FOCUS_CHAIN — module-level map of route.name -> native tag.
+// V261_TAB_FOCUS_CHAIN â€” module-level map of route.name -> native tag.
 // Populated as each tab button mounts.  Used to wire every tab's
 // nextFocusLeft / nextFocusRight to its adjacent sibling so D-pad LEFT/RIGHT
 // stays inside the tab bar instead of jumping into the content posters.
@@ -28,6 +29,65 @@ function _v261Subscribe(fn: () => void) {
 }
 
 export default function TabsLayout() {
+  // V740_AUTHENTICATED_TUNNEL_GATE
+  // Authenticated Android UI remains fail-closed until the
+  // Privastream-only WireGuard tunnel is verified UP.
+  const [_v740TunnelReady, _v740SetTunnelReady] =
+    useState(Platform.OS !== 'android');
+  const _v740TunnelStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      _v740SetTunnelReady(true);
+      return;
+    }
+
+    if (_v740TunnelStartedRef.current) {
+      return;
+    }
+
+    _v740TunnelStartedRef.current = true;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        console.log('[V740_TUNNEL] authenticated gate starting');
+
+        await ensurePrivastreamTunnel();
+
+        if (!cancelled) {
+          _v740SetTunnelReady(true);
+        }
+      } catch (error: any) {
+        const message =
+          String(
+            error?.message ||
+            error ||
+            'Privastream secure connection failed'
+          );
+
+        console.error('[V740_TUNNEL] FAIL', message);
+
+        if (!cancelled) {
+          try {
+            ToastAndroid.show(
+              'Privastream secure connection failed',
+              ToastAndroid.LONG
+            );
+          } catch (_) {}
+
+          // Intentionally do NOT render authenticated tabs.
+          // This is the V740 fail-closed behavior.
+          _v740SetTunnelReady(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // PATCH_V71_BACK_ROUTE_AWARE - hardware back is route-aware now.
   //   Nested screens -> router.back()
   //   Non-Discover tabs -> go to Discover
@@ -67,11 +127,22 @@ export default function TabsLayout() {
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 20 : 10);
   const tabBarHeight = isTV ? 80 : 65 + bottomPadding;
 
+  // V740_FAIL_CLOSED_RENDER
+  if (!_v740TunnelReady) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: '#0c0c0c',
+        }}
+      />
+    );
+  }
   return (
     <Tabs
       screenOptions={{
         // PATCH_V14B_FREEZE_ON_BLUR_TABS
-        // PATCH_V40_NO_FREEZE — keep Discover mounted; back returns instantly.
+        // PATCH_V40_NO_FREEZE â€” keep Discover mounted; back returns instantly.
         freezeOnBlur: false,
         lazy: true,
         headerShown: false,
@@ -94,7 +165,7 @@ export default function TabsLayout() {
           isTV && styles.tabBarItemTV,
         ],
         tabBarButton: (props: any) => {
-          // V261_TAB_FOCUS_CHAIN — every tab button now explicitly wires
+          // V261_TAB_FOCUS_CHAIN â€” every tab button now explicitly wires
           // nextFocusLeft / nextFocusRight to its adjacent tab's tag so the
           // D-pad never escapes the tab bar horizontally.  The first tab
           // traps LEFT to itself; the last tab traps RIGHT to itself.
@@ -142,7 +213,7 @@ export default function TabsLayout() {
             return unsub;
           }, [myName]);
 
-          // Ladder of retries — mount, layout, plus delayed attempts.
+          // Ladder of retries â€” mount, layout, plus delayed attempts.
           useEffect(() => {
             if (!myName) return;
             const timers = [0, 80, 250, 600, 1500].map((ms) => setTimeout(grabTag, ms));
@@ -176,7 +247,7 @@ export default function TabsLayout() {
               {...props}
               {...trap}
               focusable={true}
-              /* v238 — cold-boot focus lands on the Discover tab button.
+              /* v238 â€” cold-boot focus lands on the Discover tab button.
                  Without this, no element claimed initial TV focus and the
                  selector ring was invisible until the user pressed a key. */
               hasTVPreferredFocus={isFirst}

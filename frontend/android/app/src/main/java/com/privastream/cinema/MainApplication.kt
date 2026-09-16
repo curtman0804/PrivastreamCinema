@@ -26,6 +26,7 @@ class MainApplication : Application(), ReactApplication {
               add(com.privastream.cinema.PSTVScrollViewPackage())
               add(com.privastream.cinema.PrivastreamTVRowPackage())
               add(com.privastream.cinema.PrivastreamDeviceCapabilitiesPackage())
+              add(com.privastream.cinema.PrivastreamTunnelPackage()) // V739A_PRIVASTREAM_TUNNEL
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())
             }

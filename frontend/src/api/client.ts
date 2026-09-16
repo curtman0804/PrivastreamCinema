@@ -18,6 +18,7 @@ import { resolveMagnet as _pmResolveMagnet, isPremiumizeConfigured } from '../se
 const _pmResolved = new Map<string, string>();        // infoHash -> absolute PM URL
 const _pmInFlight = new Map<string, Promise<string | null>>();
 const _pmFailed = new Set<string>();                  // infoHash that PM rejected
+const _pmActiveKey = new Map<string, string>(); // base state -> title-qualified state
 
 async function _hasPMKey(): Promise<boolean> {
   return isPremiumizeConfigured();
@@ -27,12 +28,47 @@ function _normHash(h: string): string {
   return (h || '').toLowerCase().trim();
 }
 
-function _pmStateKey(infoHash: string, season?: number, episode?: number): string {
+function _pmTitleKey(title?: string): string {
+  return String(title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .slice(0, 96);
+}
+
+function _pmStateKey(
+  infoHash: string,
+  season?: number,
+  episode?: number,
+  title?: string,
+  year?: string
+): string {
   const h = _normHash(infoHash);
-  if (season != null && episode != null && Number.isFinite(season) && Number.isFinite(episode)) {
-    return h + ':s' + season + ':e' + episode;
+
+  let key = h;
+
+  if (
+    season != null &&
+    episode != null &&
+    Number.isFinite(season) &&
+    Number.isFinite(episode)
+  ) {
+    key = h + ':s' + season + ':e' + episode;
   }
-  return h;
+
+  const titleKey = _pmTitleKey(title);
+
+  if (titleKey) {
+    key += ':t:' + titleKey;
+  }
+
+  const yearKey =
+    String(year || '').match(/\b(?:18|19|20|21)\d{2}\b/)?.[0] || '';
+
+  if (yearKey) {
+    key += ':y:' + yearKey;
+  }
+
+  return key;
 }
 
 function _findMagnet(sources?: string[]): string | undefined {
@@ -45,10 +81,12 @@ function _kickPmResolve(opts: {
   magnet?: string;
   season?: number;
   episode?: number;
+  title?: string;
+  year?: string;
 }): void {
   const h = _normHash(opts.infoHash);
   if (!h) return;
-  const k = _pmStateKey(h, opts.season, opts.episode);
+  const k = _pmStateKey(h, opts.season, opts.episode, opts.title, opts.year);
   if (_pmResolved.has(k) || _pmInFlight.has(k)) return;
   const magnet = opts.magnet || `magnet:?xt=urn:btih:${h}`;
   const p = _pmResolveMagnet({
@@ -56,6 +94,8 @@ function _kickPmResolve(opts: {
     magnet,
     season: opts.season,
     episode: opts.episode,
+    title: opts.title,
+    year: opts.year,
   })
     .then(url => {
       _pmInFlight.delete(k);
@@ -84,7 +124,7 @@ function _kickPmResolve(opts: {
 // Hetzner public IPv4 is 5.161.49.99.  Inbound traffic
 // must hit that address.
 // ============================================
-const BACKEND_URL = 'http://5.161.49.99:8001';
+const BACKEND_URL = 'https://api.privastreamsolutions.com';
 
 // Get the backend URL based on environment
 const getBaseUrl = () => {
@@ -1260,7 +1300,7 @@ export const api = {
     // V656_CLIENT_PM_ONLY_STREAMS
     // infoHash/magnet playback may resolve through Premiumize only.
     // Legacy Privastream /api/stream/* P2P endpoints are never called.
-    start: async (infoHash: string, fileIdx?: number, filename?: string, sources?: string[], season?: number, episode?: number): Promise<{ status: string; info_hash: string }> => {
+    start: async (infoHash: string, fileIdx?: number, filename?: string, sources?: string[], season?: number, episode?: number, title?: string, year?: string): Promise<{ status: string; info_hash: string }> => {
       const h = _normHash(infoHash);
       if (!h) {
         return { status: 'error', info_hash: h };
@@ -1274,11 +1314,18 @@ export const api = {
         return { status: 'error', info_hash: h };
       }
 
+      const baseKey = _pmStateKey(h, season, episode);
+      const activeKey = _pmStateKey(h, season, episode, title, year);
+
+      _pmActiveKey.set(baseKey, activeKey);
+
       _kickPmResolve({
         infoHash: h,
         magnet: _findMagnet(sources),
         season,
         episode,
+        title,
+        year,
       });
 
       return { status: 'starting', info_hash: h };
@@ -1296,7 +1343,8 @@ export const api = {
       downloaded?: number;
     }> => {
       const h = _normHash(infoHash);
-      const k = _pmStateKey(h, season, episode);
+      const baseKey = _pmStateKey(h, season, episode);
+      const k = _pmActiveKey.get(baseKey) || baseKey;
 
       if (_pmResolved.has(k)) {
         return {
@@ -1339,7 +1387,8 @@ export const api = {
 
     getVideoUrl: (infoHash: string, _fileIdx?: number, _torrServerUrl?: string, season?: number, episode?: number): string => {
       const h = _normHash(infoHash);
-      const k = _pmStateKey(h, season, episode);
+      const baseKey = _pmStateKey(h, season, episode);
+      const k = _pmActiveKey.get(baseKey) || baseKey;
       const pmUrl = _pmResolved.get(k);
 
       if (pmUrl) return pmUrl;

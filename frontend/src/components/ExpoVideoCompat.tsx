@@ -45,6 +45,10 @@ export type ExpoVideoCompatHandle = {
 type CompatSource = {
   uri?: string | null;
   overrideFileExtensionAndroid?: string | null;
+
+  // V727B2B1_SOURCE_HEADERS
+  // Optional per-source request headers supported natively by expo-video.
+  headers?: Record<string, string> | null;
 };
 
 type ExpoVideoCompatProps = {
@@ -151,6 +155,15 @@ export const ExpoVideoCompat = forwardRef<
   const uri = String(source?.uri || '');
   const extensionHint =
     String(source?.overrideFileExtensionAndroid || '').toLowerCase();
+
+  // V727B2B1_SOURCE_HEADERS
+  // Serialize only for source-replacement dependency tracking.
+  const sourceHeaders =
+    source?.headers && typeof source.headers === 'object'
+      ? source.headers
+      : undefined;
+
+  const sourceHeadersKey = JSON.stringify(sourceHeaders || {});
 
   const emitCompatStatus = useCallback(
     (didJustFinish: boolean = false) => {
@@ -418,6 +431,13 @@ export const ExpoVideoCompat = forwardRef<
         const nextSource: VideoSource = {
           uri,
 
+          // V727B2B1_SOURCE_HEADERS
+          ...(sourceHeaders
+            ? {
+                headers: sourceHeaders,
+              }
+            : {}),
+
           // Existing expo-av code explicitly identifies HLS.
           // Everything else coming from the torrent/direct server is
           // progressive media even when the endpoint has no extension.
@@ -465,6 +485,7 @@ export const ExpoVideoCompat = forwardRef<
     player,
     uri,
     extensionHint,
+    sourceHeadersKey,
     emitCompatStatus,
   ]);
 

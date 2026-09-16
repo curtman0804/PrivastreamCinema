@@ -433,6 +433,15 @@ export default function DiscoverScreen() {
           try { if (JSON.stringify(prev) === JSON.stringify(_v204Next)) return prev; } catch (_) {}
           return _v204Next;
         });
+
+        // V716_CW_LIVE_CACHE_SYNC
+        // A successful backend fetch is authoritative, including an
+        // empty result. Keep cachedCW synchronized so a completed
+        // newest episode cannot expose an older cached episode.
+        setCachedCW(prev => {
+          try { if (JSON.stringify(prev) === JSON.stringify(_v204Next)) return prev; } catch (_) {}
+          return _v204Next;
+        });
       });
       lastCWFetchTime.current = Date.now();
     } catch (err) {
@@ -1706,13 +1715,30 @@ function ContinueWatchingItem({
   // re-renders the moment an addon-row ContentCard registers the proper
   // poster for the same content_id.  Initial value uses the synchronous
   // lookup so the first paint already gets whatever is in the registry.
+  // V716_CW_SERIES_POSTER_IDENTITY
+  // Series CW cards keep the newest episode's resume payload, but
+  // artwork follows the parent-series identity so only the canonical
+  // series poster is shown regardless of which episode was watched.
+  const _v716PosterId = (() => {
+    const contentId = String((item as any).content_id || '').trim();
+    const contentType = String((item as any).content_type || '').trim().toLowerCase();
+
+    if (contentType === 'series') {
+      const seriesId = String((item as any).series_id || '').trim();
+      if (seriesId) return seriesId;
+      return contentId.split(':')[0] || contentId;
+    }
+
+    return contentId;
+  })();
+
   const [_v166Poster, _v166SetPoster] = useState<string>(
-    () => _v160GetPoster((item as any).content_id, item.poster)
+    () => _v160GetPoster(_v716PosterId, item.poster)
   );
   useEffect(() => {
-    const unsub = _v160SubscribePoster((item as any).content_id, (u: string) => _v166SetPoster(u));
+    const unsub = _v160SubscribePoster(_v716PosterId, (u: string) => _v166SetPoster(u));
     return unsub;
-  }, [(item as any).content_id]);
+  }, [_v716PosterId]);
 
   /* V614_CW_CURRENT_POSTER
      Watch-progress contains the poster saved at playback time. Refresh the
@@ -1720,7 +1746,7 @@ function ContinueWatchingItem({
      when Cinemeta supplies newer artwork. */
   useEffect(() => {
     const cid = String((item as any).content_id || '');
-    const baseId = cid.split(':')[0];
+    const baseId = _v716PosterId || cid.split(':')[0];
 
     let type = String((item as any).content_type || '').toLowerCase();
     if (type === 'movies') type = 'movie';
@@ -1761,8 +1787,8 @@ function ContinueWatchingItem({
      V383, so rails + CW agree from cold boot onward. */
   useEffect(() => {
     const _p = (item as any).poster;
-    if (_p) { try { _v160RegisterPoster((item as any).content_id, _p); } catch (_) {} }
-  }, []);
+    if (_p) { try { _v160RegisterPoster(_v716PosterId, _p); } catch (_) {} }
+  }, [_v716PosterId, (item as any).poster]);
 
   // V280_FIRST_CW_TAG ├óΓé¼ΓÇ¥ shared module-level reference to the first CW
   // poster's native tag.  Set by the FIRST ContinueWatchingItem (index 0)

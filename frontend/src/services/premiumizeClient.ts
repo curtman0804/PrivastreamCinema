@@ -97,16 +97,35 @@ export async function disconnectPremiumize(): Promise<boolean> {
 
 export async function isPremiumizeConfigured(): Promise<boolean> {
   const auth = await _getAuthHeader();
-  if (!auth) return false;
+  if (!auth) {
+    console.warn('[V738R1_PM_STATUS] auth=missing');
+    return false;
+  }
   try {
     const res = await _fetchWithTimeout(`${BACKEND_URL}/api/premiumize/status`, {
       method: 'GET',
       headers: { 'Authorization': auth, 'Accept': 'application/json' },
     });
-    if (!res.ok) return false;
+    if (!res.ok) {
+      console.warn('[V738R1_PM_STATUS] http=' + String(res.status));
+      return false;
+    }
     const j = await res.json();
-    return !!j?.configured;
-  } catch (_) { return false; }
+    const configured = !!j?.configured;
+    console.log(
+      '[V738R1_PM_STATUS] http=' +
+      String(res.status) +
+      ' configured=' +
+      String(configured)
+    );
+    return configured;
+  } catch (e: any) {
+    console.warn(
+      '[V738R1_PM_STATUS] error=' +
+      String(e?.message || e)
+    );
+    return false;
+  }
 }
 
 export async function premiumizeCacheCheck(items: string[]): Promise<boolean[]> {
@@ -146,25 +165,286 @@ export async function premiumizeDirectDL(src: string): Promise<any[]> {
 // ------------------------------------------------------------
 // FILE PICKER  (unchanged from v283)
 // ------------------------------------------------------------
-function _pickBestFile(content: any[], opts: { season?: number; episode?: number }): any | null {
+function _mediaBasename(value: any): string {
+  const raw = String(value || '').split(/[?#]/)[0].replace(/\\/g, '/');
+  const base = raw.split('/').pop() || raw;
+  try {
+    return decodeURIComponent(base);
+  } catch (_) {
+    return base;
+  }
+}
+
+function _isSampleLikeMedia(value: any): boolean {
+  const base = _mediaBasename(value);
+  return /(?:^|[._\-\s])(sample|trailer|preview|teaser|featurette)(?:[._\-\s]|$)/i.test(base);
+}
+
+/*
+ * V671_PM_REJECT_SAMPLE_MEDIA
+ *
+ * Premiumize directdl may return a sample.mp4 beside the real episode.
+ * Never choose sample/trailer media, and never match an episode number
+ * from a parent directory name. Episode matching must use the actual
+ * media filename only.
+ */
+// V744_PM_MOVIE_TITLE_FAIL_CLOSED
+function _v744PmTitleWords(value: any): string[] {
+  try {
+    let raw = String(value || '');
+    try { raw = decodeURIComponent(raw); } catch (_) {}
+
+    const stop = new Set([
+      'THE', 'A', 'AN', 'AND', 'OR', 'OF', 'IN', 'ON',
+      'TO', 'FOR', 'VS', 'PART', 'VOL', 'VOLUME'
+    ]);
+
+    return raw
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(w => !!w && !stop.has(w));
+  } catch (_) {
+    return [];
+  }
+}
+
+function _v744PmFileMatchesTitle(
+  requestedTitle: string,
+  value: any
+): boolean {
+  const req = _v744PmTitleWords(requestedTitle);
+  const cand = _v744PmTitleWords(_mediaBasename(value));
+
+  if (req.length === 0 || cand.length === 0) return false;
+
+  const reqCompact = req.join('');
+  const candCompact = cand.join('');
+
+  if (
+    reqCompact.length >= 2 &&
+    candCompact.includes(reqCompact)
+  ) {
+    return true;
+  }
+
+  const candidateWords = new Set(cand);
+  let hits = 0;
+
+  for (const word of req) {
+    if (candidateWords.has(word)) hits++;
+  }
+
+  if (req.length === 1) return hits === 1;
+  if (req.length === 2) return hits === 2;
+
+  return hits >= Math.ceil(req.length * 0.8);
+}
+// V745_PM_STRICT_CONTENT_IDENTITY
+function _v745PmYear(value: any): string {
+  try {
+    const m = String(value || '').match(/\b(?:18|19|20|21)\d{2}\b/);
+    return m ? m[0] : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function _v745PmTitleMatches(
+  requestedTitle: string,
+  value: any
+): boolean {
+  let raw = String(value || '');
+
+  try {
+    raw = decodeURIComponent(raw);
+  } catch (_) {}
+
+  const req = _v744PmTitleWords(requestedTitle);
+  const cand = _v744PmTitleWords(raw);
+
+  if (req.length === 0 || cand.length === 0) {
+    return false;
+  }
+
+  const reqCompact = req.join('');
+  const candCompact = cand.join('');
+
+  if (
+    reqCompact.length >= 2 &&
+    candCompact.includes(reqCompact)
+  ) {
+    return true;
+  }
+
+  const candidateWords = new Set(cand);
+  let hits = 0;
+
+  for (const word of req) {
+    if (candidateWords.has(word)) {
+      hits++;
+    }
+  }
+
+  if (req.length === 1) return hits === 1;
+  if (req.length === 2) return hits === 2;
+
+  return hits >= Math.ceil(req.length * 0.8);
+}
+
+function _v745PmMovieIdentityMatches(
+  requestedTitle: string,
+  requestedYear: any,
+  value: any
+): boolean {
+  if (!_v745PmTitleMatches(requestedTitle, value)) {
+    return false;
+  }
+
+  const year = _v745PmYear(requestedYear);
+
+  if (!year) return true;
+
+  let raw = String(value || '');
+
+  try {
+    raw = decodeURIComponent(raw);
+  } catch (_) {}
+
+  return new RegExp(
+    '(?:^|[^0-9])' + year + '(?:[^0-9]|$)'
+  ).test(raw);
+}
+
+function _v745PmEpisodeIdentityMatches(
+  requestedSeriesTitle: string,
+  season: number,
+  episode: number,
+  value: any
+): boolean {
+  if (
+    !requestedSeriesTitle ||
+    !Number.isFinite(season) ||
+    !Number.isFinite(episode)
+  ) {
+    return false;
+  }
+
+  let raw = String(value || '');
+
+  try {
+    raw = decodeURIComponent(raw);
+  } catch (_) {}
+
+  if (!_v745PmTitleMatches(requestedSeriesTitle, raw)) {
+    return false;
+  }
+
+  const s = String(season).padStart(2, '0');
+  const e = String(episode).padStart(2, '0');
+
+  const seCode = `S${s}E${e}`;
+  const xCode1 = `${season}x${e}`;
+  const xCode2 = `${s}x${e}`;
+
+  const upper = raw.toUpperCase();
+  const lower = raw.toLowerCase();
+
+  return (
+    upper.includes(seCode) ||
+    lower.includes(xCode1.toLowerCase()) ||
+    lower.includes(xCode2.toLowerCase())
+  );
+}
+function _pickBestFile(content: any[], opts: { season?: number; episode?: number; title?: string; year?: string }): any | null {
   if (!content || content.length === 0) return null;
+
   const videoExt = /\.(mkv|mp4|avi|mov|m4v|ts|m2ts|webm)$/i;
-  const videos = content.filter(c => c && c.link && videoExt.test(c.path || c.link));
-  if (videos.length === 0) return content[0];
-  if (videos.length === 1) return videos[0];
+
+  const videos = content.filter(
+    c => c && c.link && videoExt.test(c.path || c.link)
+  );
+
+  const cleanVideos = videos.filter(
+    v => !_isSampleLikeMedia(v.path || v.link)
+  );
+
+  // Fail closed rather than deliberately playing a sample/trailer.
+  if (cleanVideos.length === 0) return null;
+
+  /*
+   * V744: Movie resolution is fail-closed on the actual PM filename.
+   * Do this BEFORE the old "single video = accept it" shortcut.
+   */
+  if (
+    opts.title &&
+    opts.season == null &&
+    opts.episode == null
+  ) {
+    const movieMatches = cleanVideos.filter(v =>
+      _v745PmMovieIdentityMatches(
+        String(opts.title),
+        opts.year,
+        String(v.path || '') + ' ' + String(v.link || '')
+      )
+    );
+
+    if (movieMatches.length === 0) {
+      console.warn(
+        '[V744 PM TITLE GUARD] no PM movie file matched requested title',
+        String(opts.title).slice(0, 100)
+      );
+      return null;
+    }
+
+    movieMatches.sort(
+      (a, b) => (b.size || 0) - (a.size || 0)
+    );
+
+    return movieMatches[0];
+  }
+
+  if (cleanVideos.length === 1) return cleanVideos[0];
+
   if (opts.season != null && opts.episode != null) {
     const s = String(opts.season).padStart(2, '0');
     const e = String(opts.episode).padStart(2, '0');
+
     const seCode = `S${s}E${e}`;
     const seAlt = `${opts.season}x${e}`;
-    const m = videos.find(v =>
-      (v.path || '').toUpperCase().includes(seCode) ||
-      (v.path || '').toLowerCase().includes(seAlt.toLowerCase())
+    const seAltPadded = `${s}x${e}`;
+
+    const episodeMatches = cleanVideos.filter(v => {
+      const filename = _mediaBasename(v.path || v.link);
+      const upper = filename.toUpperCase();
+      const lower = filename.toLowerCase();
+
+      return _v745PmEpisodeIdentityMatches(
+        String(opts.title || ''),
+        Number(opts.season),
+        Number(opts.episode),
+        String(v.path || '') + ' ' + String(v.link || '')
+      );
+    });
+
+    if (episodeMatches.length > 0) {
+      episodeMatches.sort((a, b) => (b.size || 0) - (a.size || 0));
+      return episodeMatches[0];
+    }
+
+    console.warn(
+      '[V745 PM IDENTITY] no exact requested episode file found',
+      String(opts.title || ''),
+      'S' + String(opts.season).padStart(2, '0') +
+      'E' + String(opts.episode).padStart(2, '0')
     );
-    if (m) return m;
+
+    return null;
   }
-  videos.sort((a, b) => (b.size || 0) - (a.size || 0));
-  return videos[0];
+
+  cleanVideos.sort((a, b) => (b.size || 0) - (a.size || 0));
+  return cleanVideos[0];
 }
 
 export async function clearCache(): Promise<number> {
@@ -185,13 +465,62 @@ export async function resolveMagnet(opts: {
   season?: number;
   episode?: number;
   title?: string;
+  year?: string;
   onProgress?: (state: string) => void;
 }): Promise<string | null> {
   const { infoHash, onProgress } = opts;
   if (!infoHash) return null;
 
   const cached = await _readCache(infoHash, opts.season, opts.episode);
-  if (cached?.finalUrl) { onProgress?.('cache_hit'); return cached.finalUrl; }
+
+  /*
+   * V671_PM_REJECT_CACHED_SAMPLE
+   *
+   * Older builds may already have persisted sample.mp4 as the resolved
+   * URL for this hash/episode. Discard that one cache entry and resolve
+   * the torrent again through the corrected file picker.
+   */
+  if (cached?.finalUrl) {
+    const _v744CachedMovieMismatch =
+      !!opts.title &&
+      opts.season == null &&
+      opts.episode == null &&
+      !_v745PmMovieIdentityMatches(
+        String(opts.title),
+        opts.year,
+        cached.finalUrl
+      );
+    const _v745CachedEpisodeMismatch =
+      opts.season != null &&
+      opts.episode != null &&
+      !_v745PmEpisodeIdentityMatches(
+        String(opts.title || ''),
+        Number(opts.season),
+        Number(opts.episode),
+        cached.finalUrl
+      );
+
+    if (
+      _isSampleLikeMedia(cached.finalUrl) ||
+      _v744CachedMovieMismatch ||
+      _v745CachedEpisodeMismatch
+    ) {
+      try {
+        await AsyncStorage.removeItem(
+          _cacheKey(infoHash, opts.season, opts.episode)
+        );
+      } catch (_) {}
+
+      console.warn(
+        _v744CachedMovieMismatch ? '[V744 PM TITLE GUARD] rejected cached wrong-title PM URL' : '[V671] rejected cached sample-like PM URL',
+        infoHash.slice(0, 8),
+        _mediaBasename(cached.finalUrl)
+      );
+    } else {
+      onProgress?.('cache_hit');
+      return cached.finalUrl;
+    }
+  }
 
   const magnet = opts.magnet || `magnet:?xt=urn:btih:${infoHash}`;
 
@@ -199,6 +528,13 @@ export async function resolveMagnet(opts: {
   const content: any[] = await premiumizeDirectDL(magnet);
   const best = _pickBestFile(content, opts);
   if (!best?.link) throw new Error('PM_NO_LINK');
+
+  console.log(
+    '[V671 PM FILE PICK]',
+    infoHash.slice(0, 8),
+    'file=' + _mediaBasename(best.path || best.link),
+    'size=' + String(best.size || 0)
+  );
 
   const finalUrl = String(best.link);
   await _writeCache(infoHash, { finalUrl, expiresAt: Date.now() + TTL_MS }, opts.season, opts.episode);

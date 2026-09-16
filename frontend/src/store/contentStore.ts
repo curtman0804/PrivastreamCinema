@@ -382,6 +382,7 @@ interface ContentState {
   currentSearchQuery: string;
   currentSearchMode: string; // V711F2_SEARCH_INTENT
   streams: Stream[];
+  currentStreamsKey: string | null;
   selectedItem: ContentItem | null;
   currentPlaying: CurrentPlaying | null;
   isLoadingDiscover: boolean;
@@ -672,6 +673,10 @@ export const useContentStore = create<ContentState>((set, get) => ({
   },
 
   fetchStreams: async (type: string, id: string) => {
+    const _v746OwnerKey = `${type}/${id}`;
+    const _v746SetIfOwner = (patch: any) => {
+      if (get().currentStreamsKey === _v746OwnerKey) set(patch);
+    };
     // V706C2I2_STREAM_PARENTAL_GATE
     // Authorize before dedup, memory cache, disk cache, prefetch, or network.
     try {
@@ -679,11 +684,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
         (api.content as any).isAllowedByParentalMode(type, id);
 
       if (!_v706c2i2Allowed) {
-        set({
-          streams: [],
-          isLoadingStreams: false,
-          error: null,
-        });
+        _v746SetIfOwner({ streams: [], isLoadingStreams: false, error: null });
 
         console.log(
           '[V706C2I2] streams blocked by Parental Mode',
@@ -700,11 +701,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
         error
       );
 
-      set({
-        streams: [],
-        isLoadingStreams: false,
-        error: null,
-      });
+      _v746SetIfOwner({ streams: [], isLoadingStreams: false, error: null });
 
       return [];
     }
@@ -712,7 +709,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     // is already in flight, await it instead of starting a duplicate.
     // This catches the Discover-prefetch + Details-mount race that was
     // doubling network requests, sort passes, and prewarm cycles.
-    const cacheKey = `${type}/${id}`;
+    const cacheKey = _v746OwnerKey;
     const _existing = _inFlightFetches.get(cacheKey);
     if (_existing) {
       console.log('[V257_DEDUP] await existing fetch', cacheKey);
@@ -726,7 +723,31 @@ export const useContentStore = create<ContentState>((set, get) => ({
     const _doFetch = (async (): Promise<Stream[]> => {
     // V190_STORE_DEF — retry-once on empty + abort-token gate + don't-clobber
     const _myToken = _v190AbortToken;
-    const _setIf = (patch: any) => { if (_myToken === _v190AbortToken) set(patch); };
+    const _setIf = (patch: any) => {
+      const _v746CurrentOwner = get().currentStreamsKey;
+
+      if (
+        _myToken === _v190AbortToken &&
+        _v746CurrentOwner === cacheKey
+      ) {
+        set(patch);
+        return;
+      }
+
+      if (
+        patch &&
+        Object.prototype.hasOwnProperty.call(patch, 'streams')
+      ) {
+        try {
+          console.log(
+            '[V746 STREAM OWNER] blocked stale publish',
+            cacheKey,
+            'owner=',
+            _v746CurrentOwner || 'none'
+          );
+        } catch (_) {}
+      }
+    };
 
     // 1. Memory cache — instant
     const cached = getStreamsCache(cacheKey);
@@ -845,7 +866,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
       // has streams from a prior success, keep them.
       if (allStreams.length === 0) {
         const _cur = get();
-        if (_cur && _cur.streams && _cur.streams.length > 0) {
+        if (_cur && _cur.currentStreamsKey === cacheKey && _cur.streams && _cur.streams.length > 0) {
           console.log('[v190] keeping', _cur.streams.length, 'existing streams (refusing 0)');
           _setIf({ isLoadingStreams: false });
           return _cur.streams;
@@ -868,7 +889,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     } catch (error: any) {
       console.log('[ContentStore v190] fetchStreams error:', error);
       const _cur = get();
-      if (_cur && _cur.streams && _cur.streams.length > 0) {
+      if (_cur && _cur.currentStreamsKey === cacheKey && _cur.streams && _cur.streams.length > 0) {
         _setIf({ isLoadingStreams: false });
         return _cur.streams;
       }
@@ -933,6 +954,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     // same content starts a fresh fetch instead of awaiting a stale promise
     // whose state-writes are now no-ops.
     _inFlightFetches.clear();
+    set({ currentStreamsKey: null });
   },
 
   /* V176J_STORE_FINALLY — fetchLibrary in finally so the local cache

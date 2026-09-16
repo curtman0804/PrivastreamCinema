@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '../utils/mmkvStorage';
 import { api, User, AuthResponse } from '../api/client';
+import { ensurePrivastreamTunnel } from '../native/privastreamTunnelGate';
 
 // ============================================================
 // V268_AUTH_PERSIST_HARDENED
@@ -184,25 +185,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
 
   login: async (username: string, password: string) => {
-    // Network call first — credential errors throw BEFORE we touch disk.
     const response: AuthResponse = await api.auth.login(username, password);
 
-    // V268: in-memory state set IMMEDIATELY so the user is logged in
-    // for this session regardless of disk state.
+    const ok1 = await safeAuthSet('auth_token', response.token);
+    const ok2 = await safeAuthSet('user', JSON.stringify(response.user));
+
+    if (!ok1 || !ok2) {
+      console.warn(
+        '[V268_AUTH] persistence partial - token may not survive app restart.'
+      );
+    }
+
+    // V743_AUTH_TUNNEL_GATE
+    console.log('[V743_TUNNEL] login START');
+
+    await ensurePrivastreamTunnel(response.token);
+
+    console.log('[V743_TUNNEL] login READY');
+
     set({
       user: response.user,
       token: response.token,
       isAuthenticated: true,
     });
-
-    // Best-effort persistence — does not throw, does not block UI.
-    const ok1 = await safeAuthSet('auth_token', response.token);
-    const ok2 = await safeAuthSet('user', JSON.stringify(response.user));
-    if (!ok1 || !ok2) {
-      console.warn(
-        '[V268_AUTH] persistence partial — token may not survive app restart.'
-      );
-    }
   },
 
   register: async (username: string, email: string, password: string) => {
@@ -211,13 +216,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       email,
       password
     );
+
+    await safeAuthSet('auth_token', response.token);
+    await safeAuthSet('user', JSON.stringify(response.user));
+
+    console.log('[V743_TUNNEL] register START');
+
+    await ensurePrivastreamTunnel(response.token);
+
+    console.log('[V743_TUNNEL] register READY');
+
     set({
       user: response.user,
       token: response.token,
       isAuthenticated: true,
     });
-    await safeAuthSet('auth_token', response.token);
-    await safeAuthSet('user', JSON.stringify(response.user));
   },
 
   logout: async () => {
@@ -260,6 +273,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (token && userStr) {
         const user = JSON.parse(userStr);
+
+        console.log('[V743_TUNNEL] restored session START');
+
+        await ensurePrivastreamTunnel(token);
+
+        console.log('[V743_TUNNEL] restored session READY');
+
         set({
           user,
           token,

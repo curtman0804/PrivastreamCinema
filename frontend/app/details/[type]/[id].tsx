@@ -89,6 +89,155 @@ function _v154TitleOverlap(requestedTitle: string, streamTitle: string): number 
   } catch (_) { return 99; }
 }
 
+// V744_WRONG_TITLE_FAIL_CLOSED
+// Requested movie identity must agree with the release/file identity.
+function _v744TitleWords(value: any): string[] {
+  try {
+    let raw = String(value || '');
+    try { raw = decodeURIComponent(raw); } catch (_) {}
+
+    const stop = new Set([
+      'THE', 'A', 'AN', 'AND', 'OR', 'OF', 'IN', 'ON',
+      'TO', 'FOR', 'VS', 'PART', 'VOL', 'VOLUME'
+    ]);
+
+    return raw
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(w => !!w && !stop.has(w));
+  } catch (_) {
+    return [];
+  }
+}
+
+function _v744TitleMatches(requestedTitle: any, candidateText: any): boolean {
+  try {
+    const req = _v744TitleWords(requestedTitle);
+    const cand = _v744TitleWords(candidateText);
+
+    if (req.length === 0 || cand.length === 0) return false;
+
+    const reqCompact = req.join('');
+    const candCompact = cand.join('');
+
+    if (
+      reqCompact.length >= 2 &&
+      candCompact.includes(reqCompact)
+    ) {
+      return true;
+    }
+
+    const candidateWords = new Set(cand);
+    let hits = 0;
+
+    for (const word of req) {
+      if (candidateWords.has(word)) hits++;
+    }
+
+    if (req.length === 1) return hits === 1;
+    if (req.length === 2) return hits === 2;
+
+    return hits >= Math.ceil(req.length * 0.8);
+  } catch (_) {
+    return false;
+  }
+}
+
+function _v744StreamMatchesTitle(requestedTitle: any, stream: any): boolean {
+  const identity = String(
+    stream?.title ||
+    stream?.filename ||
+    stream?.name ||
+    ''
+  );
+
+  return _v744TitleMatches(requestedTitle, identity);
+}
+// V745_STRICT_CONTENT_IDENTITY
+function _v745Year(value: any): string {
+  try {
+    const m = String(value || '').match(/\b(?:18|19|20|21)\d{2}\b/);
+    return m ? m[0] : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function _v745MovieIdentityMatches(
+  requestedTitle: any,
+  requestedYear: any,
+  candidateText: any
+): boolean {
+  if (!_v744TitleMatches(requestedTitle, candidateText)) {
+    return false;
+  }
+
+  const year = _v745Year(requestedYear);
+
+  // If canonical metadata has a year, require that year.
+  // If metadata has no year, title remains the strongest available signal.
+  if (!year) return true;
+
+  let raw = String(candidateText || '');
+
+  try {
+    raw = decodeURIComponent(raw);
+  } catch (_) {}
+
+  return new RegExp(
+    '(?:^|[^0-9])' + year + '(?:[^0-9]|$)'
+  ).test(raw);
+}
+
+function _v745EpisodeIdentityMatches(
+  requestedSeriesTitle: any,
+  season: any,
+  episode: any,
+  candidateText: any
+): boolean {
+  try {
+    const sNum = Number(season);
+    const eNum = Number(episode);
+
+    if (
+      !requestedSeriesTitle ||
+      !Number.isFinite(sNum) ||
+      !Number.isFinite(eNum)
+    ) {
+      return false;
+    }
+
+    let raw = String(candidateText || '');
+
+    try {
+      raw = decodeURIComponent(raw);
+    } catch (_) {}
+
+    if (!_v744TitleMatches(requestedSeriesTitle, raw)) {
+      return false;
+    }
+
+    const s = String(sNum).padStart(2, '0');
+    const e = String(eNum).padStart(2, '0');
+
+    const seCode = `S${s}E${e}`;
+    const xCode1 = `${sNum}x${e}`;
+    const xCode2 = `${s}x${e}`;
+
+    const upper = raw.toUpperCase();
+    const lower = raw.toLowerCase();
+
+    return (
+      upper.includes(seCode) ||
+      lower.includes(xCode1.toLowerCase()) ||
+      lower.includes(xCode2.toLowerCase())
+    );
+  } catch (_) {
+    return false;
+  }
+}
 function AutoPlayLoadingBar() {
   const translateX = useRef(new Animated.Value(-100)).current;
 
@@ -2480,7 +2629,7 @@ export default function DetailsScreen() {
       console.log('[V386_BACK] prevId=' + _prevId + ' base=' + _v386Base + ' prevIsRoot=' + _v386PrevIsRoot);
     } catch (_e386) { console.log('[V386_BACK] state inspect failed'); }
     try {
-      if (false && _v386PrevIsRoot) { /* V505_PERSISTENT_EPISODE_BACK - always use deterministic root replace */
+      if (_v386PrevIsRoot) { /* V731_REAL_SERIES_ROOT_BACK - reuse existing series root */
         router.back();
         // After back lands us on RMroot, push focus params so the selector
         // highlights the just-watched episode.
@@ -2546,7 +2695,16 @@ export default function DetailsScreen() {
         /* V507_BINGE_ROOT_BACK - a series root created by episode Back has no reliable screen beneath it. */
         if (fromEpisodeBackParam === 'true') {
           console.log('[V507_BINGE_ROOT_BACK] tagged binge root -> discover');
-          try { router.replace('/(tabs)/discover'); } catch (e) { console.log('[V507_BINGE_ROOT_BACK] replace discover error', e); }
+          // V730_BINGE_ROOT_POP
+          // The episode route was replaced with this tagged series root.
+          // Discover is still underneath it, so POP back to that existing
+          // screen instead of replacing it with a brand-new Discover mount.
+          try {
+            router.back();
+            console.log('[V730_BINGE_ROOT_POP] back -> existing discover');
+          } catch (e) {
+            console.log('[V730_BINGE_ROOT_POP] back error', e);
+          }
           return true;
         }
       // Hide heavy tree on this frame.
@@ -2918,7 +3076,16 @@ export default function DetailsScreen() {
       // V188_NO_ZERO_FLASH â€” sync-seed loading state so the very first render
       // shows "Finding Streams..." instead of momentarily flashing "0 Streams"
       // (which can happen if streams=[] is left over from a prior failed load).
-      try { (useContentStore as any).setState({ streams: [], isLoadingStreams: true, error: null }); } catch (_) {}
+      try {
+        const _v746OwnerKey = `${String(type)}/${String(id)}`;
+        (useContentStore as any).setState({
+          currentStreamsKey: _v746OwnerKey,
+          streams: [],
+          isLoadingStreams: true,
+          error: null,
+        });
+        console.log('[V746 STREAM OWNER] claim', _v746OwnerKey);
+      } catch (_) {}
       // PATCH_V37_DEFER_STREAMS â€” defer to next tick so the details page paints
       // instantly; streams load in the background and populate as they arrive.
       const _v37StreamsTimer = setTimeout(() => { try { fetchStreams(type, id); } catch (_) {} }, 0);
@@ -3267,6 +3434,18 @@ export default function DetailsScreen() {
           topStream.sources || [],
           Number.isFinite(_seasonNum as number) ? _seasonNum : undefined,
           Number.isFinite(_episodeNum as number) ? _episodeNum : undefined,
+          String(
+            (content as any)?.name ||
+            (content as any)?.title ||
+            (paramName as any) ||
+            ''
+          ),
+          _v745Year(
+            (content as any)?.year ||
+            (content as any)?.releaseYear ||
+            (content as any)?.releaseInfo ||
+            ''
+          ),
         ).catch(() => {});
       }
     }
@@ -3362,6 +3541,20 @@ export default function DetailsScreen() {
       ? `S${episodeSeason}E${episodeNumber} - ${currentEpisode.name || content?.name || 'Video'}`
       : (nextTitleParam ? String(nextTitleParam) : (isEpisodePage ? `S${episodeSeason}E${episodeNumber} - ${content?.name || 'Loading...'}` : content?.name || 'Video'));
     const cType = type as string || 'movie';
+
+    const _v745IdentityTitle = String(
+      (content as any)?.name ||
+      (content as any)?.title ||
+      (paramName as any) ||
+      ''
+    ).trim();
+
+    const _v745IdentityYear = _v745Year(
+      (content as any)?.year ||
+      (content as any)?.releaseYear ||
+      (content as any)?.releaseInfo ||
+      ''
+    );
     
     // Always pass current-episode metadata for series content so the
 // player's loading screen can render "S3E6 - Rest and Ricklaxation"
@@ -3428,6 +3621,12 @@ const nextEpisodeData = nextEpisode ? {
     const buildRuntimeCodecFallbackTorrents = (excludeInfoHash?: string) => {
       const excluded = String(excludeInfoHash || '').toLowerCase();
       const seen = new Set<string>();
+      const _v744RequestedTitle = String(
+        (content as any)?.name ||
+        (content as any)?.title ||
+        (paramName as any) ||
+        ''
+      );
 
       const seedCount = (s: any): number => {
         try {
@@ -3441,6 +3640,22 @@ const nextEpisodeData = nextEpisode ? {
 
       const candidates = streams.filter((s: any) => {
         if (_v672IsSampleLikeStream(s)) return false;
+
+        if (
+          type === 'movie' &&
+          _v744RequestedTitle &&
+          !_v745MovieIdentityMatches(
+            _v744RequestedTitle,
+            _v745IdentityYear,
+            String(s?.title || s?.filename || s?.name || '')
+          )
+        ) {
+          console.warn(
+            '[V744 TITLE GUARD] rejected runtime fallback',
+            String(s?.title || s?.filename || s?.name || '').slice(0, 120)
+          );
+          return false;
+        }
         const hash = String(s?.infoHash || s?.info_hash || '').toLowerCase();
         if (!hash) return false;
         if (excluded && hash === excluded) return false;
@@ -3698,7 +3913,49 @@ const nextEpisodeData = nextEpisode ? {
                       console.log('[v300/V441] pack refused - no title match; falling through');
                     }
                   }
-                  if (_v300_file && _v300_file.link) {
+                  const _v744V300Title = String(
+                    (content as any)?.name ||
+                    (content as any)?.title ||
+                    (paramName as any) ||
+                    ''
+                  );
+
+                  const _v744V300Identity = String(
+                    _v300_file?.path ||
+                    _v300_file?.name ||
+                    _v300_file?.link ||
+                    ''
+                  );
+
+                  const _v744V300Ok =
+                    type === 'movie'
+                      ? _v745MovieIdentityMatches(
+                          _v744V300Title,
+                          _v745IdentityYear,
+                          _v744V300Identity
+                        )
+                      : type === 'series'
+                        ? _v745EpisodeIdentityMatches(
+                            _v745IdentityTitle,
+                            episodeSeason,
+                            episodeNumber,
+                            _v744V300Identity
+                          )
+                        : true;
+
+                  if (
+                    _v300_file &&
+                    _v300_file.link &&
+                    type === 'movie' &&
+                    !_v744V300Ok
+                  ) {
+                    console.warn(
+                      '[V744 TITLE GUARD] rejected V300 PM movie file',
+                      _v744V300Identity.slice(0, 140)
+                    );
+                  }
+
+                  if (_v300_file && _v300_file.link && _v744V300Ok) {
                     console.log('[v300] PM SUCCESS via', _v300_picked.hash.slice(0,12), 'â†’', String(_v300_file.link).slice(0,80));
                     /* V353_ADD_FALLBACKS â€” compute the full 60-URL fallback
                        list even for PM-directdl path so that if this direct
@@ -3714,6 +3971,8 @@ const nextEpisodeData = nextEpisode ? {
                         isLive: 'false',
                         contentType: cType,
                         contentId: subtitleContentId,
+                        identityTitle: _v745IdentityTitle,
+                        identityYear: _v745IdentityYear,
                         fallbackStreams: _v655_tor_v300.length > 0 ? '[]' : JSON.stringify(_v353_fb_v300),
                         fallbackTorrents: _v655_tor_v300.length > 0 ? JSON.stringify(_v655_tor_v300) : '',
                         backdrop: _v384OverlayUri, ..._v384Pass, /* V384 */
@@ -3805,7 +4064,49 @@ const nextEpisodeData = nextEpisode ? {
                   console.log('[v299/V441] pack refused - no title match; falling through');
                 }
               }
-              if (_v299_picked && _v299_picked.link) {
+              const _v744V299Title = String(
+                (content as any)?.name ||
+                (content as any)?.title ||
+                (paramName as any) ||
+                ''
+              );
+
+              const _v744V299Identity = String(
+                _v299_picked?.path ||
+                _v299_picked?.name ||
+                _v299_picked?.link ||
+                ''
+              );
+
+              const _v744V299Ok =
+                type === 'movie'
+                  ? _v745MovieIdentityMatches(
+                      _v744V299Title,
+                      _v745IdentityYear,
+                      _v744V299Identity
+                    )
+                  : type === 'series'
+                    ? _v745EpisodeIdentityMatches(
+                        _v745IdentityTitle,
+                        episodeSeason,
+                        episodeNumber,
+                        _v744V299Identity
+                      )
+                    : true;
+
+              if (
+                _v299_picked &&
+                _v299_picked.link &&
+                type === 'movie' &&
+                !_v744V299Ok
+              ) {
+                console.warn(
+                  '[V744 TITLE GUARD] rejected V299 PM movie file',
+                  _v744V299Identity.slice(0, 140)
+                );
+              }
+
+              if (_v299_picked && _v299_picked.link && _v744V299Ok) {
                 _v299_link = String(_v299_picked.link);
                 console.log('[v299] PM SUCCESS â†’', _v299_link.slice(0, 80));
               } else {
@@ -3832,6 +4133,8 @@ const nextEpisodeData = nextEpisode ? {
                 isLive: 'false',
                 contentType: cType,
                 contentId: subtitleContentId,
+                identityTitle: _v745IdentityTitle,
+                identityYear: _v745IdentityYear,
                 fallbackStreams: _v655_tor_v299.length > 0 ? '[]' : JSON.stringify(_v353_fb_v299),
                 fallbackTorrents: _v655_tor_v299.length > 0 ? JSON.stringify(_v655_tor_v299) : '',
                 backdrop: _v384OverlayUri, ..._v384Pass, /* V384 */
@@ -3857,6 +4160,74 @@ const nextEpisodeData = nextEpisode ? {
     // Handle external URLs - route them to the internal player
     if (stream.externalUrl || stream.requiresWebView) {
       const streamUrl = stream.externalUrl || stream.url;
+
+      // V727B2B3_REDTUBE_SIGNED_HANDOFF
+      //
+      // Deliberately not a generic header pass-through.
+      // Only the exact backend-proven RedTube object is accepted.
+      const _v727b2b3ExternalUrl =
+        typeof (stream as any).externalUrl === 'string'
+          ? String((stream as any).externalUrl)
+          : '';
+
+      const _v727b2b3Url =
+        typeof (stream as any).url === 'string'
+          ? String((stream as any).url)
+          : '';
+
+      const _v727b2b3Addon =
+        String((stream as any).addon || '');
+
+      const _v727b2b3Headers =
+        (stream as any).headers;
+
+      const _v727b2b3HeaderKeys =
+        _v727b2b3Headers &&
+        !Array.isArray(_v727b2b3Headers) &&
+        typeof _v727b2b3Headers === 'object'
+          ? Object.keys(_v727b2b3Headers)
+          : [];
+
+      const _v727b2b3Referer =
+        _v727b2b3HeaderKeys.length === 1 &&
+        _v727b2b3HeaderKeys[0] === 'Referer' &&
+        typeof _v727b2b3Headers.Referer === 'string'
+          ? _v727b2b3Headers.Referer.trim()
+          : '';
+
+      const _v727b2b3ContentMatch =
+        /^porn_id:RedTube-movie-([0-9]+)$/.exec(
+          String(subtitleContentId || '')
+        );
+
+      const _v727b2b3RefererMatch =
+        /^https:\/\/www\.redtube\.com\/([0-9]+)$/.exec(
+          _v727b2b3Referer
+        );
+
+      const _v727b2b3CdnOk =
+        /^https:\/\/ev\.phncdn\.com\/[^?#]+\.mp4\?[^#]+$/i.test(
+          _v727b2b3ExternalUrl
+        );
+
+      const _v727b2b3TrustedRedTube =
+        _v727b2b3Addon === 'RedTube' &&
+        _v727b2b3ExternalUrl.length > 0 &&
+        _v727b2b3ExternalUrl === _v727b2b3Url &&
+        _v727b2b3ExternalUrl === streamUrl &&
+        _v727b2b3CdnOk &&
+        !!_v727b2b3ContentMatch &&
+        !!_v727b2b3RefererMatch &&
+        _v727b2b3ContentMatch![1] ===
+          _v727b2b3RefererMatch![1];
+
+      const _v727b2b3RequestHeaders =
+        _v727b2b3TrustedRedTube
+          ? JSON.stringify({
+              Referer: _v727b2b3Referer,
+            })
+          : undefined;
+
       /* PATCH_V154_LOG_PLAY â€” content mismatch trace at play time */
       try {
         const _v154Req2 = (((content as any)?.name || (content as any)?.title || (name as any) || '') as string);
@@ -3868,7 +4239,18 @@ const nextEpisodeData = nextEpisode ? {
       router.push({
         pathname: '/player',
         params: { 
-          directUrl: _v237_bustUrl(streamUrl),
+          // V727B2B3_REDTUBE_SIGNED_HANDOFF
+          // Signed CDN URL stays byte-for-byte unchanged only when trusted.
+          directUrl: _v727b2b3TrustedRedTube
+            ? streamUrl
+            : _v237_bustUrl(streamUrl),
+
+          ...(_v727b2b3RequestHeaders
+            ? {
+                requestHeaders: _v727b2b3RequestHeaders,
+              }
+            : {}),
+
           title: contentTitle,
           isLive: 'false',
           contentType: cType,
@@ -3921,6 +4303,47 @@ const nextEpisodeData = nextEpisode ? {
     }
     
     if (stream.infoHash) {
+      const _v744PrimaryTitle = String(
+        (content as any)?.name ||
+        (content as any)?.title ||
+        (paramName as any) ||
+        ''
+      );
+
+      const _v744PrimaryIdentity = String(
+        stream.title ||
+        stream.filename ||
+        stream.name ||
+        ''
+      );
+
+      if (
+        type === 'movie' &&
+        !_v745MovieIdentityMatches(
+          _v744PrimaryTitle,
+          _v745IdentityYear,
+          _v744PrimaryIdentity
+        )
+      ) {
+        console.warn(
+          '[V744 TITLE GUARD] rejected primary movie torrent',
+          _v744PrimaryIdentity.slice(0, 140)
+        );
+
+        setIsPlayLoading(false);
+
+        try {
+          _V176cAlert.alert(
+            'Wrong movie detected',
+            'The selected source does not match "' +
+              _v744PrimaryTitle.slice(0, 60) +
+              '". Try another source.'
+          );
+        } catch (_) {}
+
+        return;
+      }
+
       // Build fallback torrents from other available torrent streams (sorted by seeders)
       // V162_WIDER_FALLBACKS â€” bumped from 5 to 15 so we always have a working
       // option even when the top picks share the same codec / lossless-audio
@@ -3939,7 +4362,34 @@ const nextEpisodeData = nextEpisode ? {
           return isFinite(n) ? n : 0;
         } catch { return 0; }
       };
-      const _v355_others = streams.filter(s => s.infoHash && s.infoHash !== stream.infoHash);
+      const _v744FallbackTitle = String(
+        (content as any)?.name ||
+        (content as any)?.title ||
+        (paramName as any) ||
+        ''
+      );
+
+      const _v355_others = streams.filter((s: any) => {
+        if (!s.infoHash || s.infoHash === stream.infoHash) return false;
+
+        if (
+          type === 'movie' &&
+          _v744FallbackTitle &&
+          !_v745MovieIdentityMatches(
+            _v744FallbackTitle,
+            _v745IdentityYear,
+            String(s?.title || s?.filename || s?.name || '')
+          )
+        ) {
+          console.warn(
+            '[V744 TITLE GUARD] rejected torrent fallback',
+            String(s?.title || s?.filename || s?.name || '').slice(0, 120)
+          );
+          return false;
+        }
+
+        return true;
+      });
       const _v355_sorted = [..._v355_others].sort((a, b) => _v355_seed(b) - _v355_seed(a));
       const _v355_healthy = _v355_sorted.filter(s => _v355_seed(s) >= 10);
       const _v355_unhealthy = _v355_sorted.filter(s => _v355_seed(s) < 10);
@@ -3967,6 +4417,8 @@ const nextEpisodeData = nextEpisode ? {
           title: contentTitle,
           contentType: cType,
           contentId: subtitleContentId,
+          identityTitle: _v745IdentityTitle,
+          identityYear: _v745IdentityYear,
           fileIdx: stream.fileIdx !== undefined ? String(stream.fileIdx) : '',
           filename: stream.filename || '',
           season: seasonNum,
@@ -3995,6 +4447,18 @@ const nextEpisodeData = nextEpisode ? {
       // ISP only sees traffic to real-debrid.com
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || Constants.expoConfig?.extra?.backendUrl || '';
       const authToken = await AsyncStorage.getItem('auth_token');
+
+      // V735_ADULT_DIRECT_HTTPS
+      // Addon-native adult items such as OnlyPorn use the page URL itself
+      // as the Stremio content id. Their addon returns already-resolved
+      // HTTPS HLS/media URLs. Send those directly to ExoPlayer instead of
+      // routing them through the V725-disabled /api/proxy surface.
+      const _v735AdultUrlId =
+        /^https?:\/\//i.test(String(id || ''));
+
+      const _v735DirectHttps =
+        _v735AdultUrlId &&
+        /^https:\/\//i.test(String(stream.url || ''));
       
       // Check if URL is already a backend/proxy URL (no need to re-proxy)
       const isAlreadyProxied = stream.url.startsWith('/api/') || 
@@ -4002,7 +4466,10 @@ const nextEpisodeData = nextEpisode ? {
                                 stream.url.includes('/api/proxy/');
       
       let streamUrl: string;
-      if (isAlreadyProxied) {
+      if (_v735DirectHttps) {
+        streamUrl = stream.url;
+        console.log('[V735_ADULT_DIRECT_HTTPS] device-direct primary');
+      } else if (isAlreadyProxied) {
         // Already going through our backend â€” use as-is
         streamUrl = stream.url;
       } else {
@@ -4018,6 +4485,13 @@ const nextEpisodeData = nextEpisode ? {
         .filter(s => s.url && !s.infoHash && s.url !== stream.url)
         .map(s => {
           if (!s.url) return '';
+
+          if (
+            _v735AdultUrlId &&
+            /^https:\/\//i.test(String(s.url))
+          ) {
+            return s.url;
+          }
           const isProxied = s.url.startsWith('/api/') || s.url.startsWith(backendUrl);
           if (isProxied) return s.url;
           const enc = encodeURIComponent(s.url);
@@ -4042,7 +4516,7 @@ const nextEpisodeData = nextEpisode ? {
       router.push({
         pathname: '/player',
         params: { 
-          directUrl: _v237_bustUrl(streamUrl),
+          directUrl: _v735DirectHttps ? streamUrl : _v237_bustUrl(streamUrl),
           title: contentTitle,
           isLive: type === 'tv' ? 'true' : 'false',
           contentType: cType,
@@ -4542,7 +5016,44 @@ const nextEpisodeData = nextEpisode ? {
                           // obviously belongs to a different movie (Marvel
                           // pack containing "Iron Man 2008" served as
                           // Spider-Man BND).  Only applies to movies.
-                          if (type === 'movie') {
+                          // V738R1_ADULT_DIRECT_IDENTITY
+                          //
+                          // URL-ID adult addons preserve the source-page identity
+                          // inside `id`.  When that addon also supplies a direct
+                          // HTTPS media URL, a mainstream torrent filename/title
+                          // comparison is not applicable.
+                          //
+                          // RedTube intentionally DOES NOT qualify here. Its
+                          // porn_id:* mapping remains protected by V441.
+                          const _v738r1AdultUrlId =
+                            /^https?:\/\/(?:[^/]+\.)*(?:eporner\.com|xhamster\.com|porntrex\.com)(?:[/:?#]|$)/i.test(
+                              String(id || '')
+                            );
+
+                          const _v738r1DirectHttps =
+                            /^https:\/\//i.test(
+                              String(
+                                (picked as any)?.url ||
+                                (picked as any)?.directUrl ||
+                                (picked as any)?.direct_url ||
+                                ''
+                              )
+                            );
+
+                          const _v738r1AdultDirectIdentity =
+                            _v738r1AdultUrlId &&
+                            _v738r1DirectHttps;
+
+                          if (_v738r1AdultDirectIdentity) {
+                            console.log(
+                              '[V738R1_ADULT_DIRECT_IDENTITY] V441 bypass'
+                            );
+                          }
+
+                          if (
+                            type === 'movie' &&
+                            !_v738r1AdultDirectIdentity
+                          ) {
                             const _v441_reqT = ((content as any)?.name || (content as any)?.title || (paramName as any) || '') as string;
                             const _v441_reqY = ((content as any)?.releaseInfo || (content as any)?.year || (content as any)?.releaseYear || '') as any;
                             const _v441_probe = (s: any) => String((s?.filename || s?.title || s?.name || '')).trim();
