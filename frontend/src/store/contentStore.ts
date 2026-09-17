@@ -334,7 +334,19 @@ async function _v259EvictOldestStreams(keepNewest: number): Promise<void> {
     });
     console.log('[V260_NUKE] AsyncStorage key buckets:', JSON.stringify(buckets), 'total=', (keys || []).length);
     // KEEP only auth / settings / discoverDataUid / currentUserId.
-    const KEEP_PREFIXES = ['auth_token', '@auth', 'user_', 'jwt', 'discoverDataUid', 'currentUserId', 'libraryCache'];
+    // V766U2_PRESERVE_RUNTIME_CODEC_KEYS
+    // Learned device/runtime compatibility state; never purge as cache bloat.
+    const KEEP_PREFIXES = [
+      'auth_token',
+      '@auth',
+      'user_',
+      'jwt',
+      'discoverDataUid',
+      'currentUserId',
+      'libraryCache',
+      'v766m_eac3_bad_hashes_v1',
+      'v766_eac3_decoder_broken',
+    ];
     const toDelete = (keys || []).filter((k: string) => {
       if (typeof k !== 'string') return false;
       for (const p of KEEP_PREFIXES) {

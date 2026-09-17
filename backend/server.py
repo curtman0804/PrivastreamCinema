@@ -800,6 +800,13 @@ class PremiumizeCacheCheckRequest(BaseModel):
 class PremiumizeDirectDLRequest(BaseModel):
     src: str
 
+
+# V759_ADULT_TRANSCODE_MODEL
+class AdultTranscodeSessionRequest(BaseModel):
+    source_url: str
+    content_id: str
+
+
 class PremiumizeConfigureRequest(BaseModel):
     api_key: str
 
@@ -2092,6 +2099,255 @@ async def premiumize_directdl(request: PremiumizeDirectDLRequest, current_user: 
     except Exception as exc:
         logger.warning("Premiumize directdl error for user %s: %s", current_user.id, type(exc).__name__)
         raise HTTPException(status_code=502, detail="Premiumize direct resolve failed")
+
+# ==================== V751_PREMIUMIZE_QUEUE_FALLBACK ====================
+# If Premiumize cannot instant-directdl a magnet, place it into the
+# Premiumize cloud transfer queue. This backend exchanges HTTPS API data
+# only; it does not join the torrent swarm and does not relay video bytes.
+
+@api_router.post("/premiumize/transfer/create")
+async def premiumize_transfer_create(
+    request: PremiumizeDirectDLRequest,
+    current_user: User = Depends(get_current_user),
+):
+    src = (request.src or "").strip()
+
+    if not src.lower().startswith("magnet:?xt=urn:btih:"):
+        raise HTTPException(status_code=400, detail="Invalid magnet source")
+
+    if len(src) > 8192:
+        raise HTTPException(status_code=400, detail="Magnet source is too long")
+
+    premiumize_key = get_premiumize_key_for_user(current_user)
+
+    headers = {
+        "Authorization": f"Bearer {premiumize_key}",
+        "Accept": "application/json",
+    }
+
+    try:
+        client = await get_shared_http_client()
+
+        response = await client.post(
+            "https://www.premiumize.me/api/transfer/create",
+            headers=headers,
+            data={"src": src},
+            timeout=20.0,
+        )
+
+        if response.status_code != 200:
+            logger.warning(
+                "Premiumize transfer create HTTP %s for user %s",
+                response.status_code,
+                current_user.id,
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Premiumize transfer create failed",
+            )
+
+        data = response.json()
+
+        return {
+            "status": data.get("status"),
+            "id": data.get("id"),
+            "name": data.get("name"),
+            "message": data.get("message"),
+            "code": data.get("code"),
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        logger.warning(
+            "Premiumize transfer create error for user %s: %s",
+            current_user.id,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Premiumize transfer create failed",
+        )
+
+
+@api_router.get("/premiumize/transfer/status/{transfer_id}")
+async def premiumize_transfer_status(
+    transfer_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    transfer_id = str(transfer_id or "").strip()
+
+    if not transfer_id or len(transfer_id) > 256:
+        raise HTTPException(status_code=400, detail="Invalid transfer id")
+
+    premiumize_key = get_premiumize_key_for_user(current_user)
+
+    headers = {
+        "Authorization": f"Bearer {premiumize_key}",
+        "Accept": "application/json",
+    }
+
+    try:
+        client = await get_shared_http_client()
+
+        response = await client.get(
+            "https://www.premiumize.me/api/transfer/list",
+            headers=headers,
+            timeout=15.0,
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail="Premiumize transfer status failed",
+            )
+
+        data = response.json()
+
+        if data.get("status") != "success":
+            return {
+                "status": "error",
+                "message": data.get("message") or "Premiumize transfer list failed",
+                "code": data.get("code"),
+            }
+
+        transfers = data.get("transfers") or []
+
+        transfer = next(
+            (
+                item
+                for item in transfers
+                if str(item.get("id") or "") == transfer_id
+            ),
+            None,
+        )
+
+        if transfer is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Premiumize transfer not found",
+            )
+
+        transfer_status = str(transfer.get("status") or "")
+        progress = transfer.get("progress")
+        file_id = transfer.get("file_id")
+        folder_id = transfer.get("folder_id")
+        transfer_name = str(transfer.get("name") or "")
+
+        content = []
+
+        if transfer_status in {"finished", "seeding"}:
+
+            if file_id:
+                item_response = await client.get(
+                    "https://www.premiumize.me/api/item/details",
+                    headers=headers,
+                    params={"id": file_id},
+                    timeout=15.0,
+                )
+
+                if item_response.status_code == 200:
+                    item = item_response.json()
+
+                    if (
+                        item.get("status") == "success"
+                        and item.get("link")
+                    ):
+                        content.append(
+                            {
+                                "path": item.get("name") or transfer_name,
+                                "size": item.get("size") or 0,
+                                "link": item.get("link"),
+                            }
+                        )
+
+            elif folder_id:
+                pending = [(str(folder_id), "")]
+                seen = set()
+
+                while (
+                    pending
+                    and len(seen) < 64
+                    and len(content) < 500
+                ):
+                    current_folder_id, prefix = pending.pop(0)
+
+                    if current_folder_id in seen:
+                        continue
+
+                    seen.add(current_folder_id)
+
+                    folder_response = await client.get(
+                        "https://www.premiumize.me/api/folder/list",
+                        headers=headers,
+                        params={"id": current_folder_id},
+                        timeout=15.0,
+                    )
+
+                    if folder_response.status_code != 200:
+                        continue
+
+                    folder_data = folder_response.json()
+
+                    if folder_data.get("status") != "success":
+                        continue
+
+                    for entry in folder_data.get("content") or []:
+                        entry_type = str(entry.get("type") or "")
+                        entry_name = str(entry.get("name") or "")
+
+                        entry_path = (
+                            (prefix + "/" + entry_name).strip("/")
+                            if entry_name
+                            else prefix
+                        )
+
+                        if entry_type == "file" and entry.get("link"):
+                            content.append(
+                                {
+                                    "path": entry_path or entry_name,
+                                    "size": entry.get("size") or 0,
+                                    "link": entry.get("link"),
+                                }
+                            )
+
+                            if len(content) >= 500:
+                                break
+
+                        elif entry_type == "folder" and entry.get("id"):
+                            pending.append(
+                                (
+                                    str(entry.get("id")),
+                                    entry_path,
+                                )
+                            )
+
+        return {
+            "status": "success",
+            "transfer_status": transfer_status,
+            "progress": progress,
+            "message": transfer.get("message") or "",
+            "name": transfer_name,
+            "folder_id": folder_id,
+            "file_id": file_id,
+            "content": content,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        logger.warning(
+            "Premiumize transfer status error for user %s: %s",
+            current_user.id,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Premiumize transfer status failed",
+        )
+
 
 # ==================== ADDON ROUTES ====================
 
@@ -6682,6 +6938,410 @@ async def stream_video(
         status_code=status_code,
         headers=response_headers,
     )
+
+# ============================================================
+# V759_ADULT_TRANSCODE
+#
+# Adult/VR compatibility fallback only.
+# Normal movie/series playback never calls these endpoints.
+# ============================================================
+
+import asyncio as _v759_asyncio
+import shutil as _v759_shutil
+import time as _v759_time
+from urllib.parse import urlparse as _v759_urlparse
+
+
+_V759_ADULT_TRANSCODE_SESSIONS: Dict[str, Dict[str, Any]] = {}
+_V759_ADULT_TRANSCODE_TTL_SECONDS = 6 * 60 * 60
+
+# Production currently has eight CPU cores and no GPU device
+# exposed inside the application container.  Limit the expensive
+# compatibility transcode to one active stream for now.
+_V759_ADULT_TRANSCODE_SEMAPHORE = _v759_asyncio.Semaphore(1)
+
+
+def _v759_cleanup_adult_transcode_sessions() -> None:
+    now = _v759_time.time()
+
+    expired = [
+        sid
+        for sid, item
+        in _V759_ADULT_TRANSCODE_SESSIONS.items()
+        if float(item.get("expires_at") or 0) <= now
+    ]
+
+    for sid in expired:
+        _V759_ADULT_TRANSCODE_SESSIONS.pop(
+            sid,
+            None,
+        )
+
+
+def _v759_allowed_adult_transcode_source(
+    value: str,
+) -> bool:
+    try:
+        parsed = _v759_urlparse(
+            str(value or "").strip()
+        )
+
+        if parsed.scheme.lower() != "https":
+            return False
+
+        host = str(
+            parsed.hostname or ""
+        ).strip().lower()
+
+        return (
+            host == "energycdn.com"
+            or host.endswith(".energycdn.com")
+        )
+
+    except Exception:
+        return False
+
+
+@api_router.post("/adult/transcode/session")
+async def v759_create_adult_transcode_session(
+    request: AdultTranscodeSessionRequest,
+    current_user: User = Depends(get_current_user),
+):
+    content_id = str(
+        request.content_id or ""
+    ).strip()
+
+    content_key = content_id.lower()
+
+    if not (
+        content_key.startswith("pt:")
+        or content_key.startswith("porndb:")
+    ):
+        logger.warning(
+            "V759_ADULT_TRANSCODE_BLOCK "
+            "reason=content-id user=%s",
+            current_user.id,
+        )
+
+        raise HTTPException(
+            status_code=403,
+            detail="Adult transcode content is not authorized",
+        )
+
+    source_url = str(
+        request.source_url or ""
+    ).strip()
+
+    if (
+        not source_url
+        or len(source_url) > 8192
+        or not _v759_allowed_adult_transcode_source(
+            source_url
+        )
+    ):
+        logger.warning(
+            "V759_ADULT_TRANSCODE_BLOCK "
+            "reason=source-host user=%s",
+            current_user.id,
+        )
+
+        raise HTTPException(
+            status_code=403,
+            detail="Adult transcode source is not authorized",
+        )
+
+    if not _v759_shutil.which("ffmpeg"):
+        logger.error(
+            "V759_ADULT_TRANSCODE "
+            "ffmpeg unavailable"
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail="Adult compatibility service unavailable",
+        )
+
+    _v759_cleanup_adult_transcode_sessions()
+
+    session_id = uuid.uuid4().hex
+
+    _V759_ADULT_TRANSCODE_SESSIONS[
+        session_id
+    ] = {
+        "user_id": current_user.id,
+        "content_id": content_id,
+        "source_url": source_url,
+        "created_at": _v759_time.time(),
+        "expires_at":
+            _v759_time.time()
+            + _V759_ADULT_TRANSCODE_TTL_SECONDS,
+    }
+
+    logger.info(
+        "V759_ADULT_TRANSCODE_SESSION "
+        "created=%s content=%s user=%s",
+        session_id[:8],
+        content_id[:80],
+        current_user.id,
+    )
+
+    return {
+        "status": "success",
+        "session_id": session_id,
+        "path":
+            "/api/adult/transcode/"
+            + session_id,
+        "video_codec": "h264",
+        "audio_codec": "aac",
+        "max_width": 1920,
+    }
+
+
+@api_router.get("/adult/transcode/{session_id}")
+async def v759_stream_adult_transcode(
+    session_id: str,
+):
+    _v759_cleanup_adult_transcode_sessions()
+
+    item = _V759_ADULT_TRANSCODE_SESSIONS.get(
+        str(session_id or "").strip()
+    )
+
+    if not item:
+        raise HTTPException(
+            status_code=404,
+            detail="Adult transcode session expired",
+        )
+
+    source_url = str(
+        item.get("source_url") or ""
+    ).strip()
+
+    if not _v759_allowed_adult_transcode_source(
+        source_url
+    ):
+        _V759_ADULT_TRANSCODE_SESSIONS.pop(
+            session_id,
+            None,
+        )
+
+        raise HTTPException(
+            status_code=403,
+            detail="Adult transcode source rejected",
+        )
+
+    async def v759_output():
+        async with _V759_ADULT_TRANSCODE_SEMAPHORE:
+
+            logger.info(
+                "V759_ADULT_TRANSCODE_START "
+                "session=%s content=%s",
+                session_id[:8],
+                str(
+                    item.get("content_id") or ""
+                )[:80],
+            )
+
+            cmd = [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-nostdin",
+
+                "-rw_timeout",
+                "15000000",
+
+                "-reconnect",
+                "1",
+
+                "-reconnect_streamed",
+                "1",
+
+                "-reconnect_delay_max",
+                "2",
+
+                "-i",
+                source_url,
+
+                "-map",
+                "0:v:0",
+
+                "-map",
+                "0:a:0?",
+
+                "-vf",
+                r"scale=min(1920\,iw):-2:flags=fast_bilinear",
+
+                "-c:v",
+                "libx264",
+
+                "-preset",
+                "ultrafast",
+
+                "-tune",
+                "zerolatency",
+
+                "-pix_fmt",
+                "yuv420p",
+
+                "-crf",
+                "23",
+
+                "-maxrate",
+                "16M",
+
+                "-bufsize",
+                "32M",
+
+                "-g",
+                "100",
+
+                "-keyint_min",
+                "50",
+
+                "-sc_threshold",
+                "0",
+
+                "-c:a",
+                "aac",
+
+                "-b:a",
+                "160k",
+
+                "-ac",
+                "2",
+
+                "-movflags",
+                "frag_keyframe+empty_moov+default_base_moof",
+
+                "-f",
+                "mp4",
+
+                "pipe:1",
+            ]
+
+            process = await _v759_asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=_v759_asyncio.subprocess.PIPE,
+                stderr=_v759_asyncio.subprocess.PIPE,
+            )
+
+            stderr_lines = []
+
+            async def drain_stderr():
+                try:
+                    while True:
+                        line = await process.stderr.readline()
+
+                        if not line:
+                            break
+
+                        text = line.decode(
+                            "utf-8",
+                            "replace",
+                        ).strip()
+
+                        if text:
+                            stderr_lines.append(text)
+
+                            if len(stderr_lines) > 20:
+                                del stderr_lines[:-20]
+
+                except Exception:
+                    pass
+
+            stderr_task = _v759_asyncio.create_task(
+                drain_stderr()
+            )
+
+            bytes_sent = 0
+
+            try:
+                while True:
+                    chunk = await process.stdout.read(
+                        256 * 1024
+                    )
+
+                    if not chunk:
+                        break
+
+                    bytes_sent += len(chunk)
+
+                    yield chunk
+
+            except _v759_asyncio.CancelledError:
+                raise
+
+            except Exception as exc:
+                logger.warning(
+                    "V759_ADULT_TRANSCODE_STREAM_ERROR "
+                    "session=%s type=%s",
+                    session_id[:8],
+                    type(exc).__name__,
+                )
+
+            finally:
+                if process.returncode is None:
+                    try:
+                        process.terminate()
+
+                        await _v759_asyncio.wait_for(
+                            process.wait(),
+                            timeout=3.0,
+                        )
+
+                    except Exception:
+                        try:
+                            process.kill()
+                            await process.wait()
+                        except Exception:
+                            pass
+
+                try:
+                    await _v759_asyncio.wait_for(
+                        stderr_task,
+                        timeout=1.0,
+                    )
+
+                except Exception:
+                    stderr_task.cancel()
+
+                rc = process.returncode
+
+                if (
+                    rc not in (0, None)
+                    and stderr_lines
+                ):
+                    logger.warning(
+                        "V759_ADULT_TRANSCODE_FFMPEG "
+                        "session=%s rc=%s err=%s",
+                        session_id[:8],
+                        rc,
+                        stderr_lines[-1][:500],
+                    )
+
+                logger.info(
+                    "V759_ADULT_TRANSCODE_END "
+                    "session=%s rc=%s bytes=%s",
+                    session_id[:8],
+                    rc,
+                    bytes_sent,
+                )
+
+    return StreamingResponse(
+        v759_output(),
+        media_type="video/mp4",
+        headers={
+            "Cache-Control":
+                "no-store, no-cache, must-revalidate",
+            "Pragma":
+                "no-cache",
+            "X-Accel-Buffering":
+                "no",
+        },
+    )
+
 
 # ==================== STREAM PROXY ====================
 

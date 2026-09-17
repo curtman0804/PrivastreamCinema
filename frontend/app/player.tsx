@@ -43,7 +43,7 @@ import {
   type ExpoVideoCompatHandle,
 } from '../src/components/ExpoVideoCompat';
 import { Modal, FlatList } from 'react-native';
-import AsyncStorage from '../src/utils/mmkvStorage';
+import AsyncStorage, { setItemDurable } from '../src/utils/mmkvStorage';
 /* V176C_PLAYER_MARK_WATCHED — keep the in-memory _v172WatchedSet in sync
    so visible posters show the gold check immediately, no app restart. */
 import { v176MarkWatched as _v176cMark } from '../src/components/ContentCard';
@@ -578,13 +578,13 @@ export default function PlayerScreen() {
     const segs = cid.split(':');
     // For series-style "imdb:S:E", parseInt the last two segments and
     // fail if either turns NaN.
-    if (segs.length >= 3) {
+    if (contentType === 'series' && segs.length >= 3) {
       const _s = parseInt(segs[segs.length - 2], 10);
       const _e = parseInt(segs[segs.length - 1], 10);
       if (Number.isNaN(_s) || Number.isNaN(_e)) return false;
     }
     return true;
-  }, [contentId]);
+  }, [contentId, contentType]);
   useEffect(() => {
     if (!_v273ContentIdLooksValid) {
       console.warn('[V273_NAN_ID_GUARD] malformed contentId=', contentId, '— bailing back to previous screen.');
@@ -824,6 +824,76 @@ export default function PlayerScreen() {
   // by tryNextFallbackTorrent so the cascade actually sees the
   // available fallbacks.
   const torrentFallbacksRef = useRef<any[]>([]);
+
+  // V766M3_EXACT_HASH_EAC3_RUNTIME_CACHE
+  // Only actual runtime E-AC3 decoder proof may place a hash
+  // in this set. Torrent names and filenames are never used.
+  const v766mActiveInfoHashRef = useRef<string>('');
+  const v766mBadHashesRef = useRef<Set<string>>(new Set());
+  const v766mBadHashesHydratedRef = useRef(false);
+  const v766mFallbackResumeScheduledRef = useRef(false);
+  const v766mBadHashesHydrationPromiseRef =
+    useRef<Promise<void> | null>(null);
+  const v766mBadHashesStorageKey =
+    'v766m_eac3_bad_hashes_v1';
+
+  const v766mHydrateBadHashes = (): Promise<void> => {
+    if (v766mBadHashesHydratedRef.current) {
+      return Promise.resolve();
+    }
+
+    if (v766mBadHashesHydrationPromiseRef.current) {
+      return v766mBadHashesHydrationPromiseRef.current;
+    }
+
+    const hydration =
+      AsyncStorage.getItem(v766mBadHashesStorageKey)
+        .then(raw => {
+          let hashes: string[] = [];
+
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+
+              if (Array.isArray(parsed)) {
+                hashes = parsed
+                  .map(value =>
+                    String(value || '').trim().toLowerCase()
+                  )
+                  .filter(value =>
+                    /^[a-f0-9]{40}$/.test(value)
+                  );
+              }
+            } catch (_) {}
+          }
+
+          v766mBadHashesRef.current =
+            new Set(hashes);
+
+          console.log(
+            '[V766M3 EAC3 HASH] hydrated',
+            'count=' + String(hashes.length)
+          );
+        })
+        .catch(error => {
+          console.log(
+            '[V766M3 EAC3 HASH] hydration failed',
+            error
+          );
+        })
+        .finally(() => {
+          v766mBadHashesHydratedRef.current = true;
+          v766mBadHashesHydrationPromiseRef.current = null;
+        });
+
+    v766mBadHashesHydrationPromiseRef.current = hydration;
+
+    return hydration;
+  };
+
+  useEffect(() => {
+    void v766mHydrateBadHashes();
+  }, []);
   
   // NO safety timeout - let the torrent download and ExoPlayer buffer naturally.
   // First-click torrents need 30-60+ seconds for metadata + initial pieces.
@@ -3238,6 +3308,9 @@ export default function PlayerScreen() {
   const tryNextStream = () => {
     if (fallbackUrls.length > currentStreamIndex + 1) {
       const nextIndex = currentStreamIndex + 1;
+
+      // V766M3_URL_FALLBACK_NO_HASH
+      v766mActiveInfoHashRef.current = '';
       console.log(`[PLAYER] Trying fallback stream ${nextIndex + 1}/${fallbackUrls.length}`);
       setCurrentStreamIndex(nextIndex);
       setStreamUrl(fallbackUrls[nextIndex]);
@@ -3277,10 +3350,48 @@ export default function PlayerScreen() {
     const _v163_list: any[] = (torrentFallbacksRef.current && torrentFallbacksRef.current.length > 0)
       ? torrentFallbacksRef.current
       : (torrentFallbacks || []);
+    // V766M3_WAIT_FOR_HASH_CACHE
+    if (!v766mBadHashesHydratedRef.current) {
+      if (!v766mFallbackResumeScheduledRef.current) {
+        v766mFallbackResumeScheduledRef.current = true;
+
+        void v766mHydrateBadHashes()
+          .finally(() => {
+            v766mFallbackResumeScheduledRef.current = false;
+            tryNextFallbackTorrent();
+          });
+      }
+
+      return;
+    }
+
     const idx = torrentFallbackIdxRef.current;
     if (idx < _v163_list.length) {
       const fb = _v163_list[idx];
       torrentFallbackIdxRef.current = idx + 1;
+
+      // V766M3_PRE_PM_EXACT_HASH_SKIP
+      const _v766mHash =
+        String(fb?.infoHash || '')
+          .trim()
+          .toLowerCase();
+
+      v766mActiveInfoHashRef.current = '';
+
+      if (
+        _v766mHash &&
+        v766mBadHashesRef.current.has(_v766mHash)
+      ) {
+        console.log(
+          '[V766M3 EAC3 HASH] pre-PM skip',
+          _v766mHash.slice(0, 12)
+        );
+
+        tryNextFallbackTorrent();
+        return;
+      }
+
+      v766mActiveInfoHashRef.current = _v766mHash;
       console.log(`[PLAYER v294] Trying fallback torrent ${idx + 1}/${_v163_list.length}: ${fb.infoHash?.slice(0,8)}... (${fb.name || fb.title || ''})`);
       
       // Reset state for new torrent
@@ -3666,6 +3777,11 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
     setIsLiveTV(isLive === 'true');
     
     if (directUrl) {
+      // V766V2_PRIMARY_DIRECT_HASH_OWNERSHIP
+      if (infoHash) {
+        v766mActiveInfoHashRef.current = String(infoHash).trim().toLowerCase();
+        console.log('[V766V2 PRIMARY HASH] directUrl ownership', v766mActiveInfoHashRef.current.slice(0, 12));
+      }
       setStreamUrl(directUrl);
       if (isLive === 'true') {
         // For live TV, keep loading state until video actually starts playing
@@ -3694,6 +3810,12 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
 
   const startTorrentStream = async (retryCount = 0) => {
     if (!infoHash) return;
+
+    // V766M3_PRIMARY_HASH_OWNERSHIP
+    v766mActiveInfoHashRef.current =
+      String(infoHash)
+        .trim()
+        .toLowerCase();
 
     try {
       const parsedFileIdx = fileIdx && fileIdx !== '' ? parseInt(fileIdx, 10) : undefined;
@@ -3899,7 +4021,21 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
           
           // Timeout: 60s total — cold-cache torrents need extra time for RD
           // to fetch metadata before file selection becomes possible.
-          if (elapsedSec > 60) {
+          // V751_PREMIUMIZE_QUEUE_WAIT_PRIMARY
+          // api.stream.status() reports "downloading" while the
+          // PM resolver promise is still in _pmInFlight. Do not
+          // fire the old 60s retry while Premiumize is working.
+          const _v751PmStillWorking =
+            statuses.some(
+              (result: any) =>
+                result.status === 'fulfilled' &&
+                result.value?.status === 'downloading'
+            );
+
+          if (
+            elapsedSec > 60 &&
+            !_v751PmStillWorking
+          ) {
             if (Object.keys(readyMap).length > 0) { commitWinner(); return; }
             // Auto-retry ONCE on timeout. This matches the user's manual
             // "back out and click Play again" workaround — a fresh start with
@@ -3949,6 +4085,12 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
   // Start a torrent with explicit hash (for fallback torrents)
   const startTorrentStreamWithHash = async (hash: string, fIdx?: number, fname?: string, srcs: string[] = [], retryCount = 0) => {
     const MAX_RETRIES = 2;
+
+    // V766M3_FALLBACK_HASH_OWNERSHIP
+    v766mActiveInfoHashRef.current =
+      String(hash || '')
+        .trim()
+        .toLowerCase();
     const fallbackSeasonNum = season ? parseInt(season, 10) : undefined;
     const fallbackEpisodeNum = episode ? parseInt(episode, 10) : undefined;
     try {
@@ -4036,7 +4178,14 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
           }
           
           
-          if (elapsedSec > 30 && !videoUrlSet) {
+          // V751_PREMIUMIZE_QUEUE_WAIT_FALLBACK
+          // Same rule for sequential fallback torrents: preserve
+          // the old 30s behavior unless PM is actively resolving.
+          if (
+            elapsedSec > 30 &&
+            !videoUrlSet &&
+            status.status !== 'downloading'
+          ) {
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
             tryNextFallbackTorrent();
             return;
@@ -4430,6 +4579,72 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                       || _v162_errMsg.includes('decoder failed:')
                     );
                     if (_v162_isCodecErr) {
+                      // V766M3_PERSIST_EXACT_EAC3_HASH
+                      // Never infer codec from torrent metadata.
+                      if (
+                        _v162_errMsg.includes(
+                          'c2.dolby.eac3.decoder.eac3'
+                        )
+                      ) {
+                        const _v766mFailedHash =
+                          String(
+                            v766mActiveInfoHashRef.current || ''
+                          )
+                            .trim()
+                            .toLowerCase();
+
+                        if (
+                          /^[a-f0-9]{40}$/.test(
+                            _v766mFailedHash
+                          )
+                        ) {
+                          const _v766mBefore =
+                            v766mBadHashesRef.current.size;
+
+                          v766mBadHashesRef.current.add(
+                            _v766mFailedHash
+                          );
+
+                          if (
+                            v766mBadHashesRef.current.size !==
+                            _v766mBefore
+                          ) {
+                            console.log(
+                              '[V766M3 EAC3 HASH] runtime proof cached',
+                              _v766mFailedHash.slice(0, 12)
+                            );
+                          }
+
+                          const _v766mPayload =
+                            JSON.stringify(
+                              Array.from(
+                                v766mBadHashesRef.current
+                              ).sort()
+                            );
+
+                          void setItemDurable(
+                            v766mBadHashesStorageKey,
+                            _v766mPayload
+                          )
+                            .then(() => {
+                              console.log(
+                                '[V766M3 EAC3 HASH] persisted',
+                                _v766mFailedHash.slice(0, 12)
+                              );
+                            })
+                            .catch(cacheError => {
+                              console.log(
+                                '[V766M3 EAC3 HASH] persist failed',
+                                _v766mFailedHash.slice(0, 12),
+                                cacheError
+                              );
+                            });
+                        } else {
+                          console.log(
+                            '[V766M3 EAC3 HASH] runtime proof has no authoritative hash'
+                          );
+                        }
+                      }
                       console.log('[v162] Codec/decode error — skipping retries, advancing to next stream:', _v162_errMsg.slice(0, 200));
                       videoRetryCountRef.current = 0;
                       // Prefer URL fallbacks if available (cached debrid links),

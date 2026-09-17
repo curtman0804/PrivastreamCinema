@@ -627,6 +627,258 @@ function _v157_isWrongTitleStream(stream: any, meta: { title: string; year: stri
 // the cache misses and we recompute exactly once.
 let _v312_sortCacheInput: Stream[] | null = null;
 let _v312_sortCacheOutput: Stream[] | null = null;
+// V747_PORNTUBE_NATIVE_TRUST
+function _v747TrustedPornTubeStream(
+  contentId: any,
+  contentMeta: any,
+  stream: any
+): boolean {
+  try {
+    const key = String(contentId || '')
+      .trim()
+      .toLowerCase();
+
+    if (
+      !key.startsWith('pt:') &&
+      !key.startsWith('porndb:')
+    ) {
+      return false;
+    }
+
+    const metaKey = String(
+      contentMeta?.id ||
+      contentMeta?.imdb_id ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!metaKey || metaKey !== key) {
+      return false;
+    }
+
+    const addon = String(
+      stream?.addon ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+    if (addon !== 'porn tube') {
+      return false;
+    }
+
+    const hash = String(
+      stream?.infoHash ||
+      stream?.info_hash ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+    return /^[a-f0-9]{40}$/.test(hash);
+  } catch (_) {
+    return false;
+  }
+}
+
+// V759_ADULT_TRANSCODE_ROUTE
+function _v759AdultNeedsTranscode(
+  contentId: any,
+  contentMeta: any,
+  stream: any,
+  file: any
+): boolean {
+  if (
+    !_v747TrustedPornTubeStream(
+      contentId,
+      contentMeta,
+      stream
+    )
+  ) {
+    return false;
+  }
+
+  const probe = [
+    file?.path,
+    file?.name,
+    file?.filename,
+    stream?.title,
+    stream?.name,
+    contentMeta?.name,
+    contentMeta?.title,
+    contentMeta?.releaseInfo,
+  ]
+    .map(
+      (value) => String(value || '')
+    )
+    .join(' ');
+
+  return (
+    /(?:^|[^A-Z0-9])8K(?:[^A-Z0-9]|$)/i.test(probe) ||
+    /(?:^|[^A-Z0-9])6K(?:[^A-Z0-9]|$)/i.test(probe) ||
+    /(?:^|[^A-Z0-9])5(?:\.7)?K(?:[^A-Z0-9]|$)/i.test(probe) ||
+    /\b(?:4096|4320|5760)P\b/i.test(probe) ||
+    /\b(?:8192|7680|6144|5760)[xX]\d+\b/.test(probe)
+  );
+}
+
+
+async function _v759MaybeCreateAdultTranscodeUrl(
+  contentId: any,
+  contentMeta: any,
+  stream: any,
+  file: any
+): Promise<string> {
+  const directUrl =
+    String(
+      file?.link || ''
+    ).trim();
+
+  if (!directUrl) {
+    return directUrl;
+  }
+
+  if (
+    !_v759AdultNeedsTranscode(
+      contentId,
+      contentMeta,
+      stream,
+      file
+    )
+  ) {
+    return directUrl;
+  }
+
+  try {
+    const authToken =
+      await AsyncStorage.getItem(
+        'auth_token'
+      );
+
+    const backendUrl =
+      String(
+        process.env.EXPO_PUBLIC_BACKEND_URL ||
+        Constants.expoConfig?.extra?.backendUrl ||
+        ''
+      )
+        .trim()
+        .replace(/\/+$/, '');
+
+    if (!authToken || !backendUrl) {
+      console.warn(
+        '[V759 ADULT TRANSCODE] unavailable; using original URL'
+      );
+
+      return directUrl;
+    }
+
+    const response =
+      await fetch(
+        backendUrl +
+          '/api/adult/transcode/session',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization':
+              'Bearer ' + authToken,
+            'Accept':
+              'application/json',
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            source_url: directUrl,
+            content_id: String(
+              contentId || ''
+            ),
+          }),
+        }
+      );
+
+    if (!response.ok) {
+      console.warn(
+        '[V759 ADULT TRANSCODE] session rejected',
+        response.status
+      );
+
+      return directUrl;
+    }
+
+    const payload: any =
+      await response.json();
+
+    const path =
+      String(
+        payload?.path || ''
+      ).trim();
+
+    if (
+      !path.startsWith(
+        '/api/adult/transcode/'
+      )
+    ) {
+      console.warn(
+        '[V759 ADULT TRANSCODE] invalid session response'
+      );
+
+      return directUrl;
+    }
+
+    const playbackUrl =
+      backendUrl + path;
+
+    console.log(
+      '[V759 ADULT TRANSCODE] route',
+      String(contentId || ''),
+      _v672MediaBasename(
+        file?.path ||
+        file?.name ||
+        file?.link ||
+        ''
+      ),
+      '->1920w H264/AAC'
+    );
+
+    return playbackUrl;
+
+  } catch (error: any) {
+    console.warn(
+      '[V759 ADULT TRANSCODE] setup failed',
+      String(
+        error?.message ||
+        error ||
+        ''
+      )
+    );
+
+    return directUrl;
+  }
+}
+
+
+function _v747MovieIdentityMatches(
+  contentId: any,
+  contentMeta: any,
+  stream: any,
+  requestedTitle: any,
+  requestedYear: any,
+  candidateIdentity: any
+): boolean {
+  return (
+    _v745MovieIdentityMatches(
+      requestedTitle,
+      requestedYear,
+      candidateIdentity
+    ) ||
+    _v747TrustedPornTubeStream(
+      contentId,
+      contentMeta,
+      stream
+    )
+  );
+}
+
 // V441_MOVIE_TITLE_MATCH_PACK_GUARD - stronger than v440. See patch_v441.ps1.
 function _v441_movieTitleMatch(filePath: string, movieTitle: string, movieYear: any): number {
   if (!filePath || !movieTitle) return 0;
@@ -2858,7 +3110,7 @@ export default function DetailsScreen() {
   }, [isPlayLoading]);
   // v121j-overlay-removed
 
-  const isEpisodePage = type !== 'tv' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
+  const isEpisodePage = type === 'series' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
 
   /*
    * V667_FIRST_FRAME_STREAM_OWNERSHIP
@@ -3644,7 +3896,10 @@ const nextEpisodeData = nextEpisode ? {
         if (
           type === 'movie' &&
           _v744RequestedTitle &&
-          !_v745MovieIdentityMatches(
+          !_v747MovieIdentityMatches(
+            id,
+            content,
+            s,
             _v744RequestedTitle,
             _v745IdentityYear,
             String(s?.title || s?.filename || s?.name || '')
@@ -3827,7 +4082,19 @@ const nextEpisodeData = nextEpisode ? {
             // Pick the best cached candidate (first in the pre-sorted list
             // that is cached).  Skip watermarked entries unless they are
             // the ONLY cached option (so user always gets playback).
-            const _v300_cachedCandidates = _v300_candidates.filter((c) => _v300_cached.has(c.hash));
+            // V766V3_DETAILS_BAD_HASH_FILTER
+            let _v766v3BadHashes = new Set<string>();
+            try {
+              const _rawBad = await AsyncStorage.getItem('v766m_eac3_bad_hashes_v1');
+              const _parsedBad = _rawBad ? JSON.parse(_rawBad) : [];
+              if (Array.isArray(_parsedBad)) {
+                _v766v3BadHashes = new Set(_parsedBad.map((h: any) => String(h).trim().toLowerCase()));
+              }
+            } catch (_) {}
+            const _v300_cachedCandidates = _v300_candidates.filter((c) =>
+              _v300_cached.has(c.hash) && !_v766v3BadHashes.has(c.hash)
+            );
+            console.log('[V766V3 DETAILS FILTER]', 'bad=' + _v766v3BadHashes.size, 'cachedAfter=' + _v300_cachedCandidates.length);
             const _v300_isWm = (s: any) => {
               const _b = `${s?.title || ''} ${s?.name || ''} ${s?.filename || ''}`;
               return /(1xbet|melbet|mostbet|parimatch|ftcam|fxgg|hcam|ctcam|cam\.rip|hdcam|telesync|tsrip|tcrip|tc-?rip|cam-rip|new\.?source|sourceqr|sourcetv|x-?cam|hd-?cam)/i.test(_b);
@@ -3909,6 +4176,28 @@ const nextEpisodeData = nextEpisode ? {
                     const _v441_mt = ((content as any)?.name || (content as any)?.title || (paramName as any) || '') as string;
                     const _v441_my = ((content as any)?.releaseInfo || (content as any)?.year || (content as any)?.releaseYear || '') as any;
                     _v300_file = _v441_pickMovieFile(_v300_videos, _v441_mt, _v441_my);
+
+                    if (
+                      !_v300_file &&
+                      _v747TrustedPornTubeStream(
+                        id,
+                        content,
+                        _v300_picked?.stream
+                      ) &&
+                      _v300_videos.length === 1
+                    ) {
+                      _v300_file = _v300_videos[0];
+
+                      console.log(
+                        '[V747 PT NATIVE] V300 single-file authoritative torrent accepted',
+                        String(
+                          _v300_file?.path ||
+                          _v300_file?.name ||
+                          ''
+                        ).slice(0, 120)
+                      );
+                    }
+
                     if (!_v300_file) {
                       console.log('[v300/V441] pack refused - no title match; falling through');
                     }
@@ -3929,7 +4218,10 @@ const nextEpisodeData = nextEpisode ? {
 
                   const _v744V300Ok =
                     type === 'movie'
-                      ? _v745MovieIdentityMatches(
+                      ? _v747MovieIdentityMatches(
+                          id,
+                          content,
+                          _v300_picked?.stream,
                           _v744V300Title,
                           _v745IdentityYear,
                           _v744V300Identity
@@ -3960,13 +4252,22 @@ const nextEpisodeData = nextEpisode ? {
                     /* V353_ADD_FALLBACKS â€” compute the full 60-URL fallback
                        list even for PM-directdl path so that if this direct
                        link fails to play, the cascade kicks in. */
+                    const _v759V300PlaybackUrl =
+                      await _v759MaybeCreateAdultTranscodeUrl(
+                        id,
+                        content,
+                        _v300_picked?.stream,
+                        _v300_file
+                      );
+
                     const _v353_fb_v300 = await buildFallbackUrls();
                     const _v655_tor_v300 = buildRuntimeCodecFallbackTorrents(_v300_picked.hash);
                     console.log('[V655] PM-direct runtime torrent fallbacks=', _v655_tor_v300.length);
                     router.push({
                       pathname: '/player',
                       params: {
-                        directUrl: _v237_bustUrl(String(_v300_file.link)),
+                        directUrl: _v237_bustUrl(_v759V300PlaybackUrl),
+                infoHash: _v300_picked.hash,
                         title: contentTitle,
                         isLive: 'false',
                         contentType: cType,
@@ -4060,6 +4361,28 @@ const nextEpisodeData = nextEpisode ? {
                 const _v441_mt2 = ((content as any)?.name || (content as any)?.title || (paramName as any) || '') as string;
                 const _v441_my2 = ((content as any)?.releaseInfo || (content as any)?.year || (content as any)?.releaseYear || '') as any;
                 _v299_picked = _v441_pickMovieFile(_v299_videos, _v441_mt2, _v441_my2);
+
+                if (
+                  !_v299_picked &&
+                  _v747TrustedPornTubeStream(
+                    id,
+                    content,
+                    stream
+                  ) &&
+                  _v299_videos.length === 1
+                ) {
+                  _v299_picked = _v299_videos[0];
+
+                  console.log(
+                    '[V747 PT NATIVE] V299 single-file authoritative torrent accepted',
+                    String(
+                      _v299_picked?.path ||
+                      _v299_picked?.name ||
+                      ''
+                    ).slice(0, 120)
+                  );
+                }
+
                 if (!_v299_picked) {
                   console.log('[v299/V441] pack refused - no title match; falling through');
                 }
@@ -4080,7 +4403,10 @@ const nextEpisodeData = nextEpisode ? {
 
               const _v744V299Ok =
                 type === 'movie'
-                  ? _v745MovieIdentityMatches(
+                  ? _v747MovieIdentityMatches(
+                      id,
+                      content,
+                      stream,
                       _v744V299Title,
                       _v745IdentityYear,
                       _v744V299Identity
@@ -4129,6 +4455,7 @@ const nextEpisodeData = nextEpisode ? {
               pathname: '/player',
               params: {
                 directUrl: _v237_bustUrl(_v299_link),
+                infoHash: _v299_hash,
                 title: contentTitle,
                 isLive: 'false',
                 contentType: cType,
@@ -4319,7 +4646,10 @@ const nextEpisodeData = nextEpisode ? {
 
       if (
         type === 'movie' &&
-        !_v745MovieIdentityMatches(
+        !_v747MovieIdentityMatches(
+          id,
+          content,
+          stream,
           _v744PrimaryTitle,
           _v745IdentityYear,
           _v744PrimaryIdentity
@@ -4375,7 +4705,10 @@ const nextEpisodeData = nextEpisode ? {
         if (
           type === 'movie' &&
           _v744FallbackTitle &&
-          !_v745MovieIdentityMatches(
+          !_v747MovieIdentityMatches(
+            id,
+            content,
+            s,
             _v744FallbackTitle,
             _v745IdentityYear,
             String(s?.title || s?.filename || s?.name || '')
@@ -5059,7 +5392,31 @@ const nextEpisodeData = nextEpisode ? {
                             const _v441_probe = (s: any) => String((s?.filename || s?.title || s?.name || '')).trim();
                             const _v441_top = _v441_probe(picked);
                             const _v441_ts = _v441_top ? _v441_movieTitleMatch(_v441_top, _v441_reqT, _v441_reqY) : 1;
-                            if (_v441_reqT && _v441_top && _v441_ts < 0.5) {
+
+                            const _v747TrustedPt =
+                              _v747TrustedPornTubeStream(
+                                id,
+                                content,
+                                picked
+                              );
+
+                            if (_v747TrustedPt && _v441_ts < 0.5) {
+                              console.log(
+                                '[V747 PT NATIVE] V441 authoritative stream accepted',
+                                String(
+                                  (picked as any)?.infoHash ||
+                                  (picked as any)?.info_hash ||
+                                  ''
+                                ).slice(0, 12)
+                              );
+                            }
+
+                            if (
+                              _v441_reqT &&
+                              _v441_top &&
+                              _v441_ts < 0.5 &&
+                              !_v747TrustedPt
+                            ) {
                               console.log('[V441 SKIP]', _v441_ts.toFixed(2), '|', _v441_top.slice(0, 100));
                               let _v441_alt: any = null;
                               for (let _v441_i = 0; _v441_i < list.length; _v441_i++) {
@@ -5067,7 +5424,28 @@ const nextEpisodeData = nextEpisode ? {
                                 const _v441_fn = _v441_probe(list[_v441_i]);
                                 if (!_v441_fn) { _v441_alt = list[_v441_i]; break; }
                                 const _v441_sc = _v441_movieTitleMatch(_v441_fn, _v441_reqT, _v441_reqY);
-                                if (_v441_sc >= 0.5) { _v441_alt = list[_v441_i]; console.log('[V441 USE]', _v441_sc.toFixed(2), '|', _v441_fn.slice(0, 100)); break; }
+
+                                const _v747TrustedAlt =
+                                  _v747TrustedPornTubeStream(
+                                    id,
+                                    content,
+                                    list[_v441_i]
+                                  );
+
+                                if (_v441_sc >= 0.5 || _v747TrustedAlt) {
+                                  _v441_alt = list[_v441_i];
+
+                                  console.log(
+                                    _v747TrustedAlt
+                                      ? '[V747 PT NATIVE] V441 authoritative alternate accepted'
+                                      : '[V441 USE]',
+                                    _v441_sc.toFixed(2),
+                                    '|',
+                                    _v441_fn.slice(0, 100)
+                                  );
+
+                                  break;
+                                }
                               }
                               if (_v441_alt) {
                                 picked = _v441_alt;

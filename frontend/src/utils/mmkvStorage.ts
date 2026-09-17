@@ -91,24 +91,82 @@ function _chain(key: string, op: () => Promise<void>): Promise<void> {
   return next;
 }
 
+// V766S1_STORAGE_DIAGNOSTICS
+function _v766s1TraceKey(key: string): boolean {
+  return key === 'v766m_eac3_bad_hashes_v1' ||
+    key === 'v766_eac3_decoder_broken';
+}
+
 async function _fsRead(key: string): Promise<string | null> {
+  const path = DIR + enc(key) + '.kv';
+
   try {
     await ensureDir();
-    const path = DIR + enc(key) + '.kv';
-    const info = await FileSystem.getInfoAsync(path);
+    const info: any = await FileSystem.getInfoAsync(path);
+
+    if (_v766s1TraceKey(key)) {
+      console.log(
+        '[V766S1 FS READ] key=' + key +
+        ' dir=' + DIR +
+        ' path=' + path +
+        ' exists=' + String(!!info?.exists) +
+        ' size=' + String(info?.size ?? -1)
+      );
+    }
+
     if (!info.exists) return null;
-    return await FileSystem.readAsStringAsync(path);
-  } catch {
+
+    const value = await FileSystem.readAsStringAsync(path);
+
+    if (_v766s1TraceKey(key)) {
+      console.log(
+        '[V766S1 FS READBACK] key=' + key +
+        ' bytes=' + String(value.length)
+      );
+    }
+
+    return value;
+  } catch (e: any) {
+    if (_v766s1TraceKey(key)) {
+      console.log(
+        '[V766S1 FS READ ERROR] key=' + key +
+        ' path=' + path +
+        ' err=' + (e && e.message ? e.message : String(e))
+      );
+    }
     return null;
   }
 }
 
 async function _fsWrite(key: string, value: string): Promise<void> {
+  const path = DIR + enc(key) + '.kv';
+
   try {
     await ensureDir();
-    await FileSystem.writeAsStringAsync(DIR + enc(key) + '.kv', value);
+    await FileSystem.writeAsStringAsync(path, value);
+
+    if (_v766s1TraceKey(key)) {
+      const info: any = await FileSystem.getInfoAsync(path);
+      const readBack = info?.exists
+        ? await FileSystem.readAsStringAsync(path)
+        : null;
+
+      console.log(
+        '[V766S1 FS WRITE VERIFY] key=' + key +
+        ' dir=' + DIR +
+        ' path=' + path +
+        ' exists=' + String(!!info?.exists) +
+        ' size=' + String(info?.size ?? -1) +
+        ' bytes=' + String(readBack?.length ?? -1) +
+        ' match=' + String(readBack === value)
+      );
+    }
   } catch (e: any) {
-    console.log('[kvStore] write failed key=' + key + ' err=' + (e && e.message ? e.message : String(e)));
+    console.log(
+      '[kvStore] write failed key=' + key +
+      ' path=' + path +
+      ' err=' + (e && e.message ? e.message : String(e))
+    );
   }
 }
 
@@ -129,13 +187,44 @@ function _memSet(key: string, value: string | null): void {
 
 /* ---- AsyncStorage-compatible API over the tiers ---- */
 async function getItem(key: string): Promise<string | null> {
-  if (_mem.has(key)) return _mem.get(key) ?? null;
+  // V766T2_V766_NULL_MEMORY_BYPASS
+  // A cached null must not mask the durable MMKV/FS copy for the
+  // two runtime capability keys. All other storage keys retain
+  // the original in-memory null-sentinel behavior.
+  if (_mem.has(key)) {
+    const memValue = _mem.get(key) ?? null;
+
+    if (memValue !== null || !_v766s1TraceKey(key)) {
+      return memValue;
+    }
+
+    console.log('[V766T2 MEM NULL BYPASS] key=' + key);
+    _mem.delete(key);
+  }
+
   let v: string | null = null;
   if (_mmkv) {
     try {
       const s = _mmkv.getString(key);
       v = s === undefined ? null : s;
-    } catch { v = null; }
+
+      if (_v766s1TraceKey(key)) {
+        console.log(
+          '[V766S1 MMKV READ] key=' + key +
+          ' hit=' + String(v !== null) +
+          ' bytes=' + String(v?.length ?? -1)
+        );
+      }
+    } catch (e: any) {
+      v = null;
+
+      if (_v766s1TraceKey(key)) {
+        console.log(
+          '[V766S1 MMKV READ ERROR] key=' + key +
+          ' err=' + (e && e.message ? e.message : String(e))
+        );
+      }
+    }
   }
   if (v === null) {
     v = await _fsRead(key);
@@ -162,6 +251,42 @@ async function setItem(key: string, value: string): Promise<void> {
   if (_mmkv) {
     try { _mmkv.set(key, value); return; } catch { /* fall through to FS */ }
   }
+  await _chain(key, () => _fsWrite(key, value));
+}
+
+// V766P_DURABLE_V766_STORAGE
+// Explicit MMKV + filesystem write-through for the small set of
+// runtime capability keys that must survive a process restart.
+// Normal callers keep the existing MMKV-first setItem behavior.
+export async function setItemDurable(
+  key: string,
+  value: string
+): Promise<void> {
+  _memSet(key, value);
+
+  if (_mmkv) {
+    try {
+      _mmkv.set(key, value);
+
+      if (_v766s1TraceKey(key)) {
+        const mmkvReadBack = _mmkv.getString(key);
+
+        console.log(
+          '[V766S1 MMKV WRITE VERIFY] key=' + key +
+          ' bytes=' + String(mmkvReadBack?.length ?? -1) +
+          ' match=' + String(mmkvReadBack === value)
+        );
+      }
+    } catch (e: any) {
+      if (_v766s1TraceKey(key)) {
+        console.log(
+          '[V766S1 MMKV WRITE ERROR] key=' + key +
+          ' err=' + (e && e.message ? e.message : String(e))
+        );
+      }
+    }
+  }
+
   await _chain(key, () => _fsWrite(key, value));
 }
 

@@ -162,6 +162,348 @@ export async function premiumizeDirectDL(src: string): Promise<any[]> {
   return j.content;
 }
 
+// ============================================================
+// V751_PREMIUMIZE_QUEUE_FALLBACK
+//
+// Keep directdl as the fast path. Only Premiumize's exact
+// unsupported-direct-download failure enters the cloud queue.
+// ============================================================
+
+type V751QueuedTransferStatus = {
+  status: string;
+  transfer_status?: string;
+  progress?: number;
+  message?: string;
+  name?: string;
+  folder_id?: string | null;
+  file_id?: string | null;
+  content?: any[];
+};
+
+const _v751QueueInFlight =
+  new Map<string, Promise<any[]>>();
+
+function _v751TransferStorageKey(
+  infoHash: string
+): string {
+  return (
+    '@pm_v751_transfer:' +
+    String(infoHash || '').trim().toLowerCase()
+  );
+}
+
+function _v751Sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function _v751CreateTransfer(
+  magnet: string
+): Promise<string> {
+  const auth = await _getAuthHeader();
+
+  if (!auth) {
+    throw new Error('NO_AUTH');
+  }
+
+  const res = await _fetchWithTimeout(
+    BACKEND_URL + '/api/premiumize/transfer/create',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': auth,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        src: magnet,
+      }),
+    },
+    25000
+  );
+
+  if (res.status === 409) {
+    throw new Error('NO_PM_KEY');
+  }
+
+  const j =
+    await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(
+      'PM_QUEUE_CREATE_HTTP_' +
+      String(res.status) +
+      ':' +
+      String(j?.detail || '')
+    );
+  }
+
+  if (j?.status !== 'success' || !j?.id) {
+    throw new Error(
+      'PM_QUEUE_CREATE_' +
+      String(j?.code || j?.status || 'unknown') +
+      ':' +
+      String(j?.message || '')
+    );
+  }
+
+  return String(j.id);
+}
+
+async function _v751TransferStatus(
+  transferId: string
+): Promise<V751QueuedTransferStatus> {
+  const auth = await _getAuthHeader();
+
+  if (!auth) {
+    throw new Error('NO_AUTH');
+  }
+
+  const res = await _fetchWithTimeout(
+    BACKEND_URL +
+      '/api/premiumize/transfer/status/' +
+      encodeURIComponent(transferId),
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': auth,
+        'Accept': 'application/json',
+      },
+    },
+    25000
+  );
+
+  const j =
+    await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(
+      'PM_QUEUE_STATUS_HTTP_' +
+      String(res.status) +
+      ':' +
+      String(j?.detail || '')
+    );
+  }
+
+  if (j?.status !== 'success') {
+    throw new Error(
+      'PM_QUEUE_STATUS_' +
+      String(j?.code || j?.status || 'unknown') +
+      ':' +
+      String(j?.message || '')
+    );
+  }
+
+  return j as V751QueuedTransferStatus;
+}
+
+async function _v751ResolveQueuedContent(
+  infoHash: string,
+  magnet: string,
+  onProgress?: (state: string) => void
+): Promise<any[]> {
+  const hash =
+    String(infoHash || '').trim().toLowerCase();
+
+  if (!hash) {
+    throw new Error('PM_QUEUE_NO_HASH');
+  }
+
+  const existing =
+    _v751QueueInFlight.get(hash);
+
+  if (existing) {
+    console.log(
+      '[V751 PM QUEUE] join',
+      hash.slice(0, 8)
+    );
+
+    return await existing;
+  }
+
+  const work = (async (): Promise<any[]> => {
+    const storageKey =
+      _v751TransferStorageKey(hash);
+
+    let transferId = '';
+
+    try {
+      transferId =
+        String(
+          (await AsyncStorage.getItem(storageKey)) || ''
+        ).trim();
+    } catch (_) {}
+
+    const createAndStore =
+      async (): Promise<string> => {
+        onProgress?.('queue_create');
+
+        const id =
+          await _v751CreateTransfer(magnet);
+
+        try {
+          await AsyncStorage.setItem(
+            storageKey,
+            id
+          );
+        } catch (_) {}
+
+        console.log(
+          '[V751 PM QUEUE] created',
+          hash.slice(0, 8),
+          'transfer=' + id
+        );
+
+        return id;
+      };
+
+    if (!transferId) {
+      transferId =
+        await createAndStore();
+    } else {
+      console.log(
+        '[V751 PM QUEUE] resume',
+        hash.slice(0, 8),
+        'transfer=' + transferId
+      );
+    }
+
+    const deadline =
+      Date.now() + (60 * 60 * 1000);
+
+    let lastState = '';
+    let recreatedMissingTransfer = false;
+
+    while (Date.now() < deadline) {
+      let result: V751QueuedTransferStatus;
+
+      try {
+        result =
+          await _v751TransferStatus(
+            transferId
+          );
+      } catch (error: any) {
+        const message =
+          String(error?.message || error || '');
+
+        // A persisted transfer ID can become stale if the cloud
+        // transfer was removed. Recreate it at most once per resolver.
+        const _v751MissingTransfer =
+          message.startsWith(
+            'PM_QUEUE_STATUS_HTTP_404'
+          );
+
+        if (_v751MissingTransfer) {
+          try {
+            await AsyncStorage.removeItem(
+              storageKey
+            );
+          } catch (_) {}
+
+          if (!recreatedMissingTransfer) {
+            recreatedMissingTransfer = true;
+
+            transferId =
+              await createAndStore();
+
+            continue;
+          }
+        }
+
+        throw error;
+      }
+
+      const transferStatus =
+        String(result.transfer_status || '');
+
+      const rawProgress =
+        Number(result.progress);
+
+      const progress =
+        Number.isFinite(rawProgress)
+          ? Math.max(
+              0,
+              Math.min(1, rawProgress)
+            )
+          : 0;
+
+      const pct =
+        Math.floor(progress * 100);
+
+      const state =
+        transferStatus + ':' + pct;
+
+      if (state !== lastState) {
+        lastState = state;
+
+        console.log(
+          '[V751 PM QUEUE]',
+          hash.slice(0, 8),
+          transferStatus,
+          pct + '%',
+          String(
+            result.message || ''
+          ).slice(0, 100)
+        );
+      }
+
+      onProgress?.(
+        'queue_' +
+        transferStatus +
+        ':' +
+        pct
+      );
+
+      if (transferStatus === 'error') {
+        try {
+          await AsyncStorage.removeItem(
+            storageKey
+          );
+        } catch (_) {}
+
+        throw new Error(
+          'PM_QUEUE_TRANSFER_ERROR:' +
+          String(result.message || '')
+        );
+      }
+
+      if (
+        transferStatus === 'finished' ||
+        transferStatus === 'seeding'
+      ) {
+        const content =
+          Array.isArray(result.content)
+            ? result.content
+            : [];
+
+        if (content.length > 0) {
+          console.log(
+            '[V751 PM QUEUE] files ready',
+            hash.slice(0, 8),
+            'files=' + content.length
+          );
+
+          return content;
+        }
+      }
+
+      await _v751Sleep(2500);
+    }
+
+    throw new Error('PM_QUEUE_TIMEOUT');
+  })();
+
+  _v751QueueInFlight.set(
+    hash,
+    work
+  );
+
+  try {
+    return await work;
+  } finally {
+    _v751QueueInFlight.delete(hash);
+  }
+}
+
 // ------------------------------------------------------------
 // FILE PICKER  (unchanged from v283)
 // ------------------------------------------------------------
@@ -525,7 +867,39 @@ export async function resolveMagnet(opts: {
   const magnet = opts.magnet || `magnet:?xt=urn:btih:${infoHash}`;
 
   onProgress?.('resolving');
-  const content: any[] = await premiumizeDirectDL(magnet);
+  let content: any[];
+
+  try {
+    content =
+      await premiumizeDirectDL(magnet);
+  } catch (error: any) {
+    const message =
+      String(error?.message || error || '');
+
+    if (
+      !message
+        .toLowerCase()
+        .includes(
+          'unsupported link for direct download'
+        )
+    ) {
+      throw error;
+    }
+
+    console.log(
+      '[V751 PM QUEUE] directdl unsupported; queueing',
+      infoHash.slice(0, 8)
+    );
+
+    onProgress?.('queueing');
+
+    content =
+      await _v751ResolveQueuedContent(
+        infoHash,
+        magnet,
+        onProgress
+      );
+  }
   const best = _pickBestFile(content, opts);
   if (!best?.link) throw new Error('PM_NO_LINK');
 

@@ -16,6 +16,15 @@ allprojects {
   repositories {
     google()
     mavenCentral()
+
+    // V752_JLIBTORRENT_REPOSITORY
+    maven {
+      url 'https://dl.frostwire.com/maven'
+      content {
+        includeGroup 'com.frostwire'
+      }
+    }
+
     maven { url 'https://www.jitpack.io' }
   }
 }

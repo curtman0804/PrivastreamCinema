@@ -17,6 +17,7 @@ import {
   type VideoSource,
 } from 'expo-video';
 import { getDevicePlaybackCapabilities } from '../native/devicePlaybackCapabilities';
+import AsyncStorage, { setItemDurable } from '../utils/mmkvStorage';
 
 // V616A_EXPO_VIDEO_COMPAT
 //
@@ -98,6 +99,38 @@ export const ExpoVideoCompat = forwardRef<
   // Reset for every new source. Once the user explicitly selects an
   // audio track, never override their choice for the current source.
   const v616cUserSelectedAudioRef = useRef(false);
+
+  // V766_ADAPTIVE_EAC3_CIRCUIT_BREAKER
+  //
+  // Do not globally blacklist E-AC3. A device must first prove at
+  // runtime that its E-AC3 decoder is broken. Persist that fact only
+  // in this app installation on this device.
+  const v766Eac3DecoderBrokenRef = useRef(false);
+  const v766SuppressEac3ErrorUntilRef = useRef(0);
+  // V766H_PERSISTENCE_HYDRATION
+  const v766Eac3StateHydratedRef = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+
+    AsyncStorage.getItem('v766_eac3_decoder_broken')
+      .then(value => {
+        if (active && value === '1') {
+          v766Eac3DecoderBrokenRef.current = true;
+          console.log('[V766 EAC3 CIRCUIT] restored broken-device flag');
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) {
+          v766Eac3StateHydratedRef.current = true;
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // V658_STALE_PLAYTOEND_GUARD
   // Ignore playToEnd emitted by the outgoing native source while
@@ -423,6 +456,28 @@ export const ExpoVideoCompat = forwardRef<
         // starting language again.
         v616cUserSelectedAudioRef.current = false;
 
+        // V766H_PRE_SOURCE_PERSISTENCE_CHECK
+        // The mount restore above is asynchronous. Do not allow
+        // the first source to outrun a persisted broken-device flag.
+        if (!v766Eac3StateHydratedRef.current) {
+          try {
+            const persistedEac3State =
+              await AsyncStorage.getItem(
+                'v766_eac3_decoder_broken'
+              );
+
+            if (persistedEac3State === '1') {
+              v766Eac3DecoderBrokenRef.current = true;
+              console.log(
+                '[V766H EAC3 CIRCUIT] pre-source restored broken-device flag'
+              );
+            }
+          } catch (_) {
+          } finally {
+            v766Eac3StateHydratedRef.current = true;
+          }
+        }
+
         if (!uri) {
           await player.replaceAsync(null);
           return;
@@ -446,6 +501,22 @@ export const ExpoVideoCompat = forwardRef<
               ? 'hls'
               : 'progressive',
         };
+
+        // V766H_PRE_SOURCE_AUDIO_GATE
+        if (v766Eac3DecoderBrokenRef.current) {
+          try {
+            player.audioTrack = null;
+
+            console.log(
+              '[V766H EAC3 CIRCUIT] pre-source audio disabled'
+            );
+          } catch (error) {
+            console.log(
+              '[V766H EAC3 CIRCUIT] pre-source audio gate failed',
+              error
+            );
+          }
+        }
 
         await player.replaceAsync(nextSource);
 
@@ -556,6 +627,113 @@ export const ExpoVideoCompat = forwardRef<
           String(tracks.length)
       );
 
+      // V766C_JS_AUDIO_TRACK_DIAG
+      try {
+        console.log(
+          '[V766C TRACK KEYS]',
+          tracks.map((track: any) =>
+            Object.keys(track || {}).sort()
+          )
+        );
+
+        console.log(
+          '[V766C TRACK JSON]',
+          JSON.stringify(tracks)
+        );
+      } catch (error) {
+        console.log(
+          '[V766C TRACK DIAG ERROR]',
+          error
+        );
+      }
+
+      // V766_EAC3_PREDECODE_GUARD
+      if (
+        v766Eac3DecoderBrokenRef.current &&
+        tracks.length > 0
+      ) {
+        const isEac3Track = (track: any): boolean => {
+          const mime =
+            String(track?.mimeType || '')
+              .trim()
+              .toLowerCase();
+
+          return (
+            mime === 'audio/eac3' ||
+            mime === 'audio/eac3-joc'
+          );
+        };
+
+        const eac3Tracks = tracks.filter(isEac3Track);
+        const safeTracks =
+          tracks.filter((track: any) => !isEac3Track(track));
+
+        if (eac3Tracks.length > 0) {
+          if (safeTracks.length > 0) {
+            const isEnglish = (track: any): boolean => {
+              const language =
+                String(track?.language || '')
+                  .trim()
+                  .toLowerCase();
+
+              const label =
+                String(track?.label || '')
+                  .trim()
+                  .toLowerCase();
+
+              return (
+                language === 'en' ||
+                language === 'eng' ||
+                language === 'english' ||
+                language.startsWith('en-') ||
+                language.startsWith('en_') ||
+                /\benglish\b/.test(label) ||
+                /\beng\b/.test(label)
+              );
+            };
+
+            const safeTrack =
+              safeTracks.find(isEnglish) ||
+              safeTracks[0];
+
+            player.audioTrack = safeTrack;
+
+            // Prevent V616C from immediately selecting an English
+            // E-AC3 track again for this source.
+            v616cUserSelectedAudioRef.current = true;
+
+            console.log(
+              '[V766 EAC3 CIRCUIT] selected safe audio',
+              'mime=' +
+                String((safeTrack as any)?.mimeType || 'unknown'),
+              'eac3Tracks=' + String(eac3Tracks.length)
+            );
+          } else {
+            v766SuppressEac3ErrorUntilRef.current =
+              Date.now() + 3000;
+
+            try {
+              player.pause();
+            } catch (_) {}
+
+            console.log(
+              '[V766 EAC3 CIRCUIT] predecode skip',
+              'tracks=' + String(tracks.length),
+              'mime=audio/eac3'
+            );
+
+            errorCallbackRef.current?.(
+              new Error(
+                'unsupported format: audio/eac3; ' +
+                'decoder failed: c2.dolby.eac3.decoder.eac3'
+              )
+            );
+
+            return;
+          }
+        }
+      }
+
       // V616C_DEFAULT_ENGLISH_AUDIO
       //
       // Prefer an explicitly English embedded track on every new
@@ -630,6 +808,39 @@ export const ExpoVideoCompat = forwardRef<
     'statusChange',
     ({ status, error }) => {
       if (status === 'error') {
+        // V766_EAC3_RUNTIME_PROOF
+        const v766ErrorMessage =
+          String(error?.message || error || '')
+            .trim()
+            .toLowerCase();
+
+        const v766IsEac3DecoderFailure =
+          v766ErrorMessage.includes('c2.dolby.eac3.decoder.eac3') ||
+          (
+            v766ErrorMessage.includes('audio/eac3') &&
+            v766ErrorMessage.includes('decoder failed')
+          );
+
+        if (v766IsEac3DecoderFailure) {
+          if (
+            Date.now() <
+            v766SuppressEac3ErrorUntilRef.current
+          ) {
+            console.log(
+              '[V766 EAC3 CIRCUIT] suppressed stale native EAC3 error'
+            );
+            return;
+          }
+
+          v766Eac3DecoderBrokenRef.current = true;
+
+          setItemDurable('v766_eac3_decoder_broken', '1')
+            .catch(() => {});
+
+          console.log(
+            '[V766 EAC3 CIRCUIT] learned broken EAC3 decoder from runtime proof'
+          );
+        }
         console.log(
           '[V616A] player error',
           error?.message || error || 'unknown'
