@@ -44,7 +44,7 @@ function _v237_bustUrl(u: any) {
 const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
 
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
-import AsyncStorage from '../../../src/utils/mmkvStorage';
+import AsyncStorage, { getItemSyncFast } from '../../../src/utils/mmkvStorage';
 import { premiumizeCacheCheck, isPremiumizeConfigured, premiumizeDirectDL } from '../../../src/services/premiumizeClient';
 /* V176C_EPISODE_MENU_IMPORT â€” Stremio-style menu helpers for episode posters. */
 import {
@@ -1680,19 +1680,63 @@ function _v312_sortStreamsByLanguageImpl(streams: Stream[]): Stream[] {
  * In particular, "DUBBING PL" was incorrectly treated as English and
  * caused South Park S1E1 to auto-play Polish audio.
  */
+// V767D_AUTHORITATIVE_RUNTIME_CODEC_PROOF
+function _v767dGetBadHashSet(): Set<string> {
+  try {
+    const raw = getItemSyncFast('v766m_eac3_bad_hashes_v1');
+    const parsed = raw ? JSON.parse(raw) : [];
+
+    if (Array.isArray(parsed)) {
+      return new Set(
+        parsed
+          .map((h: any) => String(h || '').trim().toLowerCase())
+          .filter(Boolean)
+      );
+    }
+  } catch (_) {}
+
+  return new Set<string>();
+}
+
+function _v767dIsEac3Tagged(value: any): boolean {
+  try {
+    const t = String(value || '').toUpperCase();
+
+    // Tracker forms: DDP, DDP5.1, DDP 5.1, DDP7.1,
+    // EAC3, EAC3.5.1, E-AC-3 5.1, DD+5.1.
+    return /(?:^|[^A-Z0-9])(?:E-?AC-?3|DDP|DD\+)(?:[ ._-]?\d(?:\.\d)?)?(?=$|[^A-Z0-9])/.test(t);
+  } catch (_) {
+    return false;
+  }
+}
+
 function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
-  const playable = (streams || []).filter((s: any) =>
-    !!(
-      s &&
-      (
+  const _v767dBadHashes = _v767dGetBadHashSet();
+
+  const playable = (streams || []).filter((s: any) => {
+    if (
+      !s ||
+      !(
         s.url ||
         s.externalUrl ||
         s.direct_url ||
         s.infoHash ||
         s.info_hash
       )
-    )
-  );
+    ) {
+      return false;
+    }
+
+    const hash = String(
+      s.infoHash || s.info_hash || ''
+    ).trim().toLowerCase();
+
+    if (hash && _v767dBadHashes.has(hash)) {
+      return false;
+    }
+
+    return true;
+  });
 
   if (playable.length === 0) return null;
 
@@ -1806,6 +1850,31 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
 
   const _v665AudioCaps: any =
     _v665Caps?.audio || {};
+
+  /*
+   * V767C_EFFECTIVE_RUNTIME_AUDIO_CAPS
+   *
+   * Native codec enumeration is only the starting capability.
+   * V766 provides stronger runtime proof: if this exact device
+   * actually failed EAC3 initialization, automatic selection must
+   * stop treating EAC3/EAC3-JOC as playable on that device.
+   *
+   * This flag is local to each device. A Google Streamer that plays
+   * EAC3 successfully remains fully EAC3-capable.
+   */
+  const _v767BrokenRaw =
+    getItemSyncFast('v766_eac3_decoder_broken');
+
+  const _v767Eac3RuntimeBroken =
+    String(_v767BrokenRaw || '').trim().toLowerCase() === '1' ||
+    String(_v767BrokenRaw || '').trim().toLowerCase() === 'true';
+
+  if (_v767Eac3RuntimeBroken) {
+    console.log(
+      '[V767 EFFECTIVE CAPS]',
+      'runtime override eac3=false eac3Joc=false'
+    );
+  }
 
   const _v665HasAudioCaps = [
     'aac',
@@ -2055,9 +2124,9 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
      */
     if (
       /\bATMOS\b/.test(t) &&
-      /\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)
+      _v767dIsEac3Tagged(t)
     ) {
-      return a.eac3 !== true || a.eac3Joc !== true;
+      return _v767Eac3RuntimeBroken || a.eac3 !== true || a.eac3Joc !== true;
     }
 
     /*
@@ -2072,8 +2141,8 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       return true;
     }
 
-    if (/\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)) {
-      return a.eac3 !== true;
+    if (_v767dIsEac3Tagged(t)) {
+      return _v767Eac3RuntimeBroken || a.eac3 !== true;
     }
 
     if (/\b(?:AC-?3|DD ?5)\b/.test(t)) {
@@ -2160,16 +2229,24 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
   const audioRank = (s: any): number => {
     const t = blob(s);
 
+    // V767C: runtime decoder failure outranks static codec enumeration.
+    if (
+      _v767Eac3RuntimeBroken &&
+      _v767dIsEac3Tagged(t)
+    ) {
+      return -100;
+    }
+
     // Missing native capability data => preserve V652 ranking.
     if (!_v665HasAudioCaps) {
       if (
         /\bATMOS\b/.test(t) &&
-        /\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)
+        _v767dIsEac3Tagged(t)
       ) {
         return 100;
       }
 
-      if (/\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t)) return 90;
+      if (_v767dIsEac3Tagged(t)) return 90;
       if (/\b(?:AC-?3|DD ?5)\b/.test(t))       return 80;
       if (/\bAAC\b/.test(t))                   return 70;
       if (/\bOPUS\b/.test(t))                  return 60;
@@ -2200,14 +2277,14 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
 
     if (
       /\bATMOS\b/.test(t) &&
-      /\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t) &&
+      _v767dIsEac3Tagged(t) &&
       a.eac3 === true
     ) {
       return a.eac3Joc === true ? 110 : 100;
     }
 
     if (
-      /\b(?:E-?AC-?3|DDP|DD\+)\b/.test(t) &&
+      _v767dIsEac3Tagged(t) &&
       a.eac3 === true
     ) {
       return 100;
@@ -3873,6 +3950,7 @@ const nextEpisodeData = nextEpisode ? {
     const buildRuntimeCodecFallbackTorrents = (excludeInfoHash?: string) => {
       const excluded = String(excludeInfoHash || '').toLowerCase();
       const seen = new Set<string>();
+      const _v767dFallbackBadHashes = _v767dGetBadHashSet();
       const _v744RequestedTitle = String(
         (content as any)?.name ||
         (content as any)?.title ||
@@ -3913,6 +3991,7 @@ const nextEpisodeData = nextEpisode ? {
         }
         const hash = String(s?.infoHash || s?.info_hash || '').toLowerCase();
         if (!hash) return false;
+        if (_v767dFallbackBadHashes.has(hash)) return false;
         if (excluded && hash === excluded) return false;
         if (seen.has(hash)) return false;
         seen.add(hash);
@@ -4315,8 +4394,22 @@ const nextEpisodeData = nextEpisode ? {
       void _V299_BUILD_TAG;
       try {
         const _v299_pm = await isPremiumizeConfigured();
-        if (_v299_pm && stream.infoHash) {
-          const _v299_hash = String(stream.infoHash).toLowerCase();
+        const _v299_streamHash = String(
+          stream.infoHash || ''
+        ).trim().toLowerCase();
+        const _v299KnownBad =
+          !!_v299_streamHash &&
+          _v767dGetBadHashSet().has(_v299_streamHash);
+
+        if (_v299KnownBad) {
+          console.log(
+            '[V767D V299 BAD HASH SKIP]',
+            _v299_streamHash.slice(0, 12)
+          );
+        }
+
+        if (_v299_pm && stream.infoHash && !_v299KnownBad) {
+          const _v299_hash = _v299_streamHash;
           const _v299_magnet = `magnet:?xt=urn:btih:${_v299_hash}`;
           const _v299_ctrl = new AbortController();
           const _v299_to = setTimeout(() => _v299_ctrl.abort(), 15000);

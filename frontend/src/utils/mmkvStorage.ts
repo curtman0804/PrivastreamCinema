@@ -186,6 +186,38 @@ function _memSet(key: string, value: string | null): void {
 }
 
 /* ---- AsyncStorage-compatible API over the tiers ---- */
+
+// V767C_EFFECTIVE_RUNTIME_CAPS_SYNC_READ
+// Automatic stream selection is synchronous. Allow it to consume
+// runtime codec failures already persisted in native MMKV without
+// waiting for an async React/effect hydration cycle.
+//
+// This intentionally does NOT perform filesystem I/O. When MMKV is
+// unavailable it returns an already-hydrated in-memory value or null,
+// preserving the existing async fallback behavior.
+export function getItemSyncFast(key: string): string | null {
+  try {
+    if (_mem.has(key)) {
+      const cached = _mem.get(key);
+
+      if (cached !== null && cached !== undefined) {
+        return cached;
+      }
+    }
+
+    if (_mmkv) {
+      const value = _mmkv.getString(key);
+
+      if (value !== undefined) {
+        _memSet(key, value);
+        return value;
+      }
+    }
+  } catch (_) {}
+
+  return null;
+}
+
 async function getItem(key: string): Promise<string | null> {
   // V766T2_V766_NULL_MEMORY_BYPASS
   // A cached null must not mask the durable MMKV/FS copy for the

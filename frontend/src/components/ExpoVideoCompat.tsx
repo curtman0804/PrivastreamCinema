@@ -786,6 +786,59 @@ export const ExpoVideoCompat = forwardRef<
                     'unknown'
                 )
             );
+          } else if (v766Eac3DecoderBrokenRef.current) {
+            // V767G_SAFE_NON_EAC3_AUDIO_RESTORE
+            //
+            // V766 intentionally clears player.audioTrack before
+            // loading a source on a device with proven-broken EAC3.
+            // If this source later proves to contain only safe
+            // non-EAC3 audio with missing/unknown language metadata,
+            // explicitly restore that safe track instead of leaving
+            // audioTrack=null and playing silent video.
+            const safeDefaultTrack =
+              tracks.find((track: any) => {
+                const mime =
+                  String(track?.mimeType || '')
+                    .trim()
+                    .toLowerCase();
+
+                return (
+                  mime !== 'audio/eac3' &&
+                  mime !== 'audio/eac3-joc'
+                );
+              }) || null;
+
+            if (safeDefaultTrack) {
+              player.audioTrack = safeDefaultTrack;
+
+              // Match the existing V766 safe-track branch:
+              // once we deliberately choose a safe track for this
+              // source, do not let default-language logic replace it.
+              v616cUserSelectedAudioRef.current = true;
+
+              console.log(
+                '[V767G SAFE AUDIO RESTORE]',
+                'mime=' +
+                  String(
+                    (safeDefaultTrack as any)?.mimeType ||
+                      'unknown'
+                  ),
+                'language=' +
+                  String(
+                    (safeDefaultTrack as any)?.language ||
+                      'unknown'
+                  ),
+                'label=' +
+                  String(
+                    (safeDefaultTrack as any)?.label ||
+                      'unknown'
+                  )
+              );
+            } else {
+              console.log(
+                '[V616C] no English audio track; keeping stream default'
+              );
+            }
           } else {
             console.log(
               '[V616C] no English audio track; keeping stream default'
