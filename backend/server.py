@@ -8503,6 +8503,8 @@ async def movie_release_status(request: Request):
 # the authenticated user's saved watch_progress URL is used transiently.
 from segment_analyzer import extract_signature as _v682_extract_signature
 from segment_analyzer import compare_signatures as _v682_compare_signatures
+from segment_analyzer import extract_intro_signature as _v768_extract_intro_signature
+from segment_analyzer import compare_intro_signatures as _v768_compare_intro_signatures
 
 _V682_SEGMENT_SCHEMA = 1
 
@@ -8512,6 +8514,7 @@ class PlaybackSegmentsAnalyzeRequest(BaseModel):
     info_hash: Optional[str] = None
     file_idx: Optional[int] = None
     filename: Optional[str] = None
+    mode: Optional[str] = None
 
 
 def _v682_episode_identity(content_id: str, progress: Dict[str, Any]):
@@ -8631,6 +8634,80 @@ async def _v682_signature_for_release(
     return signature, False
 
 
+async def _v768_intro_signature_for_release(
+    *,
+    release_key: str,
+    content_id: str,
+    series_id: str,
+    season: int,
+    episode: int,
+    duration_sec: float,
+    media_url: str,
+):
+    cached = await db.playback_segment_intro_signatures.find_one(
+        {
+            "release_key": release_key,
+            "schema_version": _V682_SEGMENT_SCHEMA,
+        },
+        {"_id": 0, "signature": 1},
+    )
+
+    if cached and isinstance(cached.get("signature"), dict):
+        return cached["signature"], True, "intro_cache"
+
+    full_cached = await db.playback_segment_signatures.find_one(
+        {
+            "release_key": release_key,
+            "schema_version": _V682_SEGMENT_SCHEMA,
+        },
+        {"_id": 0, "signature": 1},
+    )
+
+    full_signature = (
+        full_cached.get("signature")
+        if isinstance(full_cached, dict)
+        else None
+    )
+
+    if (
+        isinstance(full_signature, dict)
+        and isinstance(full_signature.get("intro"), dict)
+    ):
+        return {
+            "schema_version": _V682_SEGMENT_SCHEMA,
+            "duration_sec": float(
+                full_signature.get("duration_sec") or duration_sec
+            ),
+            "intro": full_signature["intro"],
+        }, True, "full_cache"
+
+    signature = await asyncio.to_thread(
+        _v768_extract_intro_signature,
+        media_url,
+        duration_sec,
+    )
+
+    # V768: never persist a signed CDN URL.
+    await db.playback_segment_intro_signatures.update_one(
+        {"release_key": release_key},
+        {
+            "$set": {
+                "release_key": release_key,
+                "schema_version": _V682_SEGMENT_SCHEMA,
+                "content_id": content_id,
+                "series_id": series_id,
+                "season": season,
+                "episode": episode,
+                "duration_sec": duration_sec,
+                "signature": signature,
+                "updated_at": datetime.utcnow(),
+            }
+        },
+        upsert=True,
+    )
+
+    return signature, False, "extracted"
+
 def _v682_marker_payload(
     *,
     release_key: str,
@@ -8657,6 +8734,305 @@ def _v682_marker_payload(
         "reference_release_key": reference_release_key,
     }
 
+
+async def _v768_fast_intro_analysis(
+    *,
+    release_key: str,
+    content_id: str,
+    series_id: str,
+    season: int,
+    episode: int,
+    duration_sec: float,
+    duration_ms: int,
+    media_url: str,
+    current_user,
+):
+    current_signature, signature_cache_hit, signature_source = (
+        await _v768_intro_signature_for_release(
+            release_key=release_key,
+            content_id=content_id,
+            series_id=series_id,
+            season=season,
+            episode=episode,
+            duration_sec=duration_sec,
+            media_url=media_url,
+        )
+    )
+
+    reference_docs = await db.playback_segment_signatures.find(
+        {
+            "schema_version": _V682_SEGMENT_SCHEMA,
+            "series_id": series_id,
+            "season": season,
+            "episode": {"$ne": episode},
+            "release_key": {"$ne": release_key},
+            "signature.intro": {"$exists": True},
+        },
+        {
+            "_id": 0,
+            "release_key": 1,
+            "content_id": 1,
+            "episode": 1,
+            "updated_at": 1,
+            "signature.intro": 1,
+            "signature.duration_sec": 1,
+        },
+    ).sort("updated_at", -1).to_list(length=8)
+
+    seen_release_keys = {
+        str(item.get("release_key") or "")
+        for item in reference_docs
+        if str(item.get("release_key") or "")
+    }
+
+    if len(reference_docs) < 8:
+        intro_reference_docs = (
+            await db.playback_segment_intro_signatures.find(
+                {
+                    "schema_version": _V682_SEGMENT_SCHEMA,
+                    "series_id": series_id,
+                    "season": season,
+                    "episode": {"$ne": episode},
+                    "release_key": {"$ne": release_key},
+                },
+                {"_id": 0},
+            )
+            .sort("updated_at", -1)
+            .to_list(length=8)
+        )
+
+        for item in intro_reference_docs:
+            item_release_key = str(
+                item.get("release_key") or ""
+            )
+
+            if (
+                not item_release_key
+                or item_release_key in seen_release_keys
+            ):
+                continue
+
+            reference_docs.append(item)
+            seen_release_keys.add(item_release_key)
+
+            if len(reference_docs) >= 8:
+                break
+
+    # Generic same-season cold start.
+    if not reference_docs:
+        candidate_progress = await db.watch_progress.find(
+            {
+                "user_id": current_user.id,
+                "content_id": {
+                    "$regex": f"^{series_id}:{season}:",
+                    "$ne": content_id,
+                },
+                "stream_url": {"$nin": [None, ""]},
+                "duration": {"$gt": 0},
+            },
+            {"_id": 0},
+        ).sort("updated_at", -1).to_list(length=4)
+
+        for ref_progress in candidate_progress:
+            ref_content_id = str(
+                ref_progress.get("content_id") or ""
+            ).strip()
+
+            ref_url = str(
+                ref_progress.get("stream_url") or ""
+            ).strip()
+
+            if not ref_content_id or not ref_url:
+                continue
+
+            ref_series_id, ref_season, ref_episode = (
+                _v682_episode_identity(
+                    ref_content_id,
+                    ref_progress,
+                )
+            )
+
+            if (
+                ref_series_id != series_id
+                or ref_season != season
+                or ref_episode is None
+                or ref_episode == episode
+            ):
+                continue
+
+            try:
+                ref_duration_sec = float(
+                    ref_progress.get("duration") or 0
+                )
+            except (TypeError, ValueError):
+                ref_duration_sec = 0.0
+
+            if ref_duration_sec <= 0:
+                continue
+
+            ref_duration_ms = int(
+                round(ref_duration_sec * 1000.0)
+            )
+
+            ref_request = PlaybackSegmentsAnalyzeRequest(
+                content_id=ref_content_id,
+                mode="intro",
+            )
+
+            ref_release_key = _v682_release_key(
+                ref_progress,
+                ref_request,
+                ref_url,
+                ref_duration_ms,
+            )
+
+            try:
+                ref_signature, _, _ = (
+                    await _v768_intro_signature_for_release(
+                        release_key=ref_release_key,
+                        content_id=ref_content_id,
+                        series_id=series_id,
+                        season=season,
+                        episode=int(ref_episode),
+                        duration_sec=ref_duration_sec,
+                        media_url=ref_url,
+                    )
+                )
+            except Exception as exc:
+                logger.info(
+                    "[V768_FAST_INTRO] reference skipped "
+                    "content=%s error=%s",
+                    ref_content_id,
+                    str(exc),
+                )
+                continue
+
+            reference_docs.append(
+                {
+                    "release_key": ref_release_key,
+                    "content_id": ref_content_id,
+                    "episode": int(ref_episode),
+                    "signature": ref_signature,
+                }
+            )
+            break
+
+    best_intro = None
+    best_intro_score = -1.0
+    best_intro_reference = None
+
+    for ref_doc in reference_docs:
+        ref_signature = ref_doc.get("signature")
+        ref_release_key = str(
+            ref_doc.get("release_key") or ""
+        )
+
+        if not isinstance(ref_signature, dict):
+            continue
+
+        try:
+            intro_cmp = await asyncio.to_thread(
+                _v768_compare_intro_signatures,
+                ref_signature,
+                current_signature,
+            )
+        except Exception as exc:
+            logger.info(
+                "[V768_FAST_INTRO] comparison skipped "
+                "ref=%s content=%s error=%s",
+                ref_release_key[:12],
+                content_id,
+                str(exc),
+            )
+            continue
+
+        if not isinstance(intro_cmp, dict):
+            continue
+
+        intro_score = float(
+            intro_cmp.get("confidence") or 0.0
+        )
+
+        intro_core = float(
+            intro_cmp.get("core_score") or 0.0
+        )
+
+        # Preserve V682's strict acceptance gate.
+        if (
+            intro_score < 0.90
+            or intro_core < 0.85
+            or intro_score <= best_intro_score
+        ):
+            continue
+
+        best_intro_score = intro_score
+        best_intro_reference = ref_release_key
+
+        best_intro = {
+            "start_ms": int(
+                round(
+                    float(intro_cmp["b_start_sec"])
+                    * 1000.0
+                )
+            ),
+            "end_ms": int(
+                round(
+                    float(intro_cmp["b_end_sec"])
+                    * 1000.0
+                )
+            ),
+            "confidence": round(intro_score, 6),
+            "core_score": round(intro_core, 6),
+            "source": "audio_fingerprint",
+        }
+
+        # Confidence is clamped to 1.0 by the analyzer.
+        # No later reference can beat a perfect-confidence match.
+        if intro_score >= 1.0:
+            break
+
+    payload = _v682_marker_payload(
+        release_key=release_key,
+        content_id=content_id,
+        series_id=series_id,
+        season=int(season),
+        episode=int(episode),
+        duration_ms=duration_ms,
+        intro=best_intro,
+        credits=None,
+        reference_release_key=best_intro_reference,
+    )
+
+    payload["cache_hit"] = False
+    payload["signature_cache_hit"] = signature_cache_hit
+    payload["analysis_mode"] = "intro"
+    payload["intro_signature_source"] = signature_source
+
+    # Separate marker cache keeps full credits analysis independent.
+    if payload["status"] == "ready":
+        await db.playback_segment_intro_markers.update_one(
+            {"release_key": release_key},
+            {
+                "$set": {
+                    **payload,
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+            upsert=True,
+        )
+
+    logger.info(
+        "[V768_FAST_INTRO] user=%s content=%s "
+        "status=%s intro=%s refs=%s source=%s",
+        current_user.id,
+        content_id,
+        payload["status"],
+        bool(best_intro),
+        len(reference_docs),
+        signature_source,
+    )
+
+    return payload
 
 @api_router.post("/playback/segments/analyze")
 async def analyze_playback_segments(
@@ -8716,6 +9092,94 @@ async def analyze_playback_segments(
         media_url,
         duration_ms,
     )
+
+    analysis_mode = str(
+        request.mode or "full"
+    ).strip().lower()
+
+    if analysis_mode not in ("full", "intro"):
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported segment analysis mode",
+        )
+
+    if analysis_mode == "intro":
+        cached_intro_marker = (
+            await db.playback_segment_intro_markers.find_one(
+                {
+                    "release_key": release_key,
+                    "schema_version": _V682_SEGMENT_SCHEMA,
+                },
+                {"_id": 0},
+            )
+        )
+
+        if (
+            cached_intro_marker
+            and cached_intro_marker.get("status") == "ready"
+            and isinstance(cached_intro_marker.get("intro"), dict)
+        ):
+            cached_intro_marker["cache_hit"] = True
+            cached_intro_marker["analysis_mode"] = "intro"
+            return cached_intro_marker
+
+        # Existing full V682 markers remain authoritative.
+        cached_full_intro = await db.playback_segment_markers.find_one(
+            {
+                "release_key": release_key,
+                "schema_version": _V682_SEGMENT_SCHEMA,
+            },
+            {"_id": 0},
+        )
+
+        if (
+            cached_full_intro
+            and cached_full_intro.get("status") == "ready"
+            and isinstance(cached_full_intro.get("intro"), dict)
+        ):
+            cached_full_intro["cache_hit"] = True
+            cached_full_intro["analysis_mode"] = "intro"
+            return cached_full_intro
+
+        try:
+            return await _v768_fast_intro_analysis(
+                release_key=release_key,
+                content_id=content_id,
+                series_id=series_id,
+                season=int(season),
+                episode=int(episode),
+                duration_sec=duration_sec,
+                duration_ms=duration_ms,
+                media_url=media_url,
+                current_user=current_user,
+            )
+        except ValueError as exc:
+            logger.warning(
+                "[V768_FAST_INTRO] media rejected "
+                "user=%s content=%s error=%s",
+                current_user.id,
+                content_id,
+                str(exc),
+            )
+
+            raise HTTPException(
+                status_code=400,
+                detail=str(exc),
+            )
+
+        except Exception as exc:
+            logger.warning(
+                "[V768_FAST_INTRO] analysis failed "
+                "user=%s content=%s error=%s",
+                current_user.id,
+                content_id,
+                str(exc),
+            )
+
+            raise HTTPException(
+                status_code=503,
+                detail="Unable to analyze the current playback intro",
+            )
 
     cached_marker = await db.playback_segment_markers.find_one(
         {

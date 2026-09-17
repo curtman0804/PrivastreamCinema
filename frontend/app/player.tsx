@@ -1644,6 +1644,104 @@ export default function PlayerScreen() {
               'https://api.privastreamsolutions.com'
             ).replace(/\/$/, '');
 
+          const applyV768DynamicIntro = (
+            data: any,
+            phase: 'fast' | 'full'
+          ): boolean => {
+            const dynamicIntro = data?.intro;
+
+            if (!dynamicIntro) return false;
+
+            const startMs = Math.round(
+              Number(dynamicIntro.start_ms)
+            );
+
+            const endMs = Math.round(
+              Number(dynamicIntro.end_ms)
+            );
+
+            if (
+              !Number.isFinite(startMs) ||
+              !Number.isFinite(endMs) ||
+              startMs < 0 ||
+              endMs <= startMs ||
+              endMs > durationMs
+            ) {
+              return false;
+            }
+
+            _v500IntroMarkerRef.current = {
+              startMs,
+              endMs,
+            };
+
+            dynamicIntroLoaded = true;
+
+            console.log(
+              '[SEGMENTS V768] ' +
+              phase +
+              ' intro ' +
+              episodeContentId + ' ' +
+              startMs + '-' + endMs +
+              'ms confidence=' +
+              String(dynamicIntro.confidence ?? '')
+            );
+
+            return true;
+          };
+
+          const applyV768DynamicCredits = (
+            data: any
+          ): boolean => {
+            const dynamicCredits = data?.credits;
+
+            if (!dynamicCredits) return false;
+
+            const startMs = Math.round(
+              Number(dynamicCredits.start_ms)
+            );
+
+            const rawEndMs = Math.round(
+              Number(dynamicCredits.end_ms)
+            );
+
+            const endMs = Number.isFinite(rawEndMs)
+              ? Math.min(rawEndMs, durationMs)
+              : durationMs;
+
+            if (
+              !Number.isFinite(startMs) ||
+              startMs < 0 ||
+              startMs >= endMs ||
+              startMs >= durationMs
+            ) {
+              return false;
+            }
+
+            _v685CreditsMarkerRef.current = {
+              startMs,
+              endMs,
+              confidence: Number(
+                dynamicCredits.confidence
+              ),
+            };
+
+            console.log(
+              '[SEGMENTS V768] full credits ' +
+              episodeContentId +
+              ' start=' + startMs +
+              'ms end=' + endMs +
+              'ms confidence=' +
+              String(dynamicCredits.confidence ?? '')
+            );
+
+            return true;
+          };
+
+          /* V768B3_FAST_INTRO_PHASE
+           * Resolve the recurring intro before starting expensive
+           * tail-audio / tail-visual credits analysis.
+           */
           for (let attempt = 1; attempt <= 3; attempt++) {
             await new Promise(resolve =>
               setTimeout(resolve, attempt === 1 ? 1500 : 2000)
@@ -1663,6 +1761,7 @@ export default function PlayerScreen() {
                   },
                   body: JSON.stringify({
                     content_id: episodeContentId,
+                    mode: 'intro',
                   }),
                 }
               );
@@ -1671,7 +1770,7 @@ export default function PlayerScreen() {
 
               if (!response.ok) {
                 console.log(
-                  '[SEGMENTS V685] Dynamic HTTP ' +
+                  '[SEGMENTS V768] Fast intro HTTP ' +
                   response.status +
                   ' attempt=' + attempt +
                   ' for ' + episodeContentId
@@ -1686,7 +1785,7 @@ export default function PlayerScreen() {
 
               if (data?.status !== 'ready') {
                 console.log(
-                  '[SEGMENTS V685] Dynamic status=' +
+                  '[SEGMENTS V768] Fast intro status=' +
                   String(data?.status || 'unknown') +
                   ' for ' + episodeContentId
                 );
@@ -1694,85 +1793,86 @@ export default function PlayerScreen() {
                 break;
               }
 
-              const dynamicIntro = data?.intro;
+              applyV768DynamicIntro(data, 'fast');
+              break;
+            } catch (attemptError: any) {
+              console.log(
+                '[SEGMENTS V768] Fast intro attempt failed ' +
+                attempt + ':',
+                String(
+                  attemptError?.message ||
+                  attemptError
+                )
+              );
+            }
+          }
 
-              if (dynamicIntro) {
-                const startMs = Math.round(
-                  Number(dynamicIntro.start_ms)
-                );
+          if (_v500IntroLookupRef.current !== lookupKey) return;
 
-                const endMs = Math.round(
-                  Number(dynamicIntro.end_ms)
-                );
+          /* V768B3_FULL_CREDITS_PHASE
+           * Preserve V685/V723 credits behavior after the fast intro
+           * phase. Full analysis may also provide an authoritative intro.
+           */
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            if (attempt > 1) {
+              await new Promise(resolve =>
+                setTimeout(resolve, 2000)
+              );
+            }
 
-                if (
-                  Number.isFinite(startMs) &&
-                  Number.isFinite(endMs) &&
-                  startMs >= 0 &&
-                  endMs > startMs &&
-                  endMs <= durationMs
-                ) {
-                  _v500IntroMarkerRef.current = {
-                    startMs,
-                    endMs,
-                  };
+            if (_v500IntroLookupRef.current !== lookupKey) return;
 
-                  dynamicIntroLoaded = true;
-
-                  console.log(
-                    '[SEGMENTS V685] Dynamic intro ' +
-                    episodeContentId + ' ' +
-                    startMs + '-' + endMs +
-                    'ms confidence=' +
-                    String(dynamicIntro.confidence ?? '')
-                  );
+            try {
+              const response = await fetch(
+                backend + '/api/playback/segments/analyze',
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                  },
+                  body: JSON.stringify({
+                    content_id: episodeContentId,
+                    mode: 'full',
+                  }),
                 }
+              );
+
+              if (_v500IntroLookupRef.current !== lookupKey) return;
+
+              if (!response.ok) {
+                console.log(
+                  '[SEGMENTS V768] Full analysis HTTP ' +
+                  response.status +
+                  ' attempt=' + attempt +
+                  ' for ' + episodeContentId
+                );
+
+                continue;
               }
 
-              const dynamicCredits = data?.credits;
+              const data: any = await response.json();
 
-              if (dynamicCredits) {
-                const startMs = Math.round(
-                  Number(dynamicCredits.start_ms)
+              if (_v500IntroLookupRef.current !== lookupKey) return;
+
+              if (data?.status !== 'ready') {
+                console.log(
+                  '[SEGMENTS V768] Full analysis status=' +
+                  String(data?.status || 'unknown') +
+                  ' for ' + episodeContentId
                 );
 
-                const rawEndMs = Math.round(
-                  Number(dynamicCredits.end_ms)
-                );
-
-                const endMs = Number.isFinite(rawEndMs)
-                  ? Math.min(rawEndMs, durationMs)
-                  : durationMs;
-
-                if (
-                  Number.isFinite(startMs) &&
-                  startMs >= 0 &&
-                  startMs < endMs &&
-                  startMs < durationMs
-                ) {
-                  _v685CreditsMarkerRef.current = {
-                    startMs,
-                    endMs,
-                    confidence: Number(
-                      dynamicCredits.confidence
-                    ),
-                  };
-
-                  console.log(
-                    '[SEGMENTS V685] Dynamic credits ' +
-                    episodeContentId +
-                    ' start=' + startMs +
-                    'ms end=' + endMs +
-                    'ms confidence=' +
-                    String(dynamicCredits.confidence ?? '')
-                  );
-                }
+                break;
               }
+
+              applyV768DynamicIntro(data, 'full');
+              applyV768DynamicCredits(data);
 
               break;
             } catch (attemptError: any) {
               console.log(
-                '[SEGMENTS V685] Dynamic attempt failed ' +
+                '[SEGMENTS V768] Full analysis attempt failed ' +
                 attempt + ':',
                 String(
                   attemptError?.message ||
@@ -1813,6 +1913,13 @@ export default function PlayerScreen() {
   // Refs to store current position/duration for saving on exit
   const currentPositionRef = useRef(0);
   const currentDurationRef = useRef(0);
+
+  // V768A_DYNAMIC_SEGMENT_ACTIVE_URL
+  // Keep the URL the player is actually using available to both
+  // periodic/forced progress saves and the true unmount save.
+  // A ref avoids making source changes trigger the unmount cleanup.
+  const v768aActiveStreamUrlRef = useRef<string | null>(null);
+  v768aActiveStreamUrlRef.current = streamUrl;
   
   // Save watch progress to backend
   const saveWatchProgress = useCallback(async (currentPosition: number, totalDuration: number, force: boolean = false) => {
@@ -1856,7 +1963,7 @@ export default function PlayerScreen() {
         series_id: seriesId || undefined,
         // Save stream info for resuming playback
         stream_info_hash: infoHash || undefined,
-        stream_url: directUrl || url || undefined,
+        stream_url: v768aActiveStreamUrlRef.current || directUrl || url || undefined,
         stream_file_idx: fileIdx ? parseInt(fileIdx) : undefined,
         stream_filename: filename || undefined,
       });
@@ -1899,7 +2006,7 @@ export default function PlayerScreen() {
           episode: episode ? parseInt(episode) : undefined,
           series_id: seriesId || undefined,
           stream_info_hash: infoHash || undefined,
-          stream_url: directUrl || url || undefined,
+          stream_url: v768aActiveStreamUrlRef.current || directUrl || url || undefined,
           stream_file_idx: fileIdx ? parseInt(fileIdx) : undefined,
           stream_filename: filename || undefined,
         }).catch(err => console.log('[PLAYER] Failed to save on exit:', err));

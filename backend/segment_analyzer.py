@@ -88,6 +88,11 @@ def _visual_features(url:str,duration_sec:float)->Dict[str,Any]:
         prev=px
     return {"fps":VISUAL_FPS,"start_sec":max(0.0,float(duration_sec)-float(TAIL_VISUAL_SECONDS)),"features":out}
 
+def extract_intro_signature(url:str,duration_sec:float)->Dict[str,Any]:
+    media_url=_validate_media_url(url); duration=float(duration_sec)
+    if duration<=0: raise ValueError("INVALID_DURATION")
+    return {"schema_version":1,"duration_sec":duration,
+            "intro":_extract_audio_fp(media_url,duration,INTRO_SECONDS,False)}
 def extract_signature(url:str,duration_sec:float)->Dict[str,Any]:
     media_url=_validate_media_url(url); duration=float(duration_sec)
     if duration<=0: raise ValueError("INVALID_DURATION")
@@ -178,13 +183,17 @@ def _visual_candidates(sig:Dict[str,Any])->List[Dict[str,float]]:
         if len(distinct)>=15: break
     return distinct
 
-def compare_signatures(sig_a:Dict[str,Any],sig_b:Dict[str,Any])->Dict[str,Any]:
+def compare_intro_signatures(sig_a:Dict[str,Any],sig_b:Dict[str,Any])->Optional[Dict[str,Any]]:
     ia=sig_a["intro"]; ib=sig_b["intro"]
     intro=_audio_align(ia["fingerprint"],float(ia["fp_duration_sec"]),ib["fingerprint"],float(ib["fp_duration_sec"]),16.0)
+    if intro and intro["core_score"]>=0.85 and intro["length_sec"]>=18.0:
+        return intro
+    return None
+def compare_signatures(sig_a:Dict[str,Any],sig_b:Dict[str,Any])->Dict[str,Any]:
+    intro=compare_intro_signatures(sig_a,sig_b)
     ta=sig_a["tail_audio"]; tb=sig_b["tail_audio"]
     ca=_audio_align(ta["fingerprint"],float(ta["fp_duration_sec"]),tb["fingerprint"],float(tb["fp_duration_sec"]),20.0)
-    result={"intro":None,"credits":None,"credits_audio":ca}
-    if intro and intro["core_score"]>=0.85 and intro["length_sec"]>=18.0: result["intro"]=intro
+    result={"intro":intro,"credits":None,"credits_audio":ca}
     # V723_CORROBORATED_CREDITS
     # Preserve the existing strong path while allowing a conservative
     # near-threshold recurring-audio candidate to reach independent
