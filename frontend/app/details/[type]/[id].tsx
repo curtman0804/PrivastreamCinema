@@ -1698,6 +1698,26 @@ function _v767dGetBadHashSet(): Set<string> {
   return new Set<string>();
 }
 
+function _v769GetSeekHealthMap(): Record<string, any> {
+  try {
+    const raw =
+      getItemSyncFast('v769_seek_health_v1');
+
+    const parsed =
+      raw ? JSON.parse(raw) : {};
+
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed)
+    ) {
+      return parsed;
+    }
+  } catch (_) {}
+
+  return {};
+}
+
 function _v767dIsEac3Tagged(value: any): boolean {
   try {
     const t = String(value || '').toUpperCase();
@@ -1712,6 +1732,7 @@ function _v767dIsEac3Tagged(value: any): boolean {
 
 function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
   const _v767dBadHashes = _v767dGetBadHashSet();
+  const _v769SeekHealth = _v769GetSeekHealthMap();
 
   const playable = (streams || []).filter((s: any) => {
     if (
@@ -2402,6 +2423,65 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
     return 2;
   };
 
+  // V769V31B_FF_RW_PICKER
+  const _v769SeekHealthRank = (s: any): number => {
+    const hash = String(
+      s?.infoHash || s?.info_hash || ''
+    )
+      .trim()
+      .toLowerCase();
+
+    const health =
+      hash ? _v769SeekHealth[hash] : null;
+
+    if (
+      health?.ff === 'fail' ||
+      health?.rw === 'fail'
+    ) {
+      return -1;
+    }
+
+    const ffPass =
+      health?.ff === 'pass';
+
+    const rwPass =
+      health?.rw === 'pass';
+
+    if (ffPass && rwPass) {
+      return 2;
+    }
+
+    if (ffPass || rwPass) {
+      return 1;
+    }
+
+    return 0;
+  };
+
+  /*
+   * A proven FF/RW failure is excluded from automatic
+   * selection whenever another candidate remains.
+   *
+   * Unknown sources stay eligible so new hashes can
+   * still be tested and learned.
+   *
+   * If every available source is already marked bad,
+   * retain the original pool instead of producing
+   * "no stream".
+   */
+  const _v769NonFailedPool =
+    pool.filter(
+      (s: any) =>
+        _v769SeekHealthRank(s) >= 0
+    );
+
+  const _v769UsingNonFailed =
+    _v769NonFailedPool.length > 0;
+
+  if (_v769UsingNonFailed) {
+    pool = _v769NonFailedPool;
+  }
+
   const ranked = pool
     .map((s: any, i: number) => ({
       s,
@@ -2410,10 +2490,12 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       m: _v665bMasterRank(s),
       c: _v665VideoCompatRank(s),
       a: audioRank(s),
+      h: _v769SeekHealthRank(s),
       r: reliabilityRank(s),
     }))
     .sort((x: any, y: any) =>
       (y.q - x.q) ||
+      (y.h - x.h) ||
       (y.m - x.m) ||
       (y.c - x.c) ||
       (y.a - x.a) ||
@@ -2430,7 +2512,7 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       '[V652 AUTO PICK]',
       'pool=' + (nonForeign.length > 0 ? 'ENGLISH' : 'FOREIGN_FALLBACK'),
       'audioPool=' + (_v652UsingSafeAudio ? 'SAFE' : 'UNSAFE_FALLBACK'),
-      'videoOrder=ENGLISH>SDR>Q>MASTER>C>A>R',
+      'videoOrder=ENGLISH>SDR>Q>SEEK>MASTER>C>A>R',
       'master=' + pick.m,
       'deviceProfile=' + (
         _v665LowMemoryTv
@@ -2446,6 +2528,20 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       'playable=' + playable.length,
       'quality=' + String(info?.quality || '?'),
       'audio=' + pick.a,
+      'seekHealth=' + (
+        pick.h === 2
+          ? 'FF+RW_PASS'
+          : pick.h === 1
+            ? 'PARTIAL_PASS'
+            : pick.h < 0
+              ? 'FAIL_ONLY_FALLBACK'
+              : 'UNKNOWN'
+      ),
+      'seekPool=' + (
+        _v769UsingNonFailed
+          ? 'NON_FAILED'
+          : 'FAILED_ONLY'
+      ),
       'reliability=' + pick.r,
       '|',
       String(pick.s?.title || pick.s?.name || '').slice(0, 140)
@@ -3799,7 +3895,10 @@ export default function DetailsScreen() {
     setIsLoadingContent(false);
   };
 
-  const handleStreamSelect = async (stream: Stream) => {
+  const handleStreamSelect = async (
+    stream: Stream,
+    preserveSelectedStream: boolean = false
+  ) => {
     if (_v672IsSampleLikeStream(stream)) {
       console.warn(
         '[V672] blocked explicit sample/trailer stream selection',
@@ -4137,7 +4236,20 @@ const nextEpisodeData = nextEpisode ? {
             _v300_candidates.push({ stream: s, hash: h });
           };
           _v300_pushCand(stream);
-          for (const _s of (streams || [])) _v300_pushCand(_s);
+
+          // V769V18_MANUAL_STREAM_AUTHORITY
+          // Explicit stream-card selections remain authoritative.
+          // V300 can resolve the selected hash through Premiumize,
+          // but cannot substitute a sibling stream chosen by policy.
+          if (!preserveSelectedStream) {
+            for (const _s of (streams || [])) _v300_pushCand(_s);
+          } else {
+            console.log(
+              '[V769V18 MANUAL AUTHORITY]',
+              'selected=' + String(stream?.infoHash || '').slice(0, 12),
+              'candidateCount=' + _v300_candidates.length
+            );
+          }
 
           if (_v300_candidates.length > 0) {
             // Batch cache check (max 50 per PM call).
@@ -4173,12 +4285,65 @@ const nextEpisodeData = nextEpisode ? {
             const _v300_cachedCandidates = _v300_candidates.filter((c) =>
               _v300_cached.has(c.hash) && !_v766v3BadHashes.has(c.hash)
             );
+
+            let _v769PmSeekHealth: Record<string, any> = {};
+
+            try {
+              const _v769PmRaw =
+                await AsyncStorage.getItem(
+                  'v769_seek_health_v1'
+                );
+
+              const _v769PmParsed =
+                _v769PmRaw
+                  ? JSON.parse(_v769PmRaw)
+                  : {};
+
+              if (
+                _v769PmParsed &&
+                typeof _v769PmParsed === 'object' &&
+                !Array.isArray(_v769PmParsed)
+              ) {
+                _v769PmSeekHealth =
+                  _v769PmParsed;
+              }
+            } catch (_) {}
+
+            const _v300_seekEligibleCached =
+              preserveSelectedStream
+                ? _v300_cachedCandidates
+                : _v300_cachedCandidates.filter(
+                    c => {
+                      const h =
+                        _v769PmSeekHealth[
+                          c.hash
+                        ];
+
+                      return !(
+                        h?.ff === 'fail' ||
+                        h?.rw === 'fail'
+                      );
+                    }
+                  );
+
+            console.log(
+              '[V769 PM SEEK FILTER]',
+              'manual=' +
+                String(
+                  preserveSelectedStream
+                ),
+              'cached=' +
+                _v300_cachedCandidates.length,
+              'seekEligible=' +
+                _v300_seekEligibleCached.length
+            );
+
             console.log('[V766V3 DETAILS FILTER]', 'bad=' + _v766v3BadHashes.size, 'cachedAfter=' + _v300_cachedCandidates.length);
             const _v300_isWm = (s: any) => {
               const _b = `${s?.title || ''} ${s?.name || ''} ${s?.filename || ''}`;
               return /(1xbet|melbet|mostbet|parimatch|ftcam|fxgg|hcam|ctcam|cam\.rip|hdcam|telesync|tsrip|tcrip|tc-?rip|cam-rip|new\.?source|sourceqr|sourcetv|x-?cam|hd-?cam)/i.test(_b);
             };
-            const _v300_cleanCached = _v300_cachedCandidates.filter((c) => !_v300_isWm(c.stream));
+            const _v300_cleanCached = _v300_seekEligibleCached.filter((c) => !_v300_isWm(c.stream));
 
             /*
              * V665C_PM_CACHE_POLICY_PARITY
@@ -4191,7 +4356,7 @@ const nextEpisodeData = nextEpisode ? {
             const _v665cCachedPool =
               _v300_cleanCached.length > 0
                 ? _v300_cleanCached
-                : _v300_cachedCandidates;
+                : _v300_seekEligibleCached;
 
             const _v665cPolicyStream =
               _v503PickReliableAutoStream(
@@ -5043,7 +5208,7 @@ const nextEpisodeData = nextEpisode ? {
 
   // Render stream item for FlatList
   const renderStreamItem = ({ item }: { item: Stream }) => (
-    <StreamCard stream={item} onPress={() => handleStreamSelect(item)} />
+    <StreamCard stream={item} onPress={() => handleStreamSelect(item, true)} />
   );
 
   // Mark episode as unwatched (long-press)
@@ -5406,8 +5571,25 @@ const nextEpisodeData = nextEpisode ? {
                       // paint the loading overlay BEFORE the JS thread is
                       // tied up resolving streams.  Without this the user
                       // sees a frozen UI for several seconds.
-                      setTimeout(() => {
+                      setTimeout(async () => {
                       try {
+                        // V769V43_SEEK_HEALTH_HYDRATE
+                        // Hydrate durable seek-health before the synchronous ranker runs.
+                        try {
+                          const _v769HydratedSeekHealth =
+                            await AsyncStorage.getItem(
+                              'v769_seek_health_v1'
+                            );
+
+                          console.log(
+                            '[V769V43 SEEK HEALTH HYDRATE]',
+                            'bytes=' +
+                              String(
+                                _v769HydratedSeekHealth?.length || 0
+                              )
+                          );
+                        } catch (_) {}
+
                         const list = (sortedStreams && sortedStreams.length > 0) ? sortedStreams : streams;
                         // v241 â€” for porn (PT/JT) prefer list[0] to match the
                         // first stream card (correct content mapping). For

@@ -346,6 +346,8 @@ async function _v259EvictOldestStreams(keepNewest: number): Promise<void> {
       'libraryCache',
       'v766m_eac3_bad_hashes_v1',
       'v766_eac3_decoder_broken',
+      // V769V45_PRESERVE_SEEK_HEALTH
+      'v769_seek_health_v1',
     ];
     const toDelete = (keys || []).filter((k: string) => {
       if (typeof k !== 'string') return false;

@@ -752,6 +752,114 @@ export default function PlayerScreen() {
   const preSeekPositionMsRef = useRef<number>(0);
   const seekCooldownUntilRef = useRef<number>(0);
   const lastSeekPositionRef = useRef<number>(0);
+
+  // V769V31B_FF_RW_RUNTIME
+  type V769SeekDirection =
+    'ff' | 'rw';
+
+  type V769SeekResult =
+    'pass' | 'fail';
+
+  const v769SeekHealthStorageKey =
+    'v769_seek_health_v1';
+
+  const v769SeekDirectionRef =
+    useRef<V769SeekDirection | null>(
+      null
+    );
+
+  const v769SeekHashRef =
+    useRef<string>('');
+
+  const v769SeekStartPositionRef =
+    useRef<number>(0);
+
+  const v769SeekIssuedAtRef =
+    useRef<number>(0);
+
+  const v769SeekWatchdogRef =
+    useRef<NodeJS.Timeout | null>(
+      null
+    );
+
+  const v769SeekRecoveryTargetRef =
+    useRef<number | null>(
+      null
+    );
+
+  const v769SeekRecoveryDirectionRef =
+    useRef<V769SeekDirection | null>(
+      null
+    );
+
+  const v769SeekRecoveryInFlightRef =
+    useRef(false);
+
+  const v769PersistSeekHealth = async (
+    hashValue: string,
+    direction: V769SeekDirection,
+    result: V769SeekResult
+  ) => {
+    const hash =
+      String(hashValue || '')
+        .trim()
+        .toLowerCase();
+
+    if (
+      !/^[a-f0-9]{40}$/.test(hash)
+    ) {
+      return;
+    }
+
+    try {
+      const raw =
+        await AsyncStorage.getItem(
+          v769SeekHealthStorageKey
+        );
+
+      const parsed =
+        raw ? JSON.parse(raw) : {};
+
+      const map: Record<string, any> =
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed)
+          ? parsed
+          : {};
+
+      const previous =
+        map[hash] &&
+        typeof map[hash] === 'object'
+          ? map[hash]
+          : {};
+
+      map[hash] = {
+        ...previous,
+        [direction]: result,
+        updatedAt: Date.now(),
+      };
+
+      await setItemDurable(
+        v769SeekHealthStorageKey,
+        JSON.stringify(map)
+      );
+
+      console.log(
+        '[V769 SEEK HEALTH]',
+        result.toUpperCase(),
+        direction.toUpperCase(),
+        hash.slice(0, 12)
+      );
+    } catch (e) {
+      console.log(
+        '[V769 SEEK HEALTH] persist failed',
+        String(
+          (e as any)?.message ||
+          e
+        )
+      );
+    }
+  };
   
   // Stremio-style breathing zoom animation for loading title
   const breatheAnim = useRef(new Animated.Value(1)).current;
@@ -2441,8 +2549,182 @@ export default function PlayerScreen() {
         v621SeekTargetRef.current = null;
         setPosition(status.positionMillis);
       }
-      setDuration(status.durationMillis || 0);
-      _v500EnsureIntroMarker(status.durationMillis || 0);
+      const _v769StatusDuration =
+        status.durationMillis || 0;
+
+      // V769V36: publish new-source duration synchronously before
+      // any fallback-recovery seek can run.
+      if (_v769StatusDuration > 0) {
+        durationRef.current =
+          _v769StatusDuration;
+      }
+
+      setDuration(
+        _v769StatusDuration
+      );
+
+      _v500EnsureIntroMarker(
+        _v769StatusDuration
+      );
+
+      // V769V31B_FF_RW_RUNTIME_PROOF
+      const _v769Direction =
+        v769SeekDirectionRef.current;
+
+      const _v769SeekHash =
+        v769SeekHashRef.current;
+
+      const _v769SeekTarget =
+        lastSeekPositionRef.current;
+
+      const _v769SeekStart =
+        v769SeekStartPositionRef.current;
+
+      const _v769SeekElapsed =
+        Date.now() -
+        v769SeekIssuedAtRef.current;
+
+      if (
+        _v769Direction &&
+        /^[a-f0-9]{40}$/.test(
+          _v769SeekHash
+        ) &&
+        status.isPlaying &&
+        _v769SeekElapsed >= 100 &&
+        _v769SeekElapsed <= 8000
+      ) {
+        const distanceToTarget =
+          Math.abs(
+            status.positionMillis -
+            _v769SeekTarget
+          );
+
+        const requestedDistance =
+          Math.abs(
+            _v769SeekTarget -
+            _v769SeekStart
+          );
+
+        const actualMovement =
+          _v769Direction === 'ff'
+            ? status.positionMillis -
+              _v769SeekStart
+            : _v769SeekStart -
+              status.positionMillis;
+
+        const requiredMovement =
+          Math.min(
+            2500,
+            Math.max(
+              500,
+              requestedDistance * 0.25
+            )
+          );
+
+        if (
+          distanceToTarget <= 6000 &&
+          actualMovement >=
+            requiredMovement
+        ) {
+          if (
+            v769SeekWatchdogRef.current
+          ) {
+            clearTimeout(
+              v769SeekWatchdogRef.current
+            );
+
+            v769SeekWatchdogRef.current =
+              null;
+          }
+
+          console.log(
+            '[V769 SEEK HEALTH] RESUMED',
+            _v769Direction
+              .toUpperCase(),
+            _v769SeekHash
+              .slice(0, 12),
+            'positionMs=' +
+              Math.round(
+                status.positionMillis
+              ),
+            'targetMs=' +
+              Math.round(
+                _v769SeekTarget
+              )
+          );
+
+          void v769PersistSeekHealth(
+            _v769SeekHash,
+            _v769Direction,
+            'pass'
+          );
+
+          v769SeekDirectionRef.current =
+            null;
+
+          v769SeekHashRef.current =
+            '';
+
+          v769SeekRecoveryInFlightRef.current =
+            false;
+
+          isSeekingRef.current =
+            false;
+
+          setIsRebuffering(false);
+        }
+      }
+
+      /*
+       * A silent seek failure can move playback to an
+       * existing torrent fallback. Once the fallback
+       * really starts playing, return to the user's
+       * requested FF/RW destination.
+       */
+      if (
+        status.isPlaying &&
+        status.durationMillis &&
+        status.durationMillis > 0 &&
+        v769SeekRecoveryTargetRef.current !==
+          null &&
+        !v769SeekRecoveryInFlightRef.current
+      ) {
+        const recoveryTarget =
+          v769SeekRecoveryTargetRef.current;
+
+        const recoveryDirection =
+          v769SeekRecoveryDirectionRef.current ||
+          undefined;
+
+        v769SeekRecoveryTargetRef.current =
+          null;
+
+        v769SeekRecoveryDirectionRef.current =
+          null;
+
+        v769SeekRecoveryInFlightRef.current =
+          true;
+
+        console.log(
+          '[V769 SEEK RECOVERY] fallback ready',
+          'hash=' +
+            String(
+              v766mActiveInfoHashRef.current ||
+              ''
+            ).slice(0, 12),
+          'targetMs=' +
+            Math.round(
+              recoveryTarget
+            )
+        );
+
+        setTimeout(() => {
+          void prefetchAndSeek(
+            recoveryTarget,
+            recoveryDirection
+          );
+        }, 250);
+      }
       
       // Save watch progress periodically
       if (status.isPlaying && playbackStartedRef.current && status.durationMillis && status.durationMillis > 0) {
@@ -3015,9 +3297,24 @@ export default function PlayerScreen() {
 
   // Helper to calculate byte position from time position
   const calculateBytePosition = (timeMs: number): number => {
-    if (duration <= 0) return 0;
-    const totalDurationSec = duration / 1000;
-    const seekTimeSec = timeMs / 1000;
+    // V769V36_DURATION_AUTHORITY
+    // React duration state can briefly describe the previous
+    // stream during a fallback handoff. durationRef is the
+    // synchronous playback-status authority.
+    const effectiveDuration =
+      durationRef.current > 0
+        ? durationRef.current
+        : duration;
+
+    if (effectiveDuration <= 0) {
+      return 0;
+    }
+
+    const totalDurationSec =
+      effectiveDuration / 1000;
+
+    const seekTimeSec =
+      timeMs / 1000;
     let fileSize = videoFileSizeRef.current;
     if (!fileSize || fileSize <= 0) {
       const estimatedBitrate = 5 * 1024 * 1024 / 8;
@@ -3028,19 +3325,104 @@ export default function PlayerScreen() {
 
   // PREFETCH-THEN-SEEK: Download pieces at target position BEFORE seeking
   // This is exactly how Stremio handles seeking - it buffers the target first
-  const prefetchAndSeek = async (targetMs: number) => {
+  const prefetchAndSeek = async (
+    targetMs: number,
+    forcedDirection?: V769SeekDirection
+  ) => {
     if (!videoRef.current) return;
     
     // PATCH_V7_SAFE_CLAMP — keep at least 5s away from the very end so a long
     // drag past the duration doesn't fire ExoPlayer's end-of-video reset.
-    const safeMax = duration > 5000 ? duration - 5000 : Math.max(0, duration - 1);
-    const clampedPosition = Math.max(0, Math.min(safeMax, targetMs));
+    // V769V36_DURATION_AUTHORITY
+    const effectiveDuration =
+      durationRef.current > 0
+        ? durationRef.current
+        : duration;
+
+    const safeMax =
+      effectiveDuration > 5000
+        ? effectiveDuration - 5000
+        : Math.max(
+            0,
+            effectiveDuration - 1
+          );
+
+    const clampedPosition =
+      Math.max(
+        0,
+        Math.min(
+          safeMax,
+          targetMs
+        )
+      );
     
     // Show rebuffering spinner immediately
     isSeekingRef.current = true;
     lastSeekPositionRef.current = clampedPosition;
     // PATCH_V10_SNAPSHOT — capture pre-seek position so onError can rewind us if the seek fails
     try { preSeekPositionMsRef.current = positionRef.current || 0; } catch (_) { preSeekPositionMsRef.current = 0; }
+
+    const _v769StartPosition =
+      preSeekPositionMsRef.current;
+
+    const _v769Delta =
+      clampedPosition -
+      _v769StartPosition;
+
+    const _v769Direction:
+      V769SeekDirection | null =
+        forcedDirection ||
+        (
+          _v769Delta > 500
+            ? 'ff'
+            : _v769Delta < -500
+              ? 'rw'
+              : null
+        );
+
+    const _v769ActiveHash =
+      String(
+        v766mActiveInfoHashRef.current ||
+        infoHash ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+
+    if (
+      v769SeekWatchdogRef.current
+    ) {
+      clearTimeout(
+        v769SeekWatchdogRef.current
+      );
+
+      v769SeekWatchdogRef.current =
+        null;
+    }
+
+    v769SeekDirectionRef.current =
+      _v769Direction;
+
+    v769SeekHashRef.current =
+      _v769ActiveHash;
+
+    v769SeekStartPositionRef.current =
+      _v769StartPosition;
+
+    const _v769DoSeek =
+      async () => {
+        if (!videoRef.current) {
+          return;
+        }
+
+        v769SeekIssuedAtRef.current =
+          Date.now();
+
+        await videoRef.current
+          .setPositionTolerantAsync(
+            clampedPosition
+          );
+      };
     setIsRebuffering(true);
     showControlsWithTimeout();
 
@@ -3051,21 +3433,21 @@ export default function PlayerScreen() {
       playbackTimeoutRef.current = null;
     }
     
-    if (infoHash && duration > 0) {
+    if (_v769ActiveHash && effectiveDuration > 0) {
       const positionBytes = calculateBytePosition(clampedPosition);
       
       console.log(`[PLAYER] Prefetching pieces at byte ${positionBytes} before seeking to ${(clampedPosition/1000).toFixed(1)}s...`);
       
       // Step 1: Tell backend to prefetch pieces (waits up to 30s for pieces to download)
       try {
-        const prefetchResult = await api.stream.prefetch(infoHash, positionBytes);
+        const prefetchResult = await api.stream.prefetch(_v769ActiveHash, positionBytes);
         console.log(`[PLAYER] Prefetch result: ${prefetchResult.status}, wait=${prefetchResult.wait_ms || 0}ms`);
         
         if (prefetchResult.status === 'ready') {
           // Step 2: Pieces are ready! Now safely seek
           console.log(`[PLAYER] Pieces ready, seeking to ${(clampedPosition/1000).toFixed(1)}s`);
           try {
-            await videoRef.current.setPositionAsync(clampedPosition);
+            await _v769DoSeek();
           } catch (e) {
             console.log('[PLAYER] setPositionAsync failed after prefetch:', e);
           }
@@ -3073,7 +3455,7 @@ export default function PlayerScreen() {
           // Timeout or error - try seeking anyway (might still work with partial data)
           console.log(`[PLAYER] Prefetch ${prefetchResult.status}, seeking anyway...`);
           try {
-            await videoRef.current.setPositionAsync(clampedPosition);
+            await _v769DoSeek();
           } catch (e) {
             console.log('[PLAYER] setPositionAsync failed:', e);
           }
@@ -3082,27 +3464,116 @@ export default function PlayerScreen() {
         // Prefetch call failed - seek anyway
         console.log('[PLAYER] Prefetch call failed, seeking directly:', e);
         try {
-          await videoRef.current.setPositionAsync(clampedPosition);
+          await _v769DoSeek();
         } catch (e2) {
           console.log('[PLAYER] Direct seek also failed:', e2);
         }
       }
       
       // Also tell libtorrent to reprioritize (belt and suspenders)
-      api.stream.seek(infoHash, positionBytes).catch(() => {});
+      api.stream.seek(_v769ActiveHash, positionBytes).catch(() => {});
     } else {
       // No infoHash (direct URL) - just seek directly
       try {
-        await videoRef.current.setPositionAsync(clampedPosition);
+        await _v769DoSeek();
       } catch (e) {
         console.log('[PLAYER] Direct seek failed:', e);
       }
     }
     
-    // Clear seeking state after a delay
-    setTimeout(() => {
-      isSeekingRef.current = false;
-    }, 5000);
+    // V769V31B: seek success requires runtime playback proof.
+    if (
+      _v769Direction &&
+      /^[a-f0-9]{40}$/.test(
+        _v769ActiveHash
+      )
+    ) {
+      const _v769ExpectedTarget =
+        clampedPosition;
+
+      const _v769ExpectedHash =
+        _v769ActiveHash;
+
+      const _v769ExpectedDirection =
+        _v769Direction;
+
+      v769SeekWatchdogRef.current =
+        setTimeout(() => {
+          if (
+            v769SeekDirectionRef.current !==
+              _v769ExpectedDirection ||
+            lastSeekPositionRef.current !==
+              _v769ExpectedTarget
+          ) {
+            return;
+          }
+
+          console.log(
+            '[V769 SEEK HEALTH] STALL',
+            _v769ExpectedDirection
+              .toUpperCase(),
+            _v769ExpectedHash
+              .slice(0, 12),
+            'targetMs=' +
+              Math.round(
+                _v769ExpectedTarget
+              )
+          );
+
+          void v769PersistSeekHealth(
+            _v769ExpectedHash,
+            _v769ExpectedDirection,
+            'fail'
+          );
+
+          v769SeekDirectionRef.current =
+            null;
+
+          v769SeekHashRef.current =
+            '';
+
+          v769SeekWatchdogRef.current =
+            null;
+
+          isSeekingRef.current =
+            false;
+
+          setIsRebuffering(true);
+
+          /*
+           * Preserve the user's requested destination
+           * while the existing fallback cascade switches
+           * to another torrent.
+           */
+          v769SeekRecoveryTargetRef.current =
+            _v769ExpectedTarget;
+
+          v769SeekRecoveryDirectionRef.current =
+            _v769ExpectedDirection;
+
+          v769SeekRecoveryInFlightRef.current =
+            false;
+
+          console.log(
+            '[V769 SEEK RECOVERY] advancing fallback',
+            'targetMs=' +
+              Math.round(
+                _v769ExpectedTarget
+              )
+          );
+
+          tryNextFallbackTorrent();
+        }, 8000);
+    } else {
+      /*
+       * Sources without an authoritative torrent hash keep
+       * the original seek-state failsafe.
+       */
+      setTimeout(() => {
+        isSeekingRef.current =
+          false;
+      }, 5000);
+    }
   };
 
   // Seek to position (for progress bar interaction)
@@ -3501,14 +3972,28 @@ export default function PlayerScreen() {
       v766mActiveInfoHashRef.current = _v766mHash;
       console.log(`[PLAYER v294] Trying fallback torrent ${idx + 1}/${_v163_list.length}: ${fb.infoHash?.slice(0,8)}... (${fb.name || fb.title || ''})`);
       
-      // Reset state for new torrent
-      setStreamUrl(null);
-      setPlaybackStarted(false);
-      playbackStartedRef.current = false; // V506
+      // V769V46_SEAMLESS_SEEK_FALLBACK
+      const _v769SeamlessSeekRecovery =
+        v769SeekRecoveryTargetRef.current !== null;
+
+      // During seek recovery, keep the current Video/source mounted until
+      // the replacement torrent is actually ready. Ordinary fallback
+      // behavior remains unchanged.
+      if (!_v769SeamlessSeekRecovery) {
+        setStreamUrl(null);
+        setPlaybackStarted(false);
+        playbackStartedRef.current = false; // V506
+        setIsLoading(true);
+        setLoadingStatus('Searching for streams...');
+        setDownloadProgress(0);
+      } else {
+        setIsRebuffering(true);
+        setLoadingStatus('');
+        console.log(
+          '[V769 SEEK RECOVERY] preserving current frame while fallback prepares'
+        );
+      }
       setError(null);
-      setIsLoading(true);
-      setLoadingStatus('Searching for streams...');
-      setDownloadProgress(0);
       videoRetryCountRef.current = 0;
       continuePollingRef.current = false; // Stop old polling
       if (pollIntervalRef.current) {
@@ -4211,6 +4696,25 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
       let smoothProgress = 5;
       let videoUrlSet = false;
       let startTime = Date.now();
+
+      // V769V46_READY_COMMIT
+      const _v769CommitFallbackUrl = (nextUrl: string) => {
+        const _v769RecoveryTarget =
+          v769SeekRecoveryTargetRef.current;
+
+        if (_v769RecoveryTarget !== null) {
+          setPlaybackStarted(false);
+          playbackStartedRef.current = false;
+          setIsLoading(false);
+          setIsRebuffering(true);
+          console.log(
+            '[V769 SEEK RECOVERY] committing ready fallback',
+            'targetMs=' + Math.round(_v769RecoveryTarget)
+          );
+        }
+
+        setStreamUrl(nextUrl);
+      };
       
       const pollStatus = async () => {
         if (!continuePollingRef.current) return;
@@ -4253,7 +4757,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
             const debridVideoUrl = api.stream.getVideoUrl(hash, fIdx, undefined, fallbackSeasonNum, fallbackEpisodeNum);
             console.log(`[PLAYER v294] Fallback DEBRID ready in ${elapsedSec.toFixed(1)}s url=${(debridVideoUrl||'').slice(0,60)}`);
             videoRetryCountRef.current = 0;
-            setStreamUrl(debridVideoUrl);
+            _v769CommitFallbackUrl(debridVideoUrl);
             if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current);
             pollIntervalRef.current = setTimeout(pollStatus, 30000);
             return;
@@ -4270,7 +4774,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
             const _v294Fresh = api.stream.getVideoUrl(hash, fIdx, undefined, fallbackSeasonNum, fallbackEpisodeNum);
             console.log(`[PLAYER v294] Fallback stream READY in ${elapsedSec.toFixed(1)}s url=${(_v294Fresh||'').slice(0,60)}`);
             videoRetryCountRef.current = 0;
-            setStreamUrl(_v294Fresh || videoUrl);
+            _v769CommitFallbackUrl(_v294Fresh || videoUrl);
           }
           
           if (status.status === 'not_found' || status.status === 'invalid' || status.status === 'error') {

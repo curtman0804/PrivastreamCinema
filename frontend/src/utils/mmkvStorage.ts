@@ -94,7 +94,8 @@ function _chain(key: string, op: () => Promise<void>): Promise<void> {
 // V766S1_STORAGE_DIAGNOSTICS
 function _v766s1TraceKey(key: string): boolean {
   return key === 'v766m_eac3_bad_hashes_v1' ||
-    key === 'v766_eac3_decoder_broken';
+    key === 'v766_eac3_decoder_broken' ||
+    key === 'v769_seek_health_v1';
 }
 
 async function _fsRead(key: string): Promise<string | null> {
@@ -320,6 +321,29 @@ export async function setItemDurable(
   }
 
   await _chain(key, () => _fsWrite(key, value));
+
+  // V769V44_DURABLE_THIRD_TIER
+  // Mirror durable runtime capability state into native
+  // AsyncStorage so it remains available after restart.
+  try {
+    await RealAsyncStorage.setItem(key, value);
+
+    if (_v766s1TraceKey(key)) {
+      const legacyReadBack =
+        await RealAsyncStorage.getItem(key);
+
+      console.log(
+        '[V769V44 DURABLE WRITE VERIFY] key=' + key +
+        ' bytes=' + String(legacyReadBack?.length ?? -1) +
+        ' match=' + String(legacyReadBack === value)
+      );
+    }
+  } catch (e: any) {
+    console.log(
+      '[kvStore] durable AsyncStorage write failed key=' + key +
+      ' err=' + (e && e.message ? e.message : String(e))
+    );
+  }
 }
 
 async function removeItem(key: string): Promise<void> {
