@@ -1768,13 +1768,24 @@ export default function PlayerScreen() {
               Number(dynamicIntro.end_ms)
             );
 
+            const introLengthMs = endMs - startMs;
+
             if (
               !Number.isFinite(startMs) ||
               !Number.isFinite(endMs) ||
               startMs < 0 ||
               endMs <= startMs ||
-              endMs > durationMs
+              endMs > durationMs ||
+              introLengthMs > 180000
             ) {
+              if (introLengthMs > 180000) {
+                console.log(
+                  '[SEGMENTS V770C] rejecting implausible dynamic intro ' +
+                  episodeContentId + ' ' +
+                  startMs + '-' + endMs +
+                  'ms length=' + introLengthMs + 'ms'
+                );
+              }
               return false;
             }
 
@@ -2361,6 +2372,13 @@ export default function PlayerScreen() {
   const [countdown, setCountdown] = useState(15);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const creditsShownRef = useRef(false); // Track if we've shown the credits popup
+
+  // V770_UPNEXT_MARKER_FALLBACK
+  // Dynamic credits remain authoritative. If no marker exists, restore
+  // the original proven Up Next safety net.
+  const V770_UPNEXT_FALLBACK_REMAINING_MS = 45000;
+  const V770_UPNEXT_FALLBACK_PERCENT = 0.98;
+  const V770_UPNEXT_MIN_DURATION_MS = 300000;
   /* v126-preresolve-ref */
   const preResolveRef = useRef<null | {
     directUrl?: string;
@@ -2898,24 +2916,44 @@ export default function PlayerScreen() {
       const currentDuration = status.durationMillis || 0;
       const currentPosition = status.positionMillis || 0;
       const creditsMarker = _v685CreditsMarkerRef.current;
+      const _v770TimeRemaining = currentDuration - currentPosition;
+      const _v770PercentComplete =
+        currentDuration > 0 ? currentPosition / currentDuration : 0;
+
+      const _v770MarkerWindow = !!creditsMarker &&
+        currentPosition >= creditsMarker.startMs &&
+        currentPosition < creditsMarker.endMs;
+
+      const _v770FallbackWindow = !creditsMarker &&
+        currentDuration > V770_UPNEXT_MIN_DURATION_MS &&
+        (
+          _v770TimeRemaining <= V770_UPNEXT_FALLBACK_REMAINING_MS ||
+          _v770PercentComplete >= V770_UPNEXT_FALLBACK_PERCENT
+        );
 
       if (
         nextEpisodeId &&
         contentType === 'series' &&
-        creditsMarker &&
         !creditsShownRef.current &&
         !showNextEpisodeModal &&
-        currentPosition >= creditsMarker.startMs &&
-        currentPosition < creditsMarker.endMs
+        (_v770MarkerWindow || _v770FallbackWindow)
       ) {
-        console.log(
-          '[SEGMENTS V685] Credits boundary reached at ' +
-          Math.round(currentPosition / 1000) +
-          's marker=' +
-          Math.round(creditsMarker.startMs / 1000) +
-          's confidence=' +
-          String(creditsMarker.confidence ?? '')
-        );
+        if (_v770MarkerWindow && creditsMarker) {
+          console.log(
+            '[SEGMENTS V685] Credits boundary reached at ' +
+            Math.round(currentPosition / 1000) +
+            's marker=' +
+            Math.round(creditsMarker.startMs / 1000) +
+            's confidence=' +
+            String(creditsMarker.confidence ?? '')
+          );
+        } else {
+          console.log(
+            '[UPNEXT V770] no credits marker - fallback boundary',
+            'remaining=' + Math.round(_v770TimeRemaining / 1000) + 's',
+            'percent=' + (_v770PercentComplete * 100).toFixed(1)
+          );
+        }
 
         creditsShownRef.current = true;
         showCreditsPopup();
@@ -2924,6 +2962,22 @@ export default function PlayerScreen() {
       // V685_NATURAL_END - file completion always returns
       // to the CURRENT episode Details screen.
       if (status.didJustFinish) {
+        // V770B_UPNEXT_EOF_HANDOFF
+        // An active Up Next countdown owns EOF. Leave its interval alive
+        // so the existing countdown transition can complete.
+        if (
+          nextEpisodeId &&
+          contentType === 'series' &&
+          creditsShownRef.current &&
+          countdownRef.current
+        ) {
+          console.log(
+            '[UPNEXT V770B] natural EOF - preserving active countdown for:',
+            nextEpisodeId
+          );
+          return;
+        }
+
         console.log(
           '[SEGMENTS V685] Natural playback end -> current Details'
         );
@@ -4997,23 +5051,44 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                 // V685_DYNAMIC_CREDITS - web parity.
                 const creditsMarker =
                   _v685CreditsMarkerRef.current;
+                const _v770WebRemaining =
+                  totalDuration - currentTime;
+                const _v770WebPercent =
+                  totalDuration > 0 ? currentTime / totalDuration : 0;
+
+                const _v770WebMarkerWindow = !!creditsMarker &&
+                  currentTime >= creditsMarker.startMs &&
+                  currentTime < creditsMarker.endMs;
+
+                const _v770WebFallbackWindow = !creditsMarker &&
+                  totalDuration > V770_UPNEXT_MIN_DURATION_MS &&
+                  (
+                    _v770WebRemaining <= V770_UPNEXT_FALLBACK_REMAINING_MS ||
+                    _v770WebPercent >= V770_UPNEXT_FALLBACK_PERCENT
+                  );
 
                 if (
                   nextEpisodeId &&
                   contentType === 'series' &&
-                  creditsMarker &&
                   !creditsShownRef.current &&
                   !showNextEpisodeModal &&
-                  currentTime >= creditsMarker.startMs &&
-                  currentTime < creditsMarker.endMs
+                  (_v770WebMarkerWindow || _v770WebFallbackWindow)
                 ) {
-                  console.log(
-                    '[SEGMENTS V685] Web credits boundary reached at ' +
-                    Math.round(currentTime / 1000) +
-                    's marker=' +
-                    Math.round(creditsMarker.startMs / 1000) +
-                    's'
-                  );
+                  if (_v770WebMarkerWindow && creditsMarker) {
+                    console.log(
+                      '[SEGMENTS V685] Web credits boundary reached at ' +
+                      Math.round(currentTime / 1000) +
+                      's marker=' +
+                      Math.round(creditsMarker.startMs / 1000) +
+                      's'
+                    );
+                  } else {
+                    console.log(
+                      '[UPNEXT V770] web no credits marker - fallback boundary',
+                      'remaining=' + Math.round(_v770WebRemaining / 1000) + 's',
+                      'percent=' + (_v770WebPercent * 100).toFixed(1)
+                    );
+                  }
 
                   creditsShownRef.current = true;
                   showCreditsPopup();
