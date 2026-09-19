@@ -4433,11 +4433,15 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
         // For live TV, keep loading state until video actually starts playing
         setIsLoading(true);
       } else {
-        setIsLoading(false);
+        // V771_PLAYBACK_INIT_HOLD
+        // Keep the unified loading overlay until status.isPlaying confirms
+        // that the first frame is actually advancing.
+        setIsLoading(true);
       }
     } else if (url) {
       setStreamUrl(url);
-      setIsLoading(false);
+      // V771_PLAYBACK_INIT_HOLD
+      setIsLoading(true);
     } else if (infoHash) {
       startTorrentStream();
     } else {
