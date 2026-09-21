@@ -2,15 +2,15 @@ import React, { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid, findNodeHandle } from 'react-native';
+import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid, findNodeHandle, DeviceEventEmitter } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ensurePrivastreamTunnel } from '../../src/native/privastreamTunnelGate';
 
-// V261_TAB_FOCUS_CHAIN â€” module-level map of route.name -> native tag.
+// V261_TAB_FOCUS_CHAIN Ã¢â‚¬â€ module-level map of route.name -> native tag.
 // Populated as each tab button mounts.  Used to wire every tab's
 // nextFocusLeft / nextFocusRight to its adjacent sibling so D-pad LEFT/RIGHT
 // stays inside the tab bar instead of jumping into the content posters.
-const _v261TabOrder: string[] = ['discover', 'search', 'library', 'addons', 'profile'];
+const _v261TabOrder: string[] = ['livetv', 'discover', 'search', 'library', 'addons', 'profile'];
 const _v261Tags: Record<string, number> = {};
 const _v261Listeners: Array<() => void> = [];
 function _v261Register(name: string, tag: number) {
@@ -105,12 +105,12 @@ export default function TabsLayout() {
       } catch (_) {}
       const p = String(pathname || '').toLowerCase();
       // On Discover (root) -> let system exit
-      if (p === '/' || p.endsWith('/discover') || p === '/(tabs)' || p === '/(tabs)/discover') {
+      if (p === '/' || p.endsWith('/livetv') || p === '/(tabs)' || p === '/(tabs)/livetv') {
         return false;
       }
       // Any other tab -> back to Discover
       try {
-        router.replace('/(tabs)/discover');
+        router.replace('/(tabs)/livetv');
         return true;
       } catch (_) {
         return false;
@@ -125,7 +125,7 @@ export default function TabsLayout() {
   const isTV = width > height || width > 800;
   
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 20 : 10);
-  const tabBarHeight = isTV ? 80 : 65 + bottomPadding;
+  const tabBarHeight = isTV ? 60 : 65 + bottomPadding;
 
   // V740_FAIL_CLOSED_RENDER
   if (!_v740TunnelReady) {
@@ -142,7 +142,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         // PATCH_V14B_FREEZE_ON_BLUR_TABS
-        // PATCH_V40_NO_FREEZE â€” keep Discover mounted; back returns instantly.
+        // PATCH_V40_NO_FREEZE Ã¢â‚¬â€ keep Discover mounted; back returns instantly.
         freezeOnBlur: false,
         lazy: true,
         headerShown: false,
@@ -151,7 +151,7 @@ export default function TabsLayout() {
           isTV && styles.tabBarTV,
           {
             height: tabBarHeight,
-            paddingBottom: isTV ? 10 : bottomPadding,
+            paddingBottom: isTV ? 2 : bottomPadding,
           }
         ],
         tabBarActiveTintColor: '#B8A05C',
@@ -165,12 +165,16 @@ export default function TabsLayout() {
           isTV && styles.tabBarItemTV,
         ],
         tabBarButton: (props: any) => {
-          // V261_TAB_FOCUS_CHAIN â€” every tab button now explicitly wires
+          // V261_TAB_FOCUS_CHAIN Ã¢â‚¬â€ every tab button now explicitly wires
           // nextFocusLeft / nextFocusRight to its adjacent tab's tag so the
           // D-pad never escapes the tab bar horizontally.  The first tab
           // traps LEFT to itself; the last tab traps RIGHT to itself.
           const [isFocused, setIsFocused] = useState(false);
           const btnRef = useRef<any>(null);
+
+          // V788T8Y_R3_TRAY_REQUEST_PENDING
+          const v788t8yTrayRequestPendingRef =
+            useRef(false);
           const [, _force] = useState(0);
 // Figure out which tab this button represents.
           const blob = String(
@@ -213,7 +217,70 @@ export default function TabsLayout() {
             return unsub;
           }, [myName]);
 
-          // Ladder of retries â€” mount, layout, plus delayed attempts.
+          // V788T8Y_R3_REAL_TV_TRAY_FOCUS
+          useEffect(() => {
+            if (myName !== 'livetv') return;
+
+            const sub = DeviceEventEmitter.addListener(
+              'v788t8c:focusLiveTvTray',
+              () => {
+                const r: any = btnRef.current;
+
+                if (!r) {
+                  console.warn(
+                    '[V788T8Y TRAY] Live TV ref unavailable'
+                  );
+                  return;
+                }
+
+                v788t8yTrayRequestPendingRef.current =
+                  true;
+
+                try {
+                  if (
+                    typeof r.requestTVFocus === 'function'
+                  ) {
+                    console.log(
+                      '[V788T8Y TRAY] requestTVFocus'
+                    );
+
+                    r.requestTVFocus();
+                    return;
+                  }
+
+                  if (typeof r.focus === 'function') {
+                    console.log(
+                      '[V788T8Y TRAY] generic focus fallback'
+                    );
+
+                    r.focus();
+                    return;
+                  }
+
+                  v788t8yTrayRequestPendingRef.current =
+                    false;
+
+                  console.warn(
+                    '[V788T8Y TRAY] no focus API'
+                  );
+                } catch (error) {
+                  v788t8yTrayRequestPendingRef.current =
+                    false;
+
+                  console.warn(
+                    '[V788T8Y TRAY] focus request failed',
+                    error
+                  );
+                }
+              }
+            );
+
+            return () => {
+              try { sub.remove(); } catch (_) {}
+            };
+          }, [myName]);
+
+          // Ladder of retries Ã¢â‚¬â€ mount, layout, plus delayed attempts.
           useEffect(() => {
             if (!myName) return;
             const timers = [0, 80, 250, 600, 1500].map((ms) => setTimeout(grabTag, ms));
@@ -247,7 +314,7 @@ export default function TabsLayout() {
               {...props}
               {...trap}
               focusable={true}
-              /* v238 â€” cold-boot focus lands on the Discover tab button.
+              /* v238 Ã¢â‚¬â€ cold-boot focus lands on the Discover tab button.
                  Without this, no element claimed initial TV focus and the
                  selector ring was invisible until the user pressed a key. */
               hasTVPreferredFocus={isFirst}
@@ -255,6 +322,23 @@ export default function TabsLayout() {
               onFocus={() => {
                 setIsFocused(true);
                 grabTag();
+
+                // V788T8Y_R3_REAL_FOCUS_ACK
+                if (
+                  myName === 'livetv' &&
+                  v788t8yTrayRequestPendingRef.current
+                ) {
+                  v788t8yTrayRequestPendingRef.current =
+                    false;
+
+                  console.log(
+                    '[V788T8Y TRAY] REAL FOCUS ACQUIRED'
+                  );
+
+                  DeviceEventEmitter.emit(
+                    'v788t8y:liveTvTrayFocused'
+                  );
+                }
               }}
               onBlur={() => {
                 setIsFocused(false);
@@ -268,6 +352,17 @@ export default function TabsLayout() {
         },
       }}
     >
+      <Tabs.Screen
+        name="livetv"
+        options={{
+          title: 'Live TV',
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={focused && isTV ? styles.iconFocused : undefined}>
+              <Ionicons name="tv" size={isTV ? 28 : size} color={color} />
+            </View>
+          ),
+        }}
+      />
       <Tabs.Screen
         name="discover"
         options={{
@@ -332,38 +427,48 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderTopColor: '#2a2a2a',
     borderTopWidth: 1,
-    paddingTop: 8,
+    paddingTop: 2,
   },
   tabBarTV: {
-    paddingHorizontal: 40,
-    borderTopWidth: 2,
+    // V788T8X_THIN_ALWAYS_VISIBLE_TRAY
+    paddingHorizontal: 28,
+    borderTopWidth: 1,
     borderTopColor: '#333333',
+    zIndex: 100,
+    elevation: 20,
   },
   tabBarLabel: {
     fontSize: 11,
     fontWeight: '600',
   },
   tabBarLabelTV: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   tabBarItem: {
     paddingVertical: 4,
   },
   tabBarItemTV: {
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    marginHorizontal: 10,
-    borderRadius: 8,
+    paddingVertical: 2,
+    paddingHorizontal: 18,
+    marginHorizontal: 8,
+    borderRadius: 0,
   },
   tabItemFocused: {
-    borderWidth: 2,
-    borderColor: '#B8A05C',
-    borderRadius: 8,
-    backgroundColor: 'rgba(184, 160, 92, 0.15)',
+    // V788T8X_GOLD_UNDERLINE_SELECTOR
+    borderWidth: 0,
+    borderBottomWidth: 5,
+    borderBottomColor: '#B8A05C',
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 10,
+    paddingTop: 0,
+    paddingBottom: 2,
+    marginHorizontal: -10,
+    marginVertical: 0,
   },
   iconFocused: {
-    transform: [{ scale: 1.1 }],
+    transform: [{ scale: 1.05 }],
   },
 });
 
