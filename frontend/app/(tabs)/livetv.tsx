@@ -475,22 +475,16 @@ const timelineStart = floorHalfHour(now);
     [favoriteIds, v788t8xFavoriteOverrides]
   );
 
-  // Remove the temporary optimistic value once the store catches up.
-  useEffect(() => {
-    setV788t8xFavoriteOverrides((previous) => {
-      let changed = false;
-      const next = { ...previous };
-
-      for (const [id, expected] of Object.entries(previous)) {
-        if (favoriteIds.has(id) === expected) {
-          delete next[id];
-          changed = true;
-        }
-      }
-
-      return changed ? next : previous;
-    });
-  }, [favoriteIds]);
+  // V788T8ZA_STICKY_CONFIRMED_BOOKMARK
+  //
+  // A bookmark override is no longer merely temporary.
+  // Once the API/library confirms it, keep that exact value
+  // authoritative for this mounted Live TV screen.
+  //
+  // This prevents unrelated/concurrent library refreshes from
+  // visually reverting a bookmark while rows are recycled.
+  // A full Live TV remount/app restart still initializes from
+  // the persisted library returned by the server.
 
   const loadGuide = useCallback(async (silent = false) => {
     // V785A_LIVE_GUIDE_PERSIST
@@ -897,49 +891,133 @@ const timelineStart = floorHalfHour(now);
     }
   }, [router, channels]);
 
-  // V788T8X_OPTIMISTIC_BOOKMARK_TOGGLE
-  const toggleFavorite = useCallback(async (channel: GuideChannel) => {
-    const id = String(channel.item.imdb_id || channel.item.id || '').trim();
-    if (!id) return;
+  // V788T8Z_PERSISTED_BOOKMARK_ACK
+  const v788t8zLibraryHasChannel = useCallback(
+    (id: string) => {
+      const currentLibrary =
+        useContentStore.getState().library;
 
-    const wasFavorite = v788t8xIsFavorite(id);
-    const nextFavorite = !wasFavorite;
-
-    // Repaint the bookmark immediately.
-    setV788t8xFavoriteOverrides((previous) => ({
-      ...previous,
-      [id]: nextFavorite,
-    }));
-
-    try {
-      if (wasFavorite) {
-        await removeFromLibrary('tv', id);
-      } else {
-        await addToLibrary({
-          ...channel.item,
-          id,
-          type: 'tv',
-          poster: channel.item.poster || channel.logo || '',
-        });
-      }
-    } catch (error) {
-      // Persistence failed: restore previous visual state.
-      setV788t8xFavoriteOverrides((previous) => ({
-        ...previous,
-        [id]: wasFavorite,
-      }));
-
-      console.warn(
-        '[V788T8X BOOKMARK] persistence failed',
-        id,
-        error
+      return (currentLibrary?.channels || []).some(
+        (item: any) =>
+          String(
+            item?.imdb_id ||
+            item?.id ||
+            ''
+          ).trim() === id
       );
-    }
-  }, [
-    v788t8xIsFavorite,
-    addToLibrary,
-    removeFromLibrary,
-  ]);
+    },
+    []
+  );
+
+  const toggleFavorite = useCallback(
+    async (channel: GuideChannel) => {
+      const id = String(
+        channel.item.imdb_id ||
+        channel.item.id ||
+        ''
+      ).trim();
+
+      if (!id) return;
+
+      const wasFavorite =
+        v788t8xIsFavorite(id);
+
+      const nextFavorite =
+        !wasFavorite;
+
+      // Immediate visual response.
+      setV788t8xFavoriteOverrides(
+        (previous) => ({
+          ...previous,
+          [id]: nextFavorite,
+        })
+      );
+
+      console.log(
+        '[V788T8Z BOOKMARK] optimistic',
+        id,
+        nextFavorite
+      );
+
+      try {
+        if (wasFavorite) {
+          await removeFromLibrary(
+            'tv',
+            id
+          );
+        } else {
+          await addToLibrary({
+            ...channel.item,
+            id,
+            type: 'tv',
+            poster:
+              channel.item.poster ||
+              channel.logo ||
+              '',
+          });
+        }
+
+        // Do not trust only the mutation promise.
+        // Pull the authoritative library again and
+        // verify the channel is actually persisted.
+        await fetchLibrary(true);
+
+        const persistedFavorite =
+          v788t8zLibraryHasChannel(id);
+
+        console.log(
+          '[V788T8Z BOOKMARK] persisted-check',
+          id,
+          'wanted=' + nextFavorite,
+          'actual=' + persistedFavorite
+        );
+
+        if (persistedFavorite !== nextFavorite) {
+          throw new Error(
+            'library did not confirm bookmark state'
+          );
+        }
+
+        // V788T8ZA_STICKY_CONFIRMED_BOOKMARK
+        // The server has confirmed the requested state.
+        // Keep the same value pinned for this Live TV mount.
+        setV788t8xFavoriteOverrides(
+          (previous) => ({
+            ...previous,
+            [id]: nextFavorite,
+          })
+        );
+
+        console.log(
+          '[V788T8ZA BOOKMARK] confirmed-sticky',
+          id,
+          nextFavorite
+        );
+      } catch (error) {
+        // The authoritative library did not confirm
+        // the requested state. Put the visual back.
+        setV788t8xFavoriteOverrides(
+          (previous) => ({
+            ...previous,
+            [id]: wasFavorite,
+          })
+        );
+
+        console.warn(
+          '[V788T8Z BOOKMARK] persistence not confirmed',
+          id,
+          error
+        );
+      }
+    },
+    [
+      v788t8xIsFavorite,
+      v788t8zLibraryHasChannel,
+      addToLibrary,
+      removeFromLibrary,
+      fetchLibrary,
+    ]
+  );
 
  // V788P5D_POSTER_STYLE_CHANNEL_BOOKMARK
  v788pToggleFavoriteRef.current =

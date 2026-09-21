@@ -1697,12 +1697,22 @@ class PrivastreamLiveTVGuideView(
                             as? Holder
 
                     if (holder != null) {
+                        // V788T8ZB_REALTIME_ALPHA_BOOKMARK
                         holder.badge.visibility =
+                            View.VISIBLE
+
+                        holder.badge.alpha =
                             if (incoming.favorite) {
-                                View.VISIBLE
+                                1f
                             } else {
-                                View.GONE
+                                0f
                             }
+
+                        // Draw only. Never request/rebind row.
+                        holder.badge.invalidate()
+                        holder.badge.postInvalidateOnAnimation()
+                        holder.station.invalidate()
+                        holder.station.postInvalidateOnAnimation()
                     }
 
                     changed = true
@@ -1873,13 +1883,19 @@ class PrivastreamLiveTVGuideView(
                 )
             )
 
+            // V788T8ZB_ALWAYS_LAID_OUT_BOOKMARK
             val badge =
                 FrameLayout(context).apply {
                     background =
                         badgeBackground()
 
+                    // Never use GONE here.
+                    // Keep geometry resident so realtime add
+                    // requires drawing only, not row layout.
                     visibility =
-                        View.GONE
+                        View.VISIBLE
+
+                    alpha = 0f
 
                     isFocusable = false
                 }
@@ -1999,11 +2015,15 @@ class PrivastreamLiveTVGuideView(
             holder.title.text =
                 item.title
 
+            // V788T8ZB_BIND_ALPHA_BOOKMARK
             holder.badge.visibility =
+                View.VISIBLE
+
+            holder.badge.alpha =
                 if (item.favorite) {
-                    View.VISIBLE
+                    1f
                 } else {
-                    View.GONE
+                    0f
                 }
 
             try {
