@@ -10371,6 +10371,166 @@ async def get_live_tv_epg(
                     "streamCount": 1,
                     "streamSetSha256": "599D83B8DE087DA49AA400E903028E89E88E45067A725B5463138CFCE6A21AE0",
                 },
+                # V788T16Y Animal Planet
+                "ustv-f60b61af-2484-4d52-956c-db6ba4a06d76": {
+                    "source": "tvguide",
+                    "sourceId": "9200018479",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 2,
+                    "streamSetSha256": "5E0CC7761E72EFBBCD0719C918BB261207997630B60A42036499E4FB2A8E5B48",
+                },
+                # V788T16Y Boomerang
+                "ustv-9f8101b3-a465-47e7-8554-d8bbd80cea08": {
+                    "source": "tvguide",
+                    "sourceId": "9233015844",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 2,
+                    "streamSetSha256": "E1CFC424BC5F15263D4B7AC40CE50F570EBF270DE59F79C669D9878204F1E408",
+                },
+                # V788T16Y Cartoon Network
+                "ustv-73bce33c-1a7e-47b9-938b-3c9cbf156c20": {
+                    "source": "tvguide",
+                    "sourceId": "9200004848",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 2,
+                    "streamSetSha256": "815907D604F85781F4B1A4C410403607D3684C4FCD4282B5E768CEB980C2994A",
+                },
+                # V788T16Y CMT
+                "ustv-7511fa6f-93ad-4634-bd0a-43f80fea6ef3": {
+                    "source": "tvguide",
+                    "sourceId": "9200012085",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 3,
+                    "streamSetSha256": "D00E9CE4256CC5A3F162CE241FE572B1D6C2FB1EE93BE37623C6E18C28AB1143",
+                },
+                # V788T16Y Discovery Channel
+                "ustv-037691f3-c5f8-4d03-85bf-f0b099febe65": {
+                    "source": "tvguide",
+                    "sourceId": "9233004102",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 2,
+                    "streamSetSha256": "0B61486280A1D6AF6D09B352A72F339A84C656C147C024A983706D973CEFE432",
+                },
+                # V788T16Y Disney Channel
+                "ustv-0119400b-71ba-42e0-a381-f77d42c861dd": {
+                    "source": "tvguide",
+                    "sourceId": "9200018475",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "81341F05C5759374D844D6BCDC28580E2424916F219664828E4E9E256DE57E02",
+                },
+                # V788T16Y Food Network
+                "ustv-70687cd8-11aa-4782-a303-eb43b01bb413": {
+                    "source": "tvguide",
+                    "sourceId": "9233009448",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "4FAAC602A7149F3DACD7ABD326BB6297CD86CFCDDD4EC66383936F3727EFA683",
+                },
+                # V788T16Y FXX
+                "ustv-a42663ac-2326-4b28-a7c6-989a27ba5bd6": {
+                    "source": "tvguide",
+                    "sourceId": "9200018644",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 2,
+                    "streamSetSha256": "6DC42DED87BCE6A9F218E8BD92CA3F145A26A0C882C4FA869D75388EE551E6E7",
+                },
+                # V788T16Y Golf Channel
+                "ustv-925c7519-b24b-4075-b1d2-84d45bd3dcf0": {
+                    "source": "tvguide",
+                    "sourceId": "9233005443",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "E09B4E918A4567EB919532121CF94A8B897AB178E755EA004F429827E491B2FF",
+                },
+                # V788T16Y History
+                "ustv-0a4782bd-5d12-4b97-9f74-4f3f3f6512c3": {
+                    "source": "tvguide",
+                    "sourceId": "9233008002",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "2635DE255B2C97733536DB445DFB9114BBE1BE178E7857D497FA3492E22A66FC",
+                },
+                # V788T16Y Investigation Discovery
+                "ustv-f4a7124d-7a6e-4e2e-908a-10b51e7ecf4e": {
+                    "source": "tvguide",
+                    "sourceId": "9200002243",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "8D84291DC734B0750F52383539E3F6B9B353B9E80677BFE5B2D37ABC1A3B2563",
+                },
+                # V788T16Y Lifetime
+                "ustv-0443cb15-4abc-4f1a-9f6f-11ec690f281e": {
+                    "source": "tvguide",
+                    "sourceId": "9200020452",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "F49D14230B5A9C8D79749626F1FA38D2BB4F9C19128ACE90D52ED800575E88B8",
+                },
+                # V788T16Y National Geographic Wild
+                "ustv-b1d2b06e-80dc-4e15-b648-5567dc05f1c8": {
+                    "source": "tvguide",
+                    "sourceId": "9200004683",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 2,
+                    "streamSetSha256": "15E6EA6D1F63FD9A5B2D41B0CF15D6D40576220874C975D7B358C1A583A98EEB",
+                },
+                # V788T16Y Nick Jr
+                "ustv-7a8bd02a-c334-450d-a7f8-64263a64757f": {
+                    "source": "tvguide",
+                    "sourceId": "9233007153",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "07EF44C1752BDDD188588C32FDCA062F1A3F5A85E6B03FDE9292D903CAB4F7BE",
+                },
+                # V788T16Y Nickelodeon
+                "ustv-34816a47-4eb5-4ee1-862a-dd277ce9e36b": {
+                    "source": "tvguide",
+                    "sourceId": "9200006939",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 2,
+                    "streamSetSha256": "00A5F3BF2386A9E1596A4BE170155E6027154FE2E62D2BC496C1ED308348A228",
+                },
+                # V788T16Y Nicktoons
+                "ustv-5513d11d-b8f7-4d27-89cd-f2f982dd95da": {
+                    "source": "tvguide",
+                    "sourceId": "9200020469",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "A91458A713476341ED8E09A79B13C63B3884ED96CAF26277929AA1F4D3A94C7F",
+                },
+                # V788T16Y Paramount Network
+                "ustv-733c0b85-264f-4135-b615-5930efa84351": {
+                    "source": "tvguide",
+                    "sourceId": "9233013810",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "F9EC7CE6DAFEB26B6C284E31BAE8DD3E08FCC8EDE0EF3B2D6BD186EF4B6852BC",
+                },
+                # V788T16Y TCM
+                "ustv-afcbd9a8-65b5-496b-a72f-a8a2c998688e": {
+                    "source": "tvguide",
+                    "sourceId": "9200017928",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "EFC92242679075AF6F3C393E20A5BAB65B2E0C2906CF2FF86DC46478A46C8C52",
+                },
+                # V788T16Y VH1
+                "ustv-90079556-db40-4744-ba02-3336c9179ad5": {
+                    "source": "tvguide",
+                    "sourceId": "9233000037",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 2,
+                    "streamSetSha256": "D75D9EBD5889FAEBE25461172727D495087D2F1D8FE17FA0B6C086D40D58A014",
+                },
+                # V788T16Y We TV
+                "ustv-23117923-f2cb-4297-bbab-df386bc7ac61": {
+                    "source": "tvguide",
+                    "sourceId": "9200018188",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 2,
+                    "streamSetSha256": "A261D9FC2DE4B48CA68EC1013EDEA49FCB7734B099EE24792E416B4516C1157D",
+                },
             }
 
             endpoint_overlap = set(
