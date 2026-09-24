@@ -10531,6 +10531,22 @@ async def get_live_tv_epg(
                     "streamCount": 2,
                     "streamSetSha256": "A261D9FC2DE4B48CA68EC1013EDEA49FCB7734B099EE24792E416B4516C1157D",
                 },
+                # V788T16AB CBS Sports Network
+                "ustv-4aa99360-c3a8-447c-841f-f6f437851168": {
+                    "source": "tvguide",
+                    "sourceId": "9233013235",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "6C673A55E52FD65C6A479F0B9B069FB33194ECBCB6706265F318527BD298C261",
+                },
+                # V788T16AB Hallmark Mystery
+                "ustv-126c1af6-b39c-4d79-8ba9-e50857f08772": {
+                    "source": "tvguide",
+                    "sourceId": "9233013351",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 1,
+                    "streamSetSha256": "9C3ED5B44E44C5808432ED3A874900EA5D5436E9651B4F188AF351A46795154D",
+                },
             }
 
             endpoint_overlap = set(
