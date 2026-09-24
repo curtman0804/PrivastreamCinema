@@ -9614,6 +9614,224 @@ async def get_live_tv_inventory_page(
 
 
 # ================= /V788T11W UNIVERSAL LIVE TV INVENTORY =================
+# V788T16N-AS1_PLUTO_GUIDE_EPISODE_TITLE
+def _v788t16n_as1_pluto_guide_title(
+    addon_channel_id: str,
+    channel_name: str,
+    item: dict,
+) -> str:
+    """
+    Prefer Pluto episode names only when guide identity proves that doing so
+    removes redundant series information.
+
+    Mixed/umbrella channels retain the existing root program title.
+    """
+    if not isinstance(item, dict):
+        return "Untitled"
+
+    episode = (
+        item.get("episode")
+        if isinstance(
+            item.get("episode"),
+            dict,
+        )
+        else {}
+    )
+
+    series = (
+        episode.get("series")
+        if isinstance(
+            episode.get("series"),
+            dict,
+        )
+        else {}
+    )
+
+    root_title = str(
+        item.get("title")
+        or ""
+    ).strip()
+
+    episode_name = str(
+        episode.get("name")
+        or ""
+    ).strip()
+
+    current_title = (
+        root_title
+        or episode_name
+        or "Untitled"
+    )
+
+    if not episode_name:
+        return current_title
+
+    series_name = str(
+        series.get("name")
+        or ""
+    ).strip()
+
+    series_slug = str(
+        series.get("slug")
+        or ""
+    ).strip().lower()
+
+    # V788T16N-AS2_EPISODE_LABEL_NORMALIZATION
+    #
+    # Some Pluto episode.name values redundantly repeat the
+    # dedicated series name:
+    #
+    #   Property Brothers - Jennifer & David
+    #   La novia de Estambul: Episodio 67
+    #   Black Ink Crew The Power of the Headbands
+    #
+    # When this helper has already proven that episode.name is
+    # appropriate for display, remove one exact series/channel
+    # prefix before returning it.
+    display_episode_name = episode_name
+
+    for redundant_prefix in (
+        series_name,
+        channel_name,
+    ):
+        redundant_prefix = str(
+            redundant_prefix
+            or ""
+        ).strip()
+
+        if (
+            not redundant_prefix
+            or len(display_episode_name)
+            <= len(redundant_prefix)
+        ):
+            continue
+
+        if not display_episode_name.casefold().startswith(
+            redundant_prefix.casefold()
+        ):
+            continue
+
+        remainder = display_episode_name[
+            len(redundant_prefix):
+        ]
+
+        if not remainder:
+            continue
+
+        trimmed = remainder.lstrip()
+
+        if not trimmed:
+            continue
+
+        # Explicit separators:
+        #   Series: Episode
+        #   Series - Episode
+        #   Series | Episode
+        if trimmed.startswith(
+            (
+                ":",
+                "-",
+                "–",
+                "—",
+                "|",
+            )
+        ):
+            candidate = trimmed[1:].strip()
+
+            if candidate:
+                display_episode_name = candidate
+                break
+
+        # Some Pluto labels use only a word boundary:
+        #   Black Ink Crew The Power of the Headbands
+        #   RiffTrax Live: Carnival of Souls
+        #
+        # This normalization is only used after the surrounding
+        # selector proves the channel/series identity is safe.
+        elif remainder[0].isspace():
+            candidate = trimmed
+
+            if candidate:
+                display_episode_name = candidate
+                break
+
+    addon_slug = str(
+        addon_channel_id
+        or ""
+    ).strip().lower()
+
+    channel_fold = str(
+        channel_name
+        or ""
+    ).strip().casefold()
+
+    series_fold = (
+        series_name.casefold()
+    )
+
+    # Exact dedicated-series channel by canonical Pluto series slug.
+    if (
+        addon_slug
+        and series_slug
+        and addon_slug == series_slug
+    ):
+        return display_episode_name
+
+    # Exact dedicated-series channel by visible series/channel name.
+    if (
+        channel_fold
+        and series_fold
+        and channel_fold == series_fold
+    ):
+        return display_episode_name
+
+    # Explicit composite redundancy:
+    #
+    #   CSI: Crime Scene Investigation: I-15 Murders
+    #                                      ^ episode.name
+    #
+    # Only strip when the root title literally ends with the supplied
+    # episode name and the preceding text ends with a title separator.
+    root_lower = (
+        root_title.lower()
+    )
+
+    episode_lower = (
+        episode_name.lower()
+    )
+
+    if (
+        root_title
+        and root_lower != episode_lower
+        and root_lower.endswith(
+            episode_lower
+        )
+    ):
+        prefix_length = (
+            len(root_title)
+            - len(episode_name)
+        )
+
+        if prefix_length >= 0:
+            prefix = (
+                root_title[
+                    :prefix_length
+                ].rstrip()
+            )
+
+            if prefix.endswith(
+                (
+                    ":",
+                    "-",
+                    "–",
+                    "—",
+                    "|",
+                )
+            ):
+                return display_episode_name
+
+    return current_title
+
 @api_router.get("/content/live-tv/epg/{epg_date}")
 async def get_live_tv_epg(
     epg_date: str,
@@ -12152,6 +12370,25 @@ async def get_live_tv_epg(
                     ):
                         continue
 
+                    addon_channel_id = str(
+                        pluto_to_addon.get(
+                            pluto_id
+                        )
+                        or ""
+                    ).strip()
+
+                    channel_meta = (
+                        meta_by_addon_id.get(
+                            addon_channel_id
+                        )
+                        or {}
+                    )
+
+                    channel_name = str(
+                        channel_meta.get("name")
+                        or addon_channel_id
+                    ).strip()
+
                     programs = []
 
                     for item in (
@@ -12227,11 +12464,12 @@ async def get_live_tv_epg(
 
                         programs.append({
                             "id": program_id,
-                            "title": str(
-                                item.get("title")
-                                or episode.get("name")
-                                or "Untitled"
-                            ),
+                            "title":
+                                _v788t16n_as1_pluto_guide_title(
+                                    addon_channel_id,
+                                    channel_name,
+                                    item,
+                                ),
                             "released": None,
                             "startTime":
                                 start_time,
