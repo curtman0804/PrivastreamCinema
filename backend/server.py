@@ -4613,6 +4613,108 @@ def _v786f_wrap_pluto_streams(
 
 # ================== /V786F PLUTO HLS CONTINUITY RELAY ====================
 
+# ================= V788T16AH USA TV EPG-SAFE STREAM IDENTITY =================
+#
+# Some USA-TV rows contain unrelated feeds under one catalog row.
+# Keep only the exact feed whose identity matches the EPG assigned to
+# that row.  This helper is used by BOTH inventory health checks and
+# the owner-specific playback endpoint so visibility/playback stay aligned.
+#
+_V788T16AH_USATV_EPG_SAFE_IDS = frozenset({
+    "ustv-1a0b178a-23c5-4c06-9217-ceabe2897343",
+    "ustv-aaad2ad4-7621-40d4-b0bb-8da90ad12b5d",
+})
+
+
+def _v788t16ah_filter_usa_tv_epg_safe_streams(
+    manifest_id,
+    content_type,
+    content_id,
+    streams,
+):
+    if str(manifest_id or '').strip() != 'community.usa-tv-next':
+        return streams if isinstance(streams, list) else []
+
+    if str(content_type or '').strip().lower() != 'tv':
+        return streams if isinstance(streams, list) else []
+
+    channel_id = str(content_id or '').strip()
+
+    if channel_id not in _V788T16AH_USATV_EPG_SAFE_IDS:
+        return streams if isinstance(streams, list) else []
+
+    import urllib.parse as _v788t16ah_urlparse
+
+    source_streams = (
+        streams
+        if isinstance(streams, list)
+        else []
+    )
+
+    filtered = []
+
+    for stream in source_streams:
+
+        if not isinstance(stream, dict):
+            continue
+
+        value = str(
+            stream.get('url')
+            or stream.get('directUrl')
+            or stream.get('proxyUrl')
+            or ''
+        ).strip()
+
+        if not value:
+            continue
+
+        try:
+            parsed = _v788t16ah_urlparse.urlsplit(value)
+        except Exception:
+            continue
+
+        host = str(parsed.hostname or '').lower()
+        path = str(parsed.path or '')
+
+        if channel_id == "ustv-1a0b178a-23c5-4c06-9217-ceabe2897343":
+            if (
+                host == 'content.uplynk.com'
+                and path == '/channel/9d4e02c9c3544c269d32e6b316792c8f.m3u8'
+            ):
+                filtered.append(stream)
+
+            continue
+
+        if channel_id == "ustv-aaad2ad4-7621-40d4-b0bb-8da90ad12b5d":
+            query = _v788t16ah_urlparse.parse_qs(
+                parsed.query,
+                keep_blank_values=True,
+            )
+
+            caid = str(
+                (query.get('ads.caid') or [''])[0]
+                or ''
+            ).strip()
+
+            if (
+                host == 'dbrb49pjoymg4.cloudfront.net'
+                and path == '/10001/99951158/hls/playlist.m3u8'
+                and caid == 'ScrippsION'
+            ):
+                filtered.append(stream)
+
+    logger.info(
+        'V788T16AH_USATV_EPG_SAFE_STREAM_FILTER '
+        'channel=%s raw=%s kept=%s',
+        channel_id,
+        len(source_streams),
+        len(filtered),
+    )
+
+    return filtered
+
+
+# ================= /V788T16AH USA TV EPG-SAFE STREAM IDENTITY =================
 @api_router.get("/addons/{addon_id}/stream/{content_type}/{content_id}")
 async def get_addon_streams(
     addon_id: str,
@@ -4660,6 +4762,21 @@ async def get_addon_streams(
                 ):
                     payload = _v786f_wrap_pluto_streams(
                         payload
+                    )
+
+                if (
+                    manifest_id == "community.usa-tv-next"
+                    and str(content_type).strip().lower() == "tv"
+                    and isinstance(payload, dict)
+                ):
+                    payload = dict(payload)
+                    payload['streams'] = (
+                        _v788t16ah_filter_usa_tv_epg_safe_streams(
+                            manifest_id,
+                            content_type,
+                            content_id,
+                            payload.get('streams'),
+                        )
                     )
 
                 return payload
@@ -8997,6 +9114,16 @@ async def _v788t11w_probe_channel_stream(
         if not isinstance(streams, list):
             streams = []
 
+        if manifest_id == "community.usa-tv-next":
+            streams = (
+                _v788t16ah_filter_usa_tv_epg_safe_streams(
+                    manifest_id,
+                    "tv",
+                    channel_id,
+                    streams,
+                )
+            )
+
         # V788T16J:
         #
         # USA TV Next now has three transport states:
@@ -10546,6 +10673,22 @@ async def get_live_tv_epg(
                     "provenanceMode": "endpoint",
                     "streamCount": 1,
                     "streamSetSha256": "9C3ED5B44E44C5808432ED3A874900EA5D5436E9651B4F188AF351A46795154D",
+                },
+                # V788T16AH ABC
+                "ustv-1a0b178a-23c5-4c06-9217-ceabe2897343": {
+                    "source": "tvguide",
+                    "sourceId": "9233011874",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 7,
+                    "streamSetSha256": "2971F512E2A52254154513DF6D3AE076AB3135C070169FEDC4D619081E69B028",
+                },
+                # V788T16AH Ion
+                "ustv-aaad2ad4-7621-40d4-b0bb-8da90ad12b5d": {
+                    "source": "tvguide",
+                    "sourceId": "9233011910",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 5,
+                    "streamSetSha256": "55D5941D1B24894D19579CC9815CAAE5DEA04A3214BCCAAD38177CB64AB3B5A3",
                 },
             }
 
