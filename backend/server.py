@@ -9832,6 +9832,208 @@ def _v788t16n_as1_pluto_guide_title(
 
     return current_title
 
+# V788T16N-AX1_PLUTO_XMLTV_SUBTITLE_TITLE
+def _v788t16n_ax1_pluto_xmltv_guide_title(
+    addon_channel_id: str,
+    channel_name: str,
+    xmltv_title: str,
+    xmltv_subtitle: str,
+) -> str:
+    """
+    Prefer authoritative XMLTV <sub-title> only when channel identity proves
+    that the row is a dedicated-series channel.
+
+    Mixed and umbrella channels retain their current XMLTV title.
+    """
+
+    addon_channel_id = str(
+        addon_channel_id
+        or ""
+    ).strip()
+
+    channel_name = str(
+        channel_name
+        or ""
+    ).strip()
+
+    xmltv_title = str(
+        xmltv_title
+        or ""
+    ).strip()
+
+    xmltv_subtitle = str(
+        xmltv_subtitle
+        or ""
+    ).strip()
+
+    current_title = (
+        xmltv_title
+        or xmltv_subtitle
+        or "Programming"
+    )
+
+    if not xmltv_subtitle:
+        return current_title
+
+    # V788T16N-AX2_XMLTV_TARGET_ALLOWLIST
+    #
+    # AX1 proved that a generic dedicated-series XMLTV rule would
+    # alter 424 channels / 10,214 programs. Keep this change scoped
+    # only to the three XMLTV channels whose exact metadata and
+    # desired behavior have been proven end-to-end.
+    xmltv_subtitle_channel_ids = frozenset({
+        "csi",
+        "csi-crime-scene-investigation",
+        "crimes-that-shook-britain",
+    })
+
+    if (
+        addon_channel_id.casefold()
+        not in xmltv_subtitle_channel_ids
+    ):
+        return current_title
+
+    def _norm(value):
+        value = str(
+            value
+            or ""
+        ).casefold()
+
+        chars = [
+            character
+            if character.isalnum()
+            else " "
+            for character in value
+        ]
+
+        return " ".join(
+            "".join(chars).split()
+        )
+
+    def _slug(value):
+        return "-".join(
+            _norm(value).split()
+        )
+
+    title_norm = _norm(
+        xmltv_title
+    )
+
+    subtitle_norm = _norm(
+        xmltv_subtitle
+    )
+
+    channel_norm = _norm(
+        channel_name
+    )
+
+    addon_slug = _slug(
+        addon_channel_id
+    )
+
+    # XMLTV title is itself the dedicated series identity:
+    #
+    #   Criminal Minds
+    #   CSI: Crime Scene Investigation
+    #
+    if (
+        title_norm
+        and channel_norm
+        and title_norm == channel_norm
+    ):
+        return xmltv_subtitle
+
+    if (
+        addon_slug
+        and title_norm
+        and addon_slug == _slug(
+            xmltv_title
+        )
+    ):
+        return xmltv_subtitle
+
+    # For composite XMLTV titles, prove that <sub-title> is the
+    # literal final component before considering it an episode label.
+    series_title = ""
+
+    if (
+        xmltv_title
+        and xmltv_subtitle
+        and title_norm != subtitle_norm
+        and xmltv_title.casefold().endswith(
+            xmltv_subtitle.casefold()
+        )
+    ):
+        prefix_length = (
+            len(xmltv_title)
+            - len(xmltv_subtitle)
+        )
+
+        if prefix_length >= 0:
+            prefix = xmltv_title[
+                :prefix_length
+            ].rstrip()
+
+            for separator in (
+                ":",
+                "-",
+                "–",
+                "—",
+                "|",
+            ):
+                if prefix.endswith(
+                    separator
+                ):
+                    series_title = (
+                        prefix[:-1]
+                        .strip()
+                    )
+                    break
+
+    series_norm = _norm(
+        series_title
+    )
+
+    # Exact series/channel identity:
+    #
+    #   Crimes That Shook Britain: Ann Maguire
+    #   channel = Crimes That Shook Britain
+    #
+    if (
+        series_norm
+        and channel_norm
+        and series_norm == channel_norm
+    ):
+        return xmltv_subtitle
+
+    if (
+        series_title
+        and addon_slug
+        and addon_slug == _slug(
+            series_title
+        )
+    ):
+        return xmltv_subtitle
+
+    # Proven catalog alias:
+    #
+    #   channel ID/name: csi / CSI
+    #   XMLTV series:    CSI: Crime Scene Investigation
+    #
+    # Do not generalize this into a prefix rule because channels such
+    # as Star Trek are intentionally treated as umbrella channels.
+    if (
+        addon_channel_id.casefold()
+        == "csi"
+        and series_norm
+        == _norm(
+            "CSI: Crime Scene Investigation"
+        )
+    ):
+        return xmltv_subtitle
+
+    return current_title
+
 @api_router.get("/content/live-tv/epg/{epg_date}")
 async def get_live_tv_epg(
     epg_date: str,
@@ -12826,6 +13028,13 @@ async def get_live_tv_epg(
                             or "Programming"
                         ).strip()
 
+                        xmltv_subtitle = str(
+                            xmltv_element.findtext(
+                                "sub-title"
+                            )
+                            or ""
+                        ).strip()
+
                         xmltv_description = str(
                             xmltv_element.findtext(
                                 "desc"
@@ -12895,6 +13104,9 @@ async def get_live_tv_epg(
 
                             "title":
                                 xmltv_title,
+
+                            "_xmltvSubTitle":
+                                xmltv_subtitle,
 
                             "released":
                                 None,
@@ -13074,6 +13286,61 @@ async def get_live_tv_epg(
                         pluto_id,
                         [],
                     )
+                )
+
+                channel_name = str(
+                    meta.get("name")
+                    or addon_channel_id
+                ).strip()
+
+                normalized_programs = []
+
+                for program in (
+                    programs_for_channel
+                    or []
+                ):
+                    if not isinstance(
+                        program,
+                        dict,
+                    ):
+                        continue
+
+                    output_program = dict(
+                        program
+                    )
+
+                    if str(
+                        output_program.get("id")
+                        or ""
+                    ).startswith(
+                        "xmltv:"
+                    ):
+                        output_program[
+                            "title"
+                        ] = (
+                            _v788t16n_ax1_pluto_xmltv_guide_title(
+                                addon_channel_id,
+                                channel_name,
+                                output_program.get(
+                                    "title"
+                                ),
+                                output_program.get(
+                                    "_xmltvSubTitle"
+                                ),
+                            )
+                        )
+
+                    output_program.pop(
+                        "_xmltvSubTitle",
+                        None,
+                    )
+
+                    normalized_programs.append(
+                        output_program
+                    )
+
+                programs_for_channel = (
+                    normalized_programs
                 )
 
                 # V788T9K_PLUTO_ADULT_CHANNEL_FILTER
