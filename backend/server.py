@@ -4623,6 +4623,7 @@ def _v786f_wrap_pluto_streams(
 _V788T16AH_USATV_EPG_SAFE_IDS = frozenset({
     "ustv-1a0b178a-23c5-4c06-9217-ceabe2897343",
     "ustv-aaad2ad4-7621-40d4-b0bb-8da90ad12b5d",
+    "ustv-7ff076f8-51df-4b5e-9a61-d3896b534034",
 })
 
 
@@ -4703,6 +4704,12 @@ def _v788t16ah_filter_usa_tv_epg_safe_streams(
             ):
                 filtered.append(stream)
 
+        # V788T16N-AL MTV exact canonical EPG-safe feed
+        if channel_id == "ustv-7ff076f8-51df-4b5e-9a61-d3896b534034":
+            if value == 'http://23.237.104.106:8080/USA_MTV/index.m3u8':
+                filtered.append(stream)
+
+            continue
     logger.info(
         'V788T16AH_USATV_EPG_SAFE_STREAM_FILTER '
         'channel=%s raw=%s kept=%s',
@@ -10689,6 +10696,15 @@ async def get_live_tv_epg(
                     "provenanceMode": "endpoint",
                     "streamCount": 5,
                     "streamSetSha256": "55D5941D1B24894D19579CC9815CAAE5DEA04A3214BCCAAD38177CB64AB3B5A3",
+                },
+                # V788T16N-AL MTV
+                "ustv-7ff076f8-51df-4b5e-9a61-d3896b534034": {
+                    "source": "tvguide",
+                    "sourceId": "9200014754",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 5,
+                    "streamSetSha256":
+                        "802DD8B7BD6777793C33CE4361258F739CE40D28A959F8F4EA4C29431620CB02",
                 },
             }
 
