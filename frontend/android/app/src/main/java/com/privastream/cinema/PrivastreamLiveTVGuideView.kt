@@ -342,8 +342,27 @@ class PrivastreamLiveTVGuideView(
     }
 
     fun setPreferredFocusIndex(value: Int) {
+        android.util.Log.d(
+            "PSTV",
+            "W121ZSY34 SET_PREFERRED " +
+                "value=$value " +
+                "beforeIndex=$preferredFocusIndex " +
+                "beforeApplied=$preferredFocusApplied " +
+                "focusedRow=$focusedRow " +
+                "logicalRow=$logicalVerticalRow " +
+                "guideHasFocus=${hasFocus()}"
+        )
+
         preferredFocusIndex = value
         preferredFocusApplied = false
+
+        // V789R_TOP_VISIBLE_CATEGORY_DOWN
+        // -1 is a one-shot "focus first visible row" request carried by
+        // focusRestoreRequest. Do not let the normal preferred-focus path
+        // coerce it to absolute row 0.
+        if (value < 0) {
+            return
+        }
 
         post {
             applyPreferredFocusIfNeeded()
@@ -358,6 +377,18 @@ class PrivastreamLiveTVGuideView(
                 ?.toIntOrNull()
                 ?: return
 
+        android.util.Log.d(
+            "PSTV",
+            "W121ZSY34 REQUEST_RESTORE " +
+                "raw=$value " +
+                "requested=$requested " +
+                "beforeIndex=$preferredFocusIndex " +
+                "beforeApplied=$preferredFocusApplied " +
+                "focusedRow=$focusedRow " +
+                "logicalRow=$logicalVerticalRow " +
+                "guideHasFocus=${hasFocus()}"
+        )
+
         preferredFocusIndex = requested
         preferredFocusApplied = false
 
@@ -367,13 +398,125 @@ class PrivastreamLiveTVGuideView(
             }
 
             val row =
-                requested.coerceIn(
-                    0,
-                    adapter.itemCount - 1
-                )
+                if (requested == -1) {
+                    // V789R_TOP_VISIBLE_CATEGORY_DOWN
+                    // Categories sit outside this RecyclerView, so its vertical
+                    // viewport is unchanged while the category rail owns focus.
+                    // Re-enter on the channel that is visibly at the top.
+                    val firstVisible =
+                        layoutManager
+                            .findFirstVisibleItemPosition()
+
+                    val resolved =
+                        if (
+                            firstVisible ==
+                                RecyclerView.NO_POSITION
+                        ) {
+                            0
+                        } else {
+                            firstVisible
+                        }
+
+                    android.util.Log.d(
+                        "PSTV",
+                        "V789R TOP_VISIBLE_FOCUS " +
+                            "row=$resolved " +
+                            "items=${adapter.itemCount}"
+                    )
+
+                    resolved.coerceIn(
+                        0,
+                        adapter.itemCount - 1
+                    )
+                } else {
+                    requested.coerceIn(
+                        0,
+                        adapter.itemCount - 1
+                    )
+                }
 
             preferredFocusIndex = row
 
+            // W121ZSY40_PRESERVE_RETURN_VIEWPORT
+            //
+            // Playback return already has the correct channel and viewport.
+            // Do NOT center the returned row. Replace any stale pending
+            // LinearLayoutManager anchor with the row's current pixel position.
+            if (requested >= 0) {
+                val restoredHolder =
+                    recycler.findViewHolderForAdapterPosition(row) as? Holder
+
+                if (restoredHolder != null) {
+                    val preservedTop =
+                        restoredHolder.itemView.top
+
+                    val firstVisible =
+                        layoutManager.findFirstVisibleItemPosition()
+
+                    val lastVisible =
+                        layoutManager.findLastVisibleItemPosition()
+
+                    android.util.Log.d(
+                        "PSTV",
+                        "W121ZSY40 RETURN_PRESERVE " +
+                            "row=$row " +
+                            "top=$preservedTop " +
+                            "first=$firstVisible " +
+                            "last=$lastVisible"
+                    )
+
+                    // Overwrite any stale pending anchor with a visual no-op.
+                    // The returned channel stays exactly where it already is.
+                    layoutManager.scrollToPositionWithOffset(
+                        row,
+                        preservedTop
+                    )
+
+                    val focused =
+                        restoredHolder.root.requestFocus()
+
+                    android.util.Log.d(
+                        "PSTV",
+                        "W121ZSY40 RETURN_FOCUS " +
+                            "row=$row " +
+                            "top=$preservedTop " +
+                            "focused=$focused"
+                    )
+
+                    if (focused) {
+                        preferredFocusApplied = true
+                    } else {
+                        recycler.postOnAnimation {
+                            val retryHolder =
+                                recycler.findViewHolderForAdapterPosition(row)
+                                    as? Holder
+
+                            val retryFocused =
+                                retryHolder?.root?.requestFocus() == true
+
+                            android.util.Log.d(
+                                "PSTV",
+                                "W121ZSY40 RETURN_FOCUS_RETRY " +
+                                    "row=$row focused=$retryFocused"
+                            )
+
+                            if (retryFocused) {
+                                preferredFocusApplied = true
+                            }
+                        }
+                    }
+
+                    return@post
+                }
+
+                android.util.Log.d(
+                    "PSTV",
+                    "W121ZSY40 RETURN_HOLDER_MISSING row=$row"
+                )
+
+                focusRow(row, "station", null)
+                return@post
+            }
             val holder =
                 recycler
                     .findViewHolderForAdapterPosition(row)
@@ -538,6 +681,19 @@ class PrivastreamLiveTVGuideView(
         val oldZone = focusedZone
         val oldAnchor = focusedProgramAnchorMs
 
+        android.util.Log.d(
+            "PSTV",
+            "W121ZSY34 SET_ITEMS_REPLACE " +
+                "oldKey=$oldKey " +
+                "focusedRow=$focusedRow " +
+                "logicalRow=$logicalVerticalRow " +
+                "oldZone=$oldZone " +
+                "preferredIndex=$preferredFocusIndex " +
+                "preferredApplied=$preferredFocusApplied " +
+                "nextCount=${next.size} " +
+                "guideHasFocus=${hasFocus()}"
+        )
+
         adapter.replace(next)
 
         val restored =
@@ -549,14 +705,85 @@ class PrivastreamLiveTVGuideView(
 
         preferredFocusApplied = false
 
+        android.util.Log.d(
+            "PSTV",
+            "W121ZSY34 SET_ITEMS_RESTORED " +
+                "oldKey=$oldKey " +
+                "restored=$restored " +
+                "preferredIndex=$preferredFocusIndex " +
+                "preferredApplied=$preferredFocusApplied " +
+                "focusedRow=$focusedRow " +
+                "logicalRow=$logicalVerticalRow " +
+                "guideHasFocus=${hasFocus()}"
+        )
+
         post {
+            // V788T12D_KEEP_EXISTING_FOCUSED_HOLDER
+            //
+            // DiffUtil may have shifted this row's adapter position,
+            // but if the same keyed holder still owns focus there is
+            // nothing to restore. Updating our logical row bookkeeping
+            // is sufficient and avoids the visible selector dropout.
+            if (restored >= 0) {
+                val restoredHolder =
+                    recycler.findViewHolderForAdapterPosition(
+                        restored
+                    ) as? Holder
+
+                if (
+                    restoredHolder != null &&
+                    restoredHolder.root.hasFocus()
+                ) {
+                    focusedRow = restored
+                    logicalVerticalRow = restored
+                    focusedZone = oldZone
+                    focusedProgramAnchorMs = oldAnchor
+
+                    preferredFocusIndex = restored
+                    preferredFocusApplied = true
+
+                    android.util.Log.d(
+                        "PSTV",
+                        "V788T12D FOCUS PRESERVED " +
+                            "row=$restored key=$oldKey"
+                    )
+
+                    return@post
+                }
+            }
+
+            // Existing recovery path remains intact for genuine holder
+            // loss, playback return, cold start, or another real focus
+            // transition.
             if (hasFocus() && restored >= 0) {
+                android.util.Log.d(
+                    "PSTV",
+                    "W121ZSY34 SET_ITEMS_RESTORE_BY_KEY " +
+                        "restored=$restored " +
+                        "oldKey=$oldKey " +
+                        "zone=$oldZone " +
+                        "preferredIndex=$preferredFocusIndex " +
+                        "preferredApplied=$preferredFocusApplied"
+                )
+
                 focusRow(
                     restored,
                     oldZone,
                     oldAnchor
                 )
             } else {
+                android.util.Log.d(
+                    "PSTV",
+                    "W121ZSY34 SET_ITEMS_FALLBACK_PREFERRED " +
+                        "restored=$restored " +
+                        "oldKey=$oldKey " +
+                        "preferredIndex=$preferredFocusIndex " +
+                        "preferredApplied=$preferredFocusApplied " +
+                        "focusedRow=$focusedRow " +
+                        "logicalRow=$logicalVerticalRow " +
+                        "guideHasFocus=${hasFocus()}"
+                )
+
                 applyPreferredFocusIfNeeded()
             }
         }
@@ -637,14 +864,39 @@ class PrivastreamLiveTVGuideView(
     }
 
     private fun applyPreferredFocusIfNeeded() {
+        android.util.Log.d(
+            "PSTV",
+            "W121ZSY34 APPLY_PREFERRED_ENTRY " +
+                "preferredIndex=$preferredFocusIndex " +
+                "preferredApplied=$preferredFocusApplied " +
+                "itemCount=${adapter.itemCount} " +
+                "focusedRow=$focusedRow " +
+                "logicalRow=$logicalVerticalRow " +
+                "guideHasFocus=${hasFocus()}"
+        )
+
         if (preferredFocusApplied) return
         if (adapter.itemCount <= 0) return
+
+        // V789R_TOP_VISIBLE_CATEGORY_DOWN
+        // Negative values are focusRestoreRequest sentinels, not row indexes.
+        if (preferredFocusIndex < 0) return
 
         val p =
             preferredFocusIndex.coerceIn(
                 0,
                 adapter.itemCount - 1
             )
+
+        android.util.Log.d(
+            "PSTV",
+            "W121ZSY34 APPLY_PREFERRED_FIRE " +
+                "resolvedRow=$p " +
+                "preferredIndex=$preferredFocusIndex " +
+                "focusedRow=$focusedRow " +
+                "logicalRow=$logicalVerticalRow " +
+                "guideHasFocus=${hasFocus()}"
+        )
 
         preferredFocusApplied = true
 
@@ -660,6 +912,20 @@ class PrivastreamLiveTVGuideView(
         zone: String,
         anchorMs: Long?
     ) {
+        android.util.Log.d(
+            "PSTV",
+            "W121ZSY34 FOCUS_ROW_REQUEST " +
+                "row=$row " +
+                "zone=$zone " +
+                "anchorMs=$anchorMs " +
+                "itemCount=${adapter.itemCount} " +
+                "beforeFocusedRow=$focusedRow " +
+                "beforeLogicalRow=$logicalVerticalRow " +
+                "preferredIndex=$preferredFocusIndex " +
+                "preferredApplied=$preferredFocusApplied " +
+                "guideHasFocus=${hasFocus()}"
+        )
+
         if (row !in 0 until adapter.itemCount) return
 
         focusedRow = row
@@ -685,24 +951,87 @@ class PrivastreamLiveTVGuideView(
         )
 
         recycler.post {
-            val holder =
-                recycler.findViewHolderForAdapterPosition(row)
-                    as? Holder
-
-            if (holder != null) {
-                holder.root.requestFocus()
-            } else {
-                recycler.postOnAnimation {
-                    (
-                        recycler
-                            .findViewHolderForAdapterPosition(row)
-                            as? Holder
-                    )?.root?.requestFocus()
-                }
-            }
+            requestRowRootFocusWithRetry(
+                row,
+                0
+            )
         }
     }
 
+    // V788T10P_POST_REFRESH_ROOT_FOCUS_RETRY
+    // RecyclerView.notifyDataSetChanged() can invalidate a holder after
+    // requestFocus() has already returned true. Keep the established root
+    // focus target, but confirm that the CURRENT holder still owns focus
+    // on the next animation frame before considering restoration complete.
+    private fun requestRowRootFocusWithRetry(
+        row: Int,
+        attempt: Int
+    ) {
+        if (row !in 0 until adapter.itemCount) {
+            return
+        }
+
+        val holder =
+            recycler.findViewHolderForAdapterPosition(row)
+                as? Holder
+
+        val requested =
+            holder?.root?.requestFocus() == true
+
+        recycler.postOnAnimation {
+            if (row !in 0 until adapter.itemCount) {
+                return@postOnAnimation
+            }
+
+            val currentHolder =
+                recycler.findViewHolderForAdapterPosition(row)
+                    as? Holder
+
+            if (
+                requested &&
+                currentHolder != null &&
+                currentHolder.root.hasFocus()
+            ) {
+                if (attempt > 0) {
+                    android.util.Log.d(
+                        "PSTV",
+                        "V788T10P ROOT FOCUS RESTORED " +
+                            "row=$row attempt=$attempt"
+                    )
+                }
+
+                return@postOnAnimation
+            }
+
+            if (attempt >= maxVerticalFocusRetries) {
+                android.util.Log.w(
+                    "PSTV",
+                    "V788T10P ROOT FOCUS GIVEUP " +
+                        "row=$row attempts=$attempt"
+                )
+
+                return@postOnAnimation
+            }
+
+            android.util.Log.d(
+                "PSTV",
+                "V788T10P ROOT FOCUS RETRY " +
+                    "row=$row attempt=${attempt + 1}"
+            )
+
+            layoutManager.scrollToPositionWithOffset(
+                row,
+                0
+            )
+
+            recycler.post {
+                requestRowRootFocusWithRetry(
+                    row,
+                    attempt + 1
+                )
+            }
+        }
+    }
     private fun findProgramForAnchor(
         holder: Holder,
         anchorMs: Long?
@@ -746,6 +1075,188 @@ class PrivastreamLiveTVGuideView(
         return best
     }
 
+    // W121ZSY36_VIEWPORT_EDGE_ROOT_FOCUS
+    //
+    // Root-to-root navigation succeeds while the destination holder is
+    // already visible. At a viewport edge, shift the RecyclerView exactly
+    // one row first, then focus the newly visible adjacent root.
+    //
+    // Do NOT use the playback-return root retry loop here. That loop uses
+    // scrollToPositionWithOffset() and was proven to stall repeatedly at
+    // viewport boundaries while the old root retained focus.
+    private fun moveRootVertical(
+        sourceHolder: Holder,
+        delta: Int
+    ): Boolean {
+        if (adapter.itemCount <= 0) {
+            return false
+        }
+
+        val actualFocus =
+            recycler.findFocus()
+
+        val actualHolder =
+            actualFocus?.let { focusedView ->
+                recycler.findContainingViewHolder(
+                    focusedView
+                ) as? Holder
+            }
+
+        var current =
+            actualHolder?.bindingAdapterPosition
+                ?: RecyclerView.NO_POSITION
+
+        if (current !in 0 until adapter.itemCount) {
+            current =
+                sourceHolder.bindingAdapterPosition
+        }
+
+        if (current !in 0 until adapter.itemCount) {
+            current =
+                logicalVerticalRow
+        }
+
+        if (current !in 0 until adapter.itemCount) {
+            current =
+                focusedRow
+        }
+
+        if (current !in 0 until adapter.itemCount) {
+            return false
+        }
+
+        val target =
+            current + delta
+
+        // Preserve the existing category/top and true bottom boundary paths.
+        if (target !in 0 until adapter.itemCount) {
+            return false
+        }
+
+        android.util.Log.d(
+            "PSTV",
+            "W121ZSY36 ROOT_VERTICAL " +
+                "current=$current " +
+                "target=$target " +
+                "delta=$delta " +
+                "itemCount=${adapter.itemCount}"
+        )
+
+        // Fast path: destination is already visible and can take focus.
+        val attachedTarget =
+            recycler.findViewHolderForAdapterPosition(
+                target
+            ) as? Holder
+
+        if (
+            attachedTarget != null &&
+            attachedTarget.root.requestFocus()
+        ) {
+            return true
+        }
+
+        // Proven failure case:
+        // the adjacent holder is at/just beyond the viewport edge.
+        // Move the viewport by exactly one guide row, synchronously.
+        val rowStepPx =
+            px(rowHeightDp)
+                .coerceAtLeast(1)
+
+        android.util.Log.d(
+            "PSTV",
+            "W121ZSY36 EDGE_SCROLL " +
+                "current=$current " +
+                "target=$target " +
+                "delta=$delta " +
+                "stepPx=$rowStepPx"
+        )
+
+        recycler.scrollBy(
+            0,
+            delta * rowStepPx
+        )
+
+        // scrollBy() normally lays out the adjacent row immediately.
+        val shiftedTarget =
+            recycler.findViewHolderForAdapterPosition(
+                target
+            ) as? Holder
+
+        if (
+            shiftedTarget != null &&
+            shiftedTarget.root.requestFocus()
+        ) {
+            android.util.Log.d(
+                "PSTV",
+                "W121ZSY36 EDGE_FOCUS " +
+                    "target=$target mode=immediate result=success"
+            )
+
+            return true
+        }
+
+        // One frame is enough for RecyclerView to finish an edge attachment.
+        // Do not start overlapping eight-attempt retry chains.
+        recycler.postOnAnimation {
+            val frameTarget =
+                recycler.findViewHolderForAdapterPosition(
+                    target
+                ) as? Holder
+
+            if (
+                frameTarget != null &&
+                frameTarget.root.requestFocus()
+            ) {
+                android.util.Log.d(
+                    "PSTV",
+                    "W121ZSY36 EDGE_FOCUS " +
+                        "target=$target mode=frame result=success"
+                )
+
+                return@postOnAnimation
+            }
+
+            // Last deterministic fallback: put the requested target fully
+            // inside the viewport, then try exactly once on the next frame.
+            val visibleOffset =
+                if (delta > 0) {
+                    (
+                        recycler.height -
+                            rowStepPx
+                    ).coerceAtLeast(0)
+                } else {
+                    0
+                }
+
+            layoutManager.scrollToPositionWithOffset(
+                target,
+                visibleOffset
+            )
+
+            recycler.postOnAnimation {
+                val finalTarget =
+                    recycler.findViewHolderForAdapterPosition(
+                        target
+                    ) as? Holder
+
+                val focused =
+                    finalTarget?.root?.requestFocus() == true
+
+                android.util.Log.d(
+                    "PSTV",
+                    "W121ZSY36 EDGE_FOCUS " +
+                        "target=$target " +
+                        "mode=final " +
+                        "result=${if (focused) "success" else "failed"}"
+                )
+            }
+        }
+
+        // Consume the vertical key because this function owns the pending
+        // one-row transition. Actual focusedRow remains updated only by the
+        // real root focus-change listener.
+        return true
+    }
     // V788T8Q2_NATIVE_VERTICAL_ZONE_LOCK
     private fun moveVertical(delta: Int): Boolean {
         if (adapter.itemCount <= 0) return false
@@ -1037,6 +1548,14 @@ class PrivastreamLiveTVGuideView(
                 anchorMs.toDouble()
             )
         }
+
+        // W121ZSY15A_SELECTOR_DIAG
+        android.util.Log.d(
+            "PSTVSEL",
+            "EMIT_FOCUS " +
+                "row=$row zone=$zone " +
+                "program=$programIndex"
+        )
 
         emit(
             "topItemFocus",
@@ -1369,6 +1888,18 @@ class PrivastreamLiveTVGuideView(
         val row =
             holder.bindingAdapterPosition
 
+        // W121ZSY15A_SELECTOR_DIAG
+        android.util.Log.d(
+            "PSTVSEL",
+            "RENDER " +
+                "row=$row " +
+                "focusedArg=$focused " +
+                "rootHasFocus=${holder.root.hasFocus()} " +
+                "stationHasFocus=${holder.station.hasFocus()} " +
+                "zone=$focusedZone " +
+                "emit=$emitEvent"
+        )
+
         val validRow =
             row != RecyclerView.NO_POSITION
 
@@ -1638,7 +2169,7 @@ class PrivastreamLiveTVGuideView(
         val root: LinearLayout,
         val station: LinearLayout,
         val logo: ImageView,
-        val fallback: TextView,
+        val fallback: ImageView,
         val title: TextView,
         val badge: FrameLayout,
         val programViewport: FrameLayout,
@@ -1722,12 +2253,56 @@ class PrivastreamLiveTVGuideView(
             return changed
         }
 
+        // V788T12D_FOCUS_SAFE_DIFF_UPDATE
+        //
+        // Inventory growth must not invalidate every visible holder.
+        // Channels already present retain identity through GuideItem.key.
+        // DiffUtil therefore reports insert/change operations instead of
+        // notifyDataSetChanged(), allowing RecyclerView to keep the
+        // currently focused holder alive while background inventory grows.
         fun replace(
             next: List<GuideItem>
         ) {
+            val previous =
+                ArrayList(data)
+
+            val diff =
+                androidx.recyclerview.widget.DiffUtil.calculateDiff(
+                    object :
+                        androidx.recyclerview.widget.DiffUtil.Callback() {
+
+                        override fun getOldListSize(): Int =
+                            previous.size
+
+                        override fun getNewListSize(): Int =
+                            next.size
+
+                        override fun areItemsTheSame(
+                            oldItemPosition: Int,
+                            newItemPosition: Int
+                        ): Boolean =
+                            previous[oldItemPosition].key ==
+                                next[newItemPosition].key
+
+                        override fun areContentsTheSame(
+                            oldItemPosition: Int,
+                            newItemPosition: Int
+                        ): Boolean =
+                            previous[oldItemPosition] ==
+                                next[newItemPosition]
+                    },
+
+                    // Existing A-Z rows retain relative ordering while
+                    // new channels are inserted between them. Move
+                    // detection is unnecessary and adds UI-thread work
+                    // on lower-powered Fire TV hardware.
+                    false
+                )
+
             data.clear()
             data.addAll(next)
-            notifyDataSetChanged()
+
+            diff.dispatchUpdatesTo(this)
         }
 
         fun itemAt(
@@ -1830,28 +2405,28 @@ class PrivastreamLiveTVGuideView(
                 )
             )
 
+            // V789S13C_INCOGNITO_TV_FALLBACK
+            // Missing station logos use the same gold TV visual language as
+            // the Live TV tray icon, with the Privastream incognito mark
+            // baked into the TV. The old gold "TV" text fallback is removed.
             val fallback =
-                TextView(context).apply {
-                    text = "TV"
-
-                    setTextColor(
-                        Color.rgb(
-                            184,
-                            160,
-                            92
-                        )
+                ImageView(context).apply {
+                    setImageResource(
+                        R.drawable.pstv_live_tv_incognito_fallback
                     )
 
-                    textSize = 14f
-                    gravity = Gravity.CENTER
+                    scaleType =
+                        ImageView.ScaleType.FIT_CENTER
+
                     isFocusable = false
                 }
 
             logoFrame.addView(
                 fallback,
                 FrameLayout.LayoutParams(
-                    LayoutParams.MATCH_PARENT,
-                    LayoutParams.MATCH_PARENT
+                    px(56f),
+                    px(36f),
+                    Gravity.CENTER
                 )
             )
 
@@ -2068,6 +2643,17 @@ class PrivastreamLiveTVGuideView(
                     .into(holder.logo)
             }
 
+            // W121ZSY15A_SELECTOR_DIAG
+            android.util.Log.d(
+                "PSTVSEL",
+                "BIND_BEFORE " +
+                    "position=$position " +
+                    "adapterRow=${holder.bindingAdapterPosition} " +
+                    "rootHasFocus=${holder.root.hasFocus()} " +
+                    "stationHasFocus=${holder.station.hasFocus()} " +
+                    "zone=$focusedZone"
+            )
+
             holder.station.background =
                 stationBackground(
                     holder.station.hasFocus()
@@ -2134,6 +2720,17 @@ class PrivastreamLiveTVGuideView(
 
                 val row =
                     holder.bindingAdapterPosition
+
+                // W121ZSY15A_SELECTOR_DIAG
+                android.util.Log.d(
+                    "PSTVSEL",
+                    "ROOT_FOCUS " +
+                        "row=$row " +
+                        "focused=$focused " +
+                        "rootHasFocus=${holder.root.hasFocus()} " +
+                        "stationHasFocus=${holder.station.hasFocus()} " +
+                        "zone=$focusedZone"
+                )
 
                 if (
                     focused &&
@@ -2207,8 +2804,39 @@ class PrivastreamLiveTVGuideView(
                         true
                     }
 
-                    // Up/Down deliberately fall through
-                    // to RecyclerView.
+                    // W121ZSY35_DETERMINISTIC_ROOT_VERTICAL_NAV
+                    //
+                    // Do not delegate vertical focus search to RecyclerView.
+                    // The root row is the actual focus owner, so move one
+                    // adapter row deterministically and consume the key.
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (
+                            event.action ==
+                                KeyEvent.ACTION_DOWN
+                        ) {
+                            moveRootVertical(
+                                holder,
+                                -1
+                            )
+                        } else {
+                            true
+                        }
+                    }
+
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        if (
+                            event.action ==
+                                KeyEvent.ACTION_DOWN
+                        ) {
+                            moveRootVertical(
+                                holder,
+                                1
+                            )
+                        } else {
+                            true
+                        }
+                    }
+
                     else -> false
                 }
             }
@@ -2217,6 +2845,17 @@ class PrivastreamLiveTVGuideView(
                 holder,
                 holder.root.hasFocus(),
                 false
+            )
+
+            // W121ZSY15A_SELECTOR_DIAG
+            android.util.Log.d(
+                "PSTVSEL",
+                "BIND_AFTER " +
+                    "position=$position " +
+                    "adapterRow=${holder.bindingAdapterPosition} " +
+                    "rootHasFocus=${holder.root.hasFocus()} " +
+                    "stationHasFocus=${holder.station.hasFocus()} " +
+                    "zone=$focusedZone"
             )
         }
 
@@ -2626,6 +3265,142 @@ class PrivastreamLiveTVGuideView(
         override fun onViewRecycled(
             holder: Holder
         ) {
+            // W121ZSY15A_SELECTOR_DIAG
+            android.util.Log.d(
+                "PSTVSEL",
+                "RECYCLE " +
+                    "row=${holder.bindingAdapterPosition} " +
+                    "rootHasFocus=${holder.root.hasFocus()} " +
+                    "stationHasFocus=${holder.station.hasFocus()} " +
+                    "zone=$focusedZone"
+            )
+
+            // W121ZSY30_FOCUSED_HOLDER_RECYCLE_RECOVERY
+            //
+            // W121ZSY29 captured RecyclerView recycling the exact
+            // row root that Android had just focused. The holder then
+            // retained focus with bindingAdapterPosition == NO_POSITION,
+            // leaving the selector invisible while the app/window still
+            // owned Android focus.
+            //
+            // Do not alter normal Up/Down focus search. Recover only
+            // this impossible state, and only if Android has not already
+            // landed on another valid adapter row by the next frame.
+            val recycledRow =
+                holder.bindingAdapterPosition
+
+            val recycledHadRootFocus =
+                holder.root.hasFocus()
+
+            val recycledKey =
+                if (
+                    recycledRow in
+                        0 until adapter.itemCount
+                ) {
+                    adapter.itemAt(
+                        recycledRow
+                    )?.key
+                } else {
+                    null
+                }
+
+            val recycledZone =
+                focusedZone
+
+            val recycledAnchor =
+                focusedProgramAnchorMs
+
+            if (
+                recycledHadRootFocus &&
+                recycledRow in
+                    0 until adapter.itemCount
+            ) {
+                android.util.Log.w(
+                    "PSTVSEL",
+                    "FOCUSED_RECYCLE_DETECTED " +
+                        "row=$recycledRow " +
+                        "key=$recycledKey " +
+                        "zone=$recycledZone"
+                )
+
+                recycler.postOnAnimation {
+                    val actualFocus =
+                        recycler.findFocus()
+
+                    val actualHolder =
+                        actualFocus?.let {
+                                focusedView ->
+                            recycler
+                                .findContainingViewHolder(
+                                    focusedView
+                                ) as? Holder
+                        }
+
+                    val actualRow =
+                        actualHolder
+                            ?.bindingAdapterPosition
+                            ?: RecyclerView.NO_POSITION
+
+                    if (
+                        actualRow in
+                            0 until adapter.itemCount
+                    ) {
+                        android.util.Log.d(
+                            "PSTVSEL",
+                            "FOCUSED_RECYCLE_RECOVERY_SKIP " +
+                                "validRow=$actualRow"
+                        )
+
+                        return@postOnAnimation
+                    }
+
+                    val recoveryRow =
+                        recycledKey
+                            ?.let {
+                                adapter.indexOfKey(it)
+                            }
+                            ?.takeIf {
+                                it in
+                                    0 until adapter.itemCount
+                            }
+                            ?: recycledRow
+                                .takeIf {
+                                    it in
+                                        0 until adapter.itemCount
+                                }
+                            ?: RecyclerView.NO_POSITION
+
+                    if (
+                        recoveryRow ==
+                            RecyclerView.NO_POSITION
+                    ) {
+                        android.util.Log.w(
+                            "PSTVSEL",
+                            "FOCUSED_RECYCLE_RECOVERY_ABORT " +
+                                "oldRow=$recycledRow " +
+                                "key=$recycledKey"
+                        )
+
+                        return@postOnAnimation
+                    }
+
+                    android.util.Log.w(
+                        "PSTVSEL",
+                        "FOCUSED_RECYCLE_RECOVERY_APPLY " +
+                            "oldRow=$recycledRow " +
+                            "recoveryRow=$recoveryRow " +
+                            "key=$recycledKey " +
+                            "zone=$recycledZone"
+                    )
+
+                    focusRow(
+                        recoveryRow,
+                        recycledZone,
+                        recycledAnchor
+                    )
+                }
+            }
+
             holder.station.setOnFocusChangeListener(
                 null
             )
