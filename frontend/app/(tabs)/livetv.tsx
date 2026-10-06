@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import PrivastreamLiveTVStationList from '../../src/components/PrivastreamLiveTVStationList';
 import PrivastreamLiveTVGuide from '../../src/components/PrivastreamLiveTVGuide';
+import PrivastreamCategoryRow from '../../src/components/PrivastreamCategoryRow';
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { api, ContentItem } from '../../src/api/client';
@@ -51,6 +52,461 @@ type GuideChannel = {
   programs: GuideProgram[];
 };
 
+type V789gCategoryKey =
+  | 'favorites'
+  | 'us'
+  | 'news'
+  | 'sports'
+  | 'movies'
+  | 'entertainment'
+  | 'kids'
+  | 'crime'
+  | 'reality'
+  | 'comedy'
+  | 'lifestyle'
+  | 'documentary'
+  | 'music'
+  | 'anime'
+  | 'spanish'
+  | 'portuguese'
+  | 'german'
+  | 'french'
+  | 'italian'
+  | 'danish'
+  | 'swedish'
+  | 'norwegian'
+  | 'finnish'
+  | 'all';
+
+type V789gCategoryDef = {
+  key: V789gCategoryKey;
+  label: string;
+};
+
+const V789G_CHANNEL_META: any =
+  require('../../src/data/liveTvChannelMeta.json');
+
+const V789G_CATEGORY_DEFS: V789gCategoryDef[] = [
+  { key: 'favorites', label: 'Favorites' },
+  { key: 'us', label: 'US Channels' },
+  { key: 'news', label: 'News' },
+  { key: 'sports', label: 'Sports' },
+  { key: 'movies', label: 'Movies' },
+  { key: 'entertainment', label: 'Entertainment' },
+  { key: 'kids', label: 'Kids' },
+  { key: 'crime', label: 'Crime' },
+  { key: 'reality', label: 'Reality' },
+  { key: 'comedy', label: 'Comedy' },
+  { key: 'lifestyle', label: 'Lifestyle' },
+  { key: 'documentary', label: 'Documentary' },
+  { key: 'music', label: 'Music' },
+  { key: 'anime', label: 'Anime' },
+  { key: 'spanish', label: 'Spanish' },
+  { key: 'portuguese', label: 'Portuguese' },
+  { key: 'german', label: 'German' },
+  { key: 'french', label: 'French' },
+  { key: 'italian', label: 'Italian' },
+  { key: 'danish', label: 'Danish' },
+  { key: 'swedish', label: 'Swedish' },
+  { key: 'norwegian', label: 'Norwegian' },
+  { key: 'finnish', label: 'Finnish' },
+  { key: 'all', label: 'All Channels' },
+];
+
+const V789G_SPANISH_REGIONS =
+  new Set([
+    'es',
+    'mx',
+    'ar',
+    'co',
+    'cr',
+    'pe',
+    've',
+    'cl',
+    'bo',
+    'sv',
+    'gt',
+    'hn',
+    'ni',
+    'pa',
+    'uy',
+    'ec',
+    'py',
+    'do',
+  ]);
+
+const v789gNormalize = (value: any) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+const v789gFavoriteId = (
+  channel: GuideChannel
+) =>
+  String(
+    channel.item.imdb_id ||
+      channel.item.id ||
+      ''
+  ).trim();
+
+const v789gMetadataId = (
+  channel: GuideChannel
+) =>
+  String(
+    channel.item.id ||
+      channel.item.imdb_id ||
+      ''
+  ).trim();
+
+const v789gGenres = (
+  channel: GuideChannel
+) => {
+  const item: any =
+    channel.item as any;
+
+  return [
+    item?.genre,
+    ...(Array.isArray(item?.genres)
+      ? item.genres
+      : []),
+  ]
+    .map(v789gNormalize)
+    .filter(Boolean);
+};
+
+const v789gPlutoMeta = (
+  channel: GuideChannel
+) => {
+  if (
+    String(
+      channel.addonId || ''
+    ).trim() !== 'org.plutotv'
+  ) {
+    return null;
+  }
+
+  return (
+    V789G_CHANNEL_META?.pluto?.[
+      v789gMetadataId(channel)
+    ] || null
+  );
+};
+
+const v789gRegions = (
+  channel: GuideChannel
+) =>
+  (
+    Array.isArray(
+      v789gPlutoMeta(channel)
+        ?.regions
+    )
+      ? v789gPlutoMeta(channel)
+          .regions
+      : []
+  )
+    .map(v789gNormalize)
+    .filter(Boolean);
+
+const v789gCategories = (
+  channel: GuideChannel
+) =>
+  (
+    Array.isArray(
+      v789gPlutoMeta(channel)
+        ?.categories
+    )
+      ? v789gPlutoMeta(channel)
+          .categories
+      : []
+  )
+    .map(v789gNormalize)
+    .filter(Boolean);
+
+const v789gAllRegionsWithin = (
+  regions: string[],
+  allowed: Set<string>
+) =>
+  regions.length > 0 &&
+  regions.every((region) =>
+    allowed.has(region)
+  );
+
+const v789gLanguageBucket = (
+  channel: GuideChannel
+): V789gCategoryKey | null => {
+  const genres =
+    v789gGenres(channel);
+
+  const regions =
+    v789gRegions(channel);
+
+  const categories =
+    v789gCategories(channel);
+
+  if (
+    genres.includes('latino') ||
+    categories.includes(
+      'en espanol'
+    ) ||
+    v789gAllRegionsWithin(
+      regions,
+      V789G_SPANISH_REGIONS
+    )
+  ) {
+    return 'spanish';
+  }
+
+  if (
+    v789gAllRegionsWithin(
+      regions,
+      new Set(['br'])
+    )
+  ) {
+    return 'portuguese';
+  }
+
+  if (
+    v789gAllRegionsWithin(
+      regions,
+      new Set(['de', 'at'])
+    )
+  ) {
+    return 'german';
+  }
+
+  if (
+    v789gAllRegionsWithin(
+      regions,
+      new Set(['fr'])
+    )
+  ) {
+    return 'french';
+  }
+
+  if (
+    v789gAllRegionsWithin(
+      regions,
+      new Set(['it'])
+    )
+  ) {
+    return 'italian';
+  }
+
+  if (
+    v789gAllRegionsWithin(
+      regions,
+      new Set(['dk'])
+    )
+  ) {
+    return 'danish';
+  }
+
+  if (
+    v789gAllRegionsWithin(
+      regions,
+      new Set(['se'])
+    )
+  ) {
+    return 'swedish';
+  }
+
+  if (
+    v789gAllRegionsWithin(
+      regions,
+      new Set(['no'])
+    )
+  ) {
+    return 'norwegian';
+  }
+
+  if (
+    v789gAllRegionsWithin(
+      regions,
+      new Set(['fi'])
+    )
+  ) {
+    return 'finnish';
+  }
+
+  return null;
+};
+
+const v789gMatchesCategory = (
+  channel: GuideChannel,
+  category: V789gCategoryKey,
+  isFavorite: (
+    id: string
+  ) => boolean
+) => {
+  if (category === 'all') {
+    return true;
+  }
+
+  const favoriteId =
+    v789gFavoriteId(channel);
+
+  if (category === 'favorites') {
+    return (
+      !!favoriteId &&
+      isFavorite(favoriteId)
+    );
+  }
+
+  const addonId =
+    String(
+      channel.addonId || ''
+    ).trim();
+
+  const genres =
+    v789gGenres(channel);
+
+  const regions =
+    v789gRegions(channel);
+
+  const categories =
+    v789gCategories(channel);
+
+  const hasGenre = (
+    ...values: string[]
+  ) =>
+    values.some((value) =>
+      genres.includes(value)
+    );
+
+  const hasCategory = (
+    ...values: string[]
+  ) =>
+    values.some((value) =>
+      categories.includes(value)
+    );
+
+  if (category === 'us') {
+    return (
+      addonId ===
+        'community.usa-tv-next' ||
+      regions.includes('us')
+    );
+  }
+
+  if (category === 'news') {
+    return (
+      hasGenre('news') ||
+      hasCategory(
+        'news',
+        'news + opinion',
+        'local news'
+      )
+    );
+  }
+
+  if (category === 'sports') {
+    return (
+      hasGenre('sports') ||
+      hasCategory('sports')
+    );
+  }
+
+  if (category === 'movies') {
+    return hasCategory('movies');
+  }
+
+  if (
+    category === 'entertainment'
+  ) {
+    return (
+      hasGenre(
+        'entertainment',
+        'premium'
+      ) ||
+      hasCategory(
+        'entertainment',
+        'drama',
+        'classic tv',
+        'daytime + game shows'
+      )
+    );
+  }
+
+  if (category === 'kids') {
+    return (
+      hasGenre('kids') ||
+      hasCategory('kids')
+    );
+  }
+
+  if (category === 'crime') {
+    return hasCategory(
+      'true crime'
+    );
+  }
+
+  if (category === 'reality') {
+    return hasCategory(
+      'reality',
+      'competition reality'
+    );
+  }
+
+  if (category === 'comedy') {
+    return hasCategory('comedy');
+  }
+
+  if (category === 'lifestyle') {
+    return (
+      hasGenre('lifestyle') ||
+      hasCategory(
+        'home + food',
+        'animals + nature'
+      )
+    );
+  }
+
+  if (
+    category === 'documentary'
+  ) {
+    return (
+      hasGenre('documentaries') ||
+      hasCategory(
+        'history + science',
+        'documentary + science'
+      )
+    );
+  }
+
+  if (category === 'music') {
+    return (
+      hasGenre('music') ||
+      hasCategory('music videos')
+    );
+  }
+
+  if (category === 'anime') {
+    return hasCategory('anime');
+  }
+
+  return (
+    v789gLanguageBucket(
+      channel
+    ) === category
+  );
+};
+
+const v789gFilterChannels = (
+  channels: GuideChannel[],
+  category: V789gCategoryKey,
+  isFavorite: (
+    id: string
+  ) => boolean
+) =>
+  channels.filter((channel) =>
+    v789gMatchesCategory(
+      channel,
+      category,
+      isFavorite
+    )
+  );
 const localDateKey = (d: Date) => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -134,6 +590,23 @@ const v788t8cChannelCountRef = useRef(0);
 const v788t8cFirstLeftRef = useRef(0);
 const v788t8cRawLeftRef = useRef(0);
 
+// V789S9_PROGRAM_TO_STATION_LEFT_GUARD
+// Native guide focus reaches JS before useTVEventHandler receives the same
+// LEFT key-up. Remember that one program -> station transition so the LEFT
+// which merely returned to the channel column cannot arm the tray timer.
+const v789s9ProgramToStationLeftRef = useRef(0);
+
+// V789S10_ROW1_TO_ROW0_UP_GUARD
+// Native guide focus reaches row 0 before useTVEventHandler receives the same
+// UP key-up that moved row 1 -> row 0. Remember that transition so that one
+// UP only lands on channel row 0. A later UP from row 0 may enter Categories.
+const v789s10RowOneToZeroUpRef = useRef(0);
+
+// V789K_SINGLE_VS_DOUBLE_LEFT
+const v789kSingleLeftTimerRef =
+  useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 // V788T8Y_R3_TRAY_ACK_HANDSHAKE
 const v788t8yTrayPendingRef =
   useRef(false);
@@ -278,6 +751,126 @@ useTVEventHandler((event: any) => {
     const focusArea = v788t8cFocusAreaRef.current;
     const row = v788t8cFocusedRowRef.current;
 
+    // V789M_EXPLICIT_CATEGORY_BOUNDARIES
+    //
+    // The category row owns its own focus while active.
+    // DOWN deliberately returns to filtered guide row 0.
+    // V789Q2_GLOBAL_CATEGORY_DOWN_OWNER
+    //
+    // Runtime proof on Google TV shows the global TV handler receives
+    // category DOWN while the native category-item DOWN handler does not.
+    // Use one owner only: select the actually-focused category and reuse
+    // the existing category-select -> guide-row-0 transaction.
+    if (
+      type === 'down' &&
+      v789hCategoryModeRef.current &&
+      v789hCategoryFocusedIndexRef.current >= 0
+    ) {
+      const highlightedIndex =
+        v789hCategoryFocusedIndexRef.current;
+
+      const highlightedCategory =
+        V789G_CATEGORY_DEFS[
+          highlightedIndex
+        ];
+
+      // V789S9_DOWN_EXITS_ONLY
+      //
+      // Highlighting a category is not selection. DOWN must never mutate the
+      // selected filter. It only exits Categories into the guide for the
+      // category that was last committed with OK.
+      console.log(
+        '[V789S9 CATEGORY DOWN EXIT] ' +
+          'highlighted=' +
+          String(
+            highlightedCategory?.key ||
+            ''
+          ) +
+          ' selected=' +
+          v789gCategory
+      );
+
+      v789mCategoryExitPendingRef.current =
+        true;
+
+      // Re-enter the currently selected guide at its first visible row.
+      // For a just-selected/remounted guide that naturally resolves to row 0.
+      setPreferredChannelIndex(
+        -1
+      );
+
+      setV788t8vFocusRestoreRequest(
+        (request) => ({
+          index: -1,
+          serial: request.serial + 1,
+        })
+      );
+
+      return;
+    }
+    // UP from the first CHANNEL row enters the
+    // category row on the currently-selected category.
+    //
+    // Normal native RecyclerView Up/Down remains untouched
+    // for every other guide row.
+    if (
+      type === 'up' &&
+      focusArea === 'station' &&
+      row === 0
+    ) {
+      // V789S10_ROW1_TO_ROW0_UP_GUARD
+      // The native guide reports row 0 before this same UP key-up reaches JS.
+      // If row 1 -> row 0 just happened, this UP belongs to that move and must
+      // not be reinterpreted as a second UP originating from row 0.
+      const now = Date.now();
+      const rowOneToZeroAt =
+        v789s10RowOneToZeroUpRef.current;
+
+      if (
+        rowOneToZeroAt > 0 &&
+        now - rowOneToZeroAt <= 350
+      ) {
+        v789s10RowOneToZeroUpRef.current = 0;
+
+        console.log(
+          '[V789S10 ROW1 TO ROW0 UP] stay-guide'
+        );
+
+        return;
+      }
+
+      v789s10RowOneToZeroUpRef.current = 0;
+
+      const stationKey =
+        v788pFocusedStationKeyRef.current;
+
+      const channel =
+        stationKey
+          ? channels.find(
+              (candidate) =>
+                candidate.key ===
+                stationKey
+            )
+          : undefined;
+
+      console.log(
+        '[V789M TOP ROW UP] ' +
+          'channel=' +
+          String(stationKey || '')
+      );
+
+      if (channel) {
+        setTimeout(
+          () =>
+            v789gOpenCategoriesFromChannel(
+              channel
+            ),
+          0
+        );
+      }
+
+      return;
+    }
     if (
       type === 'down' &&
       row != null &&
@@ -287,29 +880,167 @@ useTVEventHandler((event: any) => {
       return;
     }
 
-    if (focusArea === 'station' && type === 'left') {
-      const t = Date.now();
+    // V789K_SINGLE_VS_DOUBLE_LEFT
+    if (
+      focusArea === 'station' &&
+      type === 'left'
+    ) {
+      const now = Date.now();
 
-      if (t - v788t8cRawLeftRef.current < 100) {
+      // V789S9_PROGRAM_TO_STATION_LEFT_GUARD
+      // onItemFocus reports station before this same LEFT reaches the JS TV
+      // handler. Consume that one LEFT here instead of treating it as a new
+      // station-column LEFT intended for tray/categories.
+      const programReturnAt =
+        v789s9ProgramToStationLeftRef.current;
+
+      if (
+        programReturnAt > 0 &&
+        now - programReturnAt <= 500
+      ) {
+        v789s9ProgramToStationLeftRef.current =
+          0;
+
+        v788t8cFirstLeftRef.current =
+          0;
+
+        v788t8cRawLeftRef.current =
+          0;
+
+        if (
+          v789kSingleLeftTimerRef.current
+        ) {
+          clearTimeout(
+            v789kSingleLeftTimerRef.current
+          );
+
+          v789kSingleLeftTimerRef.current =
+            null;
+        }
+
+        console.log(
+          '[V789S9 PROGRAM RETURN LEFT CONSUMED]'
+        );
+
         return;
       }
 
-      v788t8cRawLeftRef.current = t;
-      const first = v788t8cFirstLeftRef.current;
+      v789s9ProgramToStationLeftRef.current =
+        0;
+
+      if (
+        now -
+          v788t8cRawLeftRef.current <
+        100
+      ) {
+        return;
+      }
+
+      v788t8cRawLeftRef.current =
+        now;
+
+      const first =
+        v788t8cFirstLeftRef.current;
 
       if (
         first > 0 &&
-        t - first >= 100 &&
-        t - first <= 1200
+        now - first >= 100 &&
+        now - first <= 400
       ) {
-        setTimeout(v788t8cFocusTray, 0);
+        if (
+          v789kSingleLeftTimerRef.current
+        ) {
+          clearTimeout(
+            v789kSingleLeftTimerRef.current
+          );
+
+          v789kSingleLeftTimerRef.current =
+            null;
+        }
+
+        v788t8cFirstLeftRef.current =
+          0;
+
+        v788t8cRawLeftRef.current =
+          0;
+
+        const stationKey =
+          v788pFocusedStationKeyRef.current;
+
+        const channel =
+          stationKey
+            ? channels.find(
+                (candidate) =>
+                  candidate.key ===
+                  stationKey
+              )
+            : undefined;
+
+        console.log(
+          '[V789K DOUBLE LEFT] ' +
+            'category rail ' +
+            String(stationKey || '')
+        );
+
+        if (channel) {
+          setTimeout(
+            () =>
+              v789gOpenCategoriesFromChannel(
+                channel
+              ),
+            0
+          );
+        }
+
         return;
       }
 
-      v788t8cFirstLeftRef.current = t;
+      v788t8cFirstLeftRef.current =
+        now;
+
+      if (
+        v789kSingleLeftTimerRef.current
+      ) {
+        clearTimeout(
+          v789kSingleLeftTimerRef.current
+        );
+      }
+
+      v789kSingleLeftTimerRef.current =
+        setTimeout(
+          () => {
+            v789kSingleLeftTimerRef.current =
+              null;
+
+            v788t8cFirstLeftRef.current =
+              0;
+
+            v788t8cRawLeftRef.current =
+              0;
+
+            console.log(
+              '[V789K SINGLE LEFT] tray'
+            );
+
+            v788t8cFocusTray();
+          },
+          400
+        );
+
       return;
     }
+    // V789K_CANCEL_PENDING_SINGLE_LEFT
+    if (
+      type !== 'left' &&
+      v789kSingleLeftTimerRef.current
+    ) {
+      clearTimeout(
+        v789kSingleLeftTimerRef.current
+      );
 
+      v789kSingleLeftTimerRef.current =
+        null;
+    }
     if (type !== 'left') {
       v788t8cFirstLeftRef.current = 0;
       v788t8cRawLeftRef.current = 0;
@@ -332,6 +1063,7 @@ useTVEventHandler((event: any) => {
 const v788qPreferredFocusArmedRef =
   useRef(true);
   const loadGenerationRef = useRef(0); // V784L_LIVE_TV_FOCUS_REFRESH
+  const v788t10gRefreshResultRef = useRef<GuideChannel[] | null>(null);
 
   // V785A_LIVE_GUIDE_PERSIST
   // Keep the already-rendered guide resident while /player sits above it.
@@ -444,14 +1176,41 @@ const timelineStart = floorHalfHour(now);
       channels.length - v788hRenderEnd
     ) * ROW_HEIGHT;
 
+  // W121ZPLAY10Y24Q_LIBRARY_CHANNEL_ID_ALIASES
+  // The library API has used both channels[] and tv[] for
+  // Live TV entries. Preserve every supported identity alias
+  // instead of choosing only the first imdb_id/id value.
   const favoriteIds = useMemo(() => {
     const out = new Set<string>();
-    for (const item of library?.channels || []) {
-      const id = String(item.imdb_id || item.id || '').trim();
-      if (id) out.add(id);
+
+    const libraryChannels: any[] =
+      ([] as any[]).concat(
+        (library as any)?.channels || [],
+        (library as any)?.tv || []
+      );
+
+    for (const item of libraryChannels) {
+      const aliases = [
+        item?.content_id,
+        item?.imdb_id,
+        item?.id,
+      ];
+
+      for (const raw of aliases) {
+        const id = String(raw || '').trim();
+        if (id) out.add(id);
+      }
     }
+
     return out;
   }, [library]);
+
+  // W121ZPLAY10Y24L_STABLE_FAVORITE_PREDICATE
+  // Library/override changes must not invalidate the complete guide
+  // filtering + program-map chain. Read current values through refs
+  // while keeping v788t8xIsFavorite identity stable.
+  const v788y24lFavoriteIdsRef = useRef(favoriteIds);
+  v788y24lFavoriteIdsRef.current = favoriteIds;
 
   // V788T8X_REALTIME_BOOKMARK
   const [
@@ -459,22 +1218,611 @@ const timelineStart = floorHalfHour(now);
     setV788t8xFavoriteOverrides,
   ] = useState<Record<string, boolean>>({});
 
+  const v788y24lFavoriteOverridesRef =
+    useRef<Record<string, boolean>>(
+      v788t8xFavoriteOverrides
+    );
+
+  v788y24lFavoriteOverridesRef.current =
+    v788t8xFavoriteOverrides;
+
+  // W121ZPLAY10Y23A_DIRECT_GUIDE_FAVORITE_REFS
+  // Visible station stars are owned by the mounted whole-row native guide.
+  const v788y23GuideRef = useRef<any>(null);
+  const v788y23GuideItemsRef = useRef<any[]>([]);
+
   const v788t8xIsFavorite = useCallback(
     (id: string) => {
+      const overrides =
+        v788y24lFavoriteOverridesRef.current;
+
       if (
         Object.prototype.hasOwnProperty.call(
-          v788t8xFavoriteOverrides,
+          overrides,
           id
         )
       ) {
-        return v788t8xFavoriteOverrides[id];
+        return overrides[id];
       }
 
-      return favoriteIds.has(id);
+      return v788y24lFavoriteIdsRef.current.has(id);
     },
-    [favoriteIds, v788t8xFavoriteOverrides]
+    []
   );
 
+  // V789G_R1_LIVE_TV_CATEGORY_STATE
+  const [
+    v789gCategory,
+    setV789gCategory,
+  ] =
+    useState<V789gCategoryKey>(
+      'us'
+    );
+
+  // V789H_EXPLICIT_CATEGORY_FOCUS
+  const v789gCategoryScrollRef =
+    useRef<ScrollView>(null);
+
+  const v789hCategoryRefs =
+    useRef<Array<any | null>>(
+      []
+    );
+
+  const [
+    v789hCategoryTags,
+    setV789hCategoryTags,
+  ] =
+    useState<number[]>([]);
+
+  const [
+    v789hCategoryMode,
+    setV789hCategoryMode,
+  ] =
+    useState(false);
+
+  const v789hCategoryModeRef =
+    useRef(false);
+
+  const v789hCategoryFocusedIndexRef =
+    useRef(-1);
+  // V789M_R6_EXIT_PENDING
+  // Keep categories alive until the native guide
+  // positively confirms it owns focus.
+  const v789mCategoryExitPendingRef =
+    useRef(false);
+
+  // V789N_NATIVE_CATEGORY_SWITCH
+  const [
+    v789nNativeCategoryPreferredIndex,
+    setV789nNativeCategoryPreferredIndex,
+  ] =
+    useState(0);
+
+  const [
+    v789nNativeCategoryFocusSerial,
+    setV789nNativeCategoryFocusSerial,
+  ] =
+    useState(0);
+  // V789N_MEASURED_CATEGORY_VIEWPORT
+  //
+  // Category pills have different real widths.
+  // Never infer horizontal geometry from category index.
+  const v789nCategoryLayoutsRef =
+    useRef<
+      Array<
+        {
+          x: number;
+          width: number;
+        } | null
+      >
+    >([]);
+
+  const v789nCategoryScrollXRef =
+    useRef(0);
+
+  const v789nCategoryViewportWidthRef =
+    useRef(0);
+
+  // V789N_ENSURE_CATEGORY_VISIBLE
+  const v789nEnsureCategoryVisible =
+    useCallback(
+      (
+        index: number,
+        animated = false
+      ) => {
+        const layout =
+          v789nCategoryLayoutsRef
+            .current[index];
+
+        const viewportWidth =
+          v789nCategoryViewportWidthRef
+            .current;
+
+        if (
+          !layout ||
+          viewportWidth <= 0
+        ) {
+          return;
+        }
+
+        const currentX =
+          v789nCategoryScrollXRef
+            .current;
+
+        const margin = 28;
+
+        const leftEdge =
+          currentX + margin;
+
+        const rightEdge =
+          currentX +
+          viewportWidth -
+          margin;
+
+        const itemLeft =
+          layout.x;
+
+        const itemRight =
+          layout.x +
+          layout.width;
+
+        let targetX =
+          currentX;
+
+        if (
+          itemLeft < leftEdge
+        ) {
+          targetX =
+            Math.max(
+              0,
+              itemLeft - margin
+            );
+        }
+        else if (
+          itemRight > rightEdge
+        ) {
+          targetX =
+            Math.max(
+              0,
+              itemRight -
+                viewportWidth +
+                margin
+            );
+        }
+
+        if (
+          Math.abs(
+            targetX - currentX
+          ) < 2
+        ) {
+          return;
+        }
+
+        console.log(
+          '[V789N CATEGORY SCROLL] ' +
+            'index=' +
+            index +
+            ' current=' +
+            Math.round(currentX) +
+            ' target=' +
+            Math.round(targetX) +
+            ' x=' +
+            Math.round(layout.x) +
+            ' width=' +
+            Math.round(layout.width)
+        );
+
+        v789nCategoryScrollXRef
+          .current =
+          targetX;
+
+        v789gCategoryScrollRef
+          .current?.scrollTo({
+            x: targetX,
+            animated,
+          });
+      },
+      []
+    );
+  const v789hRegisterCategoryRef =
+    useCallback(
+      (
+        index: number,
+        node: any
+      ) => {
+        v789hCategoryRefs.current[
+          index
+        ] = node;
+
+        if (!node) {
+          return;
+        }
+
+        let tag = 0;
+
+        try {
+          tag =
+            Number(
+              findNodeHandle(node) ||
+                0
+            );
+        } catch (_) {
+          tag = 0;
+        }
+
+        if (tag <= 0) {
+          return;
+        }
+
+        setV789hCategoryTags(
+          (previous) => {
+            if (
+              previous[index] ===
+              tag
+            ) {
+              return previous;
+            }
+
+            const next =
+              previous.slice();
+
+            next[index] = tag;
+
+            return next;
+          }
+        );
+      },
+      []
+    );
+
+  const [
+    v789gFavoriteActionChannel,
+    setV789gFavoriteActionChannel,
+  ] =
+    useState<GuideChannel | null>(
+      null
+    );
+
+  // W121ZPLAY10Y24L_FAVORITES_STRUCTURE_TOKEN
+  // Outside Favorites, bookmark-state changes must not rebuild
+  // the full visible guide. Inside Favorites, preserve immediate
+  // add/remove membership behavior.
+  const v788y24lFavoritesStructureToken =
+    v789gCategory === 'favorites'
+      ? v788t8xFavoriteOverrides
+      : null;
+
+  const v789gVisibleChannels =
+    useMemo(
+      () =>
+        v789gFilterChannels(
+          channels,
+          v789gCategory,
+          v788t8xIsFavorite
+        ),
+      [
+        channels,
+        v789gCategory,
+        v788t8xIsFavorite,
+        v788y24lFavoritesStructureToken,
+      ]
+    );
+
+  // W121ZSY3_VISIBLE_IDENTITY_DOMAIN
+  //
+  // LiveTvNav and the native guide must resolve rows against
+  // the same filtered channel domain the user actually sees.
+  // Refs let the focus-return callback read current state
+  // without turning category/favorite changes into focus-effect
+  // re-subscriptions.
+  const v789gVisibleChannelsRef =
+    useRef(v789gVisibleChannels);
+
+  v789gVisibleChannelsRef.current =
+    v789gVisibleChannels;
+
+  const v789gCategoryRef =
+    useRef(v789gCategory);
+
+  v789gCategoryRef.current =
+    v789gCategory;
+
+  const v788t8xIsFavoriteRef =
+    useRef(v788t8xIsFavorite);
+
+  v788t8xIsFavoriteRef.current =
+    v788t8xIsFavorite;
+
+  // V789S16E_HIDE_EMPTY_LIVE_TV_CATEGORIES
+  // W121ZPLAY10Y13A_PIN_FAVORITES_FIRST
+  //
+  // Favorites stays visible at index 0 even when empty so long-press can add the first station.
+  // Other categories still require at least one playable row.
+  const v789gVisibleCategoryDefs =
+    useMemo(
+      () =>
+        V789G_CATEGORY_DEFS.filter(
+          (category) =>
+            category.key === 'favorites' ||
+            v789gFilterChannels(
+              channels,
+              category.key,
+              v788t8xIsFavorite
+            ).length > 0
+        ),
+      [
+        channels,
+        v788t8xIsFavorite,
+      ]
+    );
+
+  // Native focus callbacks can outlive a render. Keep their category
+  // index mapping tied to the same visible list the user actually sees.
+  const v789gVisibleCategoryDefsRef =
+    useRef(v789gVisibleCategoryDefs);
+
+  v789gVisibleCategoryDefsRef.current =
+    v789gVisibleCategoryDefs;
+
+  // W121ZPLAY10Y19A_START_CATEGORY_FROM_FAVORITES
+  //
+  // Startup rule:
+  //   Favorites contains >=1 saved station -> Favorites
+  //   Favorites contains zero stations     -> US Channels
+  //
+  // Wait for both channel inventory and persisted library state.
+  // Resolve exactly once per mounted Live TV screen.
+  const v789y19StartupCategoryResolvedRef =
+    useRef(false);
+
+  useEffect(() => {
+    if (
+      v789y19StartupCategoryResolvedRef.current ||
+      channels.length <= 0 ||
+      library === null
+    ) {
+      return;
+    }
+
+    const hasFavorites =
+      v789gFilterChannels(
+        channels,
+        'favorites',
+        v788t8xIsFavorite
+      ).length > 0;
+
+    const startupCategory: V789gCategoryKey =
+      hasFavorites
+        ? 'favorites'
+        : 'us';
+
+    v789y19StartupCategoryResolvedRef.current =
+      true;
+
+    setV789gCategory(
+      startupCategory
+    );
+
+    const startupIndex =
+      v789gVisibleCategoryDefs.findIndex(
+        (entry) =>
+          entry.key === startupCategory
+      );
+
+    setV789nNativeCategoryPreferredIndex(
+      Math.max(
+        0,
+        startupIndex
+      )
+    );
+
+    console.log(
+      '[W121ZPLAY10Y19A START CATEGORY] ' +
+        'favorites=' +
+        String(hasFavorites) +
+        ' category=' +
+        startupCategory +
+        ' index=' +
+        String(startupIndex)
+    );
+  }, [
+    channels,
+    library,
+    v788t8xIsFavorite,
+    v789gVisibleCategoryDefs,
+  ]);
+
+  // After startup only: if the selected category genuinely
+  // disappears, prefer US Channels instead of blindly using
+  // category index zero.
+  useEffect(() => {
+    if (
+      !v789y19StartupCategoryResolvedRef.current ||
+      v789gVisibleCategoryDefs.length <= 0 ||
+      v789gVisibleCategoryDefs.some(
+        (entry) =>
+          entry.key === v789gCategory
+      )
+    ) {
+      return;
+    }
+
+    const fallbackCategory: V789gCategoryKey =
+      v789gVisibleCategoryDefs.some(
+        (entry) =>
+          entry.key === 'us'
+      )
+        ? 'us'
+        : v789gVisibleCategoryDefs[0].key;
+
+    setV789gCategory(
+      fallbackCategory
+    );
+
+    const fallbackIndex =
+      v789gVisibleCategoryDefs.findIndex(
+        (entry) =>
+          entry.key === fallbackCategory
+      );
+
+    setV789nNativeCategoryPreferredIndex(
+      Math.max(
+        0,
+        fallbackIndex
+      )
+    );
+  }, [
+    v789gCategory,
+    v789gVisibleCategoryDefs,
+  ]);
+  // Existing native guide event
+  // dispatcher reads this ref.
+  // Keep it synchronized with
+  // the filtered guide row count.
+  v788t8cChannelCountRef.current =
+    v789gVisibleChannels.length;
+
+  // V789N_NATIVE_CATEGORY_ENTRY
+  const v789gOpenCategoriesFromChannel =
+    useCallback(
+      (channel: GuideChannel) => {
+        setV789gFavoriteActionChannel(
+          channel
+        );
+
+        // V789S9_CATEGORY_ENTRY_CANCELS_STALE_LEFT
+        // Never allow a previously armed single-LEFT tray timer to fire after
+        // Categories has legitimately taken focus.
+        if (
+          v789kSingleLeftTimerRef.current
+        ) {
+          clearTimeout(
+            v789kSingleLeftTimerRef.current
+          );
+
+          v789kSingleLeftTimerRef.current =
+            null;
+        }
+
+        v788t8cFirstLeftRef.current =
+          0;
+
+        v788t8cRawLeftRef.current =
+          0;
+
+        v789s9ProgramToStationLeftRef.current =
+          0;
+
+        v789hCategoryFocusedIndexRef
+          .current = -1;
+
+        v789mCategoryExitPendingRef.current =
+          false;
+
+        // V789S9_CATEGORY_OWNS_FOCUS
+        // While Categories is active, a category change may remount/update the
+        // native guide underneath it. Put the guide's preferred focus in the
+        // existing -1 sentinel state and clear any old restore request so that
+        // those data changes cannot steal Android focus from Categories.
+        setPreferredChannelIndex(
+          -1
+        );
+
+        setV788t8vFocusRestoreRequest({
+          index: -1,
+          serial: 0,
+        });
+
+        const selectedIndex =
+          Math.max(
+            0,
+            v789gVisibleCategoryDefsRef.current.findIndex(
+              (entry) =>
+                entry.key ===
+                v789gCategory
+            )
+          );
+
+        console.log(
+          '[V789N NATIVE CATEGORY ENTER] ' +
+            'channel=' +
+            channel.key +
+            ' category=' +
+            v789gCategory +
+            ' index=' +
+            selectedIndex
+        );
+
+        setV789nNativeCategoryPreferredIndex(
+          selectedIndex
+        );
+
+        v789hCategoryModeRef.current =
+          true;
+
+        setV789hCategoryMode(
+          true
+        );
+
+        setV789nNativeCategoryFocusSerial(
+          (value) => value + 1
+        );
+      },
+      [
+        v789gCategory,
+        v789gVisibleCategoryDefs,
+      ]
+    );
+
+  // V789S9_CATEGORY_SELECT_STAYS_ON_RAIL
+  const v789gSelectCategory =
+    useCallback(
+      (
+        category:
+          V789gCategoryKey
+      ) => {
+        // OK means SELECT only. It updates the committed filter but Categories
+        // remains the Android focus owner until the user explicitly presses DOWN.
+        v789hCategoryModeRef.current =
+          true;
+
+        setV789hCategoryMode(
+          true
+        );
+
+        v789mCategoryExitPendingRef.current =
+          false;
+
+        if (
+          category ===
+          v789gCategory
+        ) {
+          console.log(
+            '[V789S9 CATEGORY SELECT STAY] ' +
+              'key=' +
+              category +
+              ' changed=false'
+          );
+
+          return;
+        }
+
+        setV789gCategory(
+          category
+        );
+
+        console.log(
+          '[V789S9 CATEGORY SELECT STAY] ' +
+            'key=' +
+            category +
+            ' changed=true'
+        );
+      },
+      [
+        v789gCategory,
+        v789gVisibleCategoryDefs,
+      ]
+    );
   // V788T8ZA_STICKY_CONFIRMED_BOOKMARK
   //
   // A bookmark override is no longer merely temporary.
@@ -505,13 +1853,275 @@ const timelineStart = floorHalfHour(now);
     try {
       const date = localDateKey(new Date());
 
-      const [discoverResult, epgResult] = await Promise.allSettled([
+      // V788T12K_PARALLEL_EPG_INVENTORY
+      //
+      // Run the complete provider-neutral playable-channel inventory
+      // concurrently with Discover + EPG.
+      //
+      // Nothing is rendered to the guide until ALL work reaches the
+      // final barrier and one stable dataset is committed.
+
+      const v788t12kInventoryPromise =
+        (async () => {
+          let sourceIndex = 0;
+          let skip = 0;
+          let completed = false;
+
+          let pageCount = 0;
+          let scannedTotal = 0;
+          let playableTotal = 0;
+          let deviceCheckTotal = 0;
+          let emptyTotal = 0;
+          let unknownTotal = 0;
+
+          const rawPlayable: any[] = [];
+          const rawDeviceCheck: any[] = [];
+
+          const visitedCursors =
+            new Set<string>();
+
+          console.log(
+            '[V788T12K LIVE INVENTORY] parallel start',
+            'generation=' + generation
+          );
+
+          while (
+            generation ===
+            loadGenerationRef.current
+          ) {
+            const cursor =
+              `${sourceIndex}:${skip}`;
+
+            if (visitedCursors.has(cursor)) {
+              throw new Error(
+                '[V788T12K LIVE INVENTORY] repeated cursor ' +
+                  cursor
+              );
+            }
+
+            visitedCursors.add(cursor);
+
+            let page: any = null;
+            let lastPageError: any = null;
+
+            for (
+              let pageAttempt = 1;
+              pageAttempt <= 3;
+              pageAttempt += 1
+            ) {
+              try {
+                page =
+                  await api.content.getLiveTvInventoryPage(
+                    sourceIndex,
+                    skip,
+                    400
+                  );
+
+                lastPageError = null;
+                break;
+              } catch (error) {
+                lastPageError = error;
+
+                console.warn(
+                  '[V788T12K LIVE INVENTORY] page retry',
+                  'source=' + sourceIndex,
+                  'skip=' + skip,
+                  'attempt=' + pageAttempt,
+                  error
+                );
+
+                if (pageAttempt < 3) {
+                  await new Promise<void>(
+                    (resolve) =>
+                      setTimeout(
+                        resolve,
+                        500 * pageAttempt
+                      )
+                  );
+                }
+              }
+            }
+
+            if (page == null) {
+              throw (
+                lastPageError ||
+                new Error(
+                  '[V788T12K LIVE INVENTORY] page unavailable'
+                )
+              );
+            }
+
+            if (
+              generation !==
+              loadGenerationRef.current
+            ) {
+              return {
+                superseded: true,
+                items: [] as any[],
+                pageCount,
+                scannedTotal,
+                playableTotal,
+                emptyTotal,
+                unknownTotal,
+              };
+            }
+
+            const pageItems =
+              Array.isArray(page?.items)
+                ? page.items
+                : [];
+
+            const pageDeviceCheckItems =
+              Array.isArray(page?.deviceCheckItems)
+                ? page.deviceCheckItems
+                : [];
+
+            rawPlayable.push(
+              ...pageItems
+            );
+
+            rawDeviceCheck.push(
+              ...pageDeviceCheckItems
+            );
+
+            pageCount += 1;
+
+            scannedTotal +=
+              Number(page?.scanned || 0);
+
+            playableTotal +=
+              Number(page?.playable || 0);
+
+            deviceCheckTotal +=
+              Number(page?.deviceCheck || 0);
+
+            emptyTotal +=
+              Number(page?.hiddenNoStream || 0);
+
+            unknownTotal +=
+              Number(page?.unknown || 0);
+
+            console.log(
+              '[V788T12K LIVE INVENTORY] page',
+              'source=' + sourceIndex,
+              'skip=' + skip,
+              'scanned=' + String(page?.scanned ?? ''),
+              'playable=' + String(page?.playable ?? ''),
+              'empty=' + String(page?.hiddenNoStream ?? ''),
+              'unknown=' + String(page?.unknown ?? ''),
+              'received=' + pageItems.length,
+              'done=' + String(Boolean(page?.done))
+            );
+
+            if (page?.done === true) {
+              completed = true;
+
+              console.log(
+                '[V788T12K LIVE INVENTORY] natural exhaustion',
+                'raw=' + rawPlayable.length,
+                'pages=' + pageCount
+              );
+
+              break;
+            }
+
+            const nextSourceIndex =
+              Number(page?.nextSourceIndex);
+
+            const nextSkip =
+              Number(page?.nextSkip);
+
+            if (
+              !Number.isInteger(nextSourceIndex) ||
+              nextSourceIndex < 0 ||
+              !Number.isInteger(nextSkip) ||
+              nextSkip < 0
+            ) {
+              throw new Error(
+                '[V788T12K LIVE INVENTORY] invalid cursor ' +
+                  String(page?.nextSourceIndex) +
+                  ':' +
+                  String(page?.nextSkip)
+              );
+            }
+
+            const nextCursor =
+              `${nextSourceIndex}:${nextSkip}`;
+
+            if (nextCursor === cursor) {
+              throw new Error(
+                '[V788T12K LIVE INVENTORY] no cursor progress ' +
+                  cursor
+              );
+            }
+
+            sourceIndex =
+              nextSourceIndex;
+
+            skip =
+              nextSkip;
+
+            await new Promise<void>(
+              (resolve) =>
+                setTimeout(
+                  resolve,
+                  40
+                )
+            );
+          }
+
+          if (
+            generation !==
+            loadGenerationRef.current
+          ) {
+            return {
+              superseded: true,
+              items: [] as any[],
+              pageCount,
+              scannedTotal,
+              playableTotal,
+              emptyTotal,
+              unknownTotal,
+            };
+          }
+
+          if (!completed) {
+            throw new Error(
+              '[V788T12K LIVE INVENTORY] did not reach natural exhaustion'
+            );
+          }
+
+          return {
+            superseded: false,
+            items: rawPlayable,
+            deviceCheckItems: rawDeviceCheck,
+            pageCount,
+            scannedTotal,
+            playableTotal,
+            deviceCheckTotal,
+            emptyTotal,
+            unknownTotal,
+          };
+        })();
+
+      const [
+        discoverResult,
+        epgResult,
+        inventoryResult,
+      ] = await Promise.allSettled([
         api.content.getDiscover(),
         api.content.getLiveTvEpg(date),
+        v788t12kInventoryPromise,
       ]);
 
+      console.log(
+        '[V788T12K LIVE LOAD] parallel barrier complete',
+        'discover=' + discoverResult.status,
+        'epg=' + epgResult.status,
+        'inventory=' + inventoryResult.status
+      );
+
       const epgById = new Map<string, any>();
-      const epgOnly: any[] = [];
 
       if (epgResult.status === 'fulfilled') {
         for (const provider of epgResult.value?.providers || []) {
@@ -526,7 +2136,6 @@ const timelineStart = floorHalfHour(now);
             };
 
             epgById.set(id, enriched);
-            epgOnly.push(enriched);
           }
         }
       } else {
@@ -599,30 +2208,14 @@ const timelineStart = floorHalfHour(now);
         }
       }
 
-      for (const raw of epgOnly) {
-        const id = String(raw?.id || '').trim();
-        if (!id) continue;
-
-        if (next.some((c) => String(c.item.id) === id)) continue;
-
-        const stationLogo = String(raw?.logo || '').trim();
-
-        next.push({
-          key: `${raw.sourceName || 'epg'}:${id}`,
-          item: {
-            ...(raw as any),
-            id,
-            type: 'tv',
-            name: String(raw?.name || id),
-            poster: stationLogo,
-          },
-          name: String(raw?.name || id),
-          logo: stationLogo,
-          sourceName: String(raw?.sourceName || ''),
-          addonId: String(raw?.addonId || ''),
-          programs: Array.isArray(raw?.programs) ? raw.programs : [],
-        });
-      }
+      // V788T16F_INVENTORY_OWNS_GUIDE_MEMBERSHIP
+      //
+      // EPG is enrichment only.
+      //
+      // A schedule provider must never create a Live TV row by itself.
+      // Channel membership comes exclusively from the completed playable
+      // inventory. If inventory removes a channel because its owning addon
+      // has no usable stream, EPG cannot reinsert that channel.
 
       if (generation !== loadGenerationRef.current) return;
       // V784O_LIVE_TV_AZ
@@ -637,7 +2230,371 @@ const timelineStart = floorHalfHour(now);
         )
       );
 
-      setChannels(next);
+      // V788T12K_PARALLEL_STABLE_GUIDE_COMMIT
+      //
+      // Discover, EPG and the COMPLETE playable inventory have now
+      // reached the same barrier.
+      //
+      // Inventory controls visibility.
+      // Discover/EPG enrich verified playable channels only.
+      // Native guide receives ONE final stable array.
+
+      if (
+        generation !==
+        loadGenerationRef.current
+      ) {
+        return;
+      }
+
+      if (
+        inventoryResult.status !== 'fulfilled'
+      ) {
+        throw inventoryResult.reason;
+      }
+
+      const inventoryPayload =
+        inventoryResult.value;
+
+      if (inventoryPayload?.superseded) {
+        return;
+      }
+
+      const backendPlayableItems =
+        Array.isArray(inventoryPayload?.items)
+          ? inventoryPayload.items
+          : [];
+
+      const deviceCheckItems =
+        Array.isArray(
+          inventoryPayload?.deviceCheckItems
+        )
+          ? inventoryPayload.deviceCheckItems
+          : [];
+
+      let v788t16jDevicePassedCount = 0;
+      let v788t16jDeviceRejectedCount = 0;
+
+      const v788t16jDevicePassedItems: any[] = [];
+
+      if (deviceCheckItems.length > 0) {
+        const candidateRows: any[] = [];
+
+        for (const raw of deviceCheckItems) {
+          const id =
+            String(raw?.id || '').trim();
+
+          const addonId =
+            String(raw?.addonId || '').trim();
+
+          if (!id || !addonId) {
+            continue;
+          }
+
+          const identity =
+            addonId + ':' + id;
+
+          const streams =
+            Array.isArray(
+              raw?.deviceCheckStreams
+            )
+              ? raw.deviceCheckStreams
+              : [];
+
+          for (
+            const stream of streams.slice(0, 4)
+          ) {
+            const url =
+              String(stream?.url || '').trim();
+
+            if (!url) continue;
+
+            candidateRows.push({
+              key: identity,
+              url,
+              headers:
+                stream?.headers &&
+                typeof stream.headers ===
+                  'object'
+                  ? stream.headers
+                  : {},
+            });
+          }
+        }
+
+        try {
+          const {
+            probeLiveTvDeviceCandidates,
+          } = require(
+            '../../src/native/devicePlaybackCapabilities'
+          );
+
+          const probeResult =
+            await probeLiveTvDeviceCandidates(
+              candidateRows,
+              2500
+            );
+
+          if (
+            generation !==
+            loadGenerationRef.current
+          ) {
+            return;
+          }
+
+          const playableKeys =
+            new Set<string>(
+              (
+                Array.isArray(
+                  probeResult?.playableKeys
+                )
+                  ? probeResult.playableKeys
+                  : []
+              ).map(
+                (value: any) =>
+                  String(value || '')
+              )
+            );
+
+          for (const raw of deviceCheckItems) {
+            const id =
+              String(raw?.id || '').trim();
+
+            const addonId =
+              String(
+                raw?.addonId || ''
+              ).trim();
+
+            const identity =
+              addonId && id
+                ? addonId + ':' + id
+                : '';
+
+            if (
+              !identity ||
+              !playableKeys.has(identity)
+            ) {
+              continue;
+            }
+
+            const clean = {
+              ...(raw as any),
+            };
+
+            delete (
+              clean as any
+            ).deviceCheckStreams;
+
+            v788t16jDevicePassedItems.push(
+              clean
+            );
+          }
+
+          v788t16jDevicePassedCount =
+            v788t16jDevicePassedItems.length;
+
+          v788t16jDeviceRejectedCount =
+            Math.max(
+              0,
+              deviceCheckItems.length -
+                v788t16jDevicePassedCount
+            );
+
+          console.log(
+            '[V788T16J LIVE PREFLIGHT]',
+            'pending=' +
+              deviceCheckItems.length,
+            'rows=' +
+              candidateRows.length,
+            'passed=' +
+              v788t16jDevicePassedCount,
+            'rejected=' +
+              v788t16jDeviceRejectedCount
+          );
+
+        } catch (probeError) {
+          // Strict pre-display contract:
+          // if this device cannot prove an uncertain channel,
+          // that channel never reaches the guide.
+          v788t16jDeviceRejectedCount =
+            deviceCheckItems.length;
+
+          console.warn(
+            '[V788T16J LIVE PREFLIGHT] failed closed',
+            'pending=' +
+              deviceCheckItems.length,
+            probeError
+          );
+        }
+      }
+
+      const inventoryItems = [
+        ...backendPlayableItems,
+        ...v788t16jDevicePassedItems,
+      ];
+
+      const enrichmentByIdentity =
+        new Map<string, GuideChannel>();
+
+      for (const channel of next) {
+        const enrichmentId =
+          String(
+            channel.item.imdb_id ||
+            channel.item.id ||
+            ''
+          ).trim();
+
+        const enrichmentAddonId =
+          String(
+            channel.addonId ||
+            ''
+          ).trim();
+
+        if (
+          !enrichmentId ||
+          !enrichmentAddonId
+        ) {
+          continue;
+        }
+
+        const identity =
+          `${enrichmentAddonId}:${enrichmentId}`;
+
+        if (
+          !enrichmentByIdentity.has(identity)
+        ) {
+          enrichmentByIdentity.set(
+            identity,
+            channel
+          );
+        }
+      }
+
+      const playableByIdentity =
+        new Map<string, GuideChannel>();
+
+      for (const raw of inventoryItems) {
+        const id =
+          String(
+            (raw as any)?.imdb_id ||
+            (raw as any)?.id ||
+            ''
+          ).trim();
+
+        const addonId =
+          String(
+            (raw as any)?.addonId ||
+            (raw as any)?._addon_id ||
+            ''
+          ).trim();
+
+        if (!id || !addonId) {
+          continue;
+        }
+
+        const identity =
+          `${addonId}:${id}`;
+
+        const existing =
+          enrichmentByIdentity.get(identity);
+
+        const epg =
+          epgById.get(id);
+
+        const stationLogo =
+          String(
+            epg?.logo ||
+            (raw as any)?.logo ||
+            existing?.logo ||
+            ''
+          ).trim();
+
+        const name =
+          String(
+            (raw as any)?.name ||
+            epg?.name ||
+            existing?.name ||
+            id
+          );
+
+        const programs =
+          Array.isArray(epg?.programs)
+            ? epg.programs
+            : (
+                Array.isArray(existing?.programs)
+                  ? existing!.programs
+                  : []
+              );
+
+        playableByIdentity.set(
+          identity,
+          {
+            key:
+              String(
+                existing?.key ||
+                identity
+              ),
+
+            item: {
+              ...(existing?.item || {}),
+              ...(raw as any),
+              id,
+              type: 'tv',
+              name,
+              poster: stationLogo,
+            },
+
+            name,
+            logo: stationLogo,
+
+            sourceName:
+              String(
+                (raw as any)?.sourceName ||
+                existing?.sourceName ||
+                ''
+              ),
+
+            addonId,
+            programs,
+          }
+        );
+      }
+
+      const completedChannels =
+        Array.from(
+          playableByIdentity.values()
+        );
+
+      completedChannels.sort(
+        (a, b) =>
+          String(a.name || '').localeCompare(
+            String(b.name || ''),
+            undefined,
+            {
+              sensitivity: 'base',
+              numeric: true,
+            }
+          )
+      );
+
+      v788t10gRefreshResultRef.current =
+        completedChannels;
+
+      setChannels(
+        completedChannels
+      );
+
+      console.log(
+        '[V788T12K LIVE INVENTORY] stable guide commit',
+        'channels=' + completedChannels.length,
+        'pages=' + String(inventoryPayload?.pageCount || 0),
+        'scanned=' + String(inventoryPayload?.scannedTotal || 0),
+        'playable=' + String(inventoryPayload?.playableTotal || 0),
+        'deviceCheck=' + String(inventoryPayload?.deviceCheckTotal || 0),
+        'devicePassed=' + String(v788t16jDevicePassedCount),
+        'deviceRejected=' + String(v788t16jDeviceRejectedCount),
+        'empty=' + String(inventoryPayload?.emptyTotal || 0),
+        'unknown=' + String(inventoryPayload?.unknownTotal || 0)
+      );
 
       guideLoadedRef.current = true;
       lastGuideLoadAtRef.current = Date.now();
@@ -663,11 +2620,30 @@ const timelineStart = floorHalfHour(now);
     }
   }, []);
 
+  // V788T12H_LOAD_ON_AUTHENTICATED_TAB_MOUNT
+  //
+  // Live TV is eagerly mounted by the tab navigator. Start one inventory
+  // generation immediately so loading continues even if another tab is
+  // currently selected. guideLoadInFlightRef prevents duplicate work.
+  useEffect(() => {
+    void loadGuide(false);
+  }, [loadGuide]);
+
   // V788T8V_RETURN_FOCUS_HANDSHAKE
+  //
+  // W121ZSY26B_ATOMIC_FOCUS_RESTORE_REQUEST
+  // Keep explicit restore target independent from
+  // preferredFocusIndex.
   const [
-    v788t8vFocusRestoreSerial,
-    setV788t8vFocusRestoreSerial,
-  ] = useState(0);
+    v788t8vFocusRestoreRequest,
+    setV788t8vFocusRestoreRequest,
+  ] = useState<{
+    index: number;
+    serial: number;
+  }>({
+    index: 0,
+    serial: 0,
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -678,27 +2654,72 @@ const timelineStart = floorHalfHour(now);
         } = require('../../src/liveTvNav');
 
         const current = getLiveTvCurrent();
-        const restoreIndex = Number(current?.index);
 
-        if (
-          Number.isInteger(restoreIndex) &&
-          restoreIndex >= 0
-        ) {
+        const restoreId = String(
+          current?.entry?.id || ''
+        ).trim();
+
+        const restoreAddonId = String(
+          current?.entry?.addonId || ''
+        ).trim();
+
+        const visibleChannels =
+          v789gVisibleChannelsRef.current;
+
+        const restoreIndex =
+          restoreId && restoreAddonId
+            ? visibleChannels.findIndex(
+                (channel) => {
+                  const id = String(
+                    channel.item.imdb_id ||
+                    channel.item.id ||
+                    ''
+                  ).trim();
+
+                  const addonId = String(
+                    channel.addonId || ''
+                  ).trim();
+
+                  return (
+                    id === restoreId &&
+                    addonId === restoreAddonId
+                  );
+                }
+              )
+            : -1;
+
+        if (restoreIndex >= 0) {
           v788qPreferredFocusArmedRef.current =
-          true;
+            true;
 
-        setPreferredChannelIndex(restoreIndex);
-
-        // V788T8V_FORCE_NATIVE_FOCUS_RETURN
-        // The row number may be unchanged after playback,
-        // so preferredFocusIndex alone cannot be the trigger.
-        setV788t8vFocusRestoreSerial(
-          (serial) => serial + 1
-        );
+          // W121ZSY26B_SINGLE_OWNER_PLAYBACK_RETURN
+          //
+          // Playback identity has already been resolved here.
+          // Do not also mutate preferredChannelIndex because that
+          // independently enters native setPreferredFocusIndex().
+          // Playback return uses only the explicit restore request.
+          setV788t8vFocusRestoreRequest(
+            (request) => ({
+              index: restoreIndex,
+              serial: request.serial + 1,
+            })
+          );
 
           console.log(
-            '[V785L6B LIVE GUIDE] restore focus index=' + restoreIndex,
-            'id=' + String(current?.entry?.id || '')
+            '[W121ZSY3 LIVE RETURN] identity restore',
+            'index=' + restoreIndex,
+            'id=' + restoreId,
+            'addon=' + restoreAddonId,
+            'visible=' + visibleChannels.length
+          );
+        } else if (current) {
+          console.warn(
+            '[W121ZSY3 LIVE RETURN] identity not visible',
+            'id=' + restoreId,
+            'addon=' + restoreAddonId,
+            'storedIndex=' +
+              String(current?.index ?? -1),
+            'visible=' + visibleChannels.length
           );
         }
       } catch (error) {
@@ -708,12 +2729,199 @@ const timelineStart = floorHalfHour(now);
         );
       }
 
+      let v788t10gSourcesDirty = false;
+
+      try {
+        const {
+          consumeLiveTvSourcesDirty,
+        } = require('../../src/liveTvNav');
+
+        v788t10gSourcesDirty =
+          consumeLiveTvSourcesDirty();
+      } catch (error) {
+        console.warn(
+          '[V788T10G2 LIVE GUIDE] dirty-state lookup failed',
+          error
+        );
+      }
       const ageMs =
         lastGuideLoadAtRef.current > 0
           ? Date.now() - lastGuideLoadAtRef.current
           : Number.POSITIVE_INFINITY;
 
-      if (!guideLoadedRef.current) {
+      if (
+        v788t10gSourcesDirty &&
+        guideLoadedRef.current
+      ) {
+        let restoreId = '';
+        let restoreAddonId = '';
+        let fallbackIndex = 0;
+
+        try {
+          const {
+            getLiveTvCurrent,
+          } = require('../../src/liveTvNav');
+
+          const current =
+            getLiveTvCurrent();
+
+          restoreId = String(
+            current?.entry?.id || ''
+          ).trim();
+
+          restoreAddonId = String(
+            current?.entry?.addonId || ''
+          ).trim();
+
+          const visibleBeforeRefresh =
+            v789gVisibleChannelsRef.current;
+
+          const visibleCurrentIndex =
+            restoreId && restoreAddonId
+              ? visibleBeforeRefresh.findIndex(
+                  (channel) => {
+                    const id = String(
+                      channel.item.imdb_id ||
+                      channel.item.id ||
+                      ''
+                    ).trim();
+
+                    const addonId = String(
+                      channel.addonId || ''
+                    ).trim();
+
+                    return (
+                      id === restoreId &&
+                      addonId === restoreAddonId
+                    );
+                  }
+                )
+              : -1;
+
+          if (visibleCurrentIndex >= 0) {
+            fallbackIndex =
+              visibleCurrentIndex;
+          }
+        } catch (error) {
+          console.warn(
+            '[V788T10G2 LIVE GUIDE] pre-refresh focus capture failed',
+            error
+          );
+        }
+
+        console.log(
+          '[V788T10G2 LIVE GUIDE] addon sources dirty - refresh on focus',
+          'id=' + restoreId,
+          'addon=' + restoreAddonId,
+          'fallbackIndex=' + fallbackIndex
+        );
+
+        v788t10gRefreshResultRef.current = null;
+
+        void (async () => {
+          await Promise.all([
+            loadGuide(true),
+            fetchLibrary(true),
+          ]);
+
+          const refreshed =
+            v788t10gRefreshResultRef.current;
+
+          if (!Array.isArray(refreshed)) {
+            try {
+              const {
+                markLiveTvSourcesDirty,
+              } = require('../../src/liveTvNav');
+
+              markLiveTvSourcesDirty();
+            } catch (_) {}
+
+            console.warn(
+              '[V788T10G2 LIVE GUIDE] refresh did not commit - dirty flag restored'
+            );
+
+            return;
+          }
+
+          const refreshedVisible =
+            v789gFilterChannels(
+              refreshed,
+              v789gCategoryRef.current,
+              v788t8xIsFavoriteRef.current
+            );
+
+          let restoreIndex = -1;
+
+          if (
+            restoreId &&
+            restoreAddonId
+          ) {
+            restoreIndex =
+              refreshedVisible.findIndex(
+                (channel) => {
+                  const id = String(
+                    channel.item.imdb_id ||
+                    channel.item.id ||
+                    ''
+                  ).trim();
+
+                  const addonId = String(
+                    channel.addonId || ''
+                  ).trim();
+
+                  return (
+                    id === restoreId &&
+                    addonId === restoreAddonId
+                  );
+                }
+              );
+          }
+
+          if (
+            restoreIndex < 0 &&
+            refreshedVisible.length > 0
+          ) {
+            restoreIndex =
+              Math.min(
+                Math.max(
+                  fallbackIndex,
+                  0
+                ),
+                refreshedVisible.length - 1
+              );
+          }
+
+          if (restoreIndex < 0) {
+            console.log(
+              '[V788T10G2 LIVE GUIDE] refreshed guide empty - no focus target'
+            );
+            return;
+          }
+
+          requestAnimationFrame(() => {
+            v788qPreferredFocusArmedRef.current =
+              true;
+
+            setPreferredChannelIndex(
+              restoreIndex
+            );
+
+            setV788t8vFocusRestoreRequest(
+              (request) => ({
+                index: restoreIndex,
+                serial: request.serial + 1,
+              })
+            );
+
+            console.log(
+              '[V788T10G2 LIVE GUIDE] post-refresh focus restore',
+              'index=' + restoreIndex,
+              'visibleChannels=' +
+                refreshedVisible.length
+            );
+          });
+        })();
+      } else if (!guideLoadedRef.current) {
         console.log('[V785A LIVE GUIDE] cold load');
 
         void Promise.all([
@@ -825,7 +3033,7 @@ const timelineStart = floorHalfHour(now);
         } = require('../../src/liveTvNav');
 
         setLiveTvNavSnapshot(
-          channels.map((entry) => ({
+          v789gVisibleChannels.map((entry) => ({
             id: String(
               entry.item.imdb_id ||
               entry.item.id ||
@@ -855,9 +3063,11 @@ const timelineStart = floorHalfHour(now);
         );
 
         console.log(
-          '[V785L5 LIVE SURF] snapshot',
-          'channels=' + channels.length,
-          'id=' + id
+          '[W121ZSY3 LIVE SURF] visible snapshot',
+          'channels=' +
+            v789gVisibleChannels.length,
+          'id=' + id,
+          'addon=' + addonId
         );
       } catch (error) {
         console.warn(
@@ -889,21 +3099,31 @@ const timelineStart = floorHalfHour(now);
         error
       );
     }
-  }, [router, channels]);
+  }, [router, v789gVisibleChannels]);
 
   // V788T8Z_PERSISTED_BOOKMARK_ACK
+  // W121ZPLAY10Y24Q_PERSISTED_CHANNEL_ID_ALIASES
   const v788t8zLibraryHasChannel = useCallback(
     (id: string) => {
-      const currentLibrary =
+      const currentLibrary: any =
         useContentStore.getState().library;
 
-      return (currentLibrary?.channels || []).some(
+      const libraryChannels: any[] =
+        ([] as any[]).concat(
+          currentLibrary?.channels || [],
+          currentLibrary?.tv || []
+        );
+
+      return libraryChannels.some(
         (item: any) =>
-          String(
-            item?.imdb_id ||
-            item?.id ||
-            ''
-          ).trim() === id
+          [
+            item?.content_id,
+            item?.imdb_id,
+            item?.id,
+          ].some(
+            (raw) =>
+              String(raw || '').trim() === id
+          )
       );
     },
     []
@@ -933,6 +3153,46 @@ const timelineStart = floorHalfHour(now);
         })
       );
 
+      // W121ZPLAY10Y23A_DIRECT_GUIDE_FAVORITE_PUSH
+      // Feed the favorite-only delta directly to the currently mounted
+      // native guide before persistence begins. The native guide's
+      // existing favorite-only fast path owns the direct badge repaint.
+      const v788y23CurrentGuideItems =
+        v788y23GuideItemsRef.current;
+
+      if (v788y23CurrentGuideItems.length > 0) {
+        const v788y23NextGuideItems =
+          v788y23CurrentGuideItems.map(
+            (item: any) =>
+              item.key === channel.key
+                ? {
+                    ...item,
+                    favorite: nextFavorite,
+                  }
+                : item
+          );
+
+        v788y23GuideItemsRef.current =
+          v788y23NextGuideItems;
+
+        try {
+          v788y23GuideRef.current?.setNativeProps({
+            items: v788y23NextGuideItems,
+          });
+
+          console.log(
+            '[W121ZPLAY10Y23A DIRECT GUIDE FAVORITE]',
+            channel.key,
+            nextFavorite
+          );
+        } catch (error) {
+          console.warn(
+            '[W121ZPLAY10Y23A DIRECT GUIDE FAVORITE FAILED]',
+            error
+          );
+        }
+      }
+
       console.log(
         '[V788T8Z BOOKMARK] optimistic',
         id,
@@ -957,11 +3217,10 @@ const timelineStart = floorHalfHour(now);
           });
         }
 
-        // Do not trust only the mutation promise.
-        // Pull the authoritative library again and
-        // verify the channel is actually persisted.
-        await fetchLibrary(true);
-
+        // W121ZPLAY10Y24L_SINGLE_LIBRARY_SYNC
+        // addToLibrary/removeFromLibrary already await fetchLibrary()
+        // in V176J_STORE_FINALLY. Do not issue a second GET here.
+        // Verify the authoritative store state they just refreshed.
         const persistedFavorite =
           v788t8zLibraryHasChannel(id);
 
@@ -982,10 +3241,13 @@ const timelineStart = floorHalfHour(now);
         // The server has confirmed the requested state.
         // Keep the same value pinned for this Live TV mount.
         setV788t8xFavoriteOverrides(
-          (previous) => ({
-            ...previous,
-            [id]: nextFavorite,
-          })
+          (previous) =>
+            previous[id] === nextFavorite
+              ? previous
+              : {
+                  ...previous,
+                  [id]: nextFavorite,
+                }
         );
 
         console.log(
@@ -1015,7 +3277,6 @@ const timelineStart = floorHalfHour(now);
       v788t8zLibraryHasChannel,
       addToLibrary,
       removeFromLibrary,
-      fetchLibrary,
     ]
   );
 
@@ -1023,10 +3284,372 @@ const timelineStart = floorHalfHour(now);
  v788pToggleFavoriteRef.current =
    toggleFavorite;
 
+ // V789H_CATEGORY_BUTTON_RENDERER
+ const v789gRenderCategoryButton = (
+   category: V789gCategoryDef,
+   visualIndex: number
+ ) => {
+   const selected =
+     v789gCategory ===
+     category.key;
+
+   const selfTag =
+     v789hCategoryTags[
+       visualIndex
+     ] || undefined;
+
+   const leftTag =
+     visualIndex > 0
+       ? (
+           v789hCategoryTags[
+             visualIndex - 1
+           ] || selfTag
+         )
+       : selfTag;
+
+   const rightTag =
+     visualIndex <
+     v789gVisibleCategoryDefsRef.current.length -
+       1
+       ? (
+           v789hCategoryTags[
+             visualIndex + 1
+           ] || selfTag
+         )
+       : selfTag;
+
+   return (
+     <Pressable
+       key={category.key}
+       ref={(node: any) =>
+         v789hRegisterCategoryRef(
+           visualIndex,
+           node
+         )
+       }
+       accessibilityLabel={
+         category.label
+       }
+       // V789N_CATEGORY_LAYOUT
+       onLayout={(event: any) => {
+         const layout =
+           event?.nativeEvent?.layout;
+
+         if (!layout) {
+           return;
+         }
+
+         const x =
+           Number(layout.x);
+
+         const width =
+           Number(layout.width);
+
+         if (
+           !Number.isFinite(x) ||
+           !Number.isFinite(width) ||
+           width <= 0
+         ) {
+           return;
+         }
+
+         v789nCategoryLayoutsRef
+           .current[visualIndex] = {
+             x,
+             width,
+           };
+       }}       focusable={
+         v789hCategoryMode
+       }
+       nextFocusLeft={
+         leftTag
+       }
+       nextFocusRight={
+         rightTag
+       }
+       nextFocusUp={
+         selfTag
+       }
+       // V789M_EXPLICIT_CATEGORY_DOWN
+       // Prevent Android spatial search from choosing
+       // an arbitrary guide child. JS requests row 0.
+       nextFocusDown={
+         selfTag
+       }       onFocus={() => {
+         v789hCategoryModeRef
+           .current = true;
+
+         setV789hCategoryMode(
+           true
+         );
+
+         v789hCategoryFocusedIndexRef
+           .current =
+           visualIndex;
+
+         // V789K_R6_COMMIT_CATEGORY_HANDOFF
+         // Android focus is confirmed here.
+         // It is now safe to retire station-only state.
+         v788pClearStationLongPress();
+         v788t8cFocusAreaRef
+           .current = 'none';
+
+         v788t8cFocusedRowRef
+           .current = null;
+
+         v788t8cFirstLeftRef
+           .current = 0;
+
+         v788t8cRawLeftRef
+           .current = 0;
+
+         // V789N_CATEGORY_SCROLL_OWNER
+         // Focus already moved to the exact adjacent pill.
+         // Only scroll if its real bounds leave the viewport.
+         v789nEnsureCategoryVisible(
+           visualIndex,
+           false
+         );
+         console.log(
+           '[V789H CATEGORY FOCUS] ' +
+             'index=' +
+             visualIndex +
+             ' key=' +
+             category.key
+         );
+       }}
+       // V789M_CATEGORY_BLUR_NO_AUTO_EXIT
+       //
+       // Horizontal category-to-category focus may take
+       // longer than one frame on Fire TV. Blur itself is
+       // NOT an exit condition anymore.
+       onBlur={() => {
+         if (
+           v789hCategoryFocusedIndexRef
+             .current ===
+           visualIndex
+         ) {
+           v789hCategoryFocusedIndexRef
+             .current = -1;
+         }
+       }}       onPress={() =>
+         v789gSelectCategory(
+           category.key
+         )
+       }
+       style={({
+         focused,
+       }: any) => [
+         styles.v789gCategoryButton,
+         selected &&
+           styles.v789gCategoryButtonSelected,
+         focused &&
+           styles.v789gCategoryButtonFocused,
+       ]}
+     >
+       {category.key ===
+         'favorites' && (
+         <Ionicons
+           name="star"
+           size={17}
+           color={
+             selected
+               ? '#0c0c0c'
+               : '#B8A05C'
+           }
+         />
+       )}
+
+       <Text
+         style={[
+           styles.v789gCategoryText,
+           selected &&
+             styles.v789gCategoryTextSelected,
+         ]}
+       >
+         {category.label}
+       </Text>
+     </Pressable>
+   );
+ };
  // V788T8L_NATIVE_STATION_ITEMS
+  // V789N_NATIVE_CATEGORY_ITEMS
+  const v789nNativeCategoryItems =
+    useMemo(
+      () =>
+        v789gVisibleCategoryDefs.map(
+          (category) => ({
+            id: category.key,
+            label: category.label,
+            selected:
+              category.key ===
+              v789gCategory,
+          })
+        ),
+      [
+        v789gCategory,
+        v789gVisibleCategoryDefs,
+      ]
+    );
+
+  // V789N_NATIVE_CATEGORY_FOCUS
+  const v789nHandleNativeCategoryFocus =
+    useCallback(
+      (event: any) => {
+        const index =
+          Number(
+            event?.nativeEvent?.index
+          );
+
+        if (
+          !Number.isInteger(index) ||
+          index < 0 ||
+          index >=
+            v789gVisibleCategoryDefsRef.current.length
+        ) {
+          return;
+        }
+
+        const category =
+          v789gVisibleCategoryDefsRef.current[index];
+
+        // V789S6_IGNORE_STALE_CATEGORY_FOCUS_DURING_EXIT
+        //
+        // Runtime proof from V789S5 showed the guide taking row-0 focus,
+        // followed by a delayed native category focus callback that turned
+        // category mode back on. Ignore category callbacks once an exit is
+        // pending or the guide has already retired category mode.
+        if (
+          v789mCategoryExitPendingRef.current ||
+          !v789hCategoryModeRef.current
+        ) {
+          console.log(
+            '[V789S6 STALE CATEGORY FOCUS IGNORED] ' +
+              'index=' +
+              index +
+              ' key=' +
+              category.key +
+              ' pendingExit=' +
+              String(
+                v789mCategoryExitPendingRef.current
+              ) +
+              ' categoryMode=' +
+              String(
+                v789hCategoryModeRef.current
+              )
+          );
+
+          return;
+        }
+
+        v789hCategoryModeRef.current =
+          true;
+
+        setV789hCategoryMode(
+          true
+        );
+
+        v789hCategoryFocusedIndexRef
+          .current =
+          index;
+
+        v789mCategoryExitPendingRef.current =
+          false;
+
+        // Do NOT feed preferredFocusIndex back on every
+        // horizontal focus move. Native RecyclerView owns
+        // LEFT/RIGHT from this point forward.
+        v788pClearStationLongPress();
+
+        v788t8cFocusAreaRef.current =
+          'none';
+
+        v788t8cFocusedRowRef.current =
+          null;
+
+        v788t8cFirstLeftRef.current =
+          0;
+
+        v788t8cRawLeftRef.current =
+          0;
+
+        console.log(
+          '[V789N NATIVE CATEGORY FOCUS] ' +
+            'index=' +
+            index +
+            ' key=' +
+            category.key
+        );
+      },
+      [
+        v788pClearStationLongPress,
+      ]
+    );
+
+  // V789N_NATIVE_CATEGORY_PRESS
+  const v789nHandleNativeCategoryPress =
+    useCallback(
+      (event: any) => {
+        const index =
+          Number(
+            event?.nativeEvent?.index
+          );
+
+        if (
+          !Number.isInteger(index) ||
+          index < 0 ||
+          index >=
+            v789gVisibleCategoryDefsRef.current.length
+        ) {
+          return;
+        }
+
+        const category =
+          v789gVisibleCategoryDefsRef.current[index];
+
+        console.log(
+          '[V789N NATIVE CATEGORY PRESS] ' +
+            'index=' +
+            index +
+            ' key=' +
+            category.key
+        );
+
+        // If the selected-state data refresh momentarily
+        // detaches the holder, fallback focus returns to
+        // the item the user actually selected.
+        setV789nNativeCategoryPreferredIndex(
+          index
+        );
+
+        v789gSelectCategory(
+          category.key
+        );
+      },
+      [
+        v789gSelectCategory,
+      ]
+    );
+
+  const v789nHandleNativeCategoryBlur =
+    useCallback(
+      () => {
+        // V789M owns the category -> guide exit commit.
+        // A row blur by itself does not retire category mode.
+        console.log(
+          '[V789N NATIVE CATEGORY BLUR] ' +
+            'pendingExit=' +
+            String(
+              v789mCategoryExitPendingRef
+                .current
+            )
+        );
+      },
+      []
+    );
  const v788t8lStationItems = useMemo(
    () =>
-     channels.map((channel) => {
+     v789gVisibleChannels.map((channel) => {
        const id = String(
          channel.item.imdb_id ||
          channel.item.id ||
@@ -1040,7 +3663,7 @@ const timelineStart = floorHalfHour(now);
          favorite: v788t8xIsFavorite(id),
        };
      }),
-   [channels, v788t8xIsFavorite]
+   [v789gVisibleChannels, v788t8xIsFavorite]
  );
 
  // V788T4A_PROGRAM_GEOMETRY
@@ -1049,7 +3672,7 @@ const timelineStart = floorHalfHour(now);
  // V788T8P_WHOLE_ROW_NATIVE_ITEMS
  const v788t8pGuideItems = useMemo(
    () =>
-     channels.map((channel) => {
+     v789gVisibleChannels.map((channel) => {
        const id = String(
          channel.item.imdb_id ||
          channel.item.id ||
@@ -1085,8 +3708,17 @@ const timelineStart = floorHalfHour(now);
            ),
        };
      }),
-   [channels, v788t8xIsFavorite]
+   [v789gVisibleChannels, v788t8xIsFavorite]
  );
+
+ // W121ZPLAY10Y24X_STABLE_DIRECT_GUIDE_CACHE
+ // Y24L intentionally keeps v788t8pGuideItems stable across favorite
+ // state changes. Only reseed the mutable direct-guide cache when the
+ // structural/native guide-items memo itself actually changes.
+ useEffect(() => {
+   v788y23GuideItemsRef.current =
+     v788t8pGuideItems;
+ }, [v788t8pGuideItems]);
  const focusProgram = useCallback((left: number) => {
     const nextX =
       Math.max(0, left - 40);
@@ -1705,9 +4337,58 @@ const timelineStart = floorHalfHour(now);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Live TV</Text>
+      {/* V789H_INLINE_LOGO_CATEGORY_ROW */}
+      <View
+        style={
+          styles.v789hTopRow
+        }
+      >
+        <Image
+          source={require('../../assets/images/livetv-header-icon.png')}
+          style={
+            styles.v789hLogo
+          }
+          resizeMode="contain"
+        />
 
-      {/* V788T6B_PINNED_GUIDE_HEADER */}
+        {/* V789N_NATIVE_CATEGORY_SWITCH */}
+        <PrivastreamCategoryRow
+          style={{
+            flex: 1,
+            height: 36, // V789S9_CENTER_CATEGORY_PILLS_WITH_ICON
+            marginLeft: 80, // V789S13B_RESTORE_S11_HEADER_GAP
+          }}
+          items={
+            v789nNativeCategoryItems
+          }
+          itemWidth={156}
+          itemHeight={36}
+          gap={8}
+          leftPadding={4} // V789S13B_FIRST_PILL_SCALE_BLEED_GUARD
+          rightPadding={24}
+          anchorColumn={5}
+          preferredFocusIndex={
+            v789nNativeCategoryPreferredIndex
+          }
+          focusRequest={
+            v789nNativeCategoryFocusSerial > 0
+              ? `${v789nNativeCategoryPreferredIndex}:${v789nNativeCategoryFocusSerial}`
+              : ''
+          }
+          active={
+            v789hCategoryMode
+          }
+          onItemFocus={
+            v789nHandleNativeCategoryFocus
+          }
+          onItemPress={
+            v789nHandleNativeCategoryPress
+          }
+          onRowBlur={
+            v789nHandleNativeCategoryBlur
+          }
+        />      </View>
+            {/* V788T6B_PINNED_GUIDE_HEADER */}
       <View style={styles.guideHeader}>
         <View
           style={[
@@ -1766,6 +4447,8 @@ const timelineStart = floorHalfHour(now);
 
       {/* V788T8P_WHOLE_ROW_NATIVE_GUIDE */}
       <PrivastreamLiveTVGuide
+        ref={v788y23GuideRef}
+        key={`livetv-guide:${v789gCategory}`}
         style={styles.vertical}
         items={v788t8pGuideItems}
         rowHeight={ROW_HEIGHT}
@@ -1777,8 +4460,8 @@ const timelineStart = floorHalfHour(now);
         nowMs={now}
         preferredFocusIndex={preferredChannelIndex}
         focusRestoreRequest={
-          v788t8vFocusRestoreSerial > 0
-            ? `${preferredChannelIndex}:${v788t8vFocusRestoreSerial}`
+          v788t8vFocusRestoreRequest.serial > 0
+            ? `${v788t8vFocusRestoreRequest.index}:${v788t8vFocusRestoreRequest.serial}`
             : ''
         }
         onHorizontalScroll={(event: any) => {
@@ -1802,12 +4485,12 @@ const timelineStart = floorHalfHour(now);
           if (
             !Number.isInteger(index) ||
             index < 0 ||
-            index >= channels.length
+            index >= v789gVisibleChannels.length
           ) {
             return;
           }
 
-          const channel = channels[index];
+          const channel = v789gVisibleChannels[index];
           const zone = String(
             event?.nativeEvent?.zone || 'station'
           );
@@ -1827,11 +4510,54 @@ const timelineStart = floorHalfHour(now);
             previousRow !== index ||
             previousArea !== zone;
 
+          const programToStation =
+            previousRow === index &&
+            previousArea === 'program' &&
+            zone === 'station';
+
+          const stationRowOneToZero =
+            previousRow === 1 &&
+            previousArea === 'station' &&
+            index === 0 &&
+            zone === 'station';
+
           v788t8cFocusedRowRef.current = index;
 
           if (logicalFocusChanged) {
             v788t8cFirstLeftRef.current = 0;
             v788t8cRawLeftRef.current = 0;
+
+            if (
+              v789kSingleLeftTimerRef.current
+            ) {
+              clearTimeout(
+                v789kSingleLeftTimerRef.current
+              );
+
+              v789kSingleLeftTimerRef.current =
+                null;
+            }
+          }
+
+          if (programToStation) {
+            v789s9ProgramToStationLeftRef.current =
+              Date.now();
+
+            console.log(
+              '[V789S9 PROGRAM TO STATION] ' +
+                'row=' +
+                index
+            );
+          }
+
+          if (stationRowOneToZero) {
+            // V789S10_ROW1_TO_ROW0_UP_GUARD
+            v789s10RowOneToZeroUpRef.current =
+              Date.now();
+
+            console.log(
+              '[V789S10 STATION ROW1 TO ROW0] armed'
+            );
           }
 
           if (zone === 'program') {
@@ -1864,6 +4590,11 @@ const timelineStart = floorHalfHour(now);
                   v788pToggleFavoriteRef.current;
 
                 if (toggle) {
+                  console.log(
+                    '[V789I HOLD OK FAVORITE] ' +
+                      channel.key
+                  );
+
                   void toggle(channel);
                 }
               };
@@ -1876,6 +4607,35 @@ const timelineStart = floorHalfHour(now);
             } catch (_) {}
           }
 
+          // V789M_R6_EXIT_COMMIT
+          //
+          // A native guide child now owns Android focus.
+          // It is finally safe to make category buttons
+          // non-focusable again.
+          if (
+            v789mCategoryExitPendingRef.current
+          ) {
+            v789mCategoryExitPendingRef.current =
+              false;
+
+            v789hCategoryModeRef.current =
+              false;
+
+            v789hCategoryFocusedIndexRef.current =
+              -1;
+
+            setV789hCategoryMode(
+              false
+            );
+
+            console.log(
+              '[V789M EXIT COMMIT] ' +
+                'guideRow=' +
+                index +
+                ' zone=' +
+                zone
+            );
+          }
           console.log(
             '[V788T8P NATIVE GUIDE FOCUS] row=' +
               index +
@@ -1897,10 +4657,10 @@ const timelineStart = floorHalfHour(now);
           if (
             Number.isInteger(index) &&
             index >= 0 &&
-            index < channels.length
+            index < v789gVisibleChannels.length
           ) {
             void openChannel(
-              channels[index]
+              v789gVisibleChannels[index]
             );
           }
         }}
@@ -1947,13 +4707,75 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+  // V789H_INLINE_CATEGORY_STYLES
+  v789hTopRow: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    position: 'relative',
+  },
+  v789hLogo: {
+    // V789S6_LARGER_HEADER_ICON
+    // 568x358 artwork uses width as the limiting dimension under contain.
+    // 64x48 keeps it inside the 52px header while making the visible art
+    // substantially larger; V789S11 starts the category row at x=80 for a 16px box gap.
+    width: 64,
+    height: 48,
+    position: 'absolute',
+    left: 0,
+    top: 2,
+    zIndex: 2,
+  },
+  v789gCategoryRail: {
+    flex: 1,
+    flexGrow: 1,
+    height: 48,
+  },
+  v789gCategoryRailContent: {
+    alignItems: 'center',
+    paddingRight: 24,
+  },
+  v789gCategoryButton: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    marginRight: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#333',
+    backgroundColor: '#171717',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  v789gCategoryButtonSelected: {
+    backgroundColor: '#B8A05C',
+    borderColor: '#B8A05C',
+  },
+  v789gCategoryButtonFocused: {
+    borderColor: '#ffffff',
+    borderWidth: 3,
+    transform: [
+      { scale: 1.04 },
+    ],
+  },
+  v789gCategoryText: {
+    color: '#e5e5e5',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  v789gCategoryTextSelected: {
+    color: '#0c0c0c',
+  },
   guideHeader: {
     flexDirection: 'row',
     backgroundColor: '#151515',
   },
   guide: { flexDirection: 'row', flex: 1 },
   stationHeader: {
-    height: 42,
+    // W121ZPLAY10Y24F_SEVEN_FULL_ROWS
+    height: 36,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -2021,7 +4843,7 @@ focused: {
 
   timelineHeader: {
     position: 'relative',
-    height: 42,
+    height: 36,
     flexDirection: 'row',
     backgroundColor: '#151515',
   },

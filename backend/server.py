@@ -12,6 +12,7 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
 import hashlib
+import hmac
 import json
 import re
 import base64  # V739B1_TUNNEL_PROVISIONING
@@ -19,6 +20,11 @@ import jwt
 import httpx
 import redis.asyncio as redis_async
 from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives.ciphers import (
+    Cipher,
+    algorithms,
+    modes,
+)
 import asyncio
 import ipaddress
 import socket
@@ -35,6 +41,7 @@ import time
 import tempfile
 import shutil
 import subprocess
+from functools import lru_cache
 import fcntl  # V178A_LEADER_LOCK ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â flock-based worker leader election
 import signal
 import atexit
@@ -3592,6 +3599,60 @@ def _v789n1_parse_int_tag(
     return None
 
 
+# ================= V789N3 PLUTO PDT MONOTONIC TIMELINE =================
+# V789N3_PLUTO_PDT_MONOTONIC_TIMELINE
+#
+# Pluto commercial/slate windows can reuse the same segment URLs while
+# MEDIA-SEQUENCE resets or remains 0/1. PROGRAM-DATE-TIME continues moving
+# forward and therefore provides an independent proof that live time advanced.
+#
+# This parser returns the first PROGRAM-DATE-TIME as an epoch timestamp.
+# If it cannot be parsed, existing V789N1 behavior remains authoritative.
+def _v789n3_first_program_time(
+    lines,
+):
+    for line in lines:
+        stripped = str(
+            line
+            or ""
+        ).strip()
+
+        if not stripped.startswith(
+            "#EXT-X-PROGRAM-DATE-TIME:"
+        ):
+            continue
+
+        raw = stripped[
+            len(
+                "#EXT-X-PROGRAM-DATE-TIME:"
+            ):
+        ].strip()
+
+        if not raw:
+            return None
+
+        try:
+            normalized = raw
+
+            if normalized.endswith(
+                "Z"
+            ):
+                normalized = (
+                    normalized[:-1]
+                    + "+00:00"
+                )
+
+            return float(
+                datetime.fromisoformat(
+                    normalized
+                ).timestamp()
+            )
+
+        except Exception:
+            return None
+
+    return None
+
 def _v789n1_parse_media_playlist(
     text: str,
     child_url: str,
@@ -3644,6 +3705,15 @@ def _v789n1_parse_media_playlist(
     return {
         "lines": lines,
         "segments": segments,
+        "target_duration":
+            _v789n1_parse_int_tag(
+                lines,
+                "#EXT-X-TARGETDURATION:",
+            ),
+        "first_program_time":
+            _v789n3_first_program_time(
+                lines,
+            ),
         "upstream_seq":
             _v789n1_parse_int_tag(
                 lines,
@@ -3736,6 +3806,121 @@ def _v789n1_best_overlap(
                 best = candidate
 
     return best
+
+
+# ================= V789S25W106A REAL-AD SPLICE DISC =================
+# V789S25W106A_REAL_AD_SPLICE_DISCONTINUITY
+#
+# Pluto can switch ad/media sequence namespaces while preserving an
+# overlapping HLS window. Some of those splice points carry a new MPEG-TS
+# timestamp epoch without an upstream EXT-X-DISCONTINUITY.
+#
+# Preserve logical MEDIA-SEQUENCE continuity, but explicitly mark the first
+# newly introduced segment as a decoder discontinuity.
+
+
+def _v789s25w106a_insert_discontinuity_before_segment(
+    text: str,
+    segment_index: int,
+    count: int = 1,
+):
+    lines = str(
+        text
+        or ""
+    ).splitlines()
+
+    uri_indexes = []
+
+    for line_index, line in enumerate(
+        lines
+    ):
+        stripped = str(
+            line
+            or ""
+        ).strip()
+
+        if (
+            stripped
+            and not stripped.startswith("#")
+        ):
+            uri_indexes.append(
+                int(line_index)
+            )
+
+    try:
+        segment_index = int(
+            segment_index
+        )
+
+        count = max(
+            1,
+            int(count),
+        )
+    except Exception:
+        return None
+
+    if (
+        segment_index <= 0
+        or segment_index
+        >= len(uri_indexes)
+    ):
+        return None
+
+    previous_uri_index = int(
+        uri_indexes[
+            segment_index - 1
+        ]
+    )
+
+    target_uri_index = int(
+        uri_indexes[
+            segment_index
+        ]
+    )
+
+    block_start = (
+        previous_uri_index
+        + 1
+    )
+
+    existing = sum(
+        1
+        for line in lines[
+            block_start:
+            target_uri_index
+        ]
+        if str(
+            line
+            or ""
+        ).strip()
+        == "#EXT-X-DISCONTINUITY"
+    )
+
+    needed = max(
+        0,
+        int(count)
+        - int(existing),
+    )
+
+    if needed <= 0:
+        return text
+
+    lines[
+        block_start:
+        block_start
+    ] = [
+        "#EXT-X-DISCONTINUITY"
+        for _ in range(
+            needed
+        )
+    ]
+
+    return (
+        "\n".join(
+            lines
+        )
+        + "\n"
+    )
 
 
 def _v789n1_rewrite_sequence_tags(
@@ -3873,9 +4058,491 @@ def _v789n1_rewrite_sequence_tags(
     )
 
 
+# ================= V789S25W10 STALE PREPEND TRIM =================
+# V789S25W10_STALE_PREPEND_TRIM
+#
+# Pluto can briefly prepend one or more already-expired media segments to an
+# otherwise unchanged live window.  If sequence normalization floors the
+# advertised MEDIA-SEQUENCE without removing that stale prefix, an existing
+# logical sequence number is reassigned to different media.  Media3 then sees a
+# one-segment timestamp rewind.  This helper removes only a proven leading
+# prefix and preserves the active EXT-X-KEY state for the first retained
+# segment.  It fails closed for playlist forms whose initialization/LL-HLS
+# state is not represented by the existing parser.
+def _v789s25w10_trim_leading_segments(
+    text: str,
+    trim_count: int,
+):
+    try:
+        count = int(trim_count)
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return None
+
+    if count <= 0:
+        return str(text or "")
+
+    raw = str(text or "")
+
+    # Fail closed for fMP4 / LL-HLS state that this narrow repair does not
+    # intentionally rewrite.
+    upper = raw.upper()
+
+    if (
+        "#EXT-X-MAP:" in upper
+        or "#EXT-X-PART:" in upper
+        or "#EXT-X-PRELOAD-HINT:" in upper
+        or "#EXT-X-SKIP:" in upper
+    ):
+        return None
+
+    parsed = _v789n4_playlist_segments(
+        raw
+    )
+
+    lines = list(
+        parsed.get("lines")
+        or []
+    )
+
+    segments = list(
+        parsed.get("segments")
+        or []
+    )
+
+    if (
+        not lines
+        or count >= len(segments)
+    ):
+        return None
+
+    first_uri_index = int(
+        segments[0].get(
+            "uri_index",
+            -1,
+        )
+    )
+
+    retained = segments[count]
+
+    retained_start = int(
+        retained.get(
+            "block_start",
+            -1,
+        )
+    )
+
+    retained_uri_index = int(
+        retained.get(
+            "uri_index",
+            -1,
+        )
+    )
+
+    if (
+        first_uri_index < 0
+        or retained_start < 0
+        or retained_uri_index < retained_start
+        or retained_uri_index >= len(lines)
+    ):
+        return None
+
+    # Locate the beginning of the first media block while leaving global
+    # playlist tags (VERSION/TARGETDURATION/MEDIA-SEQUENCE/etc.) untouched.
+    segment_tag_prefixes = (
+        "#EXTINF:",
+        "#EXT-X-PROGRAM-DATE-TIME:",
+        "#EXT-X-KEY:",
+        "#EXT-X-BYTERANGE:",
+        "#EXT-X-DATERANGE:",
+        "#EXT-X-BITRATE:",
+        "#EXT-X-CUE-",
+        "#EXT-OATCLS-SCTE35:",
+        "#EXT-X-SCTE35:",
+    )
+
+    segment_tag_exact = {
+        "#EXT-X-DISCONTINUITY",
+        "#EXT-X-GAP",
+    }
+
+    first_block_start = first_uri_index
+
+    candidate_index = (
+        first_uri_index - 1
+    )
+
+    while candidate_index >= 0:
+        stripped = str(
+            lines[candidate_index]
+            or ""
+        ).strip()
+
+        if not stripped:
+            first_block_start = (
+                candidate_index
+            )
+            candidate_index -= 1
+            continue
+
+        if (
+            stripped in segment_tag_exact
+            or stripped.startswith(
+                segment_tag_prefixes
+            )
+        ):
+            first_block_start = (
+                candidate_index
+            )
+            candidate_index -= 1
+            continue
+
+        break
+
+    if retained_start <= first_block_start:
+        return None
+
+    prefix = list(
+        lines[:first_block_start]
+    )
+
+    suffix = list(
+        lines[retained_start:]
+    )
+
+    # If the retained segment inherited an encryption key that was declared in
+    # the removed prefix, restore that active key before the retained block.
+    active_key_line = str(
+        retained.get("key_line")
+        or ""
+    ).strip()
+
+    retained_prefix_length = (
+        retained_uri_index
+        - retained_start
+    )
+
+    retained_prefix_lines = suffix[
+        :max(
+            0,
+            retained_prefix_length,
+        )
+    ]
+
+    has_retained_key = any(
+        str(line or "").strip().startswith(
+            "#EXT-X-KEY:"
+        )
+        for line in retained_prefix_lines
+    )
+
+    if (
+        active_key_line
+        and not has_retained_key
+    ):
+        suffix.insert(
+            0,
+            active_key_line,
+        )
+
+    return (
+        "\n".join(
+            prefix + suffix
+        )
+        + "\n"
+    )
+
+
+
+# V789S25W67_JOINT_SEQUENCE_RESET_DISCONTINUITY
+# ================= V789S25W46 MASTER-OWNED DISCONTINUITY CLOCK =================
+# W45 proved that real Pluto ad pods can remain ordinary media (bumper=0)
+# while sibling renditions under the SAME master publish different
+# DISCONTINUITY-SEQUENCE baselines. Media3 then observed ~30-second audio
+# timestamp rewinds.
+#
+# MEDIA-SEQUENCE remains per-child because segment identity differs by
+# rendition. DISCONTINUITY-SEQUENCE is master-owned because every rendition
+# represents one presentation timeline.
+#
+# Only hashes, integers, and timestamps are stored. No raw Pluto URLs/tokens.
+
+_V789S25W46_MASTER_DISC_TTL_SECONDS = 180
+
+
+async def _v789s25w46_master_discontinuity(
+    redis_client,
+    master_url: str,
+    upstream_disc,
+    first_pdt,
+    target_duration,
+    media_sequence_reset: bool = False,
+):
+    master_identity = _v789n1_url_identity_hash(
+        master_url,
+        include_query=False,
+        length=64,
+    )
+
+    safe_master = str(master_identity)[:16]
+
+    state_key = (
+        "privastream:v789s25w46:"
+        "pluto:master-disc:"
+        + master_identity
+    )
+    lock_key = state_key + ":lock"
+    lock_token = uuid.uuid4().hex
+    acquired = False
+
+    try:
+        raw_up = max(
+            0,
+            int(
+                upstream_disc
+                if upstream_disc is not None
+                else 0
+            ),
+        )
+    except Exception:
+        raw_up = 0
+
+    try:
+        pdt = (
+            float(first_pdt)
+            if first_pdt is not None
+            else None
+        )
+    except Exception:
+        pdt = None
+
+    try:
+        target = max(
+            1.0,
+            float(target_duration or 5.0),
+        )
+    except Exception:
+        target = 5.0
+
+    try:
+        for _ in range(40):
+            acquired = bool(
+                await redis_client.set(
+                    lock_key,
+                    lock_token,
+                    nx=True,
+                    ex=_V789N1_LOCK_TTL_SECONDS,
+                )
+            )
+
+            if acquired:
+                break
+
+            await asyncio.sleep(0.025)
+
+        if not acquired:
+            logger.warning(
+                (
+                    "V789S25W46_MASTER_DISC_LOCK_TIMEOUT "
+                    "master=%s"
+                ),
+                safe_master,
+            )
+            return int(raw_up)
+
+        previous = None
+        raw_previous = await redis_client.get(
+            state_key
+        )
+
+        if raw_previous:
+            try:
+                candidate = json.loads(raw_previous)
+                if isinstance(candidate, dict):
+                    previous = candidate
+            except Exception:
+                previous = None
+
+        offset = 0
+        last_up = None
+        last_disc = None
+        last_pdt = None
+
+        if isinstance(previous, dict):
+            try:
+                offset = max(
+                    0,
+                    int(previous.get("offset") or 0),
+                )
+            except Exception:
+                offset = 0
+
+            try:
+                if previous.get("last_up") is not None:
+                    last_up = int(previous.get("last_up"))
+            except Exception:
+                last_up = None
+
+            try:
+                if previous.get("last_disc") is not None:
+                    last_disc = int(previous.get("last_disc"))
+            except Exception:
+                last_disc = None
+
+            try:
+                if previous.get("last_pdt") is not None:
+                    last_pdt = float(previous.get("last_pdt"))
+            except Exception:
+                last_pdt = None
+
+        reset_detected = False
+
+        # If Pluto resets its absolute discontinuity counter while PDT keeps
+        # moving forward, advance ONE master-wide offset instead of letting
+        # each child independently invent a new baseline.
+        if (
+            last_up is not None
+            and last_disc is not None
+            and int(raw_up) < int(last_up)
+            and pdt is not None
+            and (
+                last_pdt is None
+                or pdt >= (
+                    float(last_pdt)
+                    - max(0.500, target * 0.25)
+                )
+            )
+        ):
+            # V789S25W67_JOINT_UPSTREAM_RESET_DISCONTINUITY
+            #
+            # W66 proved that Pluto can reset BOTH the media sequence and
+            # discontinuity sequence while the MPEG-TS clock also rewinds by
+            # roughly one segment.  A discontinuity-only reset with forward
+            # media sequence keeps W46's existing absolute-baseline behavior.
+            # A JOINT reset advances one additional master generation so
+            # Media3 obtains a fresh TimestampAdjuster for the reset clock.
+            joint_reset = bool(media_sequence_reset)
+
+            offset = max(
+                int(offset),
+                int(last_disc)
+                - int(raw_up)
+                + (1 if joint_reset else 0),
+            )
+            reset_detected = True
+
+            if joint_reset:
+                logger.warning(
+                    (
+                        "V789S25W67_JOINT_UPSTREAM_RESET "
+                        "master=%s raw_up=%s last_up=%s "
+                        "offset=%s last_disc=%s pdt=%s"
+                    ),
+                    safe_master,
+                    int(raw_up),
+                    int(last_up),
+                    int(offset),
+                    int(last_disc),
+                    (
+                        "%.3f" % pdt
+                        if pdt is not None
+                        else "-"
+                    ),
+                )
+
+            logger.warning(
+                (
+                    "V789S25W46_MASTER_DISC_RESET "
+                    "master=%s raw_up=%s last_up=%s "
+                    "offset=%s last_disc=%s pdt=%s"
+                ),
+                safe_master,
+                int(raw_up),
+                int(last_up),
+                int(offset),
+                int(last_disc),
+                (
+                    "%.3f" % pdt
+                    if pdt is not None
+                    else "-"
+                ),
+            )
+
+        canonical = max(
+            0,
+            int(raw_up) + int(offset),
+        )
+
+        should_update = (
+            previous is None
+            or reset_detected
+            or last_up is None
+            or int(raw_up) > int(last_up)
+            or (
+                int(raw_up) == int(last_up)
+                and (
+                    last_pdt is None
+                    or (
+                        pdt is not None
+                        and pdt >= float(last_pdt)
+                    )
+                )
+            )
+        )
+
+        if should_update:
+            await redis_client.set(
+                state_key,
+                json.dumps(
+                    {
+                        "offset": int(offset),
+                        "last_up": int(raw_up),
+                        "last_disc": int(canonical),
+                        "last_pdt": pdt,
+                        "updated_at": float(time.time()),
+                    },
+                    separators=(",", ":"),
+                ),
+                ex=_V789S25W46_MASTER_DISC_TTL_SECONDS,
+            )
+
+        return int(canonical)
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W46_MASTER_DISC_ERROR "
+                "master=%s type=%s"
+            ),
+            safe_master,
+            type(exc).__name__,
+        )
+        return int(raw_up)
+
+    finally:
+        if acquired:
+            try:
+                await redis_client.eval(
+                    (
+                        "if redis.call('get', KEYS[1]) "
+                        "== ARGV[1] then "
+                        "return redis.call('del', KEYS[1]) "
+                        "else return 0 end"
+                    ),
+                    1,
+                    lock_key,
+                    lock_token,
+                )
+            except Exception:
+                pass
+
+
 async def _v789n1_normalize_media_timeline(
     text: str,
     child_url: str,
+    master_url: str = "",
 ) -> str:
     parsed = _v789n1_parse_media_playlist(
         text,
@@ -3905,8 +4572,30 @@ async def _v789n1_normalize_media_timeline(
         )
     )
 
+    # V789S25W22_RENDITION_TIMELINE_DIAGNOSTIC
+    #
+    # Keep the existing per-child normalization state completely unchanged.
+    # These hashes let us prove whether Media3 moved to another child/rendition
+    # under the same master, or only received a refreshed query/token.
+    # No raw Pluto URL/query/token is logged.
+    master_log_key = (
+        _v789n1_url_identity_hash(
+            master_url,
+            include_query=False,
+            length=16,
+        )
+        if str(master_url or "").strip()
+        else "-"
+    )
+
+    child_full_log_key = (
+        str(state_identity)[:16]
+    )
+
+    # V789S25W46_STATE_EPOCH
+    # Old W43 child state contains divergent discontinuity ownership.
     state_key = (
-        "privastream:v789n1:"
+        "privastream:v789s25w46:"
         "pluto:timeline:"
         + state_identity
     )
@@ -4018,10 +4707,191 @@ async def _v789n1_normalize_media_timeline(
                     )
                 ]
 
+        current_program_time = (
+            parsed.get(
+                "first_program_time"
+            )
+        )
+
+        try:
+            current_target_duration = float(
+                parsed.get(
+                    "target_duration"
+                )
+                or 0.0
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            current_target_duration = 0.0
+
+        if current_target_duration <= 0.0:
+            current_target_duration = 5.0
+
+        previous_first_sequence = None
+        previous_clock_pdt = None
+
+        if previous_segments:
+            try:
+                previous_first_sequence = int(
+                    previous_segments[0].get(
+                        "seq",
+                        0,
+                    )
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                previous_first_sequence = 0
+
+        if isinstance(
+            previous,
+            dict,
+        ):
+            try:
+                raw_clock = previous.get(
+                    "clock_pdt"
+                )
+
+                if raw_clock is not None:
+                    previous_clock_pdt = float(
+                        raw_clock
+                    )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                previous_clock_pdt = None
+        # V789S25W67_JOINT_UPSTREAM_RESET_DETECT
+        # Preserve W46's master-owned discontinuity clock, but distinguish a
+        # harmless absolute discontinuity counter reset from W66's joint
+        # media/discontinuity reset.  The raw media sequence is child-local,
+        # so detection stays in this per-child state and only the boolean
+        # boundary signal is shared with the master discontinuity clock.
+        previous_upstream_sequence = None
+        current_upstream_sequence = None
+
+        if isinstance(previous, dict):
+            try:
+                if previous.get("upstream_seq") is not None:
+                    previous_upstream_sequence = int(
+                        previous.get("upstream_seq")
+                    )
+            except Exception:
+                previous_upstream_sequence = None
+
+        try:
+            if parsed.get("upstream_seq") is not None:
+                current_upstream_sequence = int(
+                    parsed.get("upstream_seq")
+                )
+        except Exception:
+            current_upstream_sequence = None
+
+        w67_media_sequence_reset = bool(
+            previous_upstream_sequence is not None
+            and current_upstream_sequence is not None
+            and int(current_upstream_sequence)
+            < int(previous_upstream_sequence)
+        )
+
+        if w67_media_sequence_reset:
+            logger.warning(
+                (
+                    "V789S25W67_MEDIA_SEQUENCE_RESET "
+                    "master=%s child=%s current_up_seq=%s "
+                    "previous_up_seq=%s up_disc=%s"
+                ),
+                master_log_key,
+                safe_log_key,
+                int(current_upstream_sequence),
+                int(previous_upstream_sequence),
+                parsed.get("upstream_disc"),
+            )
+
+        # V789S25W22_NEW_RENDITION_PROBE
+        #
+        # A new per-child state during an already-running master is the exact
+        # event we need to distinguish adaptive-rendition switches from
+        # ordinary refreshes. Log only hashes and timing metadata.
+        if not previous_segments:
+            logger.warning(
+                (
+                    "V789S25W22_NEW_RENDITION_PROBE "
+                    "ts=%.6f master=%s child_path=%s child_full=%s "
+                    "up_seq=%s up_disc=%s target=%.3f first_pdt=%s "
+                    "segments=%s"
+                ),
+                time.time(),
+                master_log_key,
+                safe_log_key,
+                child_full_log_key,
+                parsed.get(
+                    "upstream_seq"
+                ),
+                parsed.get(
+                    "upstream_disc"
+                ),
+                current_target_duration,
+                (
+                    "%.6f" % current_program_time
+                    if current_program_time is not None
+                    else "-"
+                ),
+                len(current_segments),
+            )
+
         normalized_sequence = 0
         normalized_discontinuity = 0
         overlap_count = 0
+        overlap_current_index = None
+        overlap_previous_index = None
         mode = "new"
+        # W121L_APPROVED_EPOCH_SEED_BEGIN
+        # An entirely new per-query timeline may start at logical sequence 0
+        # while the final delivery gate retains an approved query-free child.
+        # Only bridge non-overlapping, strictly newer CLEAN program time.
+        if (
+            not previous_segments
+            and master_url
+            and current_program_time is not None
+        ):
+            prior_child_key, _ = (
+                _v789s25w107f5_program_state_keys(
+                    master_url, child_url
+                )
+            )
+            prior_approved = (
+                await _v789s25w107f5_read_json(
+                    redis_client, prior_child_key
+                )
+            )
+            if isinstance(prior_approved, dict):
+                prior_end = _v789s25o_float_or_none(
+                    prior_approved.get("end_pdt")
+                )
+                try:
+                    prior_last = int(prior_approved.get("last_seq"))
+                except (TypeError, ValueError):
+                    prior_last = None
+                if (
+                    prior_end is not None
+                    and prior_last is not None
+                    and current_program_time
+                    > prior_end + _V789S25W107F5_PDT_EPSILON_SECONDS
+                ):
+                    normalized_sequence = prior_last + 1
+                    mode = "approved-epoch-seed"
+                    logger.warning(
+                        "V789S25W121L_APPROVED_EPOCH_SEED "
+                        "key=%s prior_last=%s new_first=%s "
+                        "prior_end=%.3f cand_first=%.3f",
+                        safe_log_key, prior_last, normalized_sequence,
+                        prior_end, current_program_time,
+                    )
+        # W121L_APPROVED_EPOCH_SEED_END
 
         if previous_segments:
             overlap = (
@@ -4037,6 +4907,13 @@ async def _v789n1_normalize_media_timeline(
                     current_index,
                     previous_index,
                 ) = overlap
+
+                overlap_current_index = int(
+                    current_index
+                )
+                overlap_previous_index = int(
+                    previous_index
+                )
 
                 previous_match = (
                     previous_segments[
@@ -4103,6 +4980,593 @@ async def _v789n1_normalize_media_timeline(
 
                 mode = "continue"
 
+        # V789S25W106A_REAL_AD_SPLICE_APPLY
+        #
+        # A published segment's discontinuity identity is immutable.
+        # If an earlier W106A splice segment remains in the overlapping
+        # window, recreate its missing upstream tag before continuing.
+        if (
+            previous_segments
+            and overlap_count > 0
+            and overlap_current_index is not None
+            and overlap_previous_index is not None
+        ):
+            preservation_guard = (
+                len(current_segments)
+                + 2
+            )
+
+            for _ in range(
+                preservation_guard
+            ):
+                mismatch = None
+
+                for offset in range(
+                    int(overlap_count)
+                ):
+                    current_overlap_index = (
+                        int(
+                            overlap_current_index
+                        )
+                        + int(offset)
+                    )
+
+                    previous_overlap_index = (
+                        int(
+                            overlap_previous_index
+                        )
+                        + int(offset)
+                    )
+
+                    if (
+                        current_overlap_index
+                        >= len(
+                            current_segments
+                        )
+                        or previous_overlap_index
+                        >= len(
+                            previous_segments
+                        )
+                    ):
+                        break
+
+                    expected_disc = (
+                        int(
+                            normalized_discontinuity
+                        )
+                        + int(
+                            current_segments[
+                                current_overlap_index
+                            ].get(
+                                "rel_disc",
+                                0,
+                            )
+                        )
+                    )
+
+                    published_disc = int(
+                        previous_segments[
+                            previous_overlap_index
+                        ].get(
+                            "disc",
+                            expected_disc,
+                        )
+                    )
+
+                    if (
+                        published_disc
+                        > expected_disc
+                    ):
+                        mismatch = (
+                            current_overlap_index,
+                            published_disc
+                            - expected_disc,
+                            expected_disc,
+                            published_disc,
+                        )
+
+                        break
+
+                if mismatch is None:
+                    break
+
+                (
+                    preserve_index,
+                    preserve_delta,
+                    preserve_from,
+                    preserve_to,
+                ) = mismatch
+
+                # Index zero is already represented by the absolute
+                # DISCONTINUITY-SEQUENCE header calculated from the
+                # overlapping previous segment.
+                if preserve_index <= 0:
+                    break
+
+                rewritten = (
+                    _v789s25w106a_insert_discontinuity_before_segment(
+                        text,
+                        preserve_index,
+                        preserve_delta,
+                    )
+                )
+
+                if (
+                    rewritten is None
+                    or rewritten == text
+                ):
+                    break
+
+                text = rewritten
+
+                parsed = (
+                    _v789n1_parse_media_playlist(
+                        text,
+                        child_url,
+                    )
+                )
+
+                current_segments = parsed[
+                    "segments"
+                ]
+
+                logger.warning(
+                    (
+                        "V789S25W106A_PRESERVE_SPLICE_DISC "
+                        "key=%s index=%s delta=%s "
+                        "disc_from=%s disc_to=%s"
+                    ),
+                    safe_log_key,
+                    int(
+                        preserve_index
+                    ),
+                    int(
+                        preserve_delta
+                    ),
+                    int(
+                        preserve_from
+                    ),
+                    int(
+                        preserve_to
+                    ),
+                )
+
+            # Exact W106-capture shape:
+            #
+            # 358 -> 443 and later 445 -> 530
+            #
+            # Five/four segment identities overlapped, proving that the
+            # client-visible live window itself remained continuous even
+            # though Pluto switched raw sequence namespaces.
+            if (
+                previous_upstream_sequence
+                is not None
+                and current_upstream_sequence
+                is not None
+                and int(
+                    current_upstream_sequence
+                )
+                > int(
+                    previous_upstream_sequence
+                )
+            ):
+                upstream_jump = (
+                    int(
+                        current_upstream_sequence
+                    )
+                    - int(
+                        previous_upstream_sequence
+                    )
+                )
+
+                jump_floor = max(
+                    len(
+                        previous_segments
+                    ),
+                    len(
+                        current_segments
+                    ),
+                )
+
+                first_new_index = (
+                    int(
+                        overlap_current_index
+                    )
+                    + int(
+                        overlap_count
+                    )
+                )
+
+                if (
+                    int(
+                        upstream_jump
+                    )
+                    > int(
+                        jump_floor
+                    )
+                    and first_new_index > 0
+                    and first_new_index
+                    < len(
+                        current_segments
+                    )
+                ):
+                    prior_rel_disc = int(
+                        current_segments[
+                            first_new_index - 1
+                        ].get(
+                            "rel_disc",
+                            0,
+                        )
+                    )
+
+                    new_rel_disc = int(
+                        current_segments[
+                            first_new_index
+                        ].get(
+                            "rel_disc",
+                            0,
+                        )
+                    )
+
+                    # If Pluto already supplied a discontinuity here,
+                    # leave it untouched.
+                    if (
+                        new_rel_disc
+                        <= prior_rel_disc
+                    ):
+                        rewritten = (
+                            _v789s25w106a_insert_discontinuity_before_segment(
+                                text,
+                                first_new_index,
+                                1,
+                            )
+                        )
+
+                        if (
+                            rewritten is not None
+                            and rewritten
+                            != text
+                        ):
+                            text = rewritten
+
+                            parsed = (
+                                _v789n1_parse_media_playlist(
+                                    text,
+                                    child_url,
+                                )
+                            )
+
+                            current_segments = (
+                                parsed[
+                                    "segments"
+                                ]
+                            )
+
+                            logger.warning(
+                                (
+                                    "V789S25W106A_NAMESPACE_SPLICE_DISC "
+                                    "key=%s previous_up=%s current_up=%s "
+                                    "jump=%s overlap=%s new_index=%s "
+                                    "logical_seq=%s"
+                                ),
+                                safe_log_key,
+                                int(
+                                    previous_upstream_sequence
+                                ),
+                                int(
+                                    current_upstream_sequence
+                                ),
+                                int(
+                                    upstream_jump
+                                ),
+                                int(
+                                    overlap_count
+                                ),
+                                int(
+                                    first_new_index
+                                ),
+                                (
+                                    int(
+                                        normalized_sequence
+                                    )
+                                    + int(
+                                        first_new_index
+                                    )
+                                ),
+                            )
+
+        # V789S25W10:
+        #
+        # If overlap proves that the current window is only an older prefix
+        # prepended in front of the complete previous logical window, remove
+        # exactly that prefix before applying the monotonic floor.  This keeps
+        # every previously assigned logical sequence bound to the same media.
+        if (
+            previous_segments
+            and overlap_count > 0
+            and overlap_current_index is not None
+            and overlap_previous_index == 0
+            and previous_first_sequence is not None
+            and normalized_sequence
+            < previous_first_sequence
+            and overlap_count
+            >= len(previous_segments)
+        ):
+            stale_prefix_count = (
+                int(previous_first_sequence)
+                - int(normalized_sequence)
+            )
+
+            if (
+                stale_prefix_count > 0
+                and stale_prefix_count
+                == int(overlap_current_index)
+                and stale_prefix_count
+                < len(current_segments)
+            ):
+                trimmed_text = (
+                    _v789s25w10_trim_leading_segments(
+                        text,
+                        stale_prefix_count,
+                    )
+                )
+
+                if trimmed_text is not None:
+                    trimmed_parsed = (
+                        _v789n1_parse_media_playlist(
+                            trimmed_text,
+                            child_url,
+                        )
+                    )
+
+                    trimmed_segments = list(
+                        trimmed_parsed.get(
+                            "segments"
+                        )
+                        or []
+                    )
+
+                    expected_first_id = str(
+                        previous_segments[0].get(
+                            "id"
+                        )
+                        or ""
+                    )
+
+                    actual_first_id = (
+                        str(
+                            trimmed_segments[0].get(
+                                "id"
+                            )
+                            or ""
+                        )
+                        if trimmed_segments
+                        else ""
+                    )
+
+                    if (
+                        trimmed_segments
+                        and actual_first_id
+                        == expected_first_id
+                        and len(trimmed_segments)
+                        == (
+                            len(current_segments)
+                            - stale_prefix_count
+                        )
+                    ):
+                        text = trimmed_text
+                        parsed = trimmed_parsed
+                        current_segments = (
+                            trimmed_segments
+                        )
+                        current_program_time = (
+                            parsed.get(
+                                "first_program_time"
+                            )
+                        )
+
+                        normalized_sequence = int(
+                            previous_first_sequence
+                        )
+
+                        normalized_discontinuity = (
+                            int(
+                                previous_segments[0].get(
+                                    "disc",
+                                    0,
+                                )
+                            )
+                            - int(
+                                current_segments[0].get(
+                                    "rel_disc",
+                                    0,
+                                )
+                            )
+                        )
+
+                        mode = (
+                            "stale-prepend-trim"
+                        )
+
+                        logger.warning(
+                            (
+                                "V789S25W10_STALE_PREPEND_TRIM "
+                                "key=%s trim=%s overlap=%s "
+                                "seq=%s segments=%s"
+                            ),
+                            safe_log_key,
+                            stale_prefix_count,
+                            overlap_count,
+                            normalized_sequence,
+                            len(current_segments),
+                        )
+
+        # V789N3:
+        #
+        # A live HLS media sequence must never move backward.
+        # Pluto bumper/slate playlists can recycle the same segment URLs and
+        # reset upstream MEDIA-SEQUENCE to 0/1 while PROGRAM-DATE-TIME proves
+        # that live time is still advancing.
+        #
+        # Keep ordinary V789N1 overlap behavior whenever it advances normally.
+        # Only provide a +1 logical clock when overlap would otherwise stall
+        # or regress for nearly one target duration.
+        clock_pdt = previous_clock_pdt
+
+        if previous_first_sequence is None:
+            if current_program_time is not None:
+                clock_pdt = current_program_time
+
+        else:
+            if (
+                normalized_sequence
+                < previous_first_sequence
+            ):
+                # V789S25W14_MONOTONIC_FLOOR_PROBE
+                logger.warning(
+                    (
+                        "V789S25W14_MONOTONIC_FLOOR_PROBE "
+                        "ts=%.6f key=%s "
+                        "candidate_seq=%s previous_first_seq=%s "
+                        "overlap=%s current_index=%s previous_index=%s "
+                        "previous_len=%s current_len=%s "
+                        "previous_first_id=%s previous_last_id=%s "
+                        "current_first_id=%s current_last_id=%s "
+                        "up_seq=%s up_disc=%s"
+                    ),
+                    time.time(),
+                    safe_log_key,
+                    normalized_sequence,
+                    previous_first_sequence,
+                    overlap_count,
+                    overlap_current_index,
+                    overlap_previous_index,
+                    len(previous_segments),
+                    len(current_segments),
+                    str(
+                        previous_segments[0].get(
+                            "id",
+                            "",
+                        )
+                    )[:16],
+                    str(
+                        previous_segments[-1].get(
+                            "id",
+                            "",
+                        )
+                    )[:16],
+                    str(
+                        current_segments[0].get(
+                            "id",
+                            "",
+                        )
+                    )[:16],
+                    str(
+                        current_segments[-1].get(
+                            "id",
+                            "",
+                        )
+                    )[:16],
+                    parsed.get(
+                        "upstream_seq"
+                    ),
+                    parsed.get(
+                        "upstream_disc"
+                    ),
+                )
+
+                normalized_sequence = (
+                    previous_first_sequence
+                )
+
+                mode = (
+                    "monotonic-floor"
+                )
+
+            pdt_elapsed = None
+            pdt_steps = 0
+
+            if (
+                current_program_time is not None
+                and previous_clock_pdt is not None
+            ):
+                pdt_elapsed = (
+                    current_program_time
+                    - previous_clock_pdt
+                )
+
+                pdt_threshold = max(
+                    1.0,
+                    (
+                        current_target_duration
+                        * 0.80
+                    ),
+                )
+
+                if (
+                    pdt_elapsed
+                    >= pdt_threshold
+                ):
+                    pdt_steps = max(
+                        1,
+                        int(
+                            pdt_elapsed
+                            // current_target_duration
+                        ),
+                    )
+
+                    pdt_sequence_floor = (
+                        previous_first_sequence
+                        + pdt_steps
+                    )
+
+                    if (
+                        normalized_sequence
+                        < pdt_sequence_floor
+                    ):
+                        normalized_sequence = (
+                            pdt_sequence_floor
+                        )
+
+                        mode = (
+                            "pdt-advance"
+                        )
+
+                        logger.warning(
+                            (
+                                "V789N3_PLUTO_PDT_ADVANCE "
+                                "key=%s elapsed=%.3f "
+                                "target=%.3f steps=%s seq=%s"
+                            ),
+                            safe_log_key,
+                            pdt_elapsed,
+                            current_target_duration,
+                            pdt_steps,
+                            normalized_sequence,
+                        )
+
+                    clock_pdt = (
+                        current_program_time
+                    )
+
+            elif (
+                normalized_sequence
+                > previous_first_sequence
+                and current_program_time
+                is not None
+            ):
+                clock_pdt = (
+                    current_program_time
+                )
+
+        if (
+            clock_pdt is None
+            and current_program_time
+            is not None
+        ):
+            clock_pdt = (
+                current_program_time
+            )
         normalized_sequence = max(
             0,
             int(
@@ -4116,6 +5580,258 @@ async def _v789n1_normalize_media_timeline(
                 normalized_discontinuity
             ),
         )
+
+        # V789S25W46_MASTER_OWNED_DISCONTINUITY
+        #
+        # Keep the legacy child result only for diagnostics. The published
+        # baseline comes from the shared Pluto master clock.
+        w46_child_discontinuity = int(
+            normalized_discontinuity
+        )
+
+        w46_master_discontinuity = (
+            await _v789s25w46_master_discontinuity(
+                redis_client,
+                master_url,
+                parsed.get(
+                    "upstream_disc"
+                ),
+                current_program_time,
+                current_target_duration,
+                w67_media_sequence_reset,
+            )
+        )
+
+        if (
+            int(w46_child_discontinuity)
+            != int(w46_master_discontinuity)
+        ):
+            logger.warning(
+                (
+                    "V789S25W46_MASTER_DISC_ALIGN "
+                    "master=%s child=%s "
+                    "up_disc=%s child_disc=%s "
+                    "master_disc=%s first_pdt=%s"
+                ),
+                master_log_key,
+                safe_log_key,
+                parsed.get(
+                    "upstream_disc"
+                ),
+                int(w46_child_discontinuity),
+                int(w46_master_discontinuity),
+                (
+                    "%.6f" % current_program_time
+                    if current_program_time is not None
+                    else "-"
+                ),
+            )
+
+        # V789S25W106AR1_OVERLAP_HEAD_DISC_FLOOR
+        #
+        # W106A can publish a synthetic discontinuity inside an overlapping
+        # live window when Pluto changes media/timestamp namespace without
+        # providing EXT-X-DISCONTINUITY.
+        #
+        # Once that already-published segment reaches index zero on a later
+        # refresh, W46's raw upstream master baseline must not relabel the
+        # SAME overlapping media identity backward to an older generation.
+        #
+        # W46 may still raise the baseline. It simply cannot lower an
+        # immutable discontinuity identity already assigned to this same
+        # overlapping first segment.
+        w106ar1_overlap_head_floor = None
+
+        if (
+            previous_segments
+            and current_segments
+            and overlap_count > 0
+            and overlap_current_index is not None
+            and overlap_previous_index is not None
+            and int(overlap_current_index) == 0
+            and int(overlap_previous_index)
+            < len(previous_segments)
+        ):
+            w106ar1_previous_head = (
+                previous_segments[
+                    int(
+                        overlap_previous_index
+                    )
+                ]
+            )
+
+            w106ar1_current_head = (
+                current_segments[0]
+            )
+
+            if (
+                str(
+                    w106ar1_previous_head.get(
+                        "id",
+                        "",
+                    )
+                )
+                == str(
+                    w106ar1_current_head.get(
+                        "id",
+                        "",
+                    )
+                )
+            ):
+                w106ar1_overlap_head_floor = (
+                    int(
+                        w106ar1_previous_head.get(
+                            "disc",
+                            0,
+                        )
+                    )
+                    - int(
+                        w106ar1_current_head.get(
+                            "rel_disc",
+                            0,
+                        )
+                    )
+                )
+
+        normalized_discontinuity = int(
+            w46_master_discontinuity
+        )
+
+        if (
+            w106ar1_overlap_head_floor
+            is not None
+            and int(
+                w106ar1_overlap_head_floor
+            )
+            > int(
+                normalized_discontinuity
+            )
+        ):
+            logger.warning(
+                (
+                    "V789S25W106AR1_OVERLAP_HEAD_DISC_FLOOR "
+                    "key=%s master_disc=%s overlap_floor=%s "
+                    "previous_index=%s overlap=%s"
+                ),
+                safe_log_key,
+                int(
+                    normalized_discontinuity
+                ),
+                int(
+                    w106ar1_overlap_head_floor
+                ),
+                int(
+                    overlap_previous_index
+                ),
+                int(
+                    overlap_count
+                ),
+            )
+
+            normalized_discontinuity = int(
+                w106ar1_overlap_head_floor
+            )
+
+        # V789S25W14_WINDOW_TRANSITION_PROBE
+        if previous_segments:
+            previous_first_disc = int(
+                previous_segments[0].get(
+                    "disc",
+                    0,
+                )
+            )
+
+            previous_last_disc = int(
+                previous_segments[-1].get(
+                    "disc",
+                    0,
+                )
+            )
+
+            previous_last_sequence = int(
+                previous_segments[-1].get(
+                    "seq",
+                    previous_first_sequence
+                    if previous_first_sequence is not None
+                    else 0,
+                )
+            )
+
+            current_last_sequence = (
+                int(normalized_sequence)
+                + len(current_segments)
+                - 1
+            )
+
+            if (
+                normalized_discontinuity
+                != previous_last_disc
+                or (
+                    previous_first_sequence is not None
+                    and normalized_sequence
+                    > int(previous_first_sequence) + 1
+                )
+            ):
+                logger.warning(
+                    (
+                        "V789S25W14_WINDOW_TRANSITION_PROBE "
+                        "ts=%.6f key=%s mode=%s "
+                        "previous_start=%s previous_end=%s "
+                        "current_start=%s current_end=%s "
+                        "previous_first_disc=%s previous_last_disc=%s "
+                        "current_disc=%s overlap=%s "
+                        "current_index=%s previous_index=%s "
+                        "previous_len=%s current_len=%s "
+                        "previous_first_id=%s previous_last_id=%s "
+                        "current_first_id=%s current_last_id=%s "
+                        "up_seq=%s up_disc=%s"
+                    ),
+                    time.time(),
+                    safe_log_key,
+                    mode,
+                    previous_first_sequence,
+                    previous_last_sequence,
+                    normalized_sequence,
+                    current_last_sequence,
+                    previous_first_disc,
+                    previous_last_disc,
+                    normalized_discontinuity,
+                    overlap_count,
+                    overlap_current_index,
+                    overlap_previous_index,
+                    len(previous_segments),
+                    len(current_segments),
+                    str(
+                        previous_segments[0].get(
+                            "id",
+                            "",
+                        )
+                    )[:16],
+                    str(
+                        previous_segments[-1].get(
+                            "id",
+                            "",
+                        )
+                    )[:16],
+                    str(
+                        current_segments[0].get(
+                            "id",
+                            "",
+                        )
+                    )[:16],
+                    str(
+                        current_segments[-1].get(
+                            "id",
+                            "",
+                        )
+                    )[:16],
+                    parsed.get(
+                        "upstream_seq"
+                    ),
+                    parsed.get(
+                        "upstream_disc"
+                    ),
+                )
 
         logical_segments = []
 
@@ -4146,6 +5862,13 @@ async def _v789n1_normalize_media_timeline(
             )
 
         state = {
+            "clock_pdt":
+                clock_pdt,
+            # V789S25W67_PERSIST_UPSTREAM_SEQUENCE
+            "upstream_seq":
+                current_upstream_sequence,
+            "upstream_disc":
+                parsed.get("upstream_disc"),
             "segments":
                 logical_segments,
         }
@@ -4160,6 +5883,42 @@ async def _v789n1_normalize_media_timeline(
                 ),
             ),
             ex=_V789N1_STATE_TTL_SECONDS,
+        )
+
+        # V789S25W22_RENDITION_TIMELINE_PROBE
+        #
+        # Timestamp every normalized media window with master/child identities
+        # so Fire TV decoder/parser events can be correlated without exposing
+        # the upstream URL or its query token.
+        logger.warning(
+            (
+                "V789S25W22_RENDITION_TIMELINE_PROBE "
+                "ts=%.6f master=%s child_path=%s child_full=%s "
+                "mode=%s overlap=%s up_seq=%s norm_seq=%s "
+                "up_disc=%s norm_disc=%s target=%.3f "
+                "first_pdt=%s segments=%s"
+            ),
+            time.time(),
+            master_log_key,
+            safe_log_key,
+            child_full_log_key,
+            mode,
+            overlap_count,
+            parsed.get(
+                "upstream_seq"
+            ),
+            normalized_sequence,
+            parsed.get(
+                "upstream_disc"
+            ),
+            normalized_discontinuity,
+            current_target_duration,
+            (
+                "%.6f" % current_program_time
+                if current_program_time is not None
+                else "-"
+            ),
+            len(current_segments),
         )
 
         logger.warning(
@@ -4244,6 +6003,7199 @@ def _v786f_is_transient_empty_endlist(
     )
 
 
+# ================= V789N4 PLUTO BUMPER SUPPRESSION =================
+# V789N4_PLUTO_BUMPER_SUPPRESSION
+# V789N5_PLUTO_FILLER_KEY_STATE
+#
+# Pluto's reusable ad-bumper transport streams have been observed to carry
+# backward PTS jumps that Media3 treats as unexpected discontinuities. Replace
+# those known bumper/slate segments with Privastream-owned filler transport
+# streams and maintain a cross-worker discontinuity timeline in Redis.
+_V789N4_FILLER_SEGMENT_COUNT = 12
+_V789N4_FILLER_SEGMENT_SECONDS = 5.0
+_V789N4_STATE_TTL_SECONDS = 6 * 60 * 60
+_V789N4_BREAK_TTL_SECONDS = 10 * 60
+
+# V789S25W26_MASTER_BREAK_RENDITION_CONTINUITY
+#
+# A late adaptive-rendition switch can first request a sibling child more
+# than 120 seconds after a commercial break began.  Do not discard an
+# actively refreshed master-scoped break merely because its base PDT is old.
+# Freshness is intentionally short: three 5-second target durations.
+_V789S25W26_MASTER_BREAK_FRESH_SECONDS = 15.0
+
+_V789N4_BUMPER_MARKERS = (
+    "ad_bumper",
+    "ad-bumper",
+    "adbumper",
+    "bumper_animation",
+    "/bumper/",
+    "_bumper_",
+    "ad_slate",
+    "ad-slate",
+    "commercial_slate",
+    "commercial-slate",
+    "/slate/",
+    "_slate_",
+    "commercial_break",
+    "commercial-break",
+    "ptv_7424",
+)
+
+
+def _v789n4_is_bumper_uri(value: str) -> bool:
+    try:
+        path = str(
+            urlsplit(
+                str(value or "")
+            ).path
+            or ""
+        ).lower()
+    except Exception:
+        path = str(value or "").lower()
+
+    return any(
+        marker in path
+        for marker in _V789N4_BUMPER_MARKERS
+    )
+
+
+def _v789n4_media_kind(child_url: str) -> str:
+    try:
+        path = str(
+            urlsplit(
+                str(child_url or "")
+            ).path
+            or ""
+        ).lower()
+    except Exception:
+        path = str(child_url or "").lower()
+
+    if (
+        "/audio/" in path
+        or path.endswith("/audio.m3u8")
+        or path.endswith("audio.m3u8")
+    ):
+        return "audio"
+
+    return "video"
+
+
+def _v789n4_parse_pdt(raw: str):
+    value = str(raw or "").strip()
+
+    if not value:
+        return None
+
+    try:
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
+
+        return float(
+            datetime.fromisoformat(
+                value
+            ).timestamp()
+        )
+    except Exception:
+        return None
+
+
+def _v789n4_parse_float_tag(line: str, prefix: str):
+    stripped = str(line or "").strip()
+
+    if not stripped.startswith(prefix):
+        return None
+
+    try:
+        raw = stripped[
+            len(prefix):
+        ].split(",", 1)[0].strip()
+
+        return float(raw)
+    except Exception:
+        return None
+
+
+def _v789n4_parse_int_value(line: str, prefix: str, default: int = 0) -> int:
+    stripped = str(line or "").strip()
+
+    if not stripped.startswith(prefix):
+        return int(default)
+
+    try:
+        return int(
+            stripped[
+                len(prefix):
+            ].strip()
+        )
+    except Exception:
+        return int(default)
+
+
+def _v789n4_playlist_segments(text: str):
+    lines = str(text or "").splitlines()
+    media_sequence = 0
+    upstream_disc_sequence = 0
+    disc_sequence_index = None
+    media_sequence_index = None
+    upstream_rel_disc = 0
+    explicit_pdt = None
+    inferred_pdt = None
+    pending_duration = 5.0
+    previous_uri_index = -1
+    active_key_line = None
+    segments = []
+    discontinuity_line_indexes = set()
+
+    for line_index, line in enumerate(lines):
+        stripped = str(line or "").strip()
+
+        if stripped.startswith(
+            "#EXT-X-MEDIA-SEQUENCE:"
+        ):
+            media_sequence = (
+                _v789n4_parse_int_value(
+                    stripped,
+                    "#EXT-X-MEDIA-SEQUENCE:",
+                    0,
+                )
+            )
+            media_sequence_index = line_index
+            continue
+
+        if stripped.startswith(
+            "#EXT-X-DISCONTINUITY-SEQUENCE:"
+        ):
+            upstream_disc_sequence = (
+                _v789n4_parse_int_value(
+                    stripped,
+                    "#EXT-X-DISCONTINUITY-SEQUENCE:",
+                    0,
+                )
+            )
+            disc_sequence_index = line_index
+            continue
+
+        if stripped == "#EXT-X-DISCONTINUITY":
+            upstream_rel_disc += 1
+            discontinuity_line_indexes.add(
+                line_index
+            )
+            continue
+
+        if stripped.startswith(
+            "#EXT-X-PROGRAM-DATE-TIME:"
+        ):
+            explicit_pdt = _v789n4_parse_pdt(
+                stripped[
+                    len(
+                        "#EXT-X-PROGRAM-DATE-TIME:"
+                    ):
+                ]
+            )
+            continue
+
+        if stripped.startswith("#EXT-X-KEY:"):
+            active_key_line = line
+            continue
+
+        duration = _v789n4_parse_float_tag(
+            stripped,
+            "#EXTINF:",
+        )
+
+        if duration is not None:
+            pending_duration = max(
+                0.001,
+                float(duration),
+            )
+            continue
+
+        if stripped and not stripped.startswith("#"):
+            segment_pdt = (
+                explicit_pdt
+                if explicit_pdt is not None
+                else inferred_pdt
+            )
+
+            seq = (
+                int(media_sequence)
+                + len(segments)
+            )
+
+            segments.append(
+                {
+                    "seq": seq,
+                    "uri": stripped,
+                    "uri_index": line_index,
+                    "key_line": active_key_line,
+                    "block_start": (
+                        previous_uri_index + 1
+                        if previous_uri_index >= 0
+                        else line_index
+                    ),
+                    "duration": float(
+                        pending_duration
+                    ),
+                    "pdt": segment_pdt,
+                    "up_disc": (
+                        int(upstream_disc_sequence)
+                        + int(upstream_rel_disc)
+                    ),
+                    "bumper": _v789n4_is_bumper_uri(
+                        stripped
+                    ),
+                }
+            )
+
+            previous_uri_index = line_index
+
+            if segment_pdt is not None:
+                inferred_pdt = (
+                    float(segment_pdt)
+                    + float(pending_duration)
+                )
+
+            explicit_pdt = None
+            pending_duration = 5.0
+
+    return {
+        "lines": lines,
+        "segments": segments,
+        "media_sequence": int(
+            media_sequence
+        ),
+        "media_sequence_index": (
+            media_sequence_index
+        ),
+        "disc_sequence": int(
+            upstream_disc_sequence
+        ),
+        "disc_sequence_index": (
+            disc_sequence_index
+        ),
+        "discontinuity_line_indexes": (
+            discontinuity_line_indexes
+        ),
+    }
+
+
+
+# ================= V789S25O BREAK RETIREMENT =================
+# V789S25O_BREAK_RETIREMENT
+#
+# Once a Pluto commercial break has cleanly returned to
+# programming, remember how far into clean programming this
+# child rendition has already progressed.
+#
+# If Pluto later resurrects an old bumper/slate window whose
+# PROGRAM-DATE-TIME is entirely behind that accepted clean
+# program watermark, that window is stale and must never be
+# allowed to create a new synthetic filler break.
+
+
+def _v789s25o_float_or_none(value):
+    try:
+        if value is None:
+            return None
+
+        return float(value)
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return None
+
+
+def _v789s25o_window_end_pdt(
+    segments,
+):
+    if not segments:
+        return None
+
+    ends = []
+
+    for item in segments:
+        pdt = _v789s25o_float_or_none(
+            item.get("pdt")
+        )
+
+        if pdt is None:
+            return None
+
+        duration = (
+            _v789s25o_float_or_none(
+                item.get("duration")
+            )
+        )
+
+        if duration is None:
+            duration = 5.0
+
+        duration = max(
+            0.001,
+            float(duration),
+        )
+
+        ends.append(
+            float(pdt)
+            + float(duration)
+        )
+
+    if not ends:
+        return None
+
+    return max(ends)
+
+
+def _v789s25o_is_stale_retired_break_segments(
+    segments,
+    retired_program_end_pdt,
+) -> bool:
+    watermark = _v789s25o_float_or_none(
+        retired_program_end_pdt
+    )
+
+    if watermark is None:
+        return False
+
+    if not segments:
+        return False
+
+    if not any(
+        bool(item.get("bumper"))
+        for item in segments
+    ):
+        return False
+
+    window_end = (
+        _v789s25o_window_end_pdt(
+            segments
+        )
+    )
+
+    if window_end is None:
+        return False
+
+    # This is not a time-based debounce.
+    #
+    # It rejects only bumper media whose complete PDT window is
+    # at or behind programming this child has already accepted.
+    return (
+        float(window_end)
+        <= float(watermark) + 0.001
+    )
+
+
+def _v789s25o_advance_retirement(
+    previous_retired_break_base_pdt,
+    previous_retired_program_end_pdt,
+    released_break_base_pdt,
+    segments,
+    has_bumper,
+):
+    retired_base = (
+        _v789s25o_float_or_none(
+            previous_retired_break_base_pdt
+        )
+    )
+
+    retired_end = (
+        _v789s25o_float_or_none(
+            previous_retired_program_end_pdt
+        )
+    )
+
+    released_base = (
+        _v789s25o_float_or_none(
+            released_break_base_pdt
+        )
+    )
+
+    if released_base is not None:
+        retired_base = float(
+            released_base
+        )
+
+    if (
+        not bool(has_bumper)
+        and retired_base is not None
+    ):
+        candidate_end = (
+            _v789s25o_window_end_pdt(
+                segments
+            )
+        )
+
+        if candidate_end is not None:
+            if retired_end is None:
+                retired_end = float(
+                    candidate_end
+                )
+            else:
+                retired_end = max(
+                    float(retired_end),
+                    float(candidate_end),
+                )
+
+    return (
+        retired_base,
+        retired_end,
+    )
+
+
+async def _v789s25o_retired_break_guard(
+    text: str,
+    child_url: str,
+):
+    parsed = _v789n4_playlist_segments(
+        text
+    )
+
+    segments = parsed.get(
+        "segments"
+    ) or []
+
+    default_result = {
+        "stale": False,
+        "window_end_pdt": (
+            _v789s25o_window_end_pdt(
+                segments
+            )
+        ),
+        "retired_break_base_pdt": None,
+        "retired_program_end_pdt": None,
+    }
+
+    if not segments:
+        return default_result
+
+    if not any(
+        bool(item.get("bumper"))
+        for item in segments
+    ):
+        return default_result
+
+    state_identity = (
+        _v789n1_url_identity_hash(
+            child_url,
+            include_query=True,
+            length=64,
+        )
+    )
+
+    safe_log_key = (
+        _v789n1_url_identity_hash(
+            child_url,
+            include_query=False,
+            length=16,
+        )
+    )
+
+    # V789S25W61_N4_STATE_EPOCH
+    state_key = (
+        "privastream:v789s25w64:"
+        "pluto:suppress:"
+        + state_identity
+    )
+
+    try:
+        redis_client = (
+            await _v789n1_get_redis()
+        )
+
+        raw_previous = (
+            await redis_client.get(
+                state_key
+            )
+        )
+
+        if not raw_previous:
+            return default_result
+
+        previous = json.loads(
+            raw_previous
+        )
+
+        if not isinstance(
+            previous,
+            dict,
+        ):
+            return default_result
+
+        retired_base = (
+            _v789s25o_float_or_none(
+                previous.get(
+                    "retired_break_base_pdt"
+                )
+            )
+        )
+
+        retired_end = (
+            _v789s25o_float_or_none(
+                previous.get(
+                    "retired_program_end_pdt"
+                )
+            )
+        )
+
+        stale = (
+            _v789s25o_is_stale_retired_break_segments(
+                segments,
+                retired_end,
+            )
+        )
+
+        result = {
+            "stale": bool(stale),
+            "window_end_pdt": (
+                _v789s25o_window_end_pdt(
+                    segments
+                )
+            ),
+            "retired_break_base_pdt": (
+                retired_base
+            ),
+            "retired_program_end_pdt": (
+                retired_end
+            ),
+        }
+
+        if stale:
+            logger.warning(
+                (
+                    "V789S25O_PLUTO_STALE_REENTRY_BLOCK "
+                    "key=%s kind=%s "
+                    "window_end=%s "
+                    "retired_end=%s "
+                    "retired_base=%s"
+                ),
+                safe_log_key,
+                _v789n4_media_kind(
+                    child_url
+                ),
+                (
+                    "%.3f"
+                    % float(
+                        result[
+                            "window_end_pdt"
+                        ]
+                    )
+                    if result.get(
+                        "window_end_pdt"
+                    ) is not None
+                    else "-"
+                ),
+                (
+                    "%.3f"
+                    % float(retired_end)
+                    if retired_end
+                    is not None
+                    else "-"
+                ),
+                (
+                    "%.3f"
+                    % float(retired_base)
+                    if retired_base
+                    is not None
+                    else "-"
+                ),
+            )
+
+        return result
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25O_GUARD_ERROR "
+                "key=%s type=%s"
+            ),
+            safe_log_key,
+            type(exc).__name__,
+        )
+
+        return default_result
+
+
+def _v789n4_local_transition(previous, current) -> bool:
+    if bool(previous.get("bumper")) != bool(
+        current.get("bumper")
+    ):
+        return True
+
+    if (
+        bool(previous.get("bumper"))
+        and bool(current.get("bumper"))
+        and int(previous.get("cycle") or 0)
+        != int(current.get("cycle") or 0)
+    ):
+        return True
+
+    return False
+
+
+def _v789n4_boundary_count(previous, current) -> int:
+    upstream_delta = max(
+        0,
+        int(current.get("up_disc") or 0)
+        - int(previous.get("up_disc") or 0),
+    )
+
+    local_delta = (
+        1
+        if _v789n4_local_transition(
+            previous,
+            current,
+        )
+        else 0
+    )
+
+    return max(
+        upstream_delta,
+        local_delta,
+    )
+
+
+
+# ================= V789S25S1 TIMESTAMP-ALIGNED FILLER =================
+# V789S25S1_TIMESTAMP_ALIGNED_FILLER
+#
+# Pluto program MPEG-TS carries a real content-relative PTS clock.
+# Static Privastream filler starts near 1.4 seconds.
+#
+# At a real break entry, derive a clock anchor from the final
+# non-bumper program segment immediately preceding the first
+# bumper. Then stream-copy the existing filler onto that clock.
+#
+# No video/audio re-encoding is performed.
+
+_V789S25S_CLOCK_HZ = 90000
+_V789S25S_FILLER_AUDIO_FIRST_SECONDS = 1.400000
+_V789S25S_MAX_ABS_SHIFT90K = 8_000_000_000
+_V789S25S_CYCLE_SECONDS = (
+    _V789N4_FILLER_SEGMENT_COUNT
+    * _V789N4_FILLER_SEGMENT_SECONDS
+)
+
+
+def _v789s25s_clock_token(
+    shift90k: int,
+) -> str:
+    value = str(
+        int(shift90k)
+    )
+
+    message = (
+        "V789S25S1:"
+        + value
+    ).encode(
+        "utf-8"
+    )
+
+    secret = str(
+        JWT_SECRET
+    ).encode(
+        "utf-8"
+    )
+
+    signature = hmac.new(
+        secret,
+        message,
+        hashlib.sha256,
+    ).hexdigest()[:24]
+
+    return (
+        value
+        + "."
+        + signature
+    )
+
+
+def _v789s25s_parse_clock_token(
+    token: str,
+):
+    value = str(
+        token
+        or ""
+    ).strip()
+
+    if not value:
+        return None
+
+    parts = value.split(
+        ".",
+        1,
+    )
+
+    if len(parts) != 2:
+        return None
+
+    try:
+        shift90k = int(
+            parts[0]
+        )
+    except Exception:
+        return None
+
+    if abs(
+        int(shift90k)
+    ) > _V789S25S_MAX_ABS_SHIFT90K:
+        return None
+
+    expected = (
+        _v789s25s_clock_token(
+            shift90k
+        )
+    )
+
+    if not hmac.compare_digest(
+        value,
+        expected,
+    ):
+        return None
+
+    return int(
+        shift90k
+    )
+
+
+def _v789s25s_cycle_shift90k(
+    base_shift90k,
+    cycle,
+):
+    if base_shift90k is None:
+        return None
+
+    safe_cycle = max(
+        0,
+        int(
+            cycle
+            or 0
+        ),
+    )
+
+    cycle_ticks = int(
+        round(
+            float(
+                _V789S25S_CYCLE_SECONDS
+            )
+            * float(
+                _V789S25S_CLOCK_HZ
+            )
+        )
+    )
+
+    return (
+        int(base_shift90k)
+        + (
+            safe_cycle
+            * cycle_ticks
+        )
+    )
+
+
+def _v789s25s_shift90k_from_audio_end(
+    audio_end_seconds,
+):
+    try:
+        target = float(
+            audio_end_seconds
+        )
+    except Exception:
+        return None
+
+    shift_seconds = (
+        target
+        - float(
+            _V789S25S_FILLER_AUDIO_FIRST_SECONDS
+        )
+    )
+
+    # Do not introduce a negative filler clock until such a
+    # case has been measured and explicitly validated.
+    if shift_seconds < 0:
+        return None
+
+    shift90k = int(
+        round(
+            shift_seconds
+            * float(
+                _V789S25S_CLOCK_HZ
+            )
+        )
+    )
+
+    if abs(
+        shift90k
+    ) > _V789S25S_MAX_ABS_SHIFT90K:
+        return None
+
+    return shift90k
+
+
+def _v789s25s_validate_fetch_url(
+    value: str,
+) -> str:
+    absolute = str(
+        value
+        or ""
+    ).strip()
+
+    parsed = urlsplit(
+        absolute
+    )
+
+    if parsed.scheme.lower() != "https":
+        raise ValueError(
+            "S25S1 upstream URL must use HTTPS"
+        )
+
+    if (
+        parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise ValueError(
+            "S25S1 upstream URL credentials are not allowed"
+        )
+
+    if parsed.port not in (
+        None,
+        443,
+    ):
+        raise ValueError(
+            "S25S1 upstream URL port is not allowed"
+        )
+
+    if not parsed.hostname:
+        raise ValueError(
+            "S25S1 upstream URL hostname missing"
+        )
+
+    return absolute
+
+
+def _v789s25s_parse_key_line(
+    key_line: str,
+    child_url: str,
+):
+    line = str(
+        key_line
+        or ""
+    ).strip()
+
+    if not line.startswith(
+        "#EXT-X-KEY:"
+    ):
+        return {
+            "method": "NONE",
+            "uri": None,
+            "iv": None,
+        }
+
+    method_match = re.search(
+        r"(?:^|,)METHOD=([^,]+)",
+        line.split(
+            ":",
+            1,
+        )[1],
+    )
+
+    method = (
+        method_match.group(1).strip()
+        if method_match
+        else "NONE"
+    )
+
+    uri_match = re.search(
+        r'URI="([^"]+)"',
+        line,
+    )
+
+    iv_match = re.search(
+        r"(?:^|,)IV=([^,]+)",
+        line.split(
+            ":",
+            1,
+        )[1],
+    )
+
+    raw_uri = (
+        uri_match.group(1)
+        if uri_match
+        else None
+    )
+
+    return {
+        "method": method.upper(),
+        "uri": (
+            _v789s25s_validate_fetch_url(
+                urljoin(
+                    child_url,
+                    raw_uri,
+                )
+            )
+            if raw_uri
+            else None
+        ),
+        "iv": (
+            iv_match.group(1).strip()
+            if iv_match
+            else None
+        ),
+    }
+
+
+def _v789s25s_parse_explicit_iv(
+    raw_value,
+):
+    value = str(
+        raw_value
+        or ""
+    ).strip()
+
+    if not value:
+        return None
+
+    if value.lower().startswith(
+        "0x"
+    ):
+        value = value[2:]
+
+    value = value.zfill(
+        32
+    )
+
+    if len(value) != 32:
+        raise ValueError(
+            "S25S1 invalid AES IV length"
+        )
+
+    return bytes.fromhex(
+        value
+    )
+
+
+def _v789s25s_strip_pkcs7(
+    payload: bytes,
+) -> bytes:
+    if not payload:
+        return payload
+
+    pad = int(
+        payload[-1]
+    )
+
+    if (
+        pad < 1
+        or pad > 16
+        or len(payload) < pad
+    ):
+        return payload
+
+    if payload[
+        -pad:
+    ] != bytes(
+        [pad]
+    ) * pad:
+        return payload
+
+    return payload[
+        :-pad
+    ]
+
+
+def _v789s25s_probe_last_audio_end(
+    payload: bytes,
+):
+    if not payload:
+        return None
+
+    path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            suffix=".ts",
+            delete=False,
+        ) as handle:
+            handle.write(
+                payload
+            )
+
+            path = (
+                handle.name
+            )
+
+        process = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a",
+                "-show_packets",
+                "-of",
+                "json",
+                path,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        if process.returncode != 0:
+            return None
+
+        parsed = json.loads(
+            process.stdout.decode(
+                "utf-8"
+            )
+        )
+
+        last_end = None
+
+        for packet in parsed.get(
+            "packets",
+            [],
+        ):
+            raw_pts = packet.get(
+                "pts_time"
+            )
+
+            if raw_pts is None:
+                continue
+
+            try:
+                pts = float(
+                    raw_pts
+                )
+
+                duration = float(
+                    packet.get(
+                        "duration_time"
+                    )
+                    or 0.0
+                )
+            except Exception:
+                continue
+
+            candidate = (
+                pts
+                + duration
+            )
+
+            if (
+                last_end is None
+                or candidate > last_end
+            ):
+                last_end = candidate
+
+        return last_end
+
+    finally:
+        if path:
+            try:
+                os.unlink(
+                    path
+                )
+            except OSError:
+                pass
+
+
+async def _v789s25s_program_audio_end(
+    child_url: str,
+    segment,
+):
+    if not isinstance(
+        segment,
+        dict,
+    ):
+        return None
+
+    raw_uri = str(
+        segment.get(
+            "uri"
+        )
+        or ""
+    ).strip()
+
+    if not raw_uri:
+        return None
+
+    segment_url = (
+        _v789s25s_validate_fetch_url(
+            urljoin(
+                child_url,
+                raw_uri,
+            )
+        )
+    )
+
+    key_info = (
+        _v789s25s_parse_key_line(
+            segment.get(
+                "key_line"
+            ),
+            child_url,
+        )
+    )
+
+    client = (
+        await get_shared_http_client()
+    )
+
+    segment_response = (
+        await _v726_safe_addon_get(
+            client,
+            segment_url,
+            timeout=12.0,
+        )
+    )
+
+    if segment_response.status_code != 200:
+        return None
+
+    payload = bytes(
+        segment_response.content
+    )
+
+    method = str(
+        key_info.get(
+            "method"
+        )
+        or "NONE"
+    ).upper()
+
+    if method == "NONE":
+        clear = payload
+
+    elif method == "AES-128":
+        key_url = key_info.get(
+            "uri"
+        )
+
+        # Pluto currently provides an explicit IV. Do not guess
+        # an AES IV from our normalized logical sequence number.
+        explicit_iv = (
+            _v789s25s_parse_explicit_iv(
+                key_info.get(
+                    "iv"
+                )
+            )
+        )
+
+        if (
+            not key_url
+            or explicit_iv is None
+        ):
+            return None
+
+        key_response = (
+            await _v726_safe_addon_get(
+                client,
+                key_url,
+                timeout=12.0,
+            )
+        )
+
+        if key_response.status_code != 200:
+            return None
+
+        key = bytes(
+            key_response.content
+        )
+
+        if len(key) != 16:
+            return None
+
+        if (
+            not payload
+            or len(payload) % 16 != 0
+        ):
+            return None
+
+        decryptor = Cipher(
+            algorithms.AES(
+                key
+            ),
+            modes.CBC(
+                explicit_iv
+            ),
+        ).decryptor()
+
+        clear = (
+            decryptor.update(
+                payload
+            )
+            + decryptor.finalize()
+        )
+
+        clear = (
+            _v789s25s_strip_pkcs7(
+                clear
+            )
+        )
+
+    else:
+        return None
+
+    return await asyncio.to_thread(
+        _v789s25s_probe_last_audio_end,
+        clear,
+    )
+
+
+@lru_cache(
+    maxsize=32
+)
+def _v789s25s_render_shifted_filler(
+    kind: str,
+    index: int,
+    shift90k: int,
+) -> bytes:
+    safe_kind = (
+        "audio"
+        if str(kind).lower()
+        == "audio"
+        else "video"
+    )
+
+    safe_index = int(
+        index
+    )
+
+    if (
+        safe_index < 0
+        or safe_index
+        >= _V789N4_FILLER_SEGMENT_COUNT
+    ):
+        raise ValueError(
+            "S25S1 filler index out of range"
+        )
+
+    safe_shift90k = int(
+        shift90k
+    )
+
+    if abs(
+        safe_shift90k
+    ) > _V789S25S_MAX_ABS_SHIFT90K:
+        raise ValueError(
+            "S25S1 filler clock shift out of range"
+        )
+
+    filler_root = str(
+        os.environ.get(
+            "V789N4_FILLER_ROOT",
+            "/app/backend/v789n4_filler/hls",
+        )
+    ).strip()
+
+    source = os.path.join(
+        filler_root,
+        f"{safe_kind}_{safe_index:03d}.ts",
+    )
+
+    shift_seconds = (
+        float(
+            safe_shift90k
+        )
+        / float(
+            _V789S25S_CLOCK_HZ
+        )
+    )
+
+    process = subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-copyts",
+            "-itsoffset",
+            f"{shift_seconds:.6f}",
+            "-i",
+            source,
+            "-map",
+            "0",
+            "-c",
+            "copy",
+            "-muxdelay",
+            "0",
+            "-muxpreload",
+            "0",
+            "-f",
+            "mpegts",
+            "pipe:1",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            "S25S1 ffmpeg retimestamp failed"
+        )
+
+    payload = bytes(
+        process.stdout
+    )
+
+    if not payload:
+        raise RuntimeError(
+            "S25S1 empty shifted filler"
+        )
+
+    logger.warning(
+        (
+            "V789S25S1_FILLER_RENDER "
+            "kind=%s index=%s "
+            "shift90k=%s shift=%.6f "
+            "bytes=%s"
+        ),
+        safe_kind,
+        safe_index,
+        safe_shift90k,
+        shift_seconds,
+        len(payload),
+    )
+
+    return payload
+
+
+
+
+# ================= V789S25U0 EXIT CLOCK PROBE =================
+# V789S25U0_EXIT_CLOCK_PROBE
+#
+# Diagnostic only.
+#
+# At filler -> real-program release, measure the raw MPEG-TS
+# timestamps immediately on BOTH sides of the exact boundary.
+#
+# This code runs as a background task so playlist delivery is
+# not delayed by HTTP fetch / AES decrypt / ffprobe work.
+#
+# It does NOT:
+#   - rewrite the returned playlist differently
+#   - change Media3 behavior
+#   - change filler timestamps
+#   - block or delay break release
+
+
+_V789S25U0_TASKS = set()
+
+
+def _v789s25u0_probe_payload(
+    payload: bytes,
+):
+    if not payload:
+        return {}
+
+    path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            suffix=".ts",
+            delete=False,
+        ) as handle:
+            handle.write(
+                payload
+            )
+
+            path = handle.name
+
+        process = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_streams",
+                "-show_packets",
+                "-of",
+                "json",
+                path,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        if process.returncode != 0:
+            return {}
+
+        parsed = json.loads(
+            process.stdout.decode(
+                "utf-8"
+            )
+        )
+
+        stream_types = {}
+
+        for stream in parsed.get(
+            "streams",
+            [],
+        ):
+            try:
+                index = int(
+                    stream.get(
+                        "index"
+                    )
+                )
+            except Exception:
+                continue
+
+            stream_types[index] = (
+                stream.get(
+                    "codec_type"
+                )
+            )
+
+        result = {
+            "audio_first": None,
+            "audio_last_end": None,
+            "video_first": None,
+            "video_last_end": None,
+
+            # V789S25W0_FIRST_VIDEO_KEYFRAME
+            "video_first_key": None,
+        }
+
+        for packet in parsed.get(
+            "packets",
+            [],
+        ):
+            try:
+                index = int(
+                    packet.get(
+                        "stream_index"
+                    )
+                )
+            except Exception:
+                continue
+
+            kind = stream_types.get(
+                index
+            )
+
+            if kind not in (
+                "audio",
+                "video",
+            ):
+                continue
+
+            raw_pts = packet.get(
+                "pts_time"
+            )
+
+            if raw_pts is None:
+                continue
+
+            try:
+                pts = float(
+                    raw_pts
+                )
+            except Exception:
+                continue
+
+            try:
+                duration = float(
+                    packet.get(
+                        "duration_time"
+                    )
+                    or 0.0
+                )
+            except Exception:
+                duration = 0.0
+
+            first_key = (
+                kind
+                + "_first"
+            )
+
+            end_key = (
+                kind
+                + "_last_end"
+            )
+
+            if result[
+                first_key
+            ] is None:
+                result[
+                    first_key
+                ] = pts
+
+                if kind == "video":
+                    result[
+                        "video_first_key"
+                    ] = (
+                        "K"
+                        in str(
+                            packet.get(
+                                "flags"
+                            )
+                            or ""
+                        )
+                    )
+
+            end_value = (
+                pts
+                + duration
+            )
+
+            if (
+                result[
+                    end_key
+                ]
+                is None
+                or end_value
+                > result[
+                    end_key
+                ]
+            ):
+                result[
+                    end_key
+                ] = end_value
+
+        return result
+
+    finally:
+        if path:
+            try:
+                os.unlink(
+                    path
+                )
+            except OSError:
+                pass
+
+
+async def _v789s25u0_fetch_clear_program_segment(
+    child_url: str,
+    segment,
+):
+    if not isinstance(
+        segment,
+        dict,
+    ):
+        raise RuntimeError(
+            "segment-invalid"
+        )
+
+    raw_uri = str(
+        segment.get(
+            "uri"
+        )
+        or ""
+    ).strip()
+
+    if not raw_uri:
+        raise RuntimeError(
+            "segment-uri-missing"
+        )
+
+    segment_url = (
+        _v789s25s_validate_fetch_url(
+            urljoin(
+                child_url,
+                raw_uri,
+            )
+        )
+    )
+
+    key_info = (
+        _v789s25s_parse_key_line(
+            segment.get(
+                "key_line"
+            ),
+            child_url,
+        )
+    )
+
+    client = (
+        await get_shared_http_client()
+    )
+
+    response = (
+        await _v726_safe_addon_get(
+            client,
+            segment_url,
+            timeout=12.0,
+        )
+    )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            "segment-fetch-status-"
+            + str(
+                response.status_code
+            )
+        )
+
+    payload = bytes(
+        response.content
+    )
+
+    method = str(
+        key_info.get(
+            "method"
+        )
+        or "NONE"
+    ).upper()
+
+    if method == "NONE":
+        return payload
+
+    if method != "AES-128":
+        raise RuntimeError(
+            "unsupported-key-method"
+        )
+
+    key_url = (
+        key_info.get(
+            "uri"
+        )
+    )
+
+    explicit_iv = (
+        _v789s25s_parse_explicit_iv(
+            key_info.get(
+                "iv"
+            )
+        )
+    )
+
+    # Do not infer an IV from N1's logical sequence numbers.
+    if (
+        not key_url
+        or explicit_iv is None
+    ):
+        raise RuntimeError(
+            "explicit-aes-iv-unavailable"
+        )
+
+    key_response = (
+        await _v726_safe_addon_get(
+            client,
+            key_url,
+            timeout=12.0,
+        )
+    )
+
+    if key_response.status_code != 200:
+        raise RuntimeError(
+            "key-fetch-status-"
+            + str(
+                key_response.status_code
+            )
+        )
+
+    key = bytes(
+        key_response.content
+    )
+
+    if len(key) != 16:
+        raise RuntimeError(
+            "invalid-key-length"
+        )
+
+    if (
+        not payload
+        or len(payload) % 16 != 0
+    ):
+        raise RuntimeError(
+            "ciphertext-not-block-aligned"
+        )
+
+    decryptor = Cipher(
+        algorithms.AES(
+            key
+        ),
+        modes.CBC(
+            explicit_iv
+        ),
+    ).decryptor()
+
+    clear = (
+        decryptor.update(
+            payload
+        )
+        + decryptor.finalize()
+    )
+
+    return (
+        _v789s25s_strip_pkcs7(
+            clear
+        )
+    )
+
+
+def _v789s25u0_last_filler_descriptor(
+    previous_state,
+    current_first_seq,
+    break_base_seq,
+    filler_shift90k,
+):
+    if not isinstance(
+        previous_state,
+        dict,
+    ):
+        return None
+
+    # V789S25W0_UNANCHORED_EXIT_PROBE
+    #
+    # A break entered before a program clock is available uses
+    # the immutable static filler files. That is still a valid
+    # media clock and must be measurable at break exit.
+    if break_base_seq is None:
+        return None
+
+    candidate_segments = (
+        previous_state.get(
+            "segments"
+        )
+    )
+
+    if not isinstance(
+        candidate_segments,
+        list,
+    ):
+        return None
+
+    try:
+        current_seq = int(
+            current_first_seq
+        )
+
+        base_seq = int(
+            break_base_seq
+        )
+
+        clocked = (
+            filler_shift90k
+            is not None
+        )
+
+        base_shift = (
+            int(
+                filler_shift90k
+            )
+            if clocked
+            else 0
+        )
+    except Exception:
+        return None
+
+    previous_bumpers = []
+
+    for item in candidate_segments:
+        if not isinstance(
+            item,
+            dict,
+        ):
+            continue
+
+        if not bool(
+            item.get(
+                "bumper"
+            )
+        ):
+            continue
+
+        try:
+            seq = int(
+                item.get(
+                    "seq"
+                )
+            )
+        except Exception:
+            continue
+
+        if seq >= current_seq:
+            continue
+
+        previous_bumpers.append(
+            (
+                seq,
+                item,
+            )
+        )
+
+    if not previous_bumpers:
+        return None
+
+    last_seq, last_item = max(
+        previous_bumpers,
+        key=lambda pair: pair[0],
+    )
+
+    stored_slot = (
+        last_item.get(
+            "slot"
+        )
+    )
+
+    stored_index = (
+        last_item.get(
+            "filler_index"
+        )
+    )
+
+    try:
+        if stored_slot is None:
+            slot = (
+                int(last_seq)
+                - int(base_seq)
+            )
+        else:
+            slot = int(
+                stored_slot
+            )
+
+        if slot < 0:
+            return None
+
+        cycle = int(
+            last_item.get(
+                "cycle"
+            )
+            or (
+                slot
+                // _V789N4_FILLER_SEGMENT_COUNT
+            )
+        )
+
+        if stored_index is None:
+            filler_index = int(
+                slot
+                % _V789N4_FILLER_SEGMENT_COUNT
+            )
+        else:
+            filler_index = int(
+                stored_index
+            )
+
+    except Exception:
+        return None
+
+    if (
+        filler_index < 0
+        or filler_index
+        >= _V789N4_FILLER_SEGMENT_COUNT
+    ):
+        return None
+
+    if clocked:
+        effective_shift90k = (
+            _v789s25s_cycle_shift90k(
+                base_shift,
+                cycle,
+            )
+        )
+
+        if effective_shift90k is None:
+            return None
+
+    else:
+        # Static filler URLs repeat the original source clock
+        # every 12 files. They do NOT receive the per-cycle
+        # +60 second S25S1 shift.
+        effective_shift90k = 0
+
+    return {
+        "last_filler_seq":
+            int(
+                last_seq
+            ),
+        "current_first_seq":
+            int(
+                current_seq
+            ),
+        "seq_gap":
+            int(
+                current_seq
+                - int(last_seq)
+            ),
+        "slot":
+            int(
+                slot
+            ),
+        "cycle":
+            int(
+                cycle
+            ),
+        "filler_index":
+            int(
+                filler_index
+            ),
+        "effective_shift90k":
+            int(
+                effective_shift90k
+            ),
+        "clocked":
+            bool(
+                clocked
+            ),
+    }
+
+
+
+# V789S25W0_STATIC_FILLER_PROBE
+def _v789s25w0_static_filler_payload(
+    kind: str,
+    index: int,
+):
+    safe_kind = (
+        "audio"
+        if str(
+            kind
+        ).lower()
+        == "audio"
+        else "video"
+    )
+
+    safe_index = int(
+        index
+    )
+
+    if (
+        safe_index < 0
+        or safe_index
+        >= _V789N4_FILLER_SEGMENT_COUNT
+    ):
+        raise ValueError(
+            "W0 static filler index out of range"
+        )
+
+    filler_root = str(
+        os.environ.get(
+            "V789N4_FILLER_ROOT",
+            "/app/backend/v789n4_filler/hls",
+        )
+    ).strip()
+
+    path = os.path.join(
+        filler_root,
+        f"{safe_kind}_{safe_index:03d}.ts",
+    )
+
+    with open(
+        path,
+        "rb",
+    ) as handle:
+        payload = handle.read()
+
+    if not payload:
+        raise RuntimeError(
+            "W0 static filler is empty"
+        )
+
+    return payload
+
+
+
+
+
+# ================= V789S25W57 EXACT BUMPER CLOCK =================
+# V789S25W57_EXACT_BUMPER_CLOCK
+#
+# W56 proved that anchoring synthetic filler to the PREVIOUS PROGRAM
+# segment can move replacement MPEG-TS by hundreds of seconds relative
+# to the Pluto bumper being replaced. The exact upstream bumper segment
+# is the only safe clock source for its replacement.
+#
+# If the exact bumper clock cannot be measured, callers fail open to the
+# normalized upstream Pluto playlist. No unrelated program clock and no
+# unclocked synthetic filler are allowed for that break entry.
+
+
+async def _v789s25w57_exact_bumper_base_shift90k(
+    child_url: str,
+    bumper_segment,
+    slot: int,
+):
+    clear_bumper = (
+        await _v789s25u0_fetch_clear_program_segment(
+            child_url,
+            bumper_segment,
+        )
+    )
+
+    bumper_probe = (
+        await asyncio.to_thread(
+            _v789s25u0_probe_payload,
+            clear_bumper,
+        )
+    )
+
+    safe_slot = max(
+        0,
+        int(
+            slot
+            or 0
+        ),
+    )
+
+    cycle = int(
+        safe_slot
+        // _V789N4_FILLER_SEGMENT_COUNT
+    )
+
+    filler_index = int(
+        safe_slot
+        % _V789N4_FILLER_SEGMENT_COUNT
+    )
+
+    filler_kind = (
+        _v789n4_media_kind(
+            child_url
+        )
+    )
+
+    filler_payload = (
+        await asyncio.to_thread(
+            _v789s25w0_static_filler_payload,
+            filler_kind,
+            filler_index,
+        )
+    )
+
+    filler_probe = (
+        await asyncio.to_thread(
+            _v789s25u0_probe_payload,
+            filler_payload,
+        )
+    )
+
+    bumper_audio_first = (
+        bumper_probe.get(
+            "audio_first"
+        )
+    )
+
+    filler_audio_first = (
+        filler_probe.get(
+            "audio_first"
+        )
+    )
+
+    if (
+        bumper_audio_first is None
+        or filler_audio_first is None
+    ):
+        raise RuntimeError(
+            "exact-bumper-audio-clock-unavailable"
+        )
+
+    base_shift90k = (
+        _v789s25w3_base_shift90k(
+            bumper_audio_first,
+            filler_audio_first,
+            cycle,
+        )
+    )
+
+    if base_shift90k is None:
+        raise RuntimeError(
+            "exact-bumper-shift-unavailable"
+        )
+
+    effective_shift90k = (
+        _v789s25s_cycle_shift90k(
+            base_shift90k,
+            cycle,
+        )
+    )
+
+    logger.warning(
+        (
+            "V789S25W57_EXACT_BUMPER_CLOCK "
+            "kind=%s seq=%s slot=%s cycle=%s index=%s "
+            "bumper_audio_first=%.6f "
+            "filler_audio_first=%.6f "
+            "base_shift90k=%s base_shift=%.6f "
+            "effective_shift90k=%s effective_shift=%.6f"
+        ),
+        filler_kind,
+        int(
+            bumper_segment.get(
+                "seq"
+            )
+            or 0
+        ),
+        safe_slot,
+        cycle,
+        filler_index,
+        float(
+            bumper_audio_first
+        ),
+        float(
+            filler_audio_first
+        ),
+        int(
+            base_shift90k
+        ),
+        (
+            float(
+                base_shift90k
+            )
+            / float(
+                _V789S25S_CLOCK_HZ
+            )
+        ),
+        int(
+            effective_shift90k
+        ),
+        (
+            float(
+                effective_shift90k
+            )
+            / float(
+                _V789S25S_CLOCK_HZ
+            )
+        ),
+    )
+
+    return int(
+        base_shift90k
+    )
+
+
+
+# ================= V789S25W3 UNANCHORED BUMPER CLOCK PROBE =================
+# V789S25W3_BUMPER_CLOCK_PROBE
+#
+# Diagnostic only.
+#
+# When no program segment exists before the first bumper, probe
+# the exact upstream bumper segment that Privastream replaces.
+# Calculate the base filler shift that would preserve that
+# segment's MPEG-TS audio clock.
+#
+# The calculated shift is logged only. It is NOT applied.
+
+_V789S25W3_TASKS = set()
+_V789S25W3_SEEN = set()
+
+
+def _v789s25w3_base_shift90k(
+    bumper_audio_first,
+    filler_audio_first,
+    cycle,
+):
+    if (
+        bumper_audio_first is None
+        or filler_audio_first is None
+    ):
+        return None
+
+    cycle_seconds = (
+        int(
+            cycle
+        )
+        * float(
+            _V789S25S_CYCLE_SECONDS
+        )
+    )
+
+    base_shift_seconds = (
+        float(
+            bumper_audio_first
+        )
+        - float(
+            filler_audio_first
+        )
+        - cycle_seconds
+    )
+
+    shift90k = int(
+        round(
+            base_shift_seconds
+            * float(
+                _V789S25S_CLOCK_HZ
+            )
+        )
+    )
+
+    if abs(
+        shift90k
+    ) > _V789S25S_MAX_ABS_SHIFT90K:
+        return None
+
+    return shift90k
+
+
+async def _v789s25w3_probe_unanchored_bumper(
+    child_url: str,
+    bumper_segment,
+    slot: int,
+    safe_log_key: str,
+):
+    try:
+        clear_bumper = (
+            await _v789s25u0_fetch_clear_program_segment(
+                child_url,
+                bumper_segment,
+            )
+        )
+
+        bumper_probe = (
+            await asyncio.to_thread(
+                _v789s25u0_probe_payload,
+                clear_bumper,
+            )
+        )
+
+        safe_slot = int(
+            slot
+        )
+
+        cycle = int(
+            safe_slot
+            // _V789N4_FILLER_SEGMENT_COUNT
+        )
+
+        filler_index = int(
+            safe_slot
+            % _V789N4_FILLER_SEGMENT_COUNT
+        )
+
+        filler_payload = (
+            await asyncio.to_thread(
+                _v789s25w0_static_filler_payload,
+                "video",
+                filler_index,
+            )
+        )
+
+        filler_probe = (
+            await asyncio.to_thread(
+                _v789s25u0_probe_payload,
+                filler_payload,
+            )
+        )
+
+        bumper_audio_first = (
+            bumper_probe.get(
+                "audio_first"
+            )
+        )
+
+        filler_audio_first = (
+            filler_probe.get(
+                "audio_first"
+            )
+        )
+
+        base_shift90k = (
+            _v789s25w3_base_shift90k(
+                bumper_audio_first,
+                filler_audio_first,
+                cycle,
+            )
+        )
+
+        effective_shift90k = None
+
+        if base_shift90k is not None:
+            effective_shift90k = (
+                _v789s25s_cycle_shift90k(
+                    base_shift90k,
+                    cycle,
+                )
+            )
+
+        logger.warning(
+            (
+                "V789S25W3_BUMPER_CLOCK_PROBE "
+                "key=%s seq=%s slot=%s cycle=%s index=%s "
+                "bumper_audio_first=%s bumper_audio_end=%s "
+                "bumper_video_first=%s bumper_video_end=%s "
+                "bumper_video_first_key=%s "
+                "filler_audio_first=%s filler_audio_end=%s "
+                "filler_video_first=%s filler_video_end=%s "
+                "candidate_base_shift90k=%s "
+                "candidate_base_shift=%s "
+                "candidate_effective_shift90k=%s "
+                "candidate_effective_shift=%s"
+            ),
+            safe_log_key,
+            int(
+                bumper_segment.get(
+                    "seq"
+                )
+                or 0
+            ),
+            safe_slot,
+            cycle,
+            filler_index,
+            _v789s25u0_fmt(
+                bumper_audio_first
+            ),
+            _v789s25u0_fmt(
+                bumper_probe.get(
+                    "audio_last_end"
+                )
+            ),
+            _v789s25u0_fmt(
+                bumper_probe.get(
+                    "video_first"
+                )
+            ),
+            _v789s25u0_fmt(
+                bumper_probe.get(
+                    "video_last_end"
+                )
+            ),
+            (
+                str(
+                    bool(
+                        bumper_probe.get(
+                            "video_first_key"
+                        )
+                    )
+                ).lower()
+                if bumper_probe.get(
+                    "video_first_key"
+                )
+                is not None
+                else "-"
+            ),
+            _v789s25u0_fmt(
+                filler_audio_first
+            ),
+            _v789s25u0_fmt(
+                filler_probe.get(
+                    "audio_last_end"
+                )
+            ),
+            _v789s25u0_fmt(
+                filler_probe.get(
+                    "video_first"
+                )
+            ),
+            _v789s25u0_fmt(
+                filler_probe.get(
+                    "video_last_end"
+                )
+            ),
+            (
+                str(
+                    int(
+                        base_shift90k
+                    )
+                )
+                if base_shift90k is not None
+                else "-"
+            ),
+            (
+                _v789s25u0_fmt(
+                    float(
+                        base_shift90k
+                    )
+                    / float(
+                        _V789S25S_CLOCK_HZ
+                    )
+                )
+                if base_shift90k is not None
+                else "-"
+            ),
+            (
+                str(
+                    int(
+                        effective_shift90k
+                    )
+                )
+                if effective_shift90k is not None
+                else "-"
+            ),
+            (
+                _v789s25u0_fmt(
+                    float(
+                        effective_shift90k
+                    )
+                    / float(
+                        _V789S25S_CLOCK_HZ
+                    )
+                )
+                if effective_shift90k is not None
+                else "-"
+            ),
+        )
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W3_BUMPER_CLOCK_PROBE_ERROR "
+                "key=%s type=%s"
+            ),
+            safe_log_key,
+            type(exc).__name__,
+        )
+
+
+def _v789s25w3_schedule_bumper_probe(
+    child_url: str,
+    bumper_segment,
+    slot: int,
+    safe_log_key: str,
+    break_base_pdt,
+):
+    identity = (
+        str(
+            safe_log_key
+        )
+        + ":"
+        + (
+            "%.3f"
+            % float(
+                break_base_pdt
+            )
+        )
+        + ":"
+        + str(
+            int(
+                bumper_segment.get(
+                    "seq"
+                )
+                or 0
+            )
+        )
+    )
+
+    if identity in _V789S25W3_SEEN:
+        return
+
+    _V789S25W3_SEEN.add(
+        identity
+    )
+
+    task = asyncio.create_task(
+        _v789s25w3_probe_unanchored_bumper(
+            child_url,
+            dict(
+                bumper_segment
+                or {}
+            ),
+            int(
+                slot
+            ),
+            safe_log_key,
+        )
+    )
+
+    _V789S25W3_TASKS.add(
+        task
+    )
+
+    def done(
+        finished,
+    ):
+        _V789S25W3_TASKS.discard(
+            finished
+        )
+
+        try:
+            finished.result()
+        except Exception as exc:
+            logger.warning(
+                (
+                    "V789S25W3_BUMPER_CLOCK_TASK_ERROR "
+                    "key=%s type=%s"
+                ),
+                safe_log_key,
+                type(exc).__name__,
+            )
+
+    task.add_done_callback(
+        done
+    )
+
+
+
+def _v789s25u0_fmt(
+    value,
+):
+    if value is None:
+        return "-"
+
+    try:
+        return (
+            "%.6f"
+            % float(
+                value
+            )
+        )
+    except Exception:
+        return "-"
+
+
+async def _v789s25u0_exit_probe(
+    child_url: str,
+    first_program_segment,
+    previous_state,
+    current_first_seq,
+    break_base_seq,
+    filler_shift90k,
+    safe_log_key: str,
+):
+    try:
+        descriptor = (
+            _v789s25u0_last_filler_descriptor(
+                previous_state,
+                current_first_seq,
+                break_base_seq,
+                filler_shift90k,
+            )
+        )
+
+        if descriptor is None:
+            logger.warning(
+                (
+                    "V789S25U0_EXIT_CLOCK_DESCRIPTOR_UNAVAILABLE "
+                    "key=%s"
+                ),
+                safe_log_key,
+            )
+
+            return
+
+        clear_program = (
+            await _v789s25u0_fetch_clear_program_segment(
+                child_url,
+                first_program_segment,
+            )
+        )
+
+        program_probe = (
+            await asyncio.to_thread(
+                _v789s25u0_probe_payload,
+                clear_program,
+            )
+        )
+
+        if bool(
+            descriptor.get(
+                "clocked"
+            )
+        ):
+            filler_payload = (
+                await asyncio.to_thread(
+                    _v789s25s_render_shifted_filler,
+                    "video",
+                    int(
+                        descriptor[
+                            "filler_index"
+                        ]
+                    ),
+                    int(
+                        descriptor[
+                            "effective_shift90k"
+                        ]
+                    ),
+                )
+            )
+
+        else:
+            filler_payload = (
+                await asyncio.to_thread(
+                    _v789s25w0_static_filler_payload,
+                    "video",
+                    int(
+                        descriptor[
+                            "filler_index"
+                        ]
+                    ),
+                )
+            )
+
+        filler_probe = (
+            await asyncio.to_thread(
+                _v789s25u0_probe_payload,
+                filler_payload,
+            )
+        )
+
+        filler_audio_end = (
+            filler_probe.get(
+                "audio_last_end"
+            )
+        )
+
+        filler_video_end = (
+            filler_probe.get(
+                "video_last_end"
+            )
+        )
+
+        program_audio_first = (
+            program_probe.get(
+                "audio_first"
+            )
+        )
+
+        program_video_first = (
+            program_probe.get(
+                "video_first"
+            )
+        )
+
+        program_video_first_key = (
+            program_probe.get(
+                "video_first_key"
+            )
+        )
+
+        audio_delta = None
+        video_delta = None
+
+        if (
+            filler_audio_end
+            is not None
+            and program_audio_first
+            is not None
+        ):
+            audio_delta = (
+                float(
+                    program_audio_first
+                )
+                - float(
+                    filler_audio_end
+                )
+            )
+
+        if (
+            filler_video_end
+            is not None
+            and program_video_first
+            is not None
+        ):
+            video_delta = (
+                float(
+                    program_video_first
+                )
+                - float(
+                    filler_video_end
+                )
+            )
+
+        logger.warning(
+            (
+                "V789S25U0_EXIT_CLOCK_PROBE "
+                "key=%s "
+                "current_seq=%s "
+                "last_filler_seq=%s "
+                "seq_gap=%s "
+                "slot=%s "
+                "cycle=%s "
+                "index=%s "
+                "clocked=%s "
+                "shift90k=%s "
+                "filler_audio_end=%s "
+                "program_audio_first=%s "
+                "audio_delta=%s "
+                "filler_video_end=%s "
+                "program_video_first=%s "
+                "program_video_first_key=%s "
+                "video_delta=%s"
+            ),
+            safe_log_key,
+            int(
+                descriptor[
+                    "current_first_seq"
+                ]
+            ),
+            int(
+                descriptor[
+                    "last_filler_seq"
+                ]
+            ),
+            int(
+                descriptor[
+                    "seq_gap"
+                ]
+            ),
+            int(
+                descriptor[
+                    "slot"
+                ]
+            ),
+            int(
+                descriptor[
+                    "cycle"
+                ]
+            ),
+            int(
+                descriptor[
+                    "filler_index"
+                ]
+            ),
+            (
+                "yes"
+                if bool(
+                    descriptor.get(
+                        "clocked"
+                    )
+                )
+                else "no"
+            ),
+            int(
+                descriptor[
+                    "effective_shift90k"
+                ]
+            ),
+            _v789s25u0_fmt(
+                filler_audio_end
+            ),
+            _v789s25u0_fmt(
+                program_audio_first
+            ),
+            _v789s25u0_fmt(
+                audio_delta
+            ),
+            _v789s25u0_fmt(
+                filler_video_end
+            ),
+            _v789s25u0_fmt(
+                program_video_first
+            ),
+            (
+                str(
+                    bool(
+                        program_video_first_key
+                    )
+                ).lower()
+                if program_video_first_key
+                is not None
+                else "-"
+            ),
+            _v789s25u0_fmt(
+                video_delta
+            ),
+        )
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25U0_EXIT_CLOCK_PROBE_ERROR "
+                "key=%s type=%s"
+            ),
+            safe_log_key,
+            type(exc).__name__,
+        )
+
+
+def _v789s25u0_schedule_exit_probe(
+    child_url: str,
+    first_program_segment,
+    previous_state,
+    current_first_seq,
+    break_base_seq,
+    filler_shift90k,
+    safe_log_key: str,
+):
+    task = asyncio.create_task(
+        _v789s25u0_exit_probe(
+            child_url,
+            dict(
+                first_program_segment
+                or {}
+            ),
+            dict(
+                previous_state
+                or {}
+            ),
+            current_first_seq,
+            break_base_seq,
+            filler_shift90k,
+            safe_log_key,
+        )
+    )
+
+    _V789S25U0_TASKS.add(
+        task
+    )
+
+    def done(
+        finished,
+    ):
+        _V789S25U0_TASKS.discard(
+            finished
+        )
+
+        try:
+            finished.result()
+        except Exception as exc:
+            logger.warning(
+                (
+                    "V789S25U0_EXIT_CLOCK_TASK_ERROR "
+                    "key=%s type=%s"
+                ),
+                safe_log_key,
+                type(exc).__name__,
+            )
+
+    task.add_done_callback(
+        done
+    )
+
+
+
+def _v789n4_filler_url(
+    kind: str,
+    index: int,
+    shift90k=None,
+) -> str:
+    safe_kind = (
+        "audio"
+        if str(kind) == "audio"
+        else "video"
+    )
+
+    safe_index = int(index) % (
+        _V789N4_FILLER_SEGMENT_COUNT
+    )
+
+    base = (
+        f"{_V786F_PLUTO_PUBLIC_ORIGIN}"
+        "/api/live/pluto/filler/"
+        f"{safe_kind}/{safe_index}.ts"
+    )
+
+    if shift90k is None:
+        return base
+
+    token = (
+        _v789s25s_clock_token(
+            int(shift90k)
+        )
+    )
+
+    return (
+        base
+        + "?clock="
+        + quote(
+            token,
+            safe="",
+        )
+    )
+
+
+
+# ================= V789S25V0 STICKY FILLER IDENTITY =================
+# V789S25V0_STICKY_FILLER_IDENTITY
+#
+# HLS identity contract:
+#
+# If logical media sequence N was already returned as Privastream
+# filler, a later playlist refresh must never change sequence N
+# into upstream program media.
+#
+# Keep that exact sequence as filler until it ages out naturally.
+# Programming may resume on the next sequence that has never been
+# issued as filler.
+
+
+def _v789s25v0_apply_sticky_filler_identity(
+    segments,
+    previous_state,
+    break_base_pdt,
+    break_base_seq,
+):
+    if not isinstance(
+        previous_state,
+        dict,
+    ):
+        return []
+
+    previous_segments = (
+        previous_state.get(
+            "segments"
+        )
+    )
+
+    if not isinstance(
+        previous_segments,
+        list,
+    ):
+        return []
+
+    if break_base_seq is None:
+        return []
+
+    previous_by_seq = {}
+
+    for item in previous_segments:
+        if not isinstance(
+            item,
+            dict,
+        ):
+            continue
+
+        try:
+            seq = int(
+                item.get(
+                    "seq"
+                )
+            )
+        except Exception:
+            continue
+
+        previous_by_seq[
+            seq
+        ] = item
+
+    sticky = []
+
+    for item in segments:
+
+        if bool(
+            item.get(
+                "bumper"
+            )
+        ):
+            continue
+
+        try:
+            seq = int(
+                item.get(
+                    "seq"
+                )
+            )
+        except Exception:
+            continue
+
+        previous_item = (
+            previous_by_seq.get(
+                seq
+            )
+        )
+
+        if not isinstance(
+            previous_item,
+            dict,
+        ):
+            continue
+
+        if not bool(
+            previous_item.get(
+                "bumper"
+            )
+        ):
+            continue
+
+        raw_slot = (
+            previous_item.get(
+                "slot"
+            )
+        )
+
+        try:
+            if raw_slot is not None:
+                slot = int(
+                    raw_slot
+                )
+            else:
+                slot = (
+                    int(seq)
+                    - int(
+                        break_base_seq
+                    )
+                )
+        except Exception:
+            continue
+
+        if slot < 0:
+            continue
+
+        try:
+            cycle = int(
+                previous_item.get(
+                    "cycle"
+                )
+                if previous_item.get(
+                    "cycle"
+                )
+                is not None
+                else (
+                    slot
+                    // _V789N4_FILLER_SEGMENT_COUNT
+                )
+            )
+        except Exception:
+            cycle = int(
+                slot
+                // _V789N4_FILLER_SEGMENT_COUNT
+            )
+
+        raw_index = (
+            previous_item.get(
+                "filler_index"
+            )
+        )
+
+        try:
+            filler_index = int(
+                raw_index
+                if raw_index is not None
+                else (
+                    slot
+                    % _V789N4_FILLER_SEGMENT_COUNT
+                )
+            )
+        except Exception:
+            filler_index = int(
+                slot
+                % _V789N4_FILLER_SEGMENT_COUNT
+            )
+
+        expected_pdt = None
+
+        if break_base_pdt is not None:
+            try:
+                expected_pdt = (
+                    float(
+                        break_base_pdt
+                    )
+                    + (
+                        float(
+                            slot
+                        )
+                        * float(
+                            _V789N4_FILLER_SEGMENT_SECONDS
+                        )
+                    )
+                )
+            except Exception:
+                expected_pdt = None
+
+        item[
+            "bumper"
+        ] = True
+
+        item[
+            "_v789s25v0_sticky"
+        ] = True
+
+        item[
+            "_v789s25v0_slot"
+        ] = int(
+            slot
+        )
+
+        item[
+            "_v789s25v0_cycle"
+        ] = int(
+            cycle
+        )
+
+        item[
+            "_v789s25v0_filler_index"
+        ] = int(
+            filler_index
+        )
+
+        previous_published_pdt = (
+            previous_item.get(
+                "published_pdt"
+            )
+        )
+
+        previous_published_duration = (
+            previous_item.get(
+                "published_duration"
+            )
+        )
+
+        item[
+            "_v789s25v0_pdt"
+        ] = (
+            float(
+                previous_published_pdt
+            )
+            if previous_published_pdt
+            is not None
+            else expected_pdt
+        )
+
+        item[
+            "_v789s25v0_duration"
+        ] = (
+            float(
+                previous_published_duration
+            )
+            if previous_published_duration
+            is not None
+            else float(
+                _V789N4_FILLER_SEGMENT_SECONDS
+            )
+        )
+
+        sticky.append(
+            int(
+                seq
+            )
+        )
+
+    return sticky
+
+
+
+
+# V789S25V0R1_STICKY_DISC_IDENTITY
+#
+# A sequence already published as filler must preserve not only
+# its filler URI/PDT/duration but also its logical discontinuity
+# identity while it remains visible in a mixed exit window.
+
+def _v789s25v0r1_preserve_disc_identity(
+    current,
+    previous_existing,
+    full_break_window,
+):
+    if not isinstance(
+        previous_existing,
+        dict,
+    ):
+        return False
+
+    return bool(
+        (
+            bool(
+                full_break_window
+            )
+            or bool(
+                current.get(
+                    "_v789s25v0_sticky"
+                )
+            )
+        )
+        and bool(
+            previous_existing.get(
+                "bumper"
+            )
+        )
+        and bool(
+            current.get(
+                "bumper"
+            )
+        )
+        and int(
+            previous_existing.get(
+                "cycle"
+            )
+            or 0
+        )
+        == int(
+            current.get(
+                "cycle"
+            )
+            or 0
+        )
+    )
+
+
+
+
+# V789S25V0R2_PUBLISHED_TIME_IDENTITY
+#
+# Return the PDT/duration that THIS sequence is actually
+# published with. Sticky filler inherits its prior published
+# values; synthetic full-break filler uses the synthetic clock.
+
+def _v789s25v0r2_published_time_identity(
+    item,
+    full_break_window,
+    break_base_pdt,
+):
+    if not isinstance(
+        item,
+        dict,
+    ):
+        return (
+            None,
+            None,
+        )
+
+    if bool(
+        item.get(
+            "_v789s25v0_sticky"
+        )
+    ):
+        pdt = item.get(
+            "_v789s25v0_pdt"
+        )
+
+        duration = item.get(
+            "_v789s25v0_duration"
+        )
+
+        if duration is None:
+            duration = item.get(
+                "duration"
+            )
+
+        return (
+            (
+                float(pdt)
+                if pdt is not None
+                else None
+            ),
+            (
+                float(duration)
+                if duration is not None
+                else 5.0
+            ),
+        )
+
+    if (
+        bool(
+            full_break_window
+        )
+        and bool(
+            item.get(
+                "bumper"
+            )
+        )
+        and break_base_pdt is not None
+        and item.get(
+            "slot"
+        )
+        is not None
+    ):
+        return (
+            (
+                float(
+                    break_base_pdt
+                )
+                + (
+                    float(
+                        item.get(
+                            "slot"
+                        )
+                    )
+                    * float(
+                        _V789N4_FILLER_SEGMENT_SECONDS
+                    )
+                )
+            ),
+            float(
+                _V789N4_FILLER_SEGMENT_SECONDS
+            ),
+        )
+
+    pdt = item.get(
+        "pdt"
+    )
+
+    duration = item.get(
+        "duration"
+    )
+
+    return (
+        (
+            float(pdt)
+            if pdt is not None
+            else None
+        ),
+        (
+            float(duration)
+            if duration is not None
+            else 5.0
+        ),
+    )
+
+
+
+
+# ================= V789S25W61 OVERLAP PDT IDENTITY =================
+# V789S25W61_OVERLAP_PDT_IDENTITY
+#
+# W59 proved Pluto can reuse the exact same media segments while moving
+# PROGRAM-DATE-TIME backward. N1 correctly preserves logical MEDIA-SEQUENCE
+# identity, but N4 previously trusted the rewound raw PDT when deciding the
+# master filler horizon. That can turn an already-published clean overlap into
+# synthetic filler and leak the upstream PDT rewind to Media3.
+#
+# For a CLEAN window only, require exact normalized sequence + query-insensitive
+# media URI identity. If every verified overlap reports one consistent PDT
+# delta, carry the already-published presentation clock across the entire
+# current window before any horizon decision. Different media or inconsistent
+# overlap deltas fail open and leave the upstream PDT untouched.
+
+_V789S25W61_PDT_TOLERANCE_SECONDS = 0.250
+
+
+def _v789s25w61_segment_identity(
+    child_url: str,
+    item,
+):
+    if not isinstance(item, dict):
+        return None
+
+    uri = str(
+        item.get("uri")
+        or ""
+    ).strip()
+
+    if not uri:
+        return None
+
+    return _v789n1_url_identity_hash(
+        urljoin(
+            child_url,
+            uri,
+        ),
+        include_query=False,
+        length=64,
+    )
+
+
+def _v789s25w61_reanchor_clean_overlap_pdt(
+    segments,
+    previous,
+    child_url: str,
+):
+    if not segments or not isinstance(previous, dict):
+        return None
+
+    previous_segments = previous.get("segments")
+
+    if not isinstance(previous_segments, list):
+        return None
+
+    previous_by_seq = {}
+
+    for previous_item in previous_segments:
+        if not isinstance(previous_item, dict):
+            continue
+
+        try:
+            seq = int(previous_item.get("seq"))
+        except Exception:
+            continue
+
+        previous_by_seq[seq] = previous_item
+
+    matches = []
+    offsets = []
+
+    for item in segments:
+        try:
+            seq = int(item.get("seq"))
+        except Exception:
+            continue
+
+        previous_item = previous_by_seq.get(seq)
+
+        if not isinstance(previous_item, dict):
+            continue
+
+        # V789S25W61R1_CLEAN_HISTORY_ONLY
+        # Clean-PDT reanchoring must never consume a sequence that was
+        # previously published as filler. Those overlaps belong to the
+        # existing W54 sticky/horizon path, which carries the
+        # _v789s25w51_horizon_bridge non-propagation identity.
+        if bool(previous_item.get("bumper")):
+            continue
+
+        previous_id = str(
+            previous_item.get("segment_id")
+            or ""
+        ).strip()
+
+        current_id = _v789s25w61_segment_identity(
+            child_url,
+            item,
+        )
+
+        if (
+            not previous_id
+            or not current_id
+            or previous_id != current_id
+        ):
+            continue
+
+        previous_pdt = _v789s25o_float_or_none(
+            previous_item.get("published_pdt")
+        )
+
+        current_pdt = _v789s25o_float_or_none(
+            item.get("pdt")
+        )
+
+        if previous_pdt is None or current_pdt is None:
+            continue
+
+        offsets.append(
+            float(previous_pdt)
+            - float(current_pdt)
+        )
+
+        item[
+            "_v789s25w61_overlap_identity"
+        ] = True
+
+        matches.append(
+            (
+                item,
+                float(previous_pdt),
+            )
+        )
+
+    if not offsets:
+        return None
+
+    offset = float(offsets[0])
+
+    for candidate in offsets[1:]:
+        if abs(
+            float(candidate)
+            - float(offset)
+        ) > _V789S25W61_PDT_TOLERANCE_SECONDS:
+            return None
+
+    first_raw_pdt = _v789s25o_float_or_none(
+        segments[0].get("pdt")
+    )
+
+    if abs(offset) > 0.001:
+        for item in segments:
+            item_pdt = _v789s25o_float_or_none(
+                item.get("pdt")
+            )
+
+            if item_pdt is not None:
+                item["pdt"] = (
+                    float(item_pdt)
+                    + float(offset)
+                )
+                item[
+                    "_v789s25w61_pdt_reanchored"
+                ] = True
+
+        # Exact overlap identity wins over floating projection.
+        for item, previous_pdt in matches:
+            item["pdt"] = float(previous_pdt)
+
+    first_published_pdt = _v789s25o_float_or_none(
+        segments[0].get("pdt")
+    )
+
+    return {
+        "offset": float(offset),
+        "matches": int(len(matches)),
+        "first_raw_pdt": first_raw_pdt,
+        "first_published_pdt": first_published_pdt,
+    }
+
+
+
+# ================= V789S25W64 MASTER CLEAN PDT OFFSET =================
+# V789S25W64_MASTER_CLEAN_PDT_OFFSET
+#
+# W63 proved that an established rendition can correctly preserve a Pluto
+# clean-program PDT reanchor while a newly appearing sibling rendition has no
+# local overlap history and therefore falls back to raw upstream PDT. That
+# recreates a master-level audio/video presentation-time split.
+#
+# Publish only a locally PROVEN W61 clean-overlap offset. A sibling with no
+# local overlap proof may adopt that master offset for a short raw-PDT window.
+# Local overlap evidence always wins. Bumper/filler windows never adopt it.
+
+_V789S25W64_MASTER_CLEAN_PDT_TTL_SECONDS = 180
+_V789S25W64_MASTER_CLEAN_PDT_MAX_RAW_AGE_SECONDS = 180.0
+
+
+def _v789s25w64_master_clean_pdt_key(
+    master_identity: str,
+):
+    return (
+        "privastream:v789s25w64:"
+        "pluto:master-clean-pdt:"
+        + str(master_identity)
+    )
+
+
+async def _v789s25w64_publish_master_clean_pdt(
+    redis_client,
+    master_identity: str,
+    identity,
+    safe_log_key: str,
+    child_url: str,
+):
+    if not isinstance(identity, dict):
+        return None
+
+    try:
+        offset = float(identity.get("offset") or 0.0)
+        raw_anchor = float(identity.get("first_raw_pdt"))
+        published_anchor = float(identity.get("first_published_pdt"))
+    except Exception:
+        return None
+
+    if abs(offset) <= 0.001:
+        return None
+
+    key = _v789s25w64_master_clean_pdt_key(
+        master_identity
+    )
+
+    state = {
+        "offset": float(offset),
+        "raw_anchor_pdt": float(raw_anchor),
+        "published_anchor_pdt": float(published_anchor),
+        "updated_at": float(time.time()),
+    }
+
+    try:
+        await redis_client.set(
+            key,
+            json.dumps(
+                state,
+                separators=(",", ":"),
+            ),
+            ex=_V789S25W64_MASTER_CLEAN_PDT_TTL_SECONDS,
+        )
+    except Exception:
+        return None
+
+    logger.warning(
+        (
+            "V789S25W64_MASTER_CLEAN_PDT_PUBLISH "
+            "master=%s key=%s kind=%s offset=%.6f "
+            "raw_anchor=%.3f published_anchor=%.3f"
+        ),
+        str(master_identity)[:16],
+        safe_log_key,
+        _v789n4_media_kind(child_url),
+        float(offset),
+        float(raw_anchor),
+        float(published_anchor),
+    )
+
+    return state
+
+
+async def _v789s25w64_adopt_master_clean_pdt(
+    redis_client,
+    master_identity: str,
+    segments,
+    safe_log_key: str,
+    child_url: str,
+):
+    if not segments:
+        return None
+
+    key = _v789s25w64_master_clean_pdt_key(
+        master_identity
+    )
+
+    try:
+        raw = await redis_client.get(key)
+    except Exception:
+        return None
+
+    if not raw:
+        return None
+
+    try:
+        state = (
+            json.loads(raw)
+            if isinstance(raw, (str, bytes, bytearray))
+            else raw
+        )
+
+        if not isinstance(state, dict):
+            return None
+
+        offset = float(state.get("offset") or 0.0)
+        raw_anchor = float(state.get("raw_anchor_pdt"))
+        published_anchor = float(
+            state.get("published_anchor_pdt")
+        )
+        updated_at = float(state.get("updated_at"))
+    except Exception:
+        return None
+
+    if abs(offset) <= 0.001:
+        return None
+
+    if (
+        float(time.time())
+        - float(updated_at)
+        > float(
+            _V789S25W64_MASTER_CLEAN_PDT_TTL_SECONDS
+        )
+        + 1.0
+    ):
+        return None
+
+    first_raw = _v789s25o_float_or_none(
+        segments[0].get("pdt")
+    )
+
+    if first_raw is None:
+        return None
+
+    if (
+        float(first_raw)
+        < float(raw_anchor)
+        - _V789S25W61_PDT_TOLERANCE_SECONDS
+    ):
+        return None
+
+    if (
+        float(first_raw)
+        - float(raw_anchor)
+        > _V789S25W64_MASTER_CLEAN_PDT_MAX_RAW_AGE_SECONDS
+    ):
+        return None
+
+    for item in segments:
+        item_pdt = _v789s25o_float_or_none(
+            item.get("pdt")
+        )
+
+        if item_pdt is None:
+            continue
+
+        item["pdt"] = (
+            float(item_pdt)
+            + float(offset)
+        )
+        item[
+            "_v789s25w61_pdt_reanchored"
+        ] = True
+        item[
+            "_v789s25w64_master_pdt_adopted"
+        ] = True
+
+    first_published = _v789s25o_float_or_none(
+        segments[0].get("pdt")
+    )
+
+    logger.warning(
+        (
+            "V789S25W64_MASTER_CLEAN_PDT_ADOPT "
+            "master=%s key=%s kind=%s offset=%.6f "
+            "raw_anchor=%.3f published_anchor=%.3f "
+            "first_raw=%.3f first_published=%.3f"
+        ),
+        str(master_identity)[:16],
+        safe_log_key,
+        _v789n4_media_kind(child_url),
+        float(offset),
+        float(raw_anchor),
+        float(published_anchor),
+        float(first_raw),
+        float(first_published),
+    )
+
+    return {
+        "offset": float(offset),
+        "raw_anchor_pdt": float(raw_anchor),
+        "published_anchor_pdt": float(published_anchor),
+        "first_raw_pdt": float(first_raw),
+        "first_published_pdt": float(first_published),
+    }
+
+
+# ================= V789S25W51 MASTER FILLER HORIZON =================
+# W48 proved that Pluto can expose clean program in one rendition while the
+# client has already been told that the same presentation time is filler.
+#
+# Do not hold/rewrite the entire clean playlist. Instead remember the furthest
+# presentation time that THIS MASTER has actually published as filler. On a
+# clean return, only leading segments whose PDT still overlaps that already-
+# published filler horizon are bridged to filler. Later clean segments remain
+# program in the same playlist.
+#
+# This keeps audio/video on the same program-return PDT without making one
+# rendition wait for the request order of another rendition.
+#
+# The sidecar key is break-instance scoped by master hash + base PDT and stores
+# only one float. No Pluto URL/token/media payload is persisted.
+
+_V789S25W51_HORIZON_TTL_SECONDS = 180
+
+# V789S25W61_HORIZON_STATE_EPOCH
+# Fresh sidecar namespace intentionally ignores self-propagated W51 horizon
+# values. Old W51 keys are left to expire naturally; Redis is not cleared.
+
+def _v789s25w51_horizon_key(
+    master_identity: str,
+    break_base_pdt,
+):
+    try:
+        base_ms = int(
+            round(
+                float(break_base_pdt)
+                * 1000.0
+            )
+        )
+    except Exception:
+        return None
+
+    return (
+        "privastream:v789s25w64:"
+        "pluto:filler-horizon:"
+        + str(master_identity)
+        + ":"
+        + str(base_ms)
+    )
+
+
+async def _v789s25w51_get_horizon(
+    redis_client,
+    master_identity: str,
+    break_base_pdt,
+):
+    key = _v789s25w51_horizon_key(
+        master_identity,
+        break_base_pdt,
+    )
+
+    if not key:
+        return None
+
+    try:
+        raw = await redis_client.get(key)
+
+        if raw is None:
+            return None
+
+        return float(raw)
+
+    except Exception:
+        return None
+
+
+async def _v789s25w51_raise_horizon(
+    redis_client,
+    master_identity: str,
+    break_base_pdt,
+    published_until_pdt,
+):
+    key = _v789s25w51_horizon_key(
+        master_identity,
+        break_base_pdt,
+    )
+
+    if not key:
+        return None
+
+    try:
+        candidate = float(
+            published_until_pdt
+        )
+    except Exception:
+        return None
+
+    # Atomic max: sibling audio/video requests may update the same master.
+    script = (
+        "local old = redis.call('get', KEYS[1]); "
+        "local newv = tonumber(ARGV[1]); "
+        "if (not old) or (tonumber(old) < newv) then "
+        "  redis.call('set', KEYS[1], ARGV[1], 'EX', ARGV[2]); "
+        "  return ARGV[1]; "
+        "end; "
+        "redis.call('expire', KEYS[1], ARGV[2]); "
+        "return old;"
+    )
+
+    try:
+        result = await redis_client.eval(
+            script,
+            1,
+            key,
+            (
+                "%.6f"
+                % float(candidate)
+            ),
+            str(
+                int(
+                    _V789S25W51_HORIZON_TTL_SECONDS
+                )
+            ),
+        )
+
+        if result is None:
+            return candidate
+
+        return float(result)
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W51_HORIZON_UPDATE_ERROR "
+                "master=%s type=%s"
+            ),
+            str(master_identity)[:16],
+            type(exc).__name__,
+        )
+
+        # Diagnostic sidecar must fail open.
+        return None
+
+
+
+# ================= V789S25W57 MASTER-OWNED N4 DISCONTINUITY =================
+# V789S25W57_MASTER_N4_DISC
+#
+# N1 already owns one master discontinuity timeline. N4 can add local
+# boundaries for replacement media, but those additions must also be shared
+# by every rendition under the master.
+#
+# MEDIA-SEQUENCE remains rendition-local. An overlapping logical sequence
+# already published by a child is never rewritten. A higher N4 discontinuity
+# becomes canonical at the PDT where it first occurs; siblings catch up only
+# on NEW sequences at/after that PDT.
+
+
+_V789S25W57_MASTER_N4_DISC_TTL_SECONDS = 180
+_V789S25W57_MASTER_N4_PDT_TOLERANCE_SECONDS = 0.250
+
+
+async def _v789s25w57_master_n4_discontinuity(
+    redis_client,
+    master_identity: str,
+    segments,
+    previous_by_seq,
+    safe_log_key: str,
+    child_url: str,
+):
+    if not segments:
+        return
+
+    state_key = (
+        "privastream:v789s25w64:"
+        "pluto:n4-master-disc:"
+        + str(
+            master_identity
+        )
+    )
+
+    lock_key = state_key + ":lock"
+    lock_token = uuid.uuid4().hex
+    acquired = False
+
+    try:
+        for _ in range(40):
+            acquired = bool(
+                await redis_client.set(
+                    lock_key,
+                    lock_token,
+                    nx=True,
+                    ex=_V789N1_LOCK_TTL_SECONDS,
+                )
+            )
+
+            if acquired:
+                break
+
+            await asyncio.sleep(0.025)
+
+        if not acquired:
+            logger.warning(
+                (
+                    "V789S25W57_MASTER_N4_DISC_LOCK_TIMEOUT "
+                    "master=%s kind=%s"
+                ),
+                str(master_identity)[:16],
+                _v789n4_media_kind(
+                    child_url
+                ),
+            )
+            return
+
+        master_disc = None
+        master_pdt = None
+
+        raw_state = await redis_client.get(
+            state_key
+        )
+
+        if raw_state:
+            try:
+                parsed_state = json.loads(
+                    raw_state
+                )
+
+                if parsed_state.get("disc") is not None:
+                    master_disc = max(
+                        0,
+                        int(
+                            parsed_state.get(
+                                "disc"
+                            )
+                        ),
+                    )
+
+                master_pdt = (
+                    _v789s25o_float_or_none(
+                        parsed_state.get(
+                            "pdt"
+                        )
+                    )
+                )
+            except Exception:
+                master_disc = None
+                master_pdt = None
+
+        for item in segments:
+            try:
+                seq = int(
+                    item.get(
+                        "seq"
+                    )
+                )
+            except Exception:
+                continue
+
+            # Preserve exact overlap identity for this child.
+            if seq in previous_by_seq:
+                continue
+
+            item_pdt = (
+                _v789s25o_float_or_none(
+                    item.get(
+                        "pdt"
+                    )
+                )
+            )
+
+            if item_pdt is None:
+                continue
+
+            item_disc = max(
+                0,
+                int(
+                    item.get(
+                        "disc"
+                    )
+                    or 0
+                ),
+            )
+
+            if (
+                master_disc is not None
+                and master_pdt is not None
+                and float(item_pdt)
+                >= (
+                    float(master_pdt)
+                    - float(
+                        _V789S25W57_MASTER_N4_PDT_TOLERANCE_SECONDS
+                    )
+                )
+                and int(item_disc) < int(master_disc)
+            ):
+                logger.warning(
+                    (
+                        "V789S25W57_MASTER_N4_DISC_ALIGN "
+                        "master=%s key=%s kind=%s seq=%s "
+                        "local_disc=%s master_disc=%s "
+                        "pdt=%.3f master_pdt=%.3f"
+                    ),
+                    str(master_identity)[:16],
+                    safe_log_key,
+                    _v789n4_media_kind(
+                        child_url
+                    ),
+                    seq,
+                    int(item_disc),
+                    int(master_disc),
+                    float(item_pdt),
+                    float(master_pdt),
+                )
+
+                item_disc = int(
+                    master_disc
+                )
+                item["disc"] = int(
+                    item_disc
+                )
+
+            if (
+                master_disc is None
+                or (
+                    int(item_disc) > int(master_disc)
+                    and (
+                        master_pdt is None
+                        or float(item_pdt)
+                        >= (
+                            float(master_pdt)
+                            - float(
+                                _V789S25W57_MASTER_N4_PDT_TOLERANCE_SECONDS
+                            )
+                        )
+                    )
+                )
+            ):
+                old_disc = master_disc
+                old_pdt = master_pdt
+
+                master_disc = int(
+                    item_disc
+                )
+                master_pdt = float(
+                    item_pdt
+                )
+
+                logger.warning(
+                    (
+                        "V789S25W57_MASTER_N4_DISC_RAISE "
+                        "master=%s key=%s kind=%s seq=%s "
+                        "old_disc=%s old_pdt=%s "
+                        "new_disc=%s new_pdt=%.3f"
+                    ),
+                    str(master_identity)[:16],
+                    safe_log_key,
+                    _v789n4_media_kind(
+                        child_url
+                    ),
+                    seq,
+                    (
+                        str(int(old_disc))
+                        if old_disc is not None
+                        else "-"
+                    ),
+                    (
+                        "%.3f" % float(old_pdt)
+                        if old_pdt is not None
+                        else "-"
+                    ),
+                    int(master_disc),
+                    float(master_pdt),
+                )
+
+        if master_disc is not None:
+            await redis_client.set(
+                state_key,
+                json.dumps(
+                    {
+                        "disc": int(master_disc),
+                        "pdt": (
+                            float(master_pdt)
+                            if master_pdt is not None
+                            else None
+                        ),
+                        "updated_at": float(time.time()),
+                    },
+                    separators=(",", ":"),
+                ),
+                ex=_V789S25W57_MASTER_N4_DISC_TTL_SECONDS,
+            )
+
+    finally:
+        if acquired:
+            try:
+                await redis_client.eval(
+                    (
+                        "if redis.call('get', KEYS[1]) "
+                        "== ARGV[1] then "
+                        "return redis.call('del', KEYS[1]) "
+                        "else return 0 end"
+                    ),
+                    1,
+                    lock_key,
+                    lock_token,
+                )
+            except Exception:
+                pass
+
+
+
+async def _v789n4_apply_bumper_suppression(
+    text: str,
+    child_url: str,
+    master_url: str,
+) -> str:
+    parsed = _v789n4_playlist_segments(
+        text
+    )
+
+    segments = parsed["segments"]
+
+    if not segments:
+        return text
+
+    safe_log_key = (
+        _v789n1_url_identity_hash(
+            child_url,
+            include_query=False,
+            length=16,
+        )
+    )
+
+    state_identity = (
+        _v789n1_url_identity_hash(
+            child_url,
+            include_query=True,
+            length=64,
+        )
+    )
+
+    master_identity = (
+        _v789n1_url_identity_hash(
+            master_url,
+            include_query=False,
+            length=64,
+        )
+    )
+
+    # V789S25W61_N4_STATE_EPOCH
+    state_key = (
+        "privastream:v789s25w64:"
+        "pluto:suppress:"
+        + state_identity
+    )
+
+    lock_key = state_key + ":lock"
+    # V789S25W61_N4_STATE_EPOCH
+    break_key = (
+        "privastream:v789s25w64:"
+        "pluto:break:"
+        + master_identity
+    )
+
+    lock_token = uuid.uuid4().hex
+    acquired = False
+
+    try:
+        redis_client = (
+            await _v789n1_get_redis()
+        )
+
+        for _ in range(40):
+            acquired = bool(
+                await redis_client.set(
+                    lock_key,
+                    lock_token,
+                    nx=True,
+                    ex=_V789N1_LOCK_TTL_SECONDS,
+                )
+            )
+
+            if acquired:
+                break
+
+            await asyncio.sleep(0.025)
+
+        if not acquired:
+            logger.warning(
+                "V789N4_LOCK_TIMEOUT key=%s",
+                safe_log_key,
+            )
+            return text
+
+        previous = None
+        raw_previous = await redis_client.get(
+            state_key
+        )
+
+        if raw_previous:
+            try:
+                candidate_previous = json.loads(
+                    raw_previous
+                )
+
+                if isinstance(
+                    candidate_previous,
+                    dict,
+                ):
+                    previous = candidate_previous
+            except Exception:
+                previous = None
+
+        has_bumper = any(
+            bool(item.get("bumper"))
+            for item in segments
+        )
+
+        if (
+            not has_bumper
+            and not isinstance(previous, dict)
+        ):
+            return text
+
+        first_bumper_pdt = None
+        first_bumper_seq = None
+        first_bumper_index = None
+        last_bumper_index = None
+
+        for index, item in enumerate(segments):
+            if not bool(item.get("bumper")):
+                continue
+
+            if first_bumper_index is None:
+                first_bumper_index = int(index)
+                first_bumper_seq = int(
+                    item["seq"]
+                )
+
+            last_bumper_index = int(index)
+
+            if (
+                first_bumper_pdt is None
+                and item.get("pdt") is not None
+            ):
+                first_bumper_pdt = float(
+                    item["pdt"]
+                )
+
+        break_base_pdt = None
+        break_base_seq = None
+        previous_break_base_pdt = None
+        previous_break_base_seq = None
+
+        # V789S25O_RETIREMENT_STATE
+        retired_break_base_pdt = None
+        retired_program_end_pdt = None
+
+        # V789S25S1_ACTIVE_FILLER_CLOCK
+        filler_shift90k = None
+
+        # V789S25W26_MASTER_BREAK_RENDITION_CONTINUITY
+        master_break_disc = None
+        adopted_master_break = False
+
+        if (
+            isinstance(previous, dict)
+            and previous.get("break_base_pdt") is not None
+            and previous.get("break_base_seq") is not None
+        ):
+            try:
+                previous_break_base_pdt = float(
+                    previous.get(
+                        "break_base_pdt"
+                    )
+                )
+
+                previous_break_base_seq = int(
+                    previous.get(
+                        "break_base_seq"
+                    )
+                )
+
+                break_base_pdt = (
+                    previous_break_base_pdt
+                )
+
+                break_base_seq = (
+                    previous_break_base_seq
+                )
+
+            except Exception:
+                previous_break_base_pdt = None
+                previous_break_base_seq = None
+                break_base_pdt = None
+                break_base_seq = None
+
+        if (
+            isinstance(previous, dict)
+            and previous.get(
+                "filler_shift90k"
+            ) is not None
+        ):
+            try:
+                filler_shift90k = int(
+                    previous.get(
+                        "filler_shift90k"
+                    )
+                )
+            except Exception:
+                filler_shift90k = None
+
+        if isinstance(previous, dict):
+            retired_break_base_pdt = (
+                _v789s25o_float_or_none(
+                    previous.get(
+                        "retired_break_base_pdt"
+                    )
+                )
+            )
+
+            retired_program_end_pdt = (
+                _v789s25o_float_or_none(
+                    previous.get(
+                        "retired_program_end_pdt"
+                    )
+                )
+            )
+
+        if first_bumper_pdt is not None:
+            raw_break = await redis_client.get(
+                break_key
+            )
+
+            if raw_break:
+                try:
+                    break_state = json.loads(
+                        raw_break
+                    )
+
+                    candidate_base = float(
+                        break_state.get(
+                            "base_pdt"
+                        )
+                    )
+
+                    candidate_age = (
+                        float(first_bumper_pdt)
+                        - float(candidate_base)
+                    )
+
+                    candidate_updated_at = (
+                        _v789s25o_float_or_none(
+                            break_state.get(
+                                "updated_at"
+                            )
+                        )
+                    )
+
+                    candidate_recent = bool(
+                        candidate_updated_at is not None
+                        and abs(
+                            float(time.time())
+                            - float(candidate_updated_at)
+                        )
+                        <= float(
+                            _V789S25W26_MASTER_BREAK_FRESH_SECONDS
+                        )
+                    )
+
+                    # V789S25W107F1_RETIRED_MASTER_BREAK_REJECT
+                    #
+                    # A master break Redis record can remain "fresh" because
+                    # sibling renditions continue touching it. Freshness alone
+                    # must NEVER allow a later, genuinely new bumper window to
+                    # inherit the base of a break this child has already
+                    # retired after accepting clean programming.
+                    #
+                    # Trace proof:
+                    #   retired base = 1790781358.600
+                    #   later bumper = 1790782137+ / 1790782142+
+                    #   old-base age = 778-874 seconds
+                    #
+                    # The retired child watermark is authoritative here:
+                    # when this Redis candidate is the SAME retired break and
+                    # the new bumper begins after accepted clean programming,
+                    # reject the candidate. The normal path below will seed a
+                    # NEW break from first_bumper_pdt and publish it for
+                    # sibling renditions.
+                    # V789S25W107F2_STALE_ONLY_RETIRED_BREAK_REJECT
+                    #
+                    # W107F1 correctly rejects a genuinely stale shared
+                    # master-break record after this child has retired it,
+                    # but retirement alone is insufficient proof that a
+                    # bumper seconds later belongs to a NEW commercial pod.
+                    #
+                    # Preserve the existing 120-second break-age contract:
+                    # only an OLD shared break may be rejected by the
+                    # retired-child watermark. A current commercial pod keeps
+                    # one stable shared break clock across transient
+                    # bumper/program/bumper playlist windows.
+                    candidate_retired_conflict = bool(
+                        retired_break_base_pdt is not None
+                        and retired_program_end_pdt is not None
+                        and float(candidate_age) > 120.0
+                        and abs(
+                            float(candidate_base)
+                            - float(retired_break_base_pdt)
+                        )
+                        <= 0.001
+                        and float(first_bumper_pdt)
+                        > float(retired_program_end_pdt)
+                        + 0.001
+                    )
+
+                    if candidate_retired_conflict:
+                        logger.warning(
+                            (
+                                "V789S25W107F1_RETIRED_MASTER_BREAK_REJECT "
+                                "key=%s kind=%s "
+                                "candidate_base=%.3f "
+                                "retired_base=%.3f "
+                                "retired_end=%.3f "
+                                "first_bumper=%.3f "
+                                "candidate_age=%.3f "
+                                "candidate_recent=%s"
+                            ),
+                            safe_log_key,
+                            _v789n4_media_kind(
+                                child_url
+                            ),
+                            float(candidate_base),
+                            float(retired_break_base_pdt),
+                            float(retired_program_end_pdt),
+                            float(first_bumper_pdt),
+                            float(candidate_age),
+                            str(
+                                bool(candidate_recent)
+                            ).lower(),
+                        )
+
+                    if (
+                        not candidate_retired_conflict
+                        and first_bumper_pdt
+                        >= candidate_base - 5.0
+                        and (
+                            candidate_age <= 120.0
+                            or candidate_recent
+                        )
+                    ):
+                        break_base_pdt = (
+                            candidate_base
+                        )
+
+                        adopted_master_break = True
+
+                        try:
+                            raw_master_break_disc = (
+                                break_state.get(
+                                    "base_disc"
+                                )
+                            )
+
+                            if raw_master_break_disc is not None:
+                                master_break_disc = max(
+                                    0,
+                                    int(
+                                        raw_master_break_disc
+                                    ),
+                                )
+                        except Exception:
+                            master_break_disc = None
+
+                        if (
+                            candidate_age > 120.0
+                            and candidate_recent
+                        ):
+                            logger.warning(
+                                (
+                                    "V789S25W26_MASTER_BREAK_CONTINUITY "
+                                    "key=%s kind=%s age=%.3f "
+                                    "fresh_age=%.3f base=%.3f "
+                                    "first_bumper=%.3f"
+                                ),
+                                safe_log_key,
+                                _v789n4_media_kind(
+                                    child_url
+                                ),
+                                float(candidate_age),
+                                abs(
+                                    float(time.time())
+                                    - float(candidate_updated_at)
+                                ),
+                                float(candidate_base),
+                                float(first_bumper_pdt),
+                            )
+
+                        if (
+                            filler_shift90k is None
+                            and break_state.get(
+                                "filler_shift90k"
+                            ) is not None
+                        ):
+                            try:
+                                filler_shift90k = int(
+                                    break_state.get(
+                                        "filler_shift90k"
+                                    )
+                                )
+                            except Exception:
+                                filler_shift90k = None
+
+                except Exception:
+                    break_base_pdt = None
+                    break_base_seq = None
+                    master_break_disc = None
+                    adopted_master_break = False
+
+            if break_base_pdt is None:
+                break_base_pdt = float(
+                    first_bumper_pdt
+                )
+
+            first_bumper_slot = int(
+                max(
+                    0.0,
+                    float(first_bumper_pdt)
+                    - float(break_base_pdt),
+                )
+                // _V789N4_FILLER_SEGMENT_SECONDS
+            )
+
+            break_base_seq = None
+
+            if (
+                previous_break_base_pdt is not None
+                and previous_break_base_seq is not None
+            ):
+                try:
+                    if (
+                        abs(
+                            float(
+                                previous_break_base_pdt
+                            )
+                            - float(break_base_pdt)
+                        )
+                        <= 0.001
+                    ):
+                        break_base_seq = int(
+                            previous_break_base_seq
+                        )
+                except Exception:
+                    break_base_seq = None
+
+            if (
+                break_base_seq is None
+                and first_bumper_seq is not None
+            ):
+                break_base_seq = max(
+                    0,
+                    int(first_bumper_seq)
+                    - int(first_bumper_slot),
+                )
+
+            # V789S25W57_EXACT_BUMPER_CLOCK_APPLY
+            #
+            # W56 measured the previous-program S1 anchor creating a
+            # +359.984 second filler jump. Never use that clock for
+            # replacement media. Align to the exact bumper being replaced.
+            if (
+                filler_shift90k is None
+                and first_bumper_index is not None
+            ):
+                try:
+                    exact_bumper_segment = segments[
+                        int(
+                            first_bumper_index
+                        )
+                    ]
+
+                    exact_bumper_slot = int(
+                        max(
+                            0,
+                            int(
+                                first_bumper_slot
+                                or 0
+                            ),
+                        )
+                    )
+
+                    filler_shift90k = (
+                        await _v789s25w57_exact_bumper_base_shift90k(
+                            child_url,
+                            exact_bumper_segment,
+                            exact_bumper_slot,
+                        )
+                    )
+
+                    logger.warning(
+                        (
+                            "V789S25W57_EXACT_BUMPER_CLOCK_APPLIED "
+                            "key=%s kind=%s seq=%s slot=%s "
+                            "base_shift90k=%s base_shift=%.6f"
+                        ),
+                        safe_log_key,
+                        _v789n4_media_kind(
+                            child_url
+                        ),
+                        int(
+                            exact_bumper_segment.get(
+                                "seq"
+                            )
+                            or 0
+                        ),
+                        int(
+                            exact_bumper_slot
+                        ),
+                        int(
+                            filler_shift90k
+                        ),
+                        (
+                            float(
+                                filler_shift90k
+                            )
+                            / float(
+                                _V789S25S_CLOCK_HZ
+                            )
+                        ),
+                    )
+
+                except Exception as exc:
+                    logger.warning(
+                        (
+                            "V789S25W57_EXACT_BUMPER_CLOCK_FAIL_OPEN "
+                            "key=%s kind=%s type=%s"
+                        ),
+                        safe_log_key,
+                        _v789n4_media_kind(
+                            child_url
+                        ),
+                        type(exc).__name__,
+                    )
+
+                    # Return the N1-normalized upstream Pluto playlist rather
+                    # than manufacture replacement media on an unknown clock.
+                    return text
+
+            break_base_disc = (
+                master_break_disc
+            )
+
+            if (
+                break_base_disc is None
+                and first_bumper_index is not None
+            ):
+                try:
+                    break_base_disc = max(
+                        0,
+                        int(
+                            segments[
+                                int(first_bumper_index)
+                            ].get(
+                                "up_disc"
+                            )
+                            or 0
+                        ),
+                    )
+                except Exception:
+                    break_base_disc = None
+
+            await redis_client.set(
+                break_key,
+                json.dumps(
+                    {
+                        "base_pdt": (
+                            break_base_pdt
+                        ),
+                        "filler_shift90k": (
+                            filler_shift90k
+                        ),
+                        "base_disc": (
+                            break_base_disc
+                        ),
+                        "updated_at": (
+                            float(time.time())
+                        ),
+                    },
+                    separators=(",", ":"),
+                ),
+                ex=_V789N4_BREAK_TTL_SECONDS,
+            )
+
+            # V789S25W43_MASTER_DISC_CANONICAL_SEED
+            #
+            # Keep the master-scoped break discontinuity available to the
+            # established-rendition reconciliation below even when THIS child
+            # is the rendition that created the master break state.
+            if break_base_disc is not None:
+                master_break_disc = max(
+                    0,
+                    int(break_base_disc),
+                )
+
+        # V789S25W61_CLEAN_OVERLAP_PDT_REANCHOR
+        #
+        # Preserve the presentation-time identity of exact overlapping clean
+        # media before W51 decides whether any leading time needs filler.
+        w61_pdt_identity = None
+
+        if (
+            not has_bumper
+            and isinstance(previous, dict)
+        ):
+            w61_pdt_identity = (
+                _v789s25w61_reanchor_clean_overlap_pdt(
+                    segments,
+                    previous,
+                    child_url,
+                )
+            )
+
+            if (
+                isinstance(w61_pdt_identity, dict)
+                and abs(
+                    float(
+                        w61_pdt_identity.get(
+                            "offset"
+                        )
+                        or 0.0
+                    )
+                )
+                > 0.001
+            ):
+                logger.warning(
+                    (
+                        "V789S25W61_CLEAN_OVERLAP_PDT_REANCHOR "
+                        "key=%s kind=%s matches=%s offset=%.6f "
+                        "first_raw=%s first_published=%s"
+                    ),
+                    safe_log_key,
+                    _v789n4_media_kind(
+                        child_url
+                    ),
+                    int(
+                        w61_pdt_identity.get(
+                            "matches"
+                        )
+                        or 0
+                    ),
+                    float(
+                        w61_pdt_identity.get(
+                            "offset"
+                        )
+                        or 0.0
+                    ),
+                    (
+                        "%.3f"
+                        % float(
+                            w61_pdt_identity.get(
+                                "first_raw_pdt"
+                            )
+                        )
+                        if w61_pdt_identity.get(
+                            "first_raw_pdt"
+                        )
+                        is not None
+                        else "-"
+                    ),
+                    (
+                        "%.3f"
+                        % float(
+                            w61_pdt_identity.get(
+                                "first_published_pdt"
+                            )
+                        )
+                        if w61_pdt_identity.get(
+                            "first_published_pdt"
+                        )
+                        is not None
+                        else "-"
+                    ),
+                )
+
+        # V789S25W64_MASTER_CLEAN_PDT_ADOPT_APPLY
+        #
+        # Local exact-overlap evidence is authoritative. Only a CLEAN sibling
+        # that lacks local overlap proof may inherit the master-scoped offset.
+        w64_master_pdt_identity = None
+
+        if (
+            not has_bumper
+            and w61_pdt_identity is None
+        ):
+            w64_master_pdt_identity = (
+                await _v789s25w64_adopt_master_clean_pdt(
+                    redis_client,
+                    master_identity,
+                    segments,
+                    safe_log_key,
+                    child_url,
+                )
+            )
+
+        current_first_pdt = (
+            float(segments[0]["pdt"])
+            if segments[0].get("pdt") is not None
+            else None
+        )
+
+        # V789S25W51_MASTER_FILLER_HORIZON_BRIDGE
+        #
+        # A clean Pluto window may begin before filler that we already
+        # published for this same master has finished. Bridge ONLY those
+        # leading overlapping segments. Do not turn the entire clean window
+        # into filler: later segments at/after the horizon remain real program.
+        w51_horizon = None
+        w51_bridged_sequences = []
+
+        if (
+            not has_bumper
+            and break_base_pdt is not None
+            and current_first_pdt is not None
+        ):
+            w51_horizon = (
+                await _v789s25w51_get_horizon(
+                    redis_client,
+                    master_identity,
+                    break_base_pdt,
+                )
+            )
+
+            if (
+                w51_horizon is not None
+                and float(current_first_pdt)
+                < float(w51_horizon) - 0.001
+            ):
+                for index, item in enumerate(segments):
+                    item_pdt = item.get("pdt")
+
+                    if item_pdt is None:
+                        break
+
+                    if (
+                        float(item_pdt)
+                        >= float(w51_horizon) - 0.001
+                    ):
+                        break
+
+                    # V789S25W61_HORIZON_PROTECTED_OVERLAP
+                    # An exact media overlap already published as clean
+                    # program cannot be rewritten as filler merely because
+                    # the master horizon is a few milliseconds later.
+                    if bool(
+                        item.get(
+                            "_v789s25w61_overlap_identity"
+                        )
+                    ):
+                        logger.warning(
+                            (
+                                "V789S25W61_HORIZON_PROTECTED_OVERLAP "
+                                "key=%s kind=%s seq=%s pdt=%.3f "
+                                "horizon=%.3f"
+                            ),
+                            safe_log_key,
+                            _v789n4_media_kind(
+                                child_url
+                            ),
+                            int(item["seq"]),
+                            float(item_pdt),
+                            float(w51_horizon),
+                        )
+                        break
+
+                    item["bumper"] = True
+                    item["_v789s25w51_horizon_bridge"] = True
+
+                    w51_bridged_sequences.append(
+                        int(item["seq"])
+                    )
+
+                    if first_bumper_index is None:
+                        first_bumper_index = int(index)
+                        first_bumper_seq = int(
+                            item["seq"]
+                        )
+                        first_bumper_pdt = float(
+                            item_pdt
+                        )
+
+                    last_bumper_index = int(index)
+
+                if w51_bridged_sequences:
+                    has_bumper = True
+
+                    first_program_pdt = None
+
+                    next_index = len(
+                        w51_bridged_sequences
+                    )
+
+                    if next_index < len(segments):
+                        raw_program_pdt = segments[
+                            next_index
+                        ].get("pdt")
+
+                        if raw_program_pdt is not None:
+                            first_program_pdt = float(
+                                raw_program_pdt
+                            )
+
+                    logger.warning(
+                        (
+                            "V789S25W51_MASTER_HORIZON_BRIDGE "
+                            "key=%s kind=%s base=%.3f "
+                            "first_pdt=%.3f horizon=%.3f "
+                            "bridged=%s first_program=%s"
+                        ),
+                        safe_log_key,
+                        _v789n4_media_kind(
+                            child_url
+                        ),
+                        float(break_base_pdt),
+                        float(current_first_pdt),
+                        float(w51_horizon),
+                        ",".join(
+                            str(value)
+                            for value in w51_bridged_sequences
+                        ),
+                        (
+                            "%.3f" % float(first_program_pdt)
+                            if first_program_pdt is not None
+                            else "-"
+                        ),
+                    )
+
+        # V789S25V0_STICKY_EXIT_IDENTITY_GUARD
+        #
+        # Preserve any overlapping logical sequence that was
+        # already emitted as filler. This executes BEFORE the
+        # break-release decision so an overlapping filler
+        # identity cannot be converted back into program.
+        sticky_filler_sequences = (
+            _v789s25v0_apply_sticky_filler_identity(
+                segments,
+                previous,
+                break_base_pdt,
+                break_base_seq,
+            )
+        )
+
+        if sticky_filler_sequences:
+            has_bumper = True
+
+            logger.warning(
+                (
+                    "V789S25V0_STICKY_FILLER_IDENTITY "
+                    "key=%s kind=%s count=%s seqs=%s"
+                ),
+                safe_log_key,
+                _v789n4_media_kind(
+                    child_url
+                ),
+                len(
+                    sticky_filler_sequences
+                ),
+                ",".join(
+                    str(value)
+                    for value
+                    in sticky_filler_sequences
+                ),
+            )
+
+        # V789S25G_TRANSITION_BRIDGE
+        #
+        # Pluto can temporarily return a stale no-bumper or
+        # partial-bumper window after this child rendition has
+        # already issued filler sequence numbers.
+        #
+        # If such a window would reuse one of those sequence
+        # numbers as upstream media, retain the child-specific
+        # break clock and bridge directly onto filler.
+        bridge_break_window = False
+        bridge_first_slot = None
+
+        if (
+            previous_break_base_pdt is not None
+            and previous_break_base_seq is not None
+            and break_base_pdt is not None
+            and break_base_seq is not None
+            and abs(
+                float(previous_break_base_pdt)
+                - float(break_base_pdt)
+            )
+            <= 0.001
+            and current_first_pdt is not None
+            and current_first_pdt
+            < float(break_base_pdt) - 0.001
+        ):
+            conflict_seq = None
+
+            for item in segments:
+                if (
+                    not bool(item.get("bumper"))
+                    and int(item["seq"])
+                    >= int(break_base_seq)
+                ):
+                    conflict_seq = int(
+                        item["seq"]
+                    )
+                    break
+
+            if conflict_seq is not None:
+                bridge_first_slot = max(
+                    0,
+                    int(conflict_seq)
+                    - int(break_base_seq),
+                )
+
+                bridge_break_window = True
+
+        # Release a retained break only when there is no bumper,
+        # there is no sequence collision to bridge, and the live
+        # window's first PDT has actually reached/passed the
+        # established break boundary.
+        #
+        # V789S25O additionally RETIRES that break instead of
+        # forgetting it. This allows the pre-N1 guard to reject
+        # stale Pluto bumper windows that fall behind programming
+        # already accepted by this child rendition.
+        released_break_base_pdt = None
+
+        if (
+            not has_bumper
+            and not bridge_break_window
+            and break_base_pdt is not None
+            and current_first_pdt is not None
+            and current_first_pdt
+            >= float(break_base_pdt) - 0.001
+        ):
+            released_break_base_pdt = float(
+                break_base_pdt
+            )
+
+            # V789S25U0_EXIT_PROBE_SCHEDULE
+            #
+            # Original/URI-less audio is in the video variant,
+            # so one video-child probe captures both the in-band
+            # AAC clock and video clock while minimizing load.
+            if (
+                _v789n4_media_kind(
+                    child_url
+                )
+                == "video"
+            ):
+                _v789s25u0_schedule_exit_probe(
+                    child_url,
+                    segments[0],
+                    previous,
+                    int(
+                        segments[0][
+                            "seq"
+                        ]
+                    ),
+                    break_base_seq,
+                    filler_shift90k,
+                    safe_log_key,
+                )
+
+            break_base_pdt = None
+            break_base_seq = None
+            filler_shift90k = None
+
+        (
+            retired_break_base_pdt,
+            retired_program_end_pdt,
+        ) = _v789s25o_advance_retirement(
+            retired_break_base_pdt,
+            retired_program_end_pdt,
+            released_break_base_pdt,
+            segments,
+            has_bumper,
+        )
+
+        if released_break_base_pdt is not None:
+            logger.warning(
+                (
+                    "V789S25O_PLUTO_BREAK_RETIRED "
+                    "key=%s kind=%s "
+                    "base=%s clean_end=%s"
+                ),
+                safe_log_key,
+                _v789n4_media_kind(
+                    child_url
+                ),
+                "%.3f"
+                % float(
+                    released_break_base_pdt
+                ),
+                (
+                    "%.3f"
+                    % float(
+                        retired_program_end_pdt
+                    )
+                    if retired_program_end_pdt
+                    is not None
+                    else "-"
+                ),
+            )
+
+        full_break_window = False
+        full_break_first_slot = None
+
+        if bridge_break_window:
+            full_break_first_slot = int(
+                bridge_first_slot
+                or 0
+            )
+
+            full_break_window = True
+
+        elif (
+            has_bumper
+            and break_base_pdt is not None
+            and break_base_seq is not None
+            and last_bumper_index is not None
+            and int(last_bumper_index)
+            == len(segments) - 1
+        ):
+            all_inside_break = True
+
+            for item in segments:
+                if item.get("pdt") is None:
+                    all_inside_break = False
+                    break
+
+                if (
+                    float(item["pdt"])
+                    < float(break_base_pdt)
+                    - 0.001
+                ):
+                    all_inside_break = False
+                    break
+
+            if all_inside_break:
+                full_break_first_slot = int(
+                    max(
+                        0.0,
+                        float(segments[0]["pdt"])
+                        - float(break_base_pdt),
+                    )
+                    // _V789N4_FILLER_SEGMENT_SECONDS
+                )
+
+                # V789S25W32_FULL_BREAK_OVERLAP_SLOT_CONTINUITY
+                #
+                # During a full break, Pluto PROGRAM-DATE-TIME can jump
+                # forward by ~7.4s while N1 advances the logical first
+                # sequence by only one. Recomputing the filler slot from
+                # absolute PDT in that case can skip one 5s filler segment,
+                # causing the same logical overlapping sequence to change
+                # filler identity between successive playlists.
+                #
+                # If this full-break window overlaps an already-published
+                # logical first sequence from the same active break, reuse
+                # that sequence's previously published filler slot. This
+                # preserves the HLS logical-sequence -> filler identity
+                # mapping while retaining the PDT-derived slot as the
+                # fail-closed fallback when no overlap exists.
+                overlap_slot = None
+
+                if (
+                    isinstance(previous, dict)
+                    and previous_break_base_pdt is not None
+                    and abs(
+                        float(previous_break_base_pdt)
+                        - float(break_base_pdt)
+                    )
+                    <= 0.001
+                ):
+                    previous_slot_segments = (
+                        previous.get("segments")
+                    )
+
+                    if isinstance(
+                        previous_slot_segments,
+                        list,
+                    ):
+                        current_first_seq = int(
+                            segments[0]["seq"]
+                        )
+
+                        for previous_item in (
+                            previous_slot_segments
+                        ):
+                            if not isinstance(
+                                previous_item,
+                                dict,
+                            ):
+                                continue
+
+                            try:
+                                previous_seq = int(
+                                    previous_item.get(
+                                        "seq"
+                                    )
+                                )
+                            except Exception:
+                                continue
+
+                            if (
+                                previous_seq
+                                != current_first_seq
+                            ):
+                                continue
+
+                            if not bool(
+                                previous_item.get(
+                                    "bumper"
+                                )
+                            ):
+                                continue
+
+                            raw_previous_slot = (
+                                previous_item.get(
+                                    "slot"
+                                )
+                            )
+
+                            if raw_previous_slot is None:
+                                continue
+
+                            try:
+                                overlap_slot = max(
+                                    0,
+                                    int(
+                                        raw_previous_slot
+                                    ),
+                                )
+                            except Exception:
+                                overlap_slot = None
+
+                            break
+
+                if (
+                    overlap_slot is not None
+                    and int(overlap_slot)
+                    != int(full_break_first_slot)
+                ):
+                    logger.warning(
+                        (
+                            "V789S25W32_FULL_BREAK_SLOT_ALIGN "
+                            "key=%s kind=%s seq=%s "
+                            "pdt_slot=%s overlap_slot=%s "
+                            "first_pdt=%.3f base=%.3f"
+                        ),
+                        safe_log_key,
+                        _v789n4_media_kind(
+                            child_url
+                        ),
+                        int(
+                            segments[0]["seq"]
+                        ),
+                        int(full_break_first_slot),
+                        int(overlap_slot),
+                        float(
+                            segments[0]["pdt"]
+                        ),
+                        float(break_base_pdt),
+                    )
+
+                    full_break_first_slot = int(
+                        overlap_slot
+                    )
+
+                full_break_window = True
+
+        for index, item in enumerate(segments):
+            item["cycle"] = 0
+            item["filler_index"] = 0
+            item["slot"] = None
+
+            if bool(
+                item.get(
+                    "_v789s25v0_sticky"
+                )
+            ):
+                slot = int(
+                    item.get(
+                        "_v789s25v0_slot"
+                    )
+                )
+
+                item[
+                    "slot"
+                ] = int(
+                    slot
+                )
+
+                item[
+                    "cycle"
+                ] = int(
+                    item.get(
+                        "_v789s25v0_cycle"
+                    )
+                    or 0
+                )
+
+                item[
+                    "filler_index"
+                ] = int(
+                    item.get(
+                        "_v789s25v0_filler_index"
+                    )
+                    or 0
+                )
+
+                continue
+
+            if full_break_window:
+                slot = (
+                    int(full_break_first_slot)
+                    + int(index)
+                )
+
+                item["bumper"] = True
+                item["slot"] = int(slot)
+
+                # V789S25W18_FULL_BREAK_SEQUENCE_IDENTITY
+                #
+                # N1 owns the published HLS media-sequence timeline.
+                # The filler slot/cycle selects wall-clock filler media,
+                # but it must not rewrite the logical sequence number to
+                # break_base_seq + slot.  Doing so can publish a full-break
+                # window ahead of N1 and then roll MEDIA-SEQUENCE backward
+                # when Pluto returns a partial/clean program window.
+                #
+                # Keep item["seq"] exactly as normalized by N1.
+
+            else:
+                if not bool(item.get("bumper")):
+                    continue
+
+                slot = None
+
+                if (
+                    break_base_pdt is not None
+                    and item.get("pdt") is not None
+                ):
+                    delta = max(
+                        0.0,
+                        float(item["pdt"])
+                        - float(break_base_pdt),
+                    )
+
+                    slot = int(
+                        delta
+                        // _V789N4_FILLER_SEGMENT_SECONDS
+                    )
+
+                if slot is None:
+                    slot = max(
+                        0,
+                        int(item["seq"])
+                        - int(
+                            first_bumper_seq
+                            if first_bumper_seq
+                            is not None
+                            else item["seq"]
+                        ),
+                    )
+
+                item["slot"] = int(slot)
+
+            if not bool(item.get("bumper")):
+                continue
+
+            slot = int(
+                item.get("slot")
+                or 0
+            )
+
+            item["cycle"] = int(
+                slot
+                // _V789N4_FILLER_SEGMENT_COUNT
+            )
+
+            item["filler_index"] = int(
+                slot
+                % _V789N4_FILLER_SEGMENT_COUNT
+            )
+
+        if bridge_break_window:
+            logger.warning(
+                (
+                    "V789S25G_PLUTO_BREAK_BRIDGE "
+                    "key=%s kind=%s "
+                    "base_seq=%s first_seq=%s "
+                    "slot=%s segments=%s"
+                ),
+                safe_log_key,
+                _v789n4_media_kind(
+                    child_url
+                ),
+                int(break_base_seq),
+                int(segments[0]["seq"]),
+                int(
+                    full_break_first_slot
+                    or 0
+                ),
+                len(segments),
+            )
+
+        if full_break_window:
+            logger.warning(
+                (
+                    "V789S25C_PLUTO_FULL_BREAK "
+                    "key=%s kind=%s "
+                    "base_seq=%s first_seq=%s "
+                    "slot=%s segments=%s"
+                ),
+                safe_log_key,
+                _v789n4_media_kind(
+                    child_url
+                ),
+                int(break_base_seq),
+                int(segments[0]["seq"]),
+                int(full_break_first_slot),
+                len(segments),
+            )
+
+        previous_segments = []
+
+        if isinstance(previous, dict):
+            candidate_segments = previous.get(
+                "segments"
+            )
+
+            if isinstance(
+                candidate_segments,
+                list,
+            ):
+                previous_segments = [
+                    item
+                    for item in candidate_segments
+                    if isinstance(item, dict)
+                ]
+
+        previous_by_seq = {
+            int(item.get("seq") or 0): item
+            for item in previous_segments
+        }
+
+        first = segments[0]
+        first_seq = int(first["seq"])
+
+        previous_same = previous_by_seq.get(
+            first_seq
+        )
+
+        if previous_same is not None:
+            first_disc = int(
+                previous_same.get("disc")
+                or 0
+            )
+
+            preserve_filler_disc = (
+                _v789s25v0r1_preserve_disc_identity(
+                    first,
+                    previous_same,
+                    full_break_window,
+                )
+            )
+
+            if (
+                not preserve_filler_disc
+                and (
+                    int(
+                        previous_same.get(
+                            "up_disc"
+                        )
+                        or 0
+                    )
+                    != int(
+                        first.get(
+                            "up_disc"
+                        )
+                        or 0
+                    )
+                    or _v789n4_local_transition(
+                        previous_same,
+                        first,
+                    )
+                )
+            ):
+                first_disc += max(
+                    1,
+                    max(
+                        0,
+                        int(first.get("up_disc") or 0)
+                        - int(previous_same.get("up_disc") or 0),
+                    ),
+                )
+
+        elif previous_segments:
+            previous_last = previous_segments[-1]
+
+            if first_seq > int(
+                previous_last.get("seq")
+                or -1
+            ):
+                first_disc = int(
+                    previous_last.get("disc")
+                    or 0
+                ) + _v789n4_boundary_count(
+                    previous_last,
+                    first,
+                )
+            else:
+                first_disc = int(
+                    first.get("up_disc")
+                    or 0
+                )
+        else:
+            if (
+                full_break_window
+                and adopted_master_break
+                and master_break_disc is not None
+            ):
+                # V789S25W28_MASTER_DISC_CYCLE_PROJECTION
+                #
+                # master_break_disc is the published discontinuity
+                # identity at break slot 0.  A sibling rendition can
+                # first appear after one or more complete filler cycles.
+                # Project the same deterministic local cycle boundaries
+                # that an established rendition has already accumulated.
+                master_disc_cycle_offset = int(
+                    max(
+                        0,
+                        int(
+                            full_break_first_slot
+                            or 0
+                        ),
+                    )
+                    // _V789N4_FILLER_SEGMENT_COUNT
+                )
+
+                first_disc = (
+                    int(master_break_disc)
+                    + int(master_disc_cycle_offset)
+                )
+
+                if (
+                    int(
+                        first.get(
+                            "up_disc"
+                        )
+                        or 0
+                    )
+                    != int(first_disc)
+                ):
+                    logger.warning(
+                        (
+                            "V789S25W28_MASTER_DISC_ALIGN "
+                            "key=%s kind=%s "
+                            "up_disc=%s base_disc=%s "
+                            "cycle_offset=%s aligned_disc=%s "
+                            "slot=%s"
+                        ),
+                        safe_log_key,
+                        _v789n4_media_kind(
+                            child_url
+                        ),
+                        int(
+                            first.get(
+                                "up_disc"
+                            )
+                            or 0
+                        ),
+                        int(master_break_disc),
+                        int(master_disc_cycle_offset),
+                        int(first_disc),
+                        int(
+                            full_break_first_slot
+                            or 0
+                        ),
+                    )
+            else:
+                first_disc = int(
+                    first.get("up_disc")
+                    or 0
+                )
+
+        # V789S25W43_MASTER_DISC_CONVERGENCE
+        #
+        # W37 proved that established audio/video siblings under the same
+        # Pluto master could retain different published discontinuity
+        # identities through one shared break.  Those divergent identities
+        # persisted after break retirement and immediately preceded Media3
+        # audio timestamp jumps of hundreds of seconds.
+        #
+        # Converge every full-break rendition onto ONE master-scoped
+        # discontinuity identity, including renditions with existing child
+        # state (the hole left by W28).
+        #
+        # Safety contracts:
+        #   1. NEVER move a child's published discontinuity backward.
+        #   2. NEVER rewrite the discontinuity identity of an overlapping
+        #      logical filler sequence already published by this child.
+        #   3. If an established child is already ahead of the master, raise
+        #      the master base; lower siblings catch up on their next NEW
+        #      logical sequence.
+        #   4. Preserve independent MEDIA-SEQUENCE timelines.
+        if (
+            full_break_window
+            and master_break_disc is not None
+        ):
+            w43_cycle_offset = int(
+                max(
+                    0,
+                    int(
+                        full_break_first_slot
+                        or 0
+                    ),
+                )
+                // _V789N4_FILLER_SEGMENT_COUNT
+            )
+
+            w43_master_projected_disc = (
+                int(master_break_disc)
+                + int(w43_cycle_offset)
+            )
+
+            w43_preserve_existing_first_disc = bool(
+                previous_same is not None
+                and _v789s25v0r1_preserve_disc_identity(
+                    first,
+                    previous_same,
+                    full_break_window,
+                )
+            )
+
+            # A child already above the current master must never be forced
+            # backward. Raise the shared master base instead.
+            if int(first_disc) > int(
+                w43_master_projected_disc
+            ):
+                w43_raised_base_disc = max(
+                    int(master_break_disc),
+                    int(first_disc)
+                    - int(w43_cycle_offset),
+                )
+
+                if w43_raised_base_disc > int(
+                    master_break_disc
+                ):
+                    logger.warning(
+                        (
+                            "V789S25W43_MASTER_DISC_RAISE "
+                            "key=%s kind=%s seq=%s "
+                            "local_disc=%s old_base_disc=%s "
+                            "cycle_offset=%s new_base_disc=%s slot=%s"
+                        ),
+                        safe_log_key,
+                        _v789n4_media_kind(
+                            child_url
+                        ),
+                        int(first_seq),
+                        int(first_disc),
+                        int(master_break_disc),
+                        int(w43_cycle_offset),
+                        int(w43_raised_base_disc),
+                        int(
+                            full_break_first_slot
+                            or 0
+                        ),
+                    )
+
+                    master_break_disc = int(
+                        w43_raised_base_disc
+                    )
+
+                    w43_master_projected_disc = (
+                        int(master_break_disc)
+                        + int(w43_cycle_offset)
+                    )
+
+                    # Publish the raised canonical base back to the existing
+                    # master break state. This changes only the logical
+                    # discontinuity identity; break PDT, filler clock, and
+                    # media sequence ownership remain unchanged.
+                    await redis_client.set(
+                        break_key,
+                        json.dumps(
+                            {
+                                "base_pdt": (
+                                    break_base_pdt
+                                ),
+                                "filler_shift90k": (
+                                    filler_shift90k
+                                ),
+                                "base_disc": (
+                                    int(master_break_disc)
+                                ),
+                                "updated_at": (
+                                    float(time.time())
+                                ),
+                            },
+                            separators=(",", ":"),
+                        ),
+                        ex=_V789N4_BREAK_TTL_SECONDS,
+                    )
+
+            # A lower child can catch up only on a NEW logical sequence.
+            # Overlap identity always wins for a sequence already published.
+            if (
+                not w43_preserve_existing_first_disc
+                and int(first_disc)
+                < int(w43_master_projected_disc)
+            ):
+                logger.warning(
+                    (
+                        "V789S25W43_MASTER_DISC_ALIGN "
+                        "key=%s kind=%s seq=%s "
+                        "local_disc=%s base_disc=%s "
+                        "cycle_offset=%s aligned_disc=%s slot=%s"
+                    ),
+                    safe_log_key,
+                    _v789n4_media_kind(
+                        child_url
+                    ),
+                    int(first_seq),
+                    int(first_disc),
+                    int(master_break_disc),
+                    int(w43_cycle_offset),
+                    int(w43_master_projected_disc),
+                    int(
+                        full_break_first_slot
+                        or 0
+                    ),
+                )
+
+                first_disc = int(
+                    w43_master_projected_disc
+                )
+
+        first["disc"] = max(
+            0,
+            int(first_disc),
+        )
+
+        for index in range(1, len(segments)):
+            previous_current = segments[
+                index - 1
+            ]
+            current = segments[index]
+
+            previous_existing = (
+                previous_by_seq.get(
+                    int(current["seq"])
+                )
+            )
+
+            preserve_filler_disc = (
+                _v789s25v0r1_preserve_disc_identity(
+                    current,
+                    previous_existing,
+                    full_break_window,
+                )
+            )
+
+            if preserve_filler_disc:
+                current["disc"] = int(
+                    previous_existing.get(
+                        "disc"
+                    )
+                    or 0
+                )
+
+            else:
+                current["disc"] = (
+                    int(previous_current["disc"])
+                    + _v789n4_boundary_count(
+                        previous_current,
+                        current,
+                    )
+                )
+
+        # V789S25W57_MASTER_N4_DISC_APPLY
+        await _v789s25w57_master_n4_discontinuity(
+            redis_client,
+            master_identity,
+            segments,
+            previous_by_seq,
+            safe_log_key,
+            child_url,
+        )
+
+        # V789S25W64_MASTER_CLEAN_PDT_PUBLISH_APPLY
+        #
+        # Publish only locally proven non-zero clean overlap identity, and do
+        # so after N4 convergence so a late sibling sees the completed master
+        # transition from this established rendition.
+        if (
+            isinstance(w61_pdt_identity, dict)
+            and abs(
+                float(
+                    w61_pdt_identity.get("offset")
+                    or 0.0
+                )
+            )
+            > 0.001
+        ):
+            await _v789s25w64_publish_master_clean_pdt(
+                redis_client,
+                master_identity,
+                w61_pdt_identity,
+                safe_log_key,
+                child_url,
+            )
+
+        # V789S25V0R2_CAPTURE_PUBLISHED_TIME_IDENTITY
+        #
+        # Persist what the CLIENT actually sees, not merely the
+        # raw upstream Pluto timing attached to the input URI.
+        for item in segments:
+            (
+                published_pdt,
+                published_duration,
+            ) = _v789s25v0r2_published_time_identity(
+                item,
+                full_break_window,
+                break_base_pdt,
+            )
+
+            item[
+                "_v789s25v0r2_published_pdt"
+            ] = published_pdt
+
+            item[
+                "_v789s25v0r2_published_duration"
+            ] = published_duration
+
+        # V789S25W107D1_TIMELINE_IDENTITY_DIAGNOSTIC
+        #
+        # LOGGING ONLY.
+        #
+        # Correlate the exact media identity, discontinuity generation,
+        # raw/published PDT identity, filler state, and the same logical
+        # sequence from the immediately preceding playlist refresh.
+        #
+        # This block performs no playlist mutation, no Redis write,
+        # no network request, and no playback action.
+
+        w107d1_pdt_offset = 0.0
+        w107d1_pdt_source = "none"
+
+        if isinstance(
+            w61_pdt_identity,
+            dict,
+        ):
+            try:
+                w107d1_pdt_offset = float(
+                    w61_pdt_identity.get(
+                        "offset"
+                    )
+                    or 0.0
+                )
+
+                w107d1_pdt_source = "w61"
+
+            except Exception:
+                w107d1_pdt_offset = 0.0
+
+        elif isinstance(
+            w64_master_pdt_identity,
+            dict,
+        ):
+            try:
+                w107d1_pdt_offset = float(
+                    w64_master_pdt_identity.get(
+                        "offset"
+                    )
+                    or 0.0
+                )
+
+                w107d1_pdt_source = "w64"
+
+            except Exception:
+                w107d1_pdt_offset = 0.0
+
+        w107d1_interesting = bool(
+            has_bumper
+            or full_break_window
+            or abs(
+                float(
+                    w107d1_pdt_offset
+                )
+            ) > 0.001
+            or bool(
+                w51_bridged_sequences
+            )
+        )
+
+        for w107d1_item in segments:
+            try:
+                w107d1_seq = int(
+                    w107d1_item.get(
+                        "seq"
+                    )
+                )
+            except Exception:
+                continue
+
+            w107d1_previous = (
+                previous_by_seq.get(
+                    w107d1_seq
+                )
+            )
+
+            if not isinstance(
+                w107d1_previous,
+                dict,
+            ):
+                continue
+
+            w107d1_current_id = str(
+                w107d1_item.get(
+                    "id"
+                )
+                or ""
+            )
+
+            w107d1_previous_id = str(
+                w107d1_previous.get(
+                    "id"
+                )
+                or ""
+            )
+
+            try:
+                w107d1_current_disc = int(
+                    w107d1_item.get(
+                        "disc"
+                    )
+                    or 0
+                )
+
+                w107d1_previous_disc = int(
+                    w107d1_previous.get(
+                        "disc"
+                    )
+                    or 0
+                )
+            except Exception:
+                w107d1_current_disc = 0
+                w107d1_previous_disc = 0
+
+            w107d1_current_pub = (
+                _v789s25o_float_or_none(
+                    w107d1_item.get(
+                        "_v789s25v0r2_published_pdt"
+                    )
+                )
+            )
+
+            w107d1_previous_pub = (
+                _v789s25o_float_or_none(
+                    w107d1_previous.get(
+                        "_v789s25v0r2_published_pdt"
+                    )
+                )
+            )
+
+            if w107d1_previous_pub is None:
+                w107d1_previous_pub = (
+                    _v789s25o_float_or_none(
+                        w107d1_previous.get(
+                            "pdt"
+                        )
+                    )
+                )
+
+            if (
+                w107d1_current_id
+                != w107d1_previous_id
+                or int(
+                    w107d1_current_disc
+                )
+                != int(
+                    w107d1_previous_disc
+                )
+                or bool(
+                    w107d1_item.get(
+                        "bumper"
+                    )
+                )
+                != bool(
+                    w107d1_previous.get(
+                        "bumper"
+                    )
+                )
+                or (
+                    w107d1_current_pub
+                    is not None
+                    and w107d1_previous_pub
+                    is not None
+                    and abs(
+                        float(
+                            w107d1_current_pub
+                        )
+                        - float(
+                            w107d1_previous_pub
+                        )
+                    )
+                    > 0.001
+                )
+            ):
+                w107d1_interesting = True
+                break
+
+        if w107d1_interesting:
+            logger.warning(
+                (
+                    "V789S25W107D1_TIMELINE_WINDOW "
+                    "master=%s key=%s kind=%s "
+                    "count=%s first_seq=%s last_seq=%s "
+                    "has_bumper=%s full_break=%s "
+                    "pdt_source=%s pdt_offset=%.6f "
+                    "break_base_pdt=%s filler_shift90k=%s "
+                    "horizon=%s bridged=%s"
+                ),
+                str(
+                    master_identity
+                )[:16],
+                safe_log_key,
+                _v789n4_media_kind(
+                    child_url
+                ),
+                len(
+                    segments
+                ),
+                (
+                    int(
+                        segments[0].get(
+                            "seq"
+                        )
+                    )
+                    if segments
+                    else -1
+                ),
+                (
+                    int(
+                        segments[-1].get(
+                            "seq"
+                        )
+                    )
+                    if segments
+                    else -1
+                ),
+                str(
+                    bool(
+                        has_bumper
+                    )
+                ).lower(),
+                str(
+                    bool(
+                        full_break_window
+                    )
+                ).lower(),
+                w107d1_pdt_source,
+                float(
+                    w107d1_pdt_offset
+                ),
+                (
+                    "%.3f"
+                    % float(
+                        break_base_pdt
+                    )
+                    if break_base_pdt
+                    is not None
+                    else "-"
+                ),
+                (
+                    int(
+                        filler_shift90k
+                    )
+                    if filler_shift90k
+                    is not None
+                    else -1
+                ),
+                (
+                    "%.3f"
+                    % float(
+                        w51_horizon
+                    )
+                    if w51_horizon
+                    is not None
+                    else "-"
+                ),
+                ",".join(
+                    str(
+                        int(x)
+                    )
+                    for x in (
+                        w51_bridged_sequences
+                        or []
+                    )
+                )
+                or "-",
+            )
+
+            for w107d1_item in segments:
+                try:
+                    w107d1_seq = int(
+                        w107d1_item.get(
+                            "seq"
+                        )
+                    )
+                except Exception:
+                    continue
+
+                w107d1_previous = (
+                    previous_by_seq.get(
+                        w107d1_seq
+                    )
+                )
+
+                if not isinstance(
+                    w107d1_previous,
+                    dict,
+                ):
+                    w107d1_previous = {}
+
+                w107d1_current_id = str(
+                    w107d1_item.get(
+                        "id"
+                    )
+                    or ""
+                )
+
+                w107d1_previous_id = str(
+                    w107d1_previous.get(
+                        "id"
+                    )
+                    or ""
+                )
+
+                w107d1_pdt = (
+                    _v789s25o_float_or_none(
+                        w107d1_item.get(
+                            "pdt"
+                        )
+                    )
+                )
+
+                w107d1_pub_pdt = (
+                    _v789s25o_float_or_none(
+                        w107d1_item.get(
+                            "_v789s25v0r2_published_pdt"
+                        )
+                    )
+                )
+
+                w107d1_prev_pub_pdt = (
+                    _v789s25o_float_or_none(
+                        w107d1_previous.get(
+                            "_v789s25v0r2_published_pdt"
+                        )
+                    )
+                )
+
+                if w107d1_prev_pub_pdt is None:
+                    w107d1_prev_pub_pdt = (
+                        _v789s25o_float_or_none(
+                            w107d1_previous.get(
+                                "pdt"
+                            )
+                        )
+                    )
+
+                w107d1_raw_pdt = (
+                    w107d1_pdt
+                )
+
+                if (
+                    w107d1_pdt
+                    is not None
+                    and bool(
+                        w107d1_item.get(
+                            "_v789s25w61_pdt_reanchored"
+                        )
+                    )
+                ):
+                    w107d1_raw_pdt = (
+                        float(
+                            w107d1_pdt
+                        )
+                        - float(
+                            w107d1_pdt_offset
+                        )
+                    )
+
+                logger.warning(
+                    (
+                        "V789S25W107D1_TIMELINE_SEG "
+                        "master=%s key=%s kind=%s "
+                        "seq=%s "
+                        "id=%s prev_id=%s same_id=%s "
+                        "disc=%s prev_disc=%s "
+                        "up_disc=%s "
+                        "raw_pdt=%s pdt=%s pub_pdt=%s prev_pub_pdt=%s "
+                        "bumper=%s prev_bumper=%s "
+                        "cycle=%s filler_index=%s "
+                        "sticky=%s horizon_bridge=%s "
+                        "reanchored=%s master_adopted=%s"
+                    ),
+                    str(
+                        master_identity
+                    )[:16],
+                    safe_log_key,
+                    _v789n4_media_kind(
+                        child_url
+                    ),
+                    w107d1_seq,
+                    (
+                        w107d1_current_id[:16]
+                        or "-"
+                    ),
+                    (
+                        w107d1_previous_id[:16]
+                        or "-"
+                    ),
+                    str(
+                        bool(
+                            w107d1_current_id
+                            and w107d1_previous_id
+                            and w107d1_current_id
+                            == w107d1_previous_id
+                        )
+                    ).lower(),
+                    int(
+                        w107d1_item.get(
+                            "disc"
+                        )
+                        or 0
+                    ),
+                    (
+                        int(
+                            w107d1_previous.get(
+                                "disc"
+                            )
+                            or 0
+                        )
+                        if w107d1_previous
+                        else -1
+                    ),
+                    int(
+                        w107d1_item.get(
+                            "up_disc"
+                        )
+                        or 0
+                    ),
+                    (
+                        "%.3f"
+                        % float(
+                            w107d1_raw_pdt
+                        )
+                        if w107d1_raw_pdt
+                        is not None
+                        else "-"
+                    ),
+                    (
+                        "%.3f"
+                        % float(
+                            w107d1_pdt
+                        )
+                        if w107d1_pdt
+                        is not None
+                        else "-"
+                    ),
+                    (
+                        "%.3f"
+                        % float(
+                            w107d1_pub_pdt
+                        )
+                        if w107d1_pub_pdt
+                        is not None
+                        else "-"
+                    ),
+                    (
+                        "%.3f"
+                        % float(
+                            w107d1_prev_pub_pdt
+                        )
+                        if w107d1_prev_pub_pdt
+                        is not None
+                        else "-"
+                    ),
+                    str(
+                        bool(
+                            w107d1_item.get(
+                                "bumper"
+                            )
+                        )
+                    ).lower(),
+                    str(
+                        bool(
+                            w107d1_previous.get(
+                                "bumper"
+                            )
+                        )
+                    ).lower(),
+                    int(
+                        w107d1_item.get(
+                            "cycle"
+                        )
+                        or 0
+                    ),
+                    (
+                        int(
+                            w107d1_item.get(
+                                "filler_index"
+                            )
+                        )
+                        if w107d1_item.get(
+                            "filler_index"
+                        )
+                        is not None
+                        else -1
+                    ),
+                    str(
+                        bool(
+                            w107d1_item.get(
+                                "_v789s25v0_sticky"
+                            )
+                        )
+                    ).lower(),
+                    str(
+                        bool(
+                            w107d1_item.get(
+                                "_v789s25w51_horizon_bridge"
+                            )
+                        )
+                    ).lower(),
+                    str(
+                        bool(
+                            w107d1_item.get(
+                                "_v789s25w61_pdt_reanchored"
+                            )
+                        )
+                    ).lower(),
+                    str(
+                        bool(
+                            w107d1_item.get(
+                                "_v789s25w64_master_pdt_adopted"
+                            )
+                        )
+                    ).lower(),
+                )
+
+        # V789S25W51_MASTER_FILLER_HORIZON_PUBLISH
+        #
+        # Record the furthest end-time of filler actually present in this
+        # returned playlist. Because the key is master + break-instance scoped,
+        # audio/video contribute to one monotonic release floor.
+        if break_base_pdt is not None:
+            w51_published_until = None
+
+            for item in segments:
+                if not bool(
+                    item.get(
+                        "bumper"
+                    )
+                ):
+                    continue
+
+                # V789S25W54_NONPROPAGATING_HORIZON
+                #
+                # A segment synthesized by the horizon bridge exists only to
+                # cover presentation time that was ALREADY published as filler.
+                # It must never extend the horizon again, or the sliding HLS
+                # overlap will make the horizon chase the live window forever.
+                if bool(
+                    item.get(
+                        "_v789s25w51_horizon_bridge"
+                    )
+                ):
+                    continue
+
+                published_pdt = item.get(
+                    "_v789s25v0r2_published_pdt"
+                )
+
+                published_duration = item.get(
+                    "_v789s25v0r2_published_duration"
+                )
+
+                if published_pdt is None:
+                    continue
+
+                try:
+                    filler_end = (
+                        float(published_pdt)
+                        + float(
+                            published_duration
+                            if published_duration is not None
+                            else _V789N4_FILLER_SEGMENT_SECONDS
+                        )
+                    )
+                except Exception:
+                    continue
+
+                if (
+                    w51_published_until is None
+                    or float(filler_end)
+                    > float(w51_published_until)
+                ):
+                    w51_published_until = float(
+                        filler_end
+                    )
+
+            if w51_published_until is not None:
+                w51_master_horizon = (
+                    await _v789s25w51_raise_horizon(
+                        redis_client,
+                        master_identity,
+                        break_base_pdt,
+                        w51_published_until,
+                    )
+                )
+
+                logger.warning(
+                    (
+                        "V789S25W51_MASTER_HORIZON_PUBLISH "
+                        "key=%s kind=%s base=%.3f "
+                        "local_until=%.3f master_until=%s"
+                    ),
+                    safe_log_key,
+                    _v789n4_media_kind(
+                        child_url
+                    ),
+                    float(break_base_pdt),
+                    float(w51_published_until),
+                    (
+                        "%.3f" % float(w51_master_horizon)
+                        if w51_master_horizon is not None
+                        else "-"
+                    ),
+                )
+
+        new_state_segments = []
+
+        for item in segments:
+            new_state_segments.append(
+                {
+                    "seq": int(item["seq"]),
+                    "disc": int(item["disc"]),
+                    "up_disc": int(
+                        item.get("up_disc")
+                        or 0
+                    ),
+                    "bumper": bool(
+                        item.get("bumper")
+                    ),
+                    "cycle": int(
+                        item.get("cycle")
+                        or 0
+                    ),
+                    "slot": (
+                        int(
+                            item.get("slot")
+                        )
+                        if item.get("slot")
+                        is not None
+                        else None
+                    ),
+                    "filler_index": (
+                        int(
+                            item.get(
+                                "filler_index"
+                            )
+                            or 0
+                        )
+                        if bool(
+                            item.get(
+                                "bumper"
+                            )
+                        )
+                        else None
+                    ),
+                    # V789S25W61_PERSIST_ALL_PUBLISHED_TIME_IDENTITY
+                    "segment_id": (
+                        _v789s25w61_segment_identity(
+                            child_url,
+                            item,
+                        )
+                    ),
+                    "published_pdt": (
+                        float(
+                            item.get(
+                                "_v789s25v0r2_published_pdt"
+                            )
+                        )
+                        if item.get(
+                            "_v789s25v0r2_published_pdt"
+                        )
+                        is not None
+                        else None
+                    ),
+                    "published_duration": (
+                        float(
+                            item.get(
+                                "_v789s25v0r2_published_duration"
+                            )
+                        )
+                        if item.get(
+                            "_v789s25v0r2_published_duration"
+                        )
+                        is not None
+                        else None
+                    ),
+                }
+            )
+
+        await redis_client.set(
+            state_key,
+            json.dumps(
+                {
+                    "segments": (
+                        new_state_segments
+                    ),
+                    "break_base_pdt": (
+                        break_base_pdt
+                    ),
+                    "break_base_seq": (
+                        break_base_seq
+                    ),
+                    "filler_shift90k": (
+                        filler_shift90k
+                    ),
+                    "retired_break_base_pdt": (
+                        retired_break_base_pdt
+                    ),
+                    "retired_program_end_pdt": (
+                        retired_program_end_pdt
+                    ),
+                },
+                separators=(",", ":"),
+            ),
+            ex=_V789N4_STATE_TTL_SECONDS,
+        )
+
+        if full_break_window:
+            kind = _v789n4_media_kind(
+                child_url
+            )
+
+            first_slot = int(
+                full_break_first_slot
+                or 0
+            )
+
+            first_program_time = (
+                float(break_base_pdt)
+                + (
+                    float(first_slot)
+                    * _V789N4_FILLER_SEGMENT_SECONDS
+                )
+            )
+
+            first_program_iso = (
+                datetime.utcfromtimestamp(
+                    first_program_time
+                ).isoformat(
+                    timespec="milliseconds"
+                )
+                + "Z"
+            )
+
+            synthetic = [
+                "#EXTM3U",
+                "#EXT-X-VERSION:3",
+                (
+                    "#EXT-X-TARGETDURATION:"
+                    + str(
+                        int(
+                            _V789N4_FILLER_SEGMENT_SECONDS
+                        )
+                    )
+                ),
+                (
+                    "#EXT-X-MEDIA-SEQUENCE:"
+                    + str(
+                        int(
+                            segments[0]["seq"]
+                        )
+                    )
+                ),
+                (
+                    "#EXT-X-DISCONTINUITY-SEQUENCE:"
+                    + str(
+                        int(
+                            segments[0]["disc"]
+                        )
+                    )
+                ),
+                (
+                    "#EXT-X-PROGRAM-DATE-TIME:"
+                    + first_program_iso
+                ),
+                "#EXT-X-KEY:METHOD=NONE",
+            ]
+
+            for index, item in enumerate(
+                segments
+            ):
+                if index > 0:
+                    disc_delta = max(
+                        0,
+                        int(item["disc"])
+                        - int(
+                            segments[
+                                index - 1
+                            ]["disc"]
+                        ),
+                    )
+
+                    for _ in range(
+                        disc_delta
+                    ):
+                        synthetic.append(
+                            "#EXT-X-DISCONTINUITY"
+                        )
+
+                synthetic.append(
+                    "#EXTINF:5.000,"
+                )
+
+                synthetic.append(
+                    _v789n4_filler_url(
+                        kind,
+                        int(
+                            item.get(
+                                "filler_index"
+                            )
+                            or 0
+                        ),
+                        _v789s25s_cycle_shift90k(
+                            filler_shift90k,
+                            item.get(
+                                "cycle"
+                            )
+                            or 0,
+                        ),
+                    )
+                )
+
+            return (
+                "\n".join(
+                    synthetic
+                )
+                + "\n"
+            )
+
+        lines = parsed["lines"]
+        remove_indexes = set(
+            parsed[
+                "discontinuity_line_indexes"
+            ]
+        )
+        uri_replacements = {}
+        insert_before = {}
+
+        # V789S25V0_STICKY_TAG_IDENTITY
+        sticky_tag_replacements = {}
+        sticky_tag_insertions = {}
+
+        for index, item in enumerate(segments):
+            # V789S25W61_REWRITE_PUBLISHED_PDT
+            # The overlap reanchor must reach the HLS text the client sees,
+            # not only internal horizon calculations/state.
+            if bool(
+                item.get(
+                    "_v789s25w61_pdt_reanchored"
+                )
+            ):
+                block_start = int(
+                    item.get(
+                        "block_start"
+                    )
+                    or 0
+                )
+                uri_index = int(
+                    item["uri_index"]
+                )
+                pdt_index = None
+                duration_index = None
+
+                for candidate_index in range(
+                    block_start,
+                    uri_index,
+                ):
+                    candidate_line = str(
+                        lines[candidate_index]
+                        or ""
+                    ).strip()
+
+                    if candidate_line.startswith(
+                        "#EXT-X-PROGRAM-DATE-TIME:"
+                    ):
+                        pdt_index = int(
+                            candidate_index
+                        )
+
+                    if candidate_line.startswith(
+                        "#EXTINF:"
+                    ):
+                        duration_index = int(
+                            candidate_index
+                        )
+
+                published_pdt = item.get(
+                    "pdt"
+                )
+
+                if published_pdt is not None:
+                    published_iso = (
+                        datetime.utcfromtimestamp(
+                            float(published_pdt)
+                        ).isoformat(
+                            timespec="milliseconds"
+                        )
+                        + "Z"
+                    )
+
+                    published_pdt_line = (
+                        "#EXT-X-PROGRAM-DATE-TIME:"
+                        + published_iso
+                    )
+
+                    if pdt_index is not None:
+                        sticky_tag_replacements[
+                            int(pdt_index)
+                        ] = published_pdt_line
+                    else:
+                        insert_index = (
+                            int(duration_index)
+                            if duration_index is not None
+                            else int(block_start)
+                        )
+                        sticky_tag_insertions.setdefault(
+                            insert_index,
+                            [],
+                        ).append(
+                            published_pdt_line
+                        )
+
+            if bool(item.get("bumper")):
+                uri_replacements[
+                    int(item["uri_index"])
+                ] = _v789n4_filler_url(
+                    _v789n4_media_kind(
+                        child_url
+                    ),
+                    int(
+                        item.get(
+                            "filler_index"
+                        )
+                        or 0
+                    ),
+                    _v789s25s_cycle_shift90k(
+                        filler_shift90k,
+                        item.get(
+                            "cycle"
+                        )
+                        or 0,
+                    ),
+                )
+
+                if bool(
+                    item.get(
+                        "_v789s25v0_sticky"
+                    )
+                ):
+                    block_start = int(
+                        item.get(
+                            "block_start"
+                        )
+                        or 0
+                    )
+
+                    uri_index = int(
+                        item[
+                            "uri_index"
+                        ]
+                    )
+
+                    pdt_index = None
+                    duration_index = None
+
+                    for candidate_index in range(
+                        block_start,
+                        uri_index,
+                    ):
+                        candidate_line = str(
+                            lines[
+                                candidate_index
+                            ]
+                            or ""
+                        ).strip()
+
+                        if candidate_line.startswith(
+                            "#EXT-X-PROGRAM-DATE-TIME:"
+                        ):
+                            pdt_index = int(
+                                candidate_index
+                            )
+
+                        if candidate_line.startswith(
+                            "#EXTINF:"
+                        ):
+                            duration_index = int(
+                                candidate_index
+                            )
+
+                    sticky_pdt = (
+                        item.get(
+                            "_v789s25v0_pdt"
+                        )
+                    )
+
+                    if sticky_pdt is not None:
+                        sticky_iso = (
+                            datetime.utcfromtimestamp(
+                                float(
+                                    sticky_pdt
+                                )
+                            ).isoformat(
+                                timespec="milliseconds"
+                            )
+                            + "Z"
+                        )
+
+                        sticky_pdt_line = (
+                            "#EXT-X-PROGRAM-DATE-TIME:"
+                            + sticky_iso
+                        )
+
+                        if pdt_index is not None:
+                            sticky_tag_replacements[
+                                int(
+                                    pdt_index
+                                )
+                            ] = (
+                                sticky_pdt_line
+                            )
+
+                        else:
+                            insert_index = (
+                                int(
+                                    duration_index
+                                )
+                                if duration_index
+                                is not None
+                                else int(
+                                    block_start
+                                )
+                            )
+
+                            sticky_tag_insertions.setdefault(
+                                insert_index,
+                                [],
+                            ).append(
+                                sticky_pdt_line
+                            )
+
+                    sticky_duration = (
+                        item.get(
+                            "_v789s25v0_duration"
+                        )
+                    )
+
+                    if (
+                        duration_index is not None
+                        and sticky_duration is not None
+                    ):
+                        sticky_tag_replacements[
+                            int(
+                                duration_index
+                            )
+                        ] = (
+                            "#EXTINF:"
+                            + (
+                                "%.6f"
+                                % float(
+                                    sticky_duration
+                                )
+                            )
+                            + ","
+                        )
+
+            if index > 0:
+                disc_delta = max(
+                    0,
+                    int(item["disc"])
+                    - int(
+                        segments[index - 1][
+                            "disc"
+                        ]
+                    ),
+                )
+
+                if disc_delta > 0:
+                    insert_before[
+                        int(item["block_start"])
+                    ] = disc_delta
+
+        key_state_before_uri = {}
+
+        for index, item in enumerate(segments):
+            uri_index = int(item["uri_index"])
+
+            if bool(item.get("bumper")):
+                key_state_before_uri[
+                    uri_index
+                ] = "#EXT-X-KEY:METHOD=NONE"
+                continue
+
+            if (
+                index > 0
+                and bool(
+                    segments[index - 1].get(
+                        "bumper"
+                    )
+                )
+            ):
+                restore_key = str(
+                    item.get("key_line")
+                    or ""
+                ).strip()
+
+                key_state_before_uri[
+                    uri_index
+                ] = (
+                    restore_key
+                    if restore_key
+                    else "#EXT-X-KEY:METHOD=NONE"
+                )
+
+        out = []
+        disc_sequence_written = False
+
+        for line_index, line in enumerate(lines):
+            if line_index in insert_before:
+                for _ in range(
+                    int(insert_before[line_index])
+                ):
+                    out.append(
+                        "#EXT-X-DISCONTINUITY"
+                    )
+
+            if line_index in sticky_tag_insertions:
+                out.extend(
+                    sticky_tag_insertions[
+                        line_index
+                    ]
+                )
+
+            if line_index in remove_indexes:
+                continue
+
+            if line_index in sticky_tag_replacements:
+                out.append(
+                    sticky_tag_replacements[
+                        line_index
+                    ]
+                )
+                continue
+
+            if line_index in key_state_before_uri:
+                out.append(
+                    key_state_before_uri[
+                        line_index
+                    ]
+                )
+
+            stripped = str(line or "").strip()
+
+            if stripped.startswith(
+                "#EXT-X-DISCONTINUITY-SEQUENCE:"
+            ):
+                out.append(
+                    "#EXT-X-DISCONTINUITY-SEQUENCE:"
+                    + str(
+                        int(segments[0]["disc"])
+                    )
+                )
+                disc_sequence_written = True
+                continue
+
+            if line_index in uri_replacements:
+                out.append(
+                    uri_replacements[line_index]
+                )
+                continue
+
+            out.append(line)
+
+            if (
+                not disc_sequence_written
+                and parsed["disc_sequence_index"] is None
+                and stripped.startswith(
+                    "#EXT-X-MEDIA-SEQUENCE:"
+                )
+            ):
+                out.append(
+                    "#EXT-X-DISCONTINUITY-SEQUENCE:"
+                    + str(
+                        int(segments[0]["disc"])
+                    )
+                )
+                disc_sequence_written = True
+
+        if not disc_sequence_written:
+            insert_at = 1 if out else 0
+            out.insert(
+                insert_at,
+                "#EXT-X-DISCONTINUITY-SEQUENCE:"
+                + str(
+                    int(segments[0]["disc"])
+                ),
+            )
+
+        bumper_count = sum(
+            1
+            for item in segments
+            if bool(item.get("bumper"))
+        )
+
+        logger.warning(
+            (
+                "V789N4_PLUTO_BUMPER_SUPPRESS "
+                "key=%s kind=%s bumper=%s "
+                "seq=%s disc=%s base=%s"
+            ),
+            safe_log_key,
+            _v789n4_media_kind(child_url),
+            bumper_count,
+            int(segments[0]["seq"]),
+            int(segments[0]["disc"]),
+            (
+                "%.3f" % break_base_pdt
+                if break_base_pdt is not None
+                else "-"
+            ),
+        )
+
+        return "\n".join(out) + "\n"
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789N4_SUPPRESSION_ERROR "
+                "key=%s type=%s"
+            ),
+            safe_log_key,
+            type(exc).__name__,
+        )
+
+        return text
+
+    finally:
+        if acquired:
+            try:
+                redis_client = (
+                    await _v789n1_get_redis()
+                )
+
+                await redis_client.eval(
+                    (
+                        "if redis.call('get', KEYS[1]) "
+                        "== ARGV[1] then "
+                        "return redis.call('del', KEYS[1]) "
+                        "else return 0 end"
+                    ),
+                    1,
+                    lock_key,
+                    lock_token,
+                )
+            except Exception:
+                pass
+
+
+@api_router.get(
+    "/live/pluto/filler/{kind}/{index}.ts"
+)
+async def v789n4_pluto_filler_segment(
+    kind: str,
+    index: int,
+    clock: Optional[str] = None,
+):
+    safe_kind = str(kind or "").strip().lower()
+
+    if safe_kind not in (
+        "video",
+        "audio",
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Filler segment not found",
+        )
+
+    safe_index = int(index)
+
+    if (
+        safe_index < 0
+        or safe_index
+        >= _V789N4_FILLER_SEGMENT_COUNT
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Filler segment not found",
+        )
+
+    if clock:
+        shift90k = (
+            _v789s25s_parse_clock_token(
+                clock
+            )
+        )
+
+        if shift90k is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Filler clock not found",
+            )
+
+        try:
+            payload = await asyncio.to_thread(
+                _v789s25s_render_shifted_filler,
+                safe_kind,
+                safe_index,
+                int(shift90k),
+            )
+
+        except Exception as exc:
+            logger.warning(
+                (
+                    "V789S25S1_FILLER_RENDER_ERROR "
+                    "kind=%s index=%s type=%s"
+                ),
+                safe_kind,
+                safe_index,
+                type(exc).__name__,
+            )
+
+            return Response(
+                status_code=503,
+                headers={
+                    "Retry-After": "1",
+                    "Cache-Control": "no-store",
+                },
+            )
+
+    else:
+        filler_root = str(
+            os.environ.get(
+                "V789N4_FILLER_ROOT",
+                "/app/backend/v789n4_filler/hls",
+            )
+        ).strip()
+
+        filename = (
+            f"{safe_kind}_{safe_index:03d}.ts"
+        )
+
+        path = os.path.join(
+            filler_root,
+            filename,
+        )
+
+        try:
+            with open(path, "rb") as handle:
+                payload = handle.read()
+        except OSError:
+            raise HTTPException(
+                status_code=404,
+                detail="Filler segment not found",
+            )
+
+    return Response(
+        content=payload,
+        status_code=200,
+        media_type="video/mp2t",
+        headers={
+            "Cache-Control": (
+                "public, max-age=3600, immutable"
+            ),
+        },
+    )
+# ================= /V789N4 PLUTO BUMPER SUPPRESSION =================
 def _v786f_rewrite_media_playlist(
     text: str,
     child_url: str,
@@ -4316,6 +13268,137 @@ def _v786f_playlist_headers() -> Dict[str, str]:
     }
 
 
+
+# ================= V789N2 R5 PLUTO PROACTIVE MASTER KEEPALIVE =================
+# V789N2_R5_PROACTIVE_MASTER_KEEPALIVE
+#
+# Measured Pluto behavior:
+#
+# - child video/audio playlists initially advance normally
+# - the same child can become HTTP 200 + empty #EXT-X-ENDLIST
+# - fetching the same upstream master revives that same child
+#
+# Existing V786F empty-ENDLIST recovery remains untouched as fallback.
+# Existing V789N1 timeline normalization remains untouched.
+#
+# While Media3 is actively requesting child playlists, refresh the upstream
+# master at most once every 8 seconds per unique master session.
+#
+# Redis deduplicates video/audio/variant requests and all app workers.
+
+_V789N2_R5_KEEPALIVE_SECONDS = 8
+
+
+async def _v789n2_r5_pluto_master_keepalive(
+    client,
+    master_url: str,
+) -> bool:
+    safe_key = (
+        _v789n1_url_identity_hash(
+            master_url,
+            include_query=False,
+            length=16,
+        )
+    )
+
+    session_key = (
+        _v789n1_url_identity_hash(
+            master_url,
+            include_query=True,
+            length=64,
+        )
+    )
+
+    redis_key = (
+        "privastream:v789n2:r5:"
+        "pluto:master-keepalive:"
+        + session_key
+    )
+
+    redis_client = None
+
+    try:
+        redis_client = (
+            await _v789n1_get_redis()
+        )
+
+        claimed = bool(
+            await redis_client.set(
+                redis_key,
+                "1",
+                nx=True,
+                ex=_V789N2_R5_KEEPALIVE_SECONDS,
+            )
+        )
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789N2_R5_KEEPALIVE_REDIS_ERROR "
+                "key=%s type=%s"
+            ),
+            safe_key,
+            type(exc).__name__,
+        )
+
+        return False
+
+    if not claimed:
+        return False
+
+    try:
+        response = await _v726_safe_addon_get(
+            client,
+            master_url,
+            timeout=12.0,
+        )
+
+        if response.status_code == 200:
+            logger.info(
+                (
+                    "V789N2_R5_MASTER_KEEPALIVE "
+                    "key=%s interval=%s"
+                ),
+                safe_key,
+                _V789N2_R5_KEEPALIVE_SECONDS,
+            )
+
+            return True
+
+        logger.warning(
+            (
+                "V789N2_R5_KEEPALIVE_HTTP "
+                "key=%s status=%s"
+            ),
+            safe_key,
+            response.status_code,
+        )
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789N2_R5_KEEPALIVE_ERROR "
+                "key=%s type=%s"
+            ),
+            safe_key,
+            type(exc).__name__,
+        )
+
+    # Do not keep the throttle after a failed refresh.
+    # The next child request may retry immediately.
+    if redis_client is not None:
+        try:
+            await redis_client.delete(
+                redis_key
+            )
+        except Exception:
+            pass
+
+    return False
+
+
+# ================= /V789N2 R5 PLUTO PROACTIVE MASTER KEEPALIVE =================
+
 @api_router.get("/live/pluto/master.m3u8")
 async def v786f_pluto_master_playlist(
     token: str,
@@ -4370,6 +13453,3083 @@ async def v786f_pluto_master_playlist(
     )
 
 
+
+# ================= V789S25W107F3 COMMERCIAL BYPASS SERVER GATE =================
+# V789S25W107F3_COMMERCIAL_GATE
+#
+# N1 + N4 remain authoritative for internal timeline/break state.
+#
+# This gate changes only what is delivered to Media3:
+#
+#   clean only
+#       -> pass the normal N4 result unchanged
+#
+#   clean prefix + bumper tail
+#       -> publish only the clean prefix
+#
+#   bumper + clean suffix
+#       -> jump directly to the first clean segment after the bumper range
+#
+#   bumper-only/current break window
+#       -> HOLD with a retryable 503 instead of publishing synthetic filler
+#
+# The existing N4 classifier remains authoritative. No new commercial
+# detection heuristic is introduced here.
+
+
+def _v789s25w107f3_slice_suppressed_playlist(
+    suppressed_text: str,
+    first_seq: int,
+    last_seq=None,
+) -> str:
+    parsed = _v789n4_playlist_segments(
+        suppressed_text
+    )
+
+    segments = parsed.get(
+        "segments"
+    ) or []
+
+    lines = parsed.get(
+        "lines"
+    ) or []
+
+    if not segments or not lines:
+        return suppressed_text
+
+    start_index = None
+
+    for index, item in enumerate(segments):
+        try:
+            if int(item.get("seq")) == int(first_seq):
+                start_index = int(index)
+                break
+        except Exception:
+            continue
+
+    if start_index is None:
+        return suppressed_text
+
+    if last_seq is None:
+        end_index = len(segments) - 1
+    else:
+        end_index = None
+
+        for index in range(
+            start_index,
+            len(segments),
+        ):
+            try:
+                if (
+                    int(
+                        segments[index].get(
+                            "seq"
+                        )
+                    )
+                    == int(last_seq)
+                ):
+                    end_index = int(index)
+                    break
+            except Exception:
+                continue
+
+        if end_index is None:
+            return suppressed_text
+
+    if end_index < start_index:
+        return suppressed_text
+
+    # Prefix case:
+    # keep the original live-playlist header and simply stop before the
+    # first commercial segment. Do NOT append ENDLIST.
+    if start_index == 0:
+        final_uri_index = int(
+            segments[end_index][
+                "uri_index"
+            ]
+        )
+
+        prefix = [
+            line
+            for line in lines[
+                : final_uri_index + 1
+            ]
+            if str(line or "").strip()
+            != "#EXT-X-ENDLIST"
+        ]
+
+        return "\n".join(prefix) + "\n"
+
+    first = segments[start_index]
+
+    header_end = int(
+        segments[0].get(
+            "block_start"
+        )
+        or 0
+    )
+
+    body_start = int(
+        first.get(
+            "block_start"
+        )
+        or 0
+    )
+
+    body_end = (
+        int(
+            segments[end_index][
+                "uri_index"
+            ]
+        )
+        + 1
+    )
+
+    header = list(
+        lines[:header_end]
+    )
+
+    body = list(
+        lines[
+            body_start:body_end
+        ]
+    )
+
+    # The selected first segment may have one or more discontinuity tags
+    # immediately before it. Its absolute discontinuity generation moves
+    # into EXT-X-DISCONTINUITY-SEQUENCE, so those leading tags must not
+    # be counted a second time.
+    first_uri_offset = max(
+        0,
+        int(first["uri_index"])
+        - body_start,
+    )
+
+    body_prefix = []
+
+    for line in body[
+        :first_uri_offset
+    ]:
+        if (
+            str(line or "").strip()
+            == "#EXT-X-DISCONTINUITY"
+        ):
+            continue
+
+        body_prefix.append(line)
+
+    body = (
+        body_prefix
+        + body[
+            first_uri_offset:
+        ]
+    )
+
+    selected_seq = int(
+        first["seq"]
+    )
+
+    selected_disc = int(
+        first.get(
+            "disc",
+            first.get(
+                "up_disc",
+                0,
+            ),
+        )
+        or 0
+    )
+
+    out = []
+    media_sequence_written = False
+    disc_sequence_written = False
+
+    for line in header:
+        stripped = str(
+            line or ""
+        ).strip()
+
+        if stripped == "#EXT-X-ENDLIST":
+            continue
+
+        if stripped.startswith(
+            "#EXT-X-MEDIA-SEQUENCE:"
+        ):
+            out.append(
+                "#EXT-X-MEDIA-SEQUENCE:"
+                + str(selected_seq)
+            )
+
+            media_sequence_written = True
+            continue
+
+        if stripped.startswith(
+            "#EXT-X-DISCONTINUITY-SEQUENCE:"
+        ):
+            out.append(
+                "#EXT-X-DISCONTINUITY-SEQUENCE:"
+                + str(selected_disc)
+            )
+
+            disc_sequence_written = True
+            continue
+
+        out.append(line)
+
+    if not media_sequence_written:
+        insert_at = (
+            1
+            if out
+            else 0
+        )
+
+        out.insert(
+            insert_at,
+            "#EXT-X-MEDIA-SEQUENCE:"
+            + str(selected_seq),
+        )
+
+    if not disc_sequence_written:
+        media_index = None
+
+        for index, line in enumerate(out):
+            if str(
+                line or ""
+            ).strip().startswith(
+                "#EXT-X-MEDIA-SEQUENCE:"
+            ):
+                media_index = int(index)
+                break
+
+        insert_at = (
+            media_index + 1
+            if media_index is not None
+            else (
+                1
+                if out
+                else 0
+            )
+        )
+
+        out.insert(
+            insert_at,
+            "#EXT-X-DISCONTINUITY-SEQUENCE:"
+            + str(selected_disc),
+        )
+
+    out.extend(
+        line
+        for line in body
+        if str(line or "").strip()
+        != "#EXT-X-ENDLIST"
+    )
+
+    return "\n".join(out) + "\n"
+
+
+def _v789s25w107f3_gate_commercial_playlist(
+    normalized_text: str,
+    suppressed_text: str,
+    child_url: str,
+):
+    parsed = _v789n4_playlist_segments(
+        normalized_text
+    )
+
+    segments = parsed.get(
+        "segments"
+    ) or []
+
+    if not segments:
+        return {
+            "mode": "pass",
+            "hold": False,
+            "text": suppressed_text,
+        }
+
+    bumper_indexes = [
+        index
+        for index, item
+        in enumerate(segments)
+        if bool(
+            item.get(
+                "bumper"
+            )
+        )
+    ]
+
+    # W121ZPLAY10M_N4_SUPPRESSION_BOUNDARY
+    #
+    # F3 parses normalized_text to locate Pluto bumper media.
+    # N4 may additionally mark leading clean-looking media as
+    # bumper when it lies below the already-published filler
+    # horizon. Those runtime bumper flags do not survive when
+    # F3 reparses normalized_text.
+    #
+    # N4's final render has exactly one URI-replacement path:
+    # item["bumper"] -> local filler URI. Therefore a segment
+    # whose URI differs between normalized_text and
+    # suppressed_text is direct evidence that N4 classified
+    # that exact logical segment as bumper.
+    #
+    # Preserve those N4-proven indexes in F3's effective
+    # bumper boundary so BYPASS begins at the first segment
+    # N4 actually left as real program media.
+    suppressed_parsed = _v789n4_playlist_segments(
+        suppressed_text
+    )
+
+    suppressed_segments = (
+        suppressed_parsed.get("segments")
+        or []
+    )
+
+    normalized_lines = (
+        parsed.get("lines")
+        or []
+    )
+
+    suppressed_lines = (
+        suppressed_parsed.get("lines")
+        or []
+    )
+
+    n4_suppressed_indexes = []
+
+    if (
+        len(suppressed_segments) == len(segments)
+        and normalized_lines
+        and suppressed_lines
+    ):
+        for index, item in enumerate(segments):
+            suppressed_item = (
+                suppressed_segments[index]
+            )
+
+            if (
+                not isinstance(item, dict)
+                or not isinstance(
+                    suppressed_item,
+                    dict,
+                )
+            ):
+                continue
+
+            try:
+                normalized_seq = int(
+                    item.get("seq")
+                )
+
+                suppressed_seq = int(
+                    suppressed_item.get("seq")
+                )
+
+                normalized_uri_index = int(
+                    item.get("uri_index")
+                )
+
+                suppressed_uri_index = int(
+                    suppressed_item.get(
+                        "uri_index"
+                    )
+                )
+            except Exception:
+                continue
+
+            if normalized_seq != suppressed_seq:
+                continue
+
+            if (
+                normalized_uri_index < 0
+                or normalized_uri_index
+                >= len(normalized_lines)
+                or suppressed_uri_index < 0
+                or suppressed_uri_index
+                >= len(suppressed_lines)
+            ):
+                continue
+
+            normalized_uri = str(
+                normalized_lines[
+                    normalized_uri_index
+                ]
+                or ""
+            ).strip()
+
+            suppressed_uri = str(
+                suppressed_lines[
+                    suppressed_uri_index
+                ]
+                or ""
+            ).strip()
+
+            if (
+                normalized_uri
+                and suppressed_uri
+                and normalized_uri
+                != suppressed_uri
+            ):
+                n4_suppressed_indexes.append(
+                    int(index)
+                )
+
+    if n4_suppressed_indexes:
+        original_bumper_indexes = list(
+            bumper_indexes
+        )
+
+        bumper_indexes = sorted(
+            set(
+                bumper_indexes
+            ).union(
+                n4_suppressed_indexes
+            )
+        )
+
+        logger.warning(
+            (
+                "W121ZPLAY10M_N4_SUPPRESSION_BOUNDARY "
+                "kind=%s original=%s n4=%s effective=%s"
+            ),
+            _v789n4_media_kind(
+                child_url
+            ),
+            ",".join(
+                str(value)
+                for value
+                in original_bumper_indexes
+            ),
+            ",".join(
+                str(value)
+                for value
+                in n4_suppressed_indexes
+            ),
+            ",".join(
+                str(value)
+                for value
+                in bumper_indexes
+            ),
+        )
+    if not bumper_indexes:
+        return {
+            "mode": "pass",
+            "hold": False,
+            "text": suppressed_text,
+        }
+
+    first_bumper = int(
+        bumper_indexes[0]
+    )
+
+    last_bumper = int(
+        bumper_indexes[-1]
+    )
+
+    kind = _v789n4_media_kind(
+        child_url
+    )
+
+    # If clean programming is already visible after the final bumper,
+    # jump directly to that clean suffix. This is the actual commercial
+    # bypass path.
+    first_clean_after = None
+
+    for index in range(
+        last_bumper + 1,
+        len(segments),
+    ):
+        if not bool(
+            segments[index].get(
+                "bumper"
+            )
+        ):
+            first_clean_after = int(
+                index
+            )
+            break
+
+    if first_clean_after is not None:
+        first_clean = segments[
+            first_clean_after
+        ]
+
+        logger.warning(
+            (
+                "V789S25W107F3_BYPASS_POST_BREAK "
+                "kind=%s first_clean_seq=%s "
+                "bumper_first=%s bumper_last=%s "
+                "segments=%s"
+            ),
+            kind,
+            int(first_clean["seq"]),
+            first_bumper,
+            last_bumper,
+            len(segments),
+        )
+
+        return {
+            "mode": "bypass",
+            "hold": False,
+            "text": (
+                _v789s25w107f3_slice_suppressed_playlist(
+                    suppressed_text,
+                    int(
+                        first_clean[
+                            "seq"
+                        ]
+                    ),
+                    None,
+                )
+            ),
+        }
+
+    # A clean prefix followed by a commercial tail is allowed to finish.
+    # Media3 never receives the bumper tail.
+    if first_bumper > 0:
+        final_clean = segments[
+            first_bumper - 1
+        ]
+
+        logger.warning(
+            (
+                "V789S25W107F3_TRIM_COMMERCIAL_TAIL "
+                "kind=%s last_clean_seq=%s "
+                "bumper_first=%s segments=%s"
+            ),
+            kind,
+            int(final_clean["seq"]),
+            first_bumper,
+            len(segments),
+        )
+
+        return {
+            "mode": "prefix",
+            "hold": False,
+            "text": (
+                _v789s25w107f3_slice_suppressed_playlist(
+                    suppressed_text,
+                    int(
+                        segments[0][
+                            "seq"
+                        ]
+                    ),
+                    int(
+                        final_clean[
+                            "seq"
+                        ]
+                    ),
+                )
+            ),
+        }
+
+    # No clean media is available for this window.
+    # Do NOT send N4 filler to Media3. Make the live playlist retry until
+    # a clean post-break segment becomes available.
+    logger.warning(
+        (
+            "V789S25W107F3_COMMERCIAL_HOLD "
+            "kind=%s bumper_first=%s "
+            "bumper_last=%s segments=%s"
+        ),
+        kind,
+        first_bumper,
+        last_bumper,
+        len(segments),
+    )
+
+    return {
+        "mode": "hold",
+        "hold": True,
+        "text": None,
+    }
+
+
+# ================= /V789S25W107F3 COMMERCIAL BYPASS SERVER GATE =================
+
+
+
+# ================= V789S25W107F5 MONOTONIC PROGRAM DELIVERY GATE =================
+# V789S25W107F5_MONOTONIC_PROGRAM_GATE
+#
+# W107F4 still lets Media3 consume N4 synthetic filler during HOLD and trusts
+# every later clean playlist returned by N1/N4. W107F5 adds a final delivery
+# firewall after the F3 commercial gate:
+#
+# - remember the last clean playlist actually approved for each child;
+# - never deliver a child window whose logical tail or PDT end regresses;
+# - identical/non-advancing windows reuse the exact prior approved snapshot;
+# - during commercial HOLD, reuse the prior clean snapshot instead of N4 filler;
+# - post-break BYPASS must advance beyond the pre-break clean snapshot before
+#   the overlay is allowed to clear.
+#
+# Existing N1/N4 state remains untouched. New state uses its own Redis namespace.
+_V789S25W107F5_PROGRAM_STATE_TTL_SECONDS = 10 * 60
+_V789S25W107F5_PDT_EPSILON_SECONDS = 0.250
+
+# V789S25W121ZY_HISTORICAL_REPLAY_GUARD
+#
+# Pluto can recycle previously published media objects while assigning them
+# newer upstream MEDIA-SEQUENCE and PROGRAM-DATE-TIME values. Sequence/PDT
+# monotonicity alone therefore cannot prove that a clean candidate contains
+# new program media.
+#
+# Keep a bounded master + media-kind history of query-insensitive segment
+# identities that were actually accepted for delivery. Normal HLS sliding
+# overlap remains legal because each advancing window introduces at least one
+# unseen segment. Block only when every usable identity in a candidate was
+# already accepted well outside a normal overlap window.
+_V789S25W121ZY_REPLAY_HISTORY_TTL_SECONDS = 30 * 60
+_V789S25W121ZY_REPLAY_MIN_AGE_SECONDS = 90
+
+# W121ZPLAY10X2_REPLAY_MAX_AGE
+#
+# X1 production evidence showed two distinct historical-identity populations:
+#
+#   actionable stale replay:
+#       youngest age 307.276 .. 664.649 seconds
+#
+#   legitimate long-cycle Pluto URI reuse:
+#       youngest age 1140.151 .. 1798.490 seconds
+#
+# No observed W121ZY block occurred between 664.649 and 1140.151 seconds.
+# Preserve the existing 90-second minimum and 30-minute history retention,
+# but only treat an all-seen candidate as actionable replay while its newest
+# prior identity is no more than 15 minutes old.
+_V789S25W121ZY_REPLAY_MAX_AGE_SECONDS = 15 * 60
+
+
+def _v789s25w121zy_replay_history_key(
+    master_url: str,
+    kind: str,
+) -> str:
+    master_identity = _v789n1_url_identity_hash(
+        master_url,
+        include_query=False,
+        length=64,
+    )
+
+    return (
+        "privastream:v789s25w121zy:"
+        "clean-segment-history:"
+        + str(master_identity)
+        + ":"
+        + str(kind or "unknown")
+    )
+
+
+def _v789s25w121zy_usable_segment_ids(
+    segment_ids,
+):
+    if not isinstance(segment_ids, list):
+        return []
+
+    result = []
+    seen = set()
+
+    for raw_id in segment_ids:
+        segment_id = str(
+            raw_id or ""
+        ).strip()
+
+        if (
+            not segment_id
+            or segment_id in seen
+        ):
+            continue
+
+        seen.add(segment_id)
+        result.append(segment_id)
+
+    return result
+
+
+async def _v789s25w121zy_probe_historical_replay(
+    redis_client,
+    master_url: str,
+    kind: str,
+    segment_ids,
+):
+    ids = _v789s25w121zy_usable_segment_ids(
+        segment_ids
+    )
+
+    result = {
+        "replay": False,
+        "ids": int(len(ids)),
+        "seen": 0,
+        "youngest_age": None,
+        "oldest_age": None,
+    }
+
+    if len(ids) < 2:
+        return result
+
+    history_key = _v789s25w121zy_replay_history_key(
+        master_url,
+        kind,
+    )
+
+    now = float(time.time())
+
+    try:
+        pipe = redis_client.pipeline(
+            transaction=False
+        )
+
+        for segment_id in ids:
+            pipe.zscore(
+                history_key,
+                segment_id,
+            )
+
+        raw_scores = await pipe.execute()
+
+        ages = []
+
+        for raw_score in raw_scores:
+            if raw_score is None:
+                continue
+
+            try:
+                first_seen = float(raw_score)
+            except Exception:
+                continue
+
+            age = max(
+                0.0,
+                now - first_seen,
+            )
+
+            if (
+                age
+                > float(
+                    _V789S25W121ZY_REPLAY_HISTORY_TTL_SECONDS
+                )
+            ):
+                continue
+
+            ages.append(age)
+
+        result["seen"] = int(len(ages))
+
+        if len(ages) != len(ids):
+            return result
+
+        youngest_age = min(ages)
+        oldest_age = max(ages)
+
+        result["youngest_age"] = float(
+            youngest_age
+        )
+
+        result["oldest_age"] = float(
+            oldest_age
+        )
+
+        result["replay"] = bool(
+            youngest_age
+            >= float(
+                _V789S25W121ZY_REPLAY_MIN_AGE_SECONDS
+            )
+        )
+
+        return result
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W121ZY_HISTORY_READ_ERROR "
+                "kind=%s type=%s"
+            ),
+            kind,
+            type(exc).__name__,
+        )
+
+        # W121ZPLAY10X2_LONG_CYCLE_URI_REUSE_ALLOWED
+        #
+        # The original W121ZY replay test above remains authoritative inside
+        # the recent replay window. If every identity was last observed more
+        # than 15 minutes ago, however, X1 proves Pluto can legitimately reuse
+        # the same query-insensitive media paths as advancing programming.
+        #
+        # Fail open only for that long-cycle population. The existing
+        # child-local sequence/PDT gates and W107F7 protections remain intact.
+        if (
+            bool(result.get("replay"))
+            and youngest_age
+            > float(
+                _V789S25W121ZY_REPLAY_MAX_AGE_SECONDS
+            )
+        ):
+            result["replay"] = False
+
+            logger.warning(
+                (
+                    "W121ZPLAY10X2_LONG_CYCLE_URI_REUSE_ALLOWED "
+                    "kind=%s ids=%s seen=%s "
+                    "youngest_age=%.3f oldest_age=%.3f "
+                    "max_age=%s action=allow"
+                ),
+                kind,
+                int(result.get("ids") or 0),
+                int(result.get("seen") or 0),
+                float(youngest_age),
+                float(oldest_age),
+                int(
+                    _V789S25W121ZY_REPLAY_MAX_AGE_SECONDS
+                ),
+            )
+        return result
+
+
+async def _v789s25w121zy_record_accepted_segments(
+    redis_client,
+    master_url: str,
+    kind: str,
+    segment_ids,
+):
+    ids = _v789s25w121zy_usable_segment_ids(
+        segment_ids
+    )
+
+    if not ids:
+        return
+
+    history_key = _v789s25w121zy_replay_history_key(
+        master_url,
+        kind,
+    )
+
+    now = float(time.time())
+
+    cutoff = (
+        now
+        - float(
+            _V789S25W121ZY_REPLAY_HISTORY_TTL_SECONDS
+        )
+    )
+
+    try:
+        pipe = redis_client.pipeline(
+            transaction=False
+        )
+
+        for segment_id in ids:
+            pipe.zadd(
+                history_key,
+                {
+                    segment_id: now,
+                },
+                nx=True,
+            )
+
+        pipe.zremrangebyscore(
+            history_key,
+            "-inf",
+            cutoff,
+        )
+
+        pipe.expire(
+            history_key,
+            int(
+                _V789S25W121ZY_REPLAY_HISTORY_TTL_SECONDS
+            ),
+        )
+
+        await pipe.execute()
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W121ZY_HISTORY_WRITE_ERROR "
+                "kind=%s type=%s"
+            ),
+            kind,
+            type(exc).__name__,
+        )
+
+        return
+
+
+
+def _v789s25w107f5_program_state_keys(
+    master_url: str,
+    child_url: str,
+):
+    master_identity = _v789n1_url_identity_hash(
+        master_url,
+        include_query=False,
+        length=64,
+    )
+
+    child_identity = _v789n1_url_identity_hash(
+        child_url,
+        include_query=False,
+        length=64,
+    )
+
+    kind = _v789n4_media_kind(
+        child_url
+    )
+
+    return (
+        (
+            "privastream:v789s25w107f5:"
+            "program-child:"
+            + master_identity
+            + ":"
+            + child_identity
+        ),
+        (
+            "privastream:v789s25w107f5:"
+            "program-master:"
+            + master_identity
+            + ":"
+            + kind
+        ),
+    )
+
+
+def _v789s25w107f5_clean_window_info(
+    text: str,
+    child_url: str,
+):
+    parsed = _v789n4_playlist_segments(
+        text
+    )
+
+    segments = parsed.get(
+        "segments"
+    ) or []
+
+    if not segments:
+        return None
+
+    if any(
+        bool(item.get("bumper"))
+        for item in segments
+    ):
+        return None
+
+    first_pdt = None
+    window_end_pdt = None
+    ids = []
+
+    for item in segments:
+        pdt = _v789s25o_float_or_none(
+            item.get("pdt")
+        )
+
+        if pdt is None:
+            return None
+
+        duration = _v789s25o_float_or_none(
+            item.get("duration")
+        )
+
+        if duration is None:
+            duration = 5.0
+
+        duration = max(
+            0.001,
+            float(duration),
+        )
+
+        if first_pdt is None:
+            first_pdt = float(pdt)
+
+        item_end = (
+            float(pdt)
+            + float(duration)
+        )
+
+        if window_end_pdt is None:
+            window_end_pdt = item_end
+        else:
+            window_end_pdt = max(
+                float(window_end_pdt),
+                float(item_end),
+            )
+
+        ids.append(
+            _v789s25w61_segment_identity(
+                child_url,
+                item,
+            )
+        )
+
+    try:
+        first_seq = int(
+            segments[0].get("seq")
+        )
+        last_seq = int(
+            segments[-1].get("seq")
+        )
+    except Exception:
+        return None
+
+    if (
+        first_pdt is None
+        or window_end_pdt is None
+    ):
+        return None
+
+    return {
+        "first_pdt": float(first_pdt),
+        "end_pdt": float(window_end_pdt),
+        "first_seq": int(first_seq),
+        "last_seq": int(last_seq),
+        "segment_ids": ids,
+        "segments": int(len(segments)),
+    }
+
+
+async def _v789s25w107f5_read_json(
+    redis_client,
+    key: str,
+):
+    raw = await redis_client.get(
+        key
+    )
+
+    if not raw:
+        return None
+
+    try:
+        candidate = json.loads(raw)
+    except Exception:
+        return None
+
+    if not isinstance(candidate, dict):
+        return None
+
+    return candidate
+
+
+# ================= V789S25W107F8 STALE SNAPSHOT FALLBACK =================
+# V789S25W107F8_STALE_SNAPSHOT_FALLBACK
+#
+# The pre-N1 retired-break guard intentionally rejects a stale bumper window
+# before it can mutate N1/N4 state.  When that guard exhausts its upstream
+# retries, do not starve Media3 with a 503 if W107F5/F7 already has a clean
+# approved playlist.  Re-serve the latest master-approved clean snapshot,
+# preserving the source child URL for correct relative URI rewriting.
+#
+# This helper is read-only.  It does not advance child/master watermarks.
+
+async def _v789s25w107f8_last_approved_snapshot(
+    master_url: str,
+    child_url: str,
+):
+    kind = _v789n4_media_kind(
+        child_url
+    )
+
+    safe_log_key = (
+        _v789n1_url_identity_hash(
+            child_url,
+            include_query=False,
+            length=16,
+        )
+    )
+
+    try:
+        redis_client = (
+            await _v789n1_get_redis()
+        )
+
+        (
+            state_key,
+            master_key,
+        ) = _v789s25w107f5_program_state_keys(
+            master_url,
+            child_url,
+        )
+
+        master_previous = (
+            await _v789s25w107f5_read_json(
+                redis_client,
+                master_key,
+            )
+        )
+
+        if isinstance(
+            master_previous,
+            dict,
+        ):
+            master_playlist = (
+                master_previous.get(
+                    "playlist"
+                )
+            )
+
+            raw_master_child = str(
+                master_previous.get(
+                    "child_url"
+                )
+                or ""
+            ).strip()
+
+            if (
+                isinstance(
+                    master_playlist,
+                    str,
+                )
+                and master_playlist.strip()
+                and raw_master_child
+            ):
+                try:
+                    source_child_url = (
+                        _v786f_validate_child_url(
+                            master_url,
+                            raw_master_child,
+                        )
+                    )
+
+                    if (
+                        _v789n4_media_kind(
+                            source_child_url
+                        )
+                        == kind
+                    ):
+                        return {
+                            "text": master_playlist,
+                            "source_child_url": (
+                                source_child_url
+                            ),
+                            "scope": "master",
+                        }
+
+                except Exception:
+                    pass
+
+        child_previous = (
+            await _v789s25w107f5_read_json(
+                redis_client,
+                state_key,
+            )
+        )
+
+        if isinstance(
+            child_previous,
+            dict,
+        ):
+            child_playlist = (
+                child_previous.get(
+                    "playlist"
+                )
+            )
+
+            if (
+                isinstance(
+                    child_playlist,
+                    str,
+                )
+                and child_playlist.strip()
+            ):
+                return {
+                    "text": child_playlist,
+                    "source_child_url": child_url,
+                    "scope": "child",
+                }
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W107F8_STALE_SNAPSHOT_READ_ERROR "
+                "key=%s kind=%s type=%s"
+            ),
+            safe_log_key,
+            kind,
+            type(exc).__name__,
+        )
+
+    return {
+        "text": None,
+        "source_child_url": None,
+        "scope": "none",
+    }
+
+
+# ================= /V789S25W107F8 STALE SNAPSHOT FALLBACK =================
+
+def _v789s25w121zplay10e_render_prefix_pdt(
+    text: str,
+    parsed,
+):
+    if (
+        not isinstance(text, str)
+        or not text.strip()
+        or not isinstance(parsed, dict)
+    ):
+        return text
+
+    lines = list(
+        parsed.get("lines")
+        or []
+    )
+
+    segments = (
+        parsed.get("segments")
+        or []
+    )
+
+    if not lines or not segments:
+        return text
+
+    replacements = {}
+    insertions = {}
+
+    for item in segments:
+        if not isinstance(item, dict):
+            continue
+
+        published_pdt = _v789s25o_float_or_none(
+            item.get("pdt")
+        )
+
+        if published_pdt is None:
+            continue
+
+        try:
+            block_start = max(
+                0,
+                int(
+                    item.get("block_start")
+                    or 0
+                ),
+            )
+
+            uri_index = int(
+                item.get("uri_index")
+            )
+        except Exception:
+            continue
+
+        pdt_index = None
+        duration_index = None
+
+        scan_end = min(
+            len(lines),
+            max(
+                block_start,
+                uri_index,
+            ),
+        )
+
+        for candidate_index in range(
+            block_start,
+            scan_end,
+        ):
+            candidate_line = str(
+                lines[candidate_index]
+                or ""
+            ).strip()
+
+            if candidate_line.startswith(
+                "#EXT-X-PROGRAM-DATE-TIME:"
+            ):
+                pdt_index = int(
+                    candidate_index
+                )
+
+            if candidate_line.startswith(
+                "#EXTINF:"
+            ):
+                duration_index = int(
+                    candidate_index
+                )
+
+        published_iso = (
+            datetime.utcfromtimestamp(
+                float(published_pdt)
+            ).isoformat(
+                timespec="milliseconds"
+            )
+            + "Z"
+        )
+
+        published_line = (
+            "#EXT-X-PROGRAM-DATE-TIME:"
+            + published_iso
+        )
+
+        if pdt_index is not None:
+            replacements[
+                int(pdt_index)
+            ] = published_line
+        else:
+            insert_index = (
+                int(duration_index)
+                if duration_index is not None
+                else int(block_start)
+            )
+
+            insert_index = max(
+                0,
+                min(
+                    int(insert_index),
+                    len(lines),
+                ),
+            )
+
+            insertions.setdefault(
+                int(insert_index),
+                [],
+            ).append(
+                published_line
+            )
+
+    if not replacements and not insertions:
+        return text
+
+    out = []
+
+    for index, line in enumerate(lines):
+        if index in insertions:
+            out.extend(
+                insertions[index]
+            )
+
+        out.append(
+            replacements.get(
+                index,
+                line,
+            )
+        )
+
+    if len(lines) in insertions:
+        out.extend(
+            insertions[len(lines)]
+        )
+
+    return "\n".join(out) + "\n"
+
+async def _v789s25w107f5_gate_program_delivery(
+    candidate_text,
+    master_url: str,
+    child_url: str,
+    commercial_mode: str,
+):
+    safe_mode = str(
+        commercial_mode or "pass"
+    ).strip().lower()
+
+    kind = _v789n4_media_kind(
+        child_url
+    )
+
+    safe_log_key = (
+        _v789n1_url_identity_hash(
+            child_url,
+            include_query=False,
+            length=16,
+        )
+    )
+
+    (
+        state_key,
+        master_key,
+    ) = _v789s25w107f5_program_state_keys(
+        master_url,
+        child_url,
+    )
+
+    # V789S25W107F7_MASTER_LOCK
+    # Serialize sibling renditions of the same media kind against the same
+    # master watermark. A per-child lock cannot prevent two video renditions
+    # from simultaneously accepting different logical tails.
+    lock_key = master_key + ":lock"
+    lock_token = uuid.uuid4().hex
+
+    try:
+        redis_client = (
+            await _v789n1_get_redis()
+        )
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W107F5_REDIS_UNAVAILABLE "
+                "key=%s kind=%s type=%s"
+            ),
+            safe_log_key,
+            kind,
+            type(exc).__name__,
+        )
+
+        return {
+            "text": candidate_text,
+            "decision": "fail-open-no-redis",
+            "advanced": False,
+            "snapshot": False,
+        }
+
+    acquired = False
+
+    try:
+        for _ in range(40):
+            acquired = bool(
+                await redis_client.set(
+                    lock_key,
+                    lock_token,
+                    nx=True,
+                    ex=_V789N1_LOCK_TTL_SECONDS,
+                )
+            )
+
+            if acquired:
+                break
+
+            await asyncio.sleep(0.025)
+
+        if not acquired:
+            logger.warning(
+                (
+                    "V789S25W107F5_LOCK_TIMEOUT "
+                    "key=%s kind=%s"
+                ),
+                safe_log_key,
+                kind,
+            )
+
+            return {
+                "text": candidate_text,
+                "decision": "fail-open-lock-timeout",
+                "advanced": False,
+                "snapshot": False,
+            }
+
+        # W121ZPLAY10E_PREFIX_CLEAN_PDT_ADOPT
+        #
+        # N4 intentionally refuses W61/W64 clean-PDT correction
+        # while the ORIGINAL window still contains a bumper.
+        # F3 has already removed a future commercial tail here.
+        # For PREFIX only, the candidate presented to W107F5 is
+        # clean program media again, so it may safely inherit the
+        # already-proven master-scoped W64 clean-program offset.
+        #
+        # This does not modify N4 state, bumper PDT, filler PDT,
+        # commercial classification, or W107F5 regression rules.
+        if (
+            safe_mode == "prefix"
+            and isinstance(candidate_text, str)
+            and candidate_text.strip()
+        ):
+            prefix_parsed = (
+                _v789n4_playlist_segments(
+                    candidate_text
+                )
+            )
+
+            prefix_segments = (
+                prefix_parsed.get(
+                    "segments"
+                )
+                or []
+            )
+
+            if (
+                prefix_segments
+                and not any(
+                    bool(item.get("bumper"))
+                    for item in prefix_segments
+                    if isinstance(item, dict)
+                )
+            ):
+                master_identity = (
+                    _v789n1_url_identity_hash(
+                        master_url,
+                        include_query=False,
+                        length=64,
+                    )
+                )
+
+                prefix_pdt_identity = (
+                    await _v789s25w64_adopt_master_clean_pdt(
+                        redis_client,
+                        master_identity,
+                        prefix_segments,
+                        safe_log_key,
+                        child_url,
+                    )
+                )
+
+                if isinstance(
+                    prefix_pdt_identity,
+                    dict,
+                ):
+                    rewritten_candidate = (
+                        _v789s25w121zplay10e_render_prefix_pdt(
+                            candidate_text,
+                            prefix_parsed,
+                        )
+                    )
+
+                    if (
+                        isinstance(
+                            rewritten_candidate,
+                            str,
+                        )
+                        and rewritten_candidate.strip()
+                        and rewritten_candidate
+                        != candidate_text
+                    ):
+                        candidate_text = (
+                            rewritten_candidate
+                        )
+
+                        logger.warning(
+                            (
+                                "W121ZPLAY10E_PREFIX_CLEAN_PDT_APPLY "
+                                "key=%s kind=%s offset=%.6f "
+                                "first_raw=%.3f first_published=%.3f"
+                            ),
+                            safe_log_key,
+                            kind,
+                            float(
+                                prefix_pdt_identity.get(
+                                    "offset"
+                                )
+                                or 0.0
+                            ),
+                            float(
+                                prefix_pdt_identity.get(
+                                    "first_raw_pdt"
+                                )
+                            ),
+                            float(
+                                prefix_pdt_identity.get(
+                                    "first_published_pdt"
+                                )
+                            ),
+                        )
+        previous = (
+            await _v789s25w107f5_read_json(
+                redis_client,
+                state_key,
+            )
+        )
+
+        master_previous = (
+            await _v789s25w107f5_read_json(
+                redis_client,
+                master_key,
+            )
+        )
+
+        previous_playlist = None
+
+        if isinstance(previous, dict):
+            raw_playlist = previous.get(
+                "playlist"
+            )
+
+            if isinstance(raw_playlist, str):
+                if raw_playlist.strip():
+                    previous_playlist = (
+                        raw_playlist
+                    )
+
+        previous_master_end = None
+        previous_master_playlist = None
+        previous_master_child_url = None
+
+        if isinstance(master_previous, dict):
+            previous_master_end = (
+                _v789s25o_float_or_none(
+                    master_previous.get(
+                        "end_pdt"
+                    )
+                )
+            )
+
+            raw_master_playlist = (
+                master_previous.get(
+                    "playlist"
+                )
+            )
+
+            if isinstance(
+                raw_master_playlist,
+                str,
+            ) and raw_master_playlist.strip():
+                previous_master_playlist = (
+                    raw_master_playlist
+                )
+
+            raw_master_child = str(
+                master_previous.get(
+                    "child_url"
+                )
+                or ""
+            ).strip()
+
+            if raw_master_child:
+                try:
+                    candidate_master_child = (
+                        _v786f_validate_child_url(
+                            master_url,
+                            raw_master_child,
+                        )
+                    )
+
+                    if (
+                        _v789n4_media_kind(
+                            candidate_master_child
+                        )
+                        == kind
+                    ):
+                        previous_master_child_url = (
+                            candidate_master_child
+                        )
+                except Exception:
+                    previous_master_child_url = None
+
+        # Commercial HOLD deliberately freezes the last approved CLEAN window.
+        # Prefer this exact child. If Media3 changed renditions at the boundary,
+        # use the last master-approved sibling snapshot with its original base.
+        if safe_mode == "hold":
+            if previous_playlist is not None:
+                logger.warning(
+                    (
+                        "V789S25W107F5_HOLD_CLEAN_SNAPSHOT "
+                        "key=%s kind=%s first_seq=%s last_seq=%s end=%s"
+                    ),
+                    safe_log_key,
+                    kind,
+                    previous.get("first_seq"),
+                    previous.get("last_seq"),
+                    previous.get("end_pdt"),
+                )
+
+                return {
+                    "text": previous_playlist,
+                    "decision": "hold-clean-snapshot",
+                    "advanced": False,
+                    "snapshot": True,
+                }
+
+            if (
+                previous_master_playlist is not None
+                and previous_master_child_url is not None
+            ):
+                logger.warning(
+                    (
+                        "V789S25W107F7_MASTER_SNAPSHOT_HOLD "
+                        "key=%s kind=%s master_end=%s"
+                    ),
+                    safe_log_key,
+                    kind,
+                    previous_master_end,
+                )
+
+                return {
+                    "text": previous_master_playlist,
+                    "decision": "hold-master-snapshot",
+                    "advanced": False,
+                    "snapshot": True,
+                    "source_child_url": (
+                        previous_master_child_url
+                    ),
+                }
+
+            logger.warning(
+                (
+                    "V789S25W107F5_HOLD_NO_CLEAN_SNAPSHOT "
+                    "key=%s kind=%s"
+                ),
+                safe_log_key,
+                kind,
+            )
+
+            return {
+                "text": None,
+                "decision": "hold-no-clean-snapshot",
+                "advanced": False,
+                "snapshot": False,
+            }
+
+        if not isinstance(candidate_text, str):
+            candidate_text = ""
+
+        info = (
+            _v789s25w107f5_clean_window_info(
+                candidate_text,
+                child_url,
+            )
+        )
+
+        if info is None:
+            if previous_playlist is not None:
+                logger.warning(
+                    (
+                        "V789S25W107F5_INVALID_CANDIDATE_SNAPSHOT "
+                        "key=%s kind=%s mode=%s"
+                    ),
+                    safe_log_key,
+                    kind,
+                    safe_mode,
+                )
+
+                return {
+                    "text": previous_playlist,
+                    "decision": "invalid-candidate-snapshot",
+                    "advanced": False,
+                    "snapshot": True,
+                }
+
+            if (
+                previous_master_playlist is not None
+                and previous_master_child_url is not None
+            ):
+                logger.warning(
+                    (
+                        "V789S25W107F7_INVALID_CANDIDATE_MASTER_SNAPSHOT "
+                        "key=%s kind=%s mode=%s"
+                    ),
+                    safe_log_key,
+                    kind,
+                    safe_mode,
+                )
+
+                return {
+                    "text": previous_master_playlist,
+                    "decision": "invalid-candidate-master-snapshot",
+                    "advanced": False,
+                    "snapshot": True,
+                    "source_child_url": (
+                        previous_master_child_url
+                    ),
+                }
+
+            return {
+                "text": candidate_text,
+                "decision": "bootstrap-fail-open",
+                "advanced": False,
+                "snapshot": False,
+            }
+
+        if isinstance(previous, dict):
+            previous_end = (
+                _v789s25o_float_or_none(
+                    previous.get("end_pdt")
+                )
+            )
+
+            try:
+                previous_first_seq = int(
+                    previous.get("first_seq")
+                )
+                previous_last_seq = int(
+                    previous.get("last_seq")
+                )
+            except Exception:
+                previous_first_seq = None
+                previous_last_seq = None
+
+            # A sliding live window may overlap the prior window, but its first
+            # logical sequence may never move BACKWARD. Trim any older prefix
+            # when the prior floor still exists in the candidate.
+            if (
+                previous_first_seq is not None
+                and int(info["first_seq"])
+                < int(previous_first_seq)
+                and int(info["last_seq"])
+                >= int(previous_first_seq)
+            ):
+                trimmed = (
+                    _v789s25w107f3_slice_suppressed_playlist(
+                        candidate_text,
+                        int(previous_first_seq),
+                        None,
+                    )
+                )
+
+                trimmed_info = (
+                    _v789s25w107f5_clean_window_info(
+                        trimmed,
+                        child_url,
+                    )
+                )
+
+                if trimmed_info is not None:
+                    candidate_text = trimmed
+                    info = trimmed_info
+
+                    logger.warning(
+                        (
+                            "V789S25W107F5_TRIM_BACKWARD_PREFIX "
+                            "key=%s kind=%s floor=%s new_first=%s last=%s"
+                        ),
+                        safe_log_key,
+                        kind,
+                        previous_first_seq,
+                        info["first_seq"],
+                        info["last_seq"],
+                    )
+
+            sequence_regressed = bool(
+                previous_last_seq is not None
+                and int(info["last_seq"])
+                < int(previous_last_seq)
+            )
+
+            pdt_regressed = bool(
+                previous_end is not None
+                and float(info["end_pdt"])
+                < (
+                    float(previous_end)
+                    - float(
+                        _V789S25W107F5_PDT_EPSILON_SECONDS
+                    )
+                )
+            )
+
+            non_advancing = bool(
+                previous_last_seq is not None
+                and int(info["last_seq"])
+                <= int(previous_last_seq)
+            )
+
+            if (
+                previous_playlist is not None
+                and (
+                    sequence_regressed
+                    or pdt_regressed
+                    or non_advancing
+                )
+            ):
+                reason = (
+                    "sequence-regression"
+                    if sequence_regressed
+                    else (
+                        "pdt-regression"
+                        if pdt_regressed
+                        else "non-advancing"
+                    )
+                )
+
+                logger.warning(
+                    (
+                        "V789S25W107F5_BLOCK_REGRESSION "
+                        "key=%s kind=%s reason=%s "
+                        "prev_first=%s prev_last=%s prev_end=%s "
+                        "cand_first=%s cand_last=%s cand_end=%.3f"
+                    ),
+                    safe_log_key,
+                    kind,
+                    reason,
+                    previous_first_seq,
+                    previous_last_seq,
+                    previous_end,
+                    info["first_seq"],
+                    info["last_seq"],
+                    float(info["end_pdt"]),
+                )
+
+                return {
+                    "text": previous_playlist,
+                    "decision": reason,
+                    "advanced": False,
+                    "snapshot": True,
+                }
+
+        # V789S25W107F7_MASTER_WATERMARK_BLOCK
+        # Child-local sequence identity cannot protect against an adaptive
+        # rendition switch. Enforce the master/kind PDT watermark BEFORE
+        # accepting the candidate into either child or master state.
+        master_regressed = bool(
+            previous_master_end is not None
+            and float(info["end_pdt"])
+            < (
+                float(previous_master_end)
+                - float(
+                    _V789S25W107F5_PDT_EPSILON_SECONDS
+                )
+            )
+        )
+
+        # W121ZPLAY10W_ALLOW_ADVANCING_SIBLING
+        #
+        # W107F5 child-local monotonicity has already run above. Therefore an
+        # established child reaching this point is advancing relative to its
+        # own approved sequence/PDT state.
+        #
+        # Do not replace that advancing VIDEO child with another sibling's
+        # master snapshot merely because the sibling is slightly farther ahead
+        # in presentation time. Media3 may still be consuming this exact child;
+        # replacing it with a sibling snapshot can strand the selected variant
+        # behind its live window.
+        #
+        # This exception is intentionally limited to clean PASS/BYPASS delivery.
+        # PREFIX/HOLD commercial-boundary behavior remains unchanged.
+        sibling_master_lag = False
+
+        if (
+            master_regressed
+            and kind == "video"
+            and safe_mode in ("pass", "bypass")
+            and previous_playlist is not None
+            and previous_master_playlist is not None
+            and previous_master_child_url is not None
+        ):
+            current_child_identity = (
+                _v789n1_url_identity_hash(
+                    child_url,
+                    include_query=False,
+                    length=64,
+                )
+            )
+
+            previous_master_child_identity = (
+                _v789n1_url_identity_hash(
+                    previous_master_child_url,
+                    include_query=False,
+                    length=64,
+                )
+            )
+
+            if (
+                current_child_identity
+                != previous_master_child_identity
+            ):
+                sibling_master_lag = True
+                master_regressed = False
+
+                logger.warning(
+                    (
+                        "W121ZPLAY10W_ALLOW_ADVANCING_SIBLING "
+                        "key=%s kind=%s mode=%s "
+                        "master_child=%s master_end=%.3f "
+                        "cand_end=%.3f lag=%.3f "
+                        "action=allow-child-preserve-master"
+                    ),
+                    safe_log_key,
+                    kind,
+                    safe_mode,
+                    str(
+                        previous_master_child_identity
+                    )[:16],
+                    float(previous_master_end),
+                    float(info["end_pdt"]),
+                    (
+                        float(previous_master_end)
+                        - float(info["end_pdt"])
+                    ),
+                )
+        if master_regressed:
+            if (
+                previous_master_playlist is not None
+                and previous_master_child_url is not None
+            ):
+                logger.warning(
+                    (
+                        "V789S25W107F7_BLOCK_MASTER_REGRESSION "
+                        "key=%s kind=%s master_end=%.3f "
+                        "cand_end=%.3f"
+                    ),
+                    safe_log_key,
+                    kind,
+                    float(previous_master_end),
+                    float(info["end_pdt"]),
+                )
+
+                return {
+                    "text": previous_master_playlist,
+                    "decision": "master-pdt-regression",
+                    "advanced": False,
+                    "snapshot": True,
+                    "source_child_url": (
+                        previous_master_child_url
+                    ),
+                }
+
+            if previous_playlist is not None:
+                logger.warning(
+                    (
+                        "V789S25W107F7_BLOCK_MASTER_REGRESSION_CHILD_SNAPSHOT "
+                        "key=%s kind=%s master_end=%.3f "
+                        "cand_end=%.3f"
+                    ),
+                    safe_log_key,
+                    kind,
+                    float(previous_master_end),
+                    float(info["end_pdt"]),
+                )
+
+                return {
+                    "text": previous_playlist,
+                    "decision": "master-pdt-regression-child-snapshot",
+                    "advanced": False,
+                    "snapshot": True,
+                }
+
+            # Fresh W107F7 state always writes a master snapshot alongside its
+            # watermark. If external deletion/corruption leaves only an end
+            # value, discard that unusable floor instead of serving media
+            # against an unverifiable snapshot.
+            await redis_client.delete(
+                master_key
+            )
+            previous_master_end = None
+            master_previous = None
+
+            logger.warning(
+                (
+                    "V789S25W107F7_CORRUPT_MASTER_FLOOR_RESET "
+                    "key=%s kind=%s"
+                ),
+                safe_log_key,
+                kind,
+            )
+
+        # V789S25W121ZY_HISTORICAL_REPLAY_BLOCK
+        #
+        # Sequence/PDT monotonicity cannot catch old Pluto media that is
+        # reissued with newer sequence and PDT metadata.
+        replay_probe = (
+            await _v789s25w121zy_probe_historical_replay(
+                redis_client,
+                master_url,
+                kind,
+                info.get("segment_ids"),
+            )
+        )
+
+        if bool(
+            replay_probe.get("replay")
+        ):
+            youngest_age = float(
+                replay_probe.get(
+                    "youngest_age"
+                )
+                or 0.0
+            )
+
+            oldest_age = float(
+                replay_probe.get(
+                    "oldest_age"
+                )
+                or 0.0
+            )
+
+            logger.warning(
+                (
+                    "V789S25W121ZY_BLOCK_HISTORICAL_REPLAY "
+                    "key=%s kind=%s ids=%s seen=%s "
+                    "youngest_age=%.3f oldest_age=%.3f "
+                    "cand_first=%s cand_last=%s cand_end=%.3f"
+                ),
+                safe_log_key,
+                kind,
+                replay_probe.get("ids"),
+                replay_probe.get("seen"),
+                youngest_age,
+                oldest_age,
+                info["first_seq"],
+                info["last_seq"],
+                float(info["end_pdt"]),
+            )
+
+            if (
+                previous_master_playlist is not None
+                and previous_master_child_url is not None
+            ):
+                return {
+                    "text": previous_master_playlist,
+                    "decision": "historical-media-replay",
+                    "advanced": False,
+                    "snapshot": True,
+                    "source_child_url": (
+                        previous_master_child_url
+                    ),
+                }
+
+            if previous_playlist is not None:
+                return {
+                    "text": previous_playlist,
+                    "decision": "historical-media-replay-child-snapshot",
+                    "advanced": False,
+                    "snapshot": True,
+                }
+
+            logger.warning(
+                (
+                    "V789S25W121ZY_REPLAY_NO_SNAPSHOT_FAIL_OPEN "
+                    "key=%s kind=%s"
+                ),
+                safe_log_key,
+                kind,
+            )
+        master_advanced = bool(
+            previous_master_end is None
+            or float(info["end_pdt"])
+            > (
+                float(previous_master_end)
+                + float(
+                    _V789S25W107F5_PDT_EPSILON_SECONDS
+                )
+            )
+        )
+
+        # Candidate is the first clean state or proves a child-safe logical tail.
+        state = {
+            "playlist": candidate_text,
+            "first_pdt": float(
+                info["first_pdt"]
+            ),
+            "end_pdt": float(
+                info["end_pdt"]
+            ),
+            "first_seq": int(
+                info["first_seq"]
+            ),
+            "last_seq": int(
+                info["last_seq"]
+            ),
+            "segment_ids": (
+                info["segment_ids"]
+            ),
+            "updated_at": float(
+                time.time()
+            ),
+        }
+
+        await redis_client.set(
+            state_key,
+            json.dumps(
+                state,
+                separators=(",", ":"),
+            ),
+            ex=_V789S25W107F5_PROGRAM_STATE_TTL_SECONDS,
+        )
+
+        # W121ZPLAY10W_PRESERVE_MASTER_SNAPSHOT
+        #
+        # A cross-rendition child accepted by W121ZPLAY10W advances only its
+        # child-local W107F5 state. Do NOT rewrite the shared master record with
+        # this candidate while retaining another sibling's higher master_end;
+        # that would pair the wrong playlist/child_url with the master floor.
+        if sibling_master_lag:
+            await _v789s25w121zy_record_accepted_segments(
+                redis_client,
+                master_url,
+                kind,
+                info.get("segment_ids"),
+            )
+
+            logger.warning(
+                (
+                    "W121ZPLAY10W_PRESERVE_MASTER_SNAPSHOT "
+                    "key=%s kind=%s mode=%s "
+                    "child_end=%.3f master_end=%.3f "
+                    "action=child-state-only"
+                ),
+                safe_log_key,
+                kind,
+                safe_mode,
+                float(info["end_pdt"]),
+                float(previous_master_end),
+            )
+
+            return {
+                "text": candidate_text,
+                "decision": "accept-child-behind-sibling",
+                "advanced": False,
+                "snapshot": False,
+            }
+        master_end = float(
+            info["end_pdt"]
+        )
+
+        if previous_master_end is not None:
+            master_end = max(
+                float(previous_master_end),
+                float(master_end),
+            )
+
+        await redis_client.set(
+            master_key,
+            json.dumps(
+                {
+                    "playlist": candidate_text,
+                    "child_url": child_url,
+                    "end_pdt": float(
+                        master_end
+                    ),
+                    "first_pdt": float(
+                        info["first_pdt"]
+                    ),
+                    "first_seq": int(
+                        info["first_seq"]
+                    ),
+                    "last_seq": int(
+                        info["last_seq"]
+                    ),
+                    "kind": kind,
+                    "updated_at": float(
+                        time.time()
+                    ),
+                },
+                separators=(",", ":"),
+            ),
+            ex=_V789S25W107F5_PROGRAM_STATE_TTL_SECONDS,
+        )
+
+        # V789S25W121ZY_RECORD_ACCEPTED_CLEAN
+        # Only media that has passed every existing W107F5/F7 gate is added
+        # to replay history.
+        await _v789s25w121zy_record_accepted_segments(
+            redis_client,
+            master_url,
+            kind,
+            info.get("segment_ids"),
+        )
+        logger.warning(
+            (
+                "V789S25W107F5_ACCEPT_CLEAN "
+                "key=%s kind=%s mode=%s "
+                "first=%s last=%s end=%.3f master_end=%.3f "
+                "master_advanced=%s"
+            ),
+            safe_log_key,
+            kind,
+            safe_mode,
+            info["first_seq"],
+            info["last_seq"],
+            float(info["end_pdt"]),
+            float(master_end),
+            1 if master_advanced else 0,
+        )
+
+        return {
+            "text": candidate_text,
+            "decision": (
+                "accept-clean"
+                if master_advanced
+                else "accept-master-equal"
+            ),
+            "advanced": bool(
+                master_advanced
+            ),
+            "snapshot": False,
+        }
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W107F5_GATE_ERROR "
+                "key=%s kind=%s mode=%s type=%s"
+            ),
+            safe_log_key,
+            kind,
+            safe_mode,
+            type(exc).__name__,
+        )
+
+        return {
+            "text": candidate_text,
+            "decision": "fail-open-exception",
+            "advanced": False,
+            "snapshot": False,
+        }
+
+    finally:
+        if acquired:
+            try:
+                await redis_client.eval(
+                    (
+                        "if redis.call('get', KEYS[1]) "
+                        "== ARGV[1] then "
+                        "return redis.call('del', KEYS[1]) "
+                        "else return 0 end"
+                    ),
+                    1,
+                    lock_key,
+                    lock_token,
+                )
+            except Exception:
+                pass
+
+
+# ================= /V789S25W107F5 MONOTONIC PROGRAM DELIVERY GATE =================
+
+
+# ================= V789S25W107F4 APP COMMERCIAL STATUS =================
+# V789S25W107F4_APP_COMMERCIAL_STATUS
+#
+# The HLS player must remain healthy during an unavoidable live commercial
+# interval. N4 filler therefore remains available UNDER the application.
+#
+# The user-facing commercial screen is driven separately through this
+# master-scoped status channel.
+#
+# IMPORTANT:
+# - only VIDEO child requests publish status;
+# - HOLD makes the overlay active;
+# - PREFIX does not clear an already-active break;
+# - BYPASS clears immediately because clean post-break media is proven;
+# - PASS clears an old HOLD only after the hold has gone quiet long enough.
+
+_V789S25W107F4_STATUS_TTL_SECONDS = 30
+_V789S25W107F4_HOLD_FRESH_SECONDS = 8.0
+
+
+def _v789s25w107f4_status_key(
+    master_url: str,
+) -> str:
+    identity = (
+        _v789n1_url_identity_hash(
+            master_url,
+            include_query=False,
+            length=64,
+        )
+    )
+
+    return (
+        "v789s25w107f4:commercial:"
+        + identity
+    )
+
+
+async def _v789s25w107f4_read_status(
+    master_url: str,
+):
+    try:
+        redis_client = (
+            await _v789n1_get_redis()
+        )
+
+        raw = await redis_client.get(
+            _v789s25w107f4_status_key(
+                master_url
+            )
+        )
+
+        if not raw:
+            return None
+
+        candidate = json.loads(raw)
+
+        if not isinstance(
+            candidate,
+            dict,
+        ):
+            return None
+
+        return candidate
+
+    except Exception:
+        return None
+
+
+async def _v789s25w107f4_publish_status(
+    master_url: str,
+    mode: str,
+    observed_mode: str,
+):
+    # W121ZPLAY9_ATOMIC_COMMERCIAL_AUTHORITY
+    #
+    # Commercial status is shared by all Gunicorn workers and all VIDEO
+    # renditions of one logical master. The complete read/decide/write
+    # transaction must therefore be serialized at the master status key.
+    #
+    # "mode" is the caller's effective decision. "observed_mode" is the
+    # upstream commercial classification that produced that decision.
+    # This distinction prevents synthetic PASS-snapshot HOLD decisions
+    # from revoking a previously proven post-break BYPASS while still
+    # allowing genuinely fresh PREFIX/HOLD evidence to start a new break.
+    now = float(time.time())
+
+    requested_mode = str(
+        mode or "pass"
+    ).strip().lower()
+
+    safe_observed_mode = str(
+        observed_mode or requested_mode
+    ).strip().lower()
+
+    status_key = _v789s25w107f4_status_key(
+        master_url
+    )
+
+    lock_key = status_key + ":lock"
+    lock_token = uuid.uuid4().hex
+    acquired = False
+
+    try:
+        redis_client = (
+            await _v789n1_get_redis()
+        )
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W107F4_STATUS_WRITE_ERROR "
+                "mode=%s type=%s"
+            ),
+            requested_mode,
+            type(exc).__name__,
+        )
+        return
+
+    try:
+        for _ in range(40):
+            acquired = bool(
+                await redis_client.set(
+                    lock_key,
+                    lock_token,
+                    nx=True,
+                    ex=_V789N1_LOCK_TTL_SECONDS,
+                )
+            )
+
+            if acquired:
+                break
+
+            await asyncio.sleep(0.025)
+
+        if not acquired:
+            logger.warning(
+                (
+                    "W121ZPLAY9_STATUS_LOCK_TIMEOUT "
+                    "requested=%s observed=%s"
+                ),
+                requested_mode,
+                safe_observed_mode,
+            )
+            return
+
+        previous = None
+
+        raw_previous = await redis_client.get(
+            status_key
+        )
+
+        if raw_previous:
+            try:
+                candidate = json.loads(
+                    raw_previous
+                )
+
+                if isinstance(candidate, dict):
+                    previous = candidate
+            except Exception:
+                previous = None
+
+        previous_mode = ""
+
+        if isinstance(previous, dict):
+            previous_mode = str(
+                previous.get("mode")
+                or ""
+            ).strip().lower()
+
+        previous_active = bool(
+            isinstance(previous, dict)
+            and previous.get("active")
+        )
+
+        try:
+            previous_updated = float(
+                previous.get("updated_at")
+                if isinstance(previous, dict)
+                else 0.0
+            )
+        except Exception:
+            previous_updated = 0.0
+
+        safe_mode = requested_mode
+
+        authoritative_break_evidence = (
+            safe_observed_mode
+            in (
+                "prefix",
+                "hold",
+            )
+        )
+
+        # W121ZPLAY9_POSTBREAK_MASTER_LATCH
+        #
+        # BYPASS means genuinely advancing post-break program media was
+        # already proven. PASS, BYPASS, and synthetic HOLD results based
+        # on ordinary clean snapshots may not revoke that proof.
+        #
+        # Fresh observed PREFIX/HOLD evidence remains exempt so the next
+        # legitimate commercial break can still begin.
+        if (
+            previous_mode == "bypass"
+            and not previous_active
+            and not authoritative_break_evidence
+            and safe_mode
+            in (
+                "pass",
+                "bypass",
+                "hold",
+            )
+        ):
+            if safe_mode != "bypass":
+                logger.warning(
+                    (
+                        "W121ZPLAY9_STATUS_BYPASS_PRESERVED "
+                        "requested=%s observed=%s"
+                    ),
+                    requested_mode,
+                    safe_observed_mode,
+                )
+
+            safe_mode = "bypass"
+
+        active = False
+
+        if safe_mode == "hold":
+            active = True
+
+        elif safe_mode == "bypass":
+            active = False
+
+        elif safe_mode == "prefix":
+            # PREFIX alone is pre-break evidence and must not start the
+            # overlay. If a break is already active it must not clear it.
+            active = previous_active
+
+        elif safe_mode == "pass":
+            if previous_active:
+                hold_is_fresh = bool(
+                    now - previous_updated
+                    < _V789S25W107F4_HOLD_FRESH_SECONDS
+                )
+
+                if hold_is_fresh:
+                    active = True
+
+                    # W121ZPLAY9_ACTIVE_MODE_PRESERVED
+                    #
+                    # MODE is authoritative to the frontend. Publishing
+                    # active=1 mode=pass would still tell the frontend to
+                    # resume programming, so preserve a commercial mode.
+                    if previous_mode in (
+                        "hold",
+                        "prefix",
+                    ):
+                        safe_mode = previous_mode
+
+                    if previous_mode not in (
+                        "hold",
+                        "prefix",
+                    ):
+                        safe_mode = "hold"
+
+                    logger.warning(
+                        (
+                            "W121ZPLAY9_ACTIVE_MODE_PRESERVED "
+                            "previous=%s effective=%s"
+                        ),
+                        previous_mode or "unknown",
+                        safe_mode,
+                    )
+
+        state = {
+            "active": bool(active),
+            "mode": safe_mode,
+            "updated_at": now,
+        }
+
+        await redis_client.set(
+            status_key,
+            json.dumps(
+                state,
+                separators=(",", ":"),
+            ),
+            ex=_V789S25W107F4_STATUS_TTL_SECONDS,
+        )
+
+        logger.warning(
+            (
+                "V789S25W107F4_STATUS "
+                "active=%s mode=%s"
+            ),
+            1 if active else 0,
+            safe_mode,
+        )
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W107F4_STATUS_WRITE_ERROR "
+                "mode=%s type=%s"
+            ),
+            requested_mode,
+            type(exc).__name__,
+        )
+
+    finally:
+        if acquired:
+            try:
+                await redis_client.eval(
+                    (
+                        "if redis.call('get', KEYS[1]) "
+                        "== ARGV[1] then "
+                        "return redis.call('del', KEYS[1]) "
+                        "else return 0 end"
+                    ),
+                    1,
+                    lock_key,
+                    lock_token,
+                )
+            except Exception:
+                pass
+
+# ================= V789S25W107F6 INDEPENDENT COMMERCIAL PROBE =================
+# V789S25W107F6_INDEPENDENT_COMMERCIAL_PROBE
+#
+# W107F5 can deliberately freeze Media3 on the last approved clean playlist
+# during HOLD. Therefore post-break discovery must NOT depend on Media3
+# continuing to refresh the child playlist. The app already polls the
+# commercial-status endpoint; while HOLD is active that poll drives a
+# throttled server-side probe of the last active VIDEO child.
+_V789S25W107F6_PROBE_STATE_TTL_SECONDS = 15 * 60
+_V789S25W107F6_PROBE_THROTTLE_SECONDS = 1
+
+
+def _v789s25w107f6_probe_state_key(
+    master_url: str,
+) -> str:
+    identity = _v789n1_url_identity_hash(
+        master_url,
+        include_query=False,
+        length=64,
+    )
+
+    return (
+        "privastream:v789s25w107f6:"
+        "commercial-probe:"
+        + identity
+    )
+
+
+async def _v789s25w107f6_register_video_child(
+    master_url: str,
+    child_url: str,
+):
+    if _v789n4_media_kind(child_url) != "video":
+        return
+
+    try:
+        child = _v786f_validate_child_url(
+            master_url,
+            child_url,
+        )
+
+        redis_client = await _v789n1_get_redis()
+
+        await redis_client.set(
+            _v789s25w107f6_probe_state_key(
+                master_url
+            ),
+            json.dumps(
+                {
+                    "child_url": child,
+                    "updated_at": float(time.time()),
+                },
+                separators=(",", ":"),
+            ),
+            ex=_V789S25W107F6_PROBE_STATE_TTL_SECONDS,
+        )
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W107F6_REGISTER_ERROR "
+                "type=%s"
+            ),
+            type(exc).__name__,
+        )
+
+
+async def _v789s25w107f6_probe_active_hold(
+    master_url: str,
+):
+    safe_key = _v789n1_url_identity_hash(
+        master_url,
+        include_query=False,
+        length=16,
+    )
+
+    try:
+        redis_client = await _v789n1_get_redis()
+
+        state_key = _v789s25w107f6_probe_state_key(
+            master_url
+        )
+
+        raw = await redis_client.get(
+            state_key
+        )
+
+        if not raw:
+            logger.warning(
+                "V789S25W107F6_PROBE_NO_CHILD key=%s",
+                safe_key,
+            )
+            return False
+
+        state = json.loads(raw)
+
+        if not isinstance(state, dict):
+            return False
+
+        child_url = _v786f_validate_child_url(
+            master_url,
+            str(
+                state.get("child_url")
+                or ""
+            ),
+        )
+
+        throttle_key = (
+            state_key
+            + ":throttle"
+        )
+
+        acquired = bool(
+            await redis_client.set(
+                throttle_key,
+                str(time.time()),
+                nx=True,
+                ex=_V789S25W107F6_PROBE_THROTTLE_SECONDS,
+            )
+        )
+
+        if not acquired:
+            return False
+
+        client = await get_shared_http_client()
+
+        await _v789n2_r5_pluto_master_keepalive(
+            client,
+            master_url,
+        )
+
+        try:
+            response = await _v726_safe_addon_get(
+                client,
+                child_url,
+                timeout=12.0,
+            )
+        except Exception as exc:
+            logger.warning(
+                (
+                    "V789S25W107F6_PROBE_FETCH_ERROR "
+                    "key=%s type=%s"
+                ),
+                safe_key,
+                type(exc).__name__,
+            )
+            return False
+
+        if (
+            response.status_code != 200
+            or _v786f_is_transient_empty_endlist(
+                response
+            )
+        ):
+            try:
+                master_refresh = (
+                    await _v726_safe_addon_get(
+                        client,
+                        master_url,
+                        timeout=12.0,
+                    )
+                )
+
+                if master_refresh.status_code == 200:
+                    response = (
+                        await _v726_safe_addon_get(
+                            client,
+                            child_url,
+                            timeout=12.0,
+                        )
+                    )
+            except Exception as exc:
+                logger.warning(
+                    (
+                        "V789S25W107F6_PROBE_REFRESH_ERROR "
+                        "key=%s type=%s"
+                    ),
+                    safe_key,
+                    type(exc).__name__,
+                )
+                return False
+
+        if (
+            response.status_code != 200
+            or _v786f_is_transient_empty_endlist(
+                response
+            )
+        ):
+            logger.warning(
+                (
+                    "V789S25W107F6_PROBE_NOT_READY "
+                    "key=%s status=%s"
+                ),
+                safe_key,
+                response.status_code,
+            )
+            return False
+
+        retired_guard = (
+            await _v789s25o_retired_break_guard(
+                response.text,
+                child_url,
+            )
+        )
+
+        if bool(
+            retired_guard.get("stale")
+        ):
+            logger.warning(
+                "V789S25W107F6_PROBE_STALE_BLOCK key=%s",
+                safe_key,
+            )
+            return False
+
+        normalized_media_text = (
+            await _v789n1_normalize_media_timeline(
+                response.text,
+                child_url,
+                master_url,
+            )
+        )
+
+        suppressed_media_text = (
+            await _v789n4_apply_bumper_suppression(
+                normalized_media_text,
+                child_url,
+                master_url,
+            )
+        )
+
+        commercial_gate = (
+            _v789s25w107f3_gate_commercial_playlist(
+                normalized_media_text,
+                suppressed_media_text,
+                child_url,
+            )
+        )
+
+        commercial_mode = str(
+            commercial_gate.get("mode")
+            or "pass"
+        )
+
+        if bool(
+            commercial_gate.get("hold")
+        ):
+            program_candidate_text = None
+        else:
+            program_candidate_text = str(
+                commercial_gate.get("text")
+                or suppressed_media_text
+            )
+
+        program_gate = (
+            await _v789s25w107f5_gate_program_delivery(
+                program_candidate_text,
+                master_url,
+                child_url,
+                commercial_mode,
+            )
+        )
+
+        program_decision = str(
+            program_gate.get("decision")
+            or "unknown"
+        )
+
+        effective_mode = commercial_mode
+
+        previous_status = (
+            await _v789s25w107f4_read_status(
+                master_url
+            )
+        )
+
+        previous_active = bool(
+            isinstance(previous_status, dict)
+            and previous_status.get("active")
+        )
+
+        if (
+            commercial_mode == "bypass"
+            and not bool(
+                program_gate.get("advanced")
+            )
+        ):
+            effective_mode = "hold"
+
+        elif (
+            commercial_mode == "pass"
+            and bool(
+                program_gate.get("snapshot")
+            )
+        ):
+            # V789S25W121ZSR_PASS_SNAPSHOT_QUARANTINE
+            # A frozen clean snapshot is safe media, but it is not proof that
+            # the live program is advancing. Keep the independent overlay
+            # active while the probe waits for genuinely advancing clean media.
+            effective_mode = "hold"
+
+            logger.warning(
+                (
+                    "V789S25W121ZSR_PASS_SNAPSHOT_HOLD "
+                    "source=probe decision=%s"
+                ),
+                program_decision,
+            )
+
+        elif (
+            previous_active
+            and commercial_mode == "pass"
+            and bool(
+                program_gate.get("advanced")
+            )
+        ):
+            # Pluto can jump directly from a bumper-only window to a
+            # pure-clean window without ever exposing a mixed bumper+clean
+            # BYPASS window. Advancing clean program media is enough proof
+            # that programming returned.
+            effective_mode = "bypass"
+
+        await _v789s25w107f4_publish_status(
+            master_url,
+            effective_mode,
+            commercial_mode,
+        )
+
+        logger.warning(
+            (
+                "V789S25W107F6_PROBE_RESULT "
+                "key=%s commercial=%s effective=%s "
+                "decision=%s advanced=%s"
+            ),
+            safe_key,
+            commercial_mode,
+            effective_mode,
+            program_decision,
+            1 if bool(
+                program_gate.get("advanced")
+            )
+            else 0,
+        )
+
+        return bool(
+            effective_mode == "bypass"
+        )
+
+    except Exception as exc:
+        logger.warning(
+            (
+                "V789S25W107F6_PROBE_ERROR "
+                "key=%s type=%s"
+            ),
+            safe_key,
+            type(exc).__name__,
+        )
+        return False
+
+
+# ================= /V789S25W107F6 INDEPENDENT COMMERCIAL PROBE =================
+
+@api_router.get("/live/pluto/commercial-status")
+async def v789s25w107f4_commercial_status(
+    token: str,
+):
+    payload = _v786f_unpack_token(
+        token,
+        "master",
+    )
+
+    master_url = payload["master"]
+
+    state = (
+        await _v789s25w107f4_read_status(
+            master_url
+        )
+    )
+
+    # V789S25W107F6_STATUS_DRIVEN_PROBE
+    # The app polls this endpoint while the gold commercial overlay is active.
+    # Use that poll to keep discovering upstream clean media even if Media3
+    # has stopped refreshing its frozen child playlist.
+    probe_needed = (
+        isinstance(state, dict)
+        and (
+            bool(
+                state.get("active")
+            )
+            or str(
+                state.get("mode")
+                or ""
+            ).strip().lower() == "prefix"
+        )
+    )
+
+    if probe_needed:
+        await _v789s25w107f6_probe_active_hold(
+            master_url
+        )
+
+        state = (
+            await _v789s25w107f4_read_status(
+                master_url
+            )
+        )
+
+    if not isinstance(state, dict):
+        return {
+            "active": False,
+            "mode": "unknown",
+            "updated_at": 0,
+        }
+
+    try:
+        updated_at = float(
+            state.get(
+                "updated_at"
+            )
+            or 0.0
+        )
+    except Exception:
+        updated_at = 0.0
+
+    active = bool(
+        state.get("active")
+    )
+
+    # Never leave the application stuck behind an abandoned status key.
+    if (
+        active
+        and (
+            float(time.time())
+            - updated_at
+        )
+        > float(
+            _V789S25W107F4_STATUS_TTL_SECONDS
+        )
+    ):
+        active = False
+
+    return {
+        "active": bool(active),
+        "mode": str(
+            state.get("mode")
+            or "unknown"
+        ),
+        "updated_at": updated_at,
+    }
+
+
+# ================= /V789S25W107F4 APP COMMERCIAL STATUS =================
+
 @api_router.get("/live/pluto/playlist.m3u8")
 async def v786f_pluto_child_playlist(
     token: str,
@@ -4382,7 +16542,21 @@ async def v786f_pluto_child_playlist(
     master_url = payload["master"]
     child_url = payload["child"]
 
+    # V789S25W107F6_REGISTER_ACTIVE_VIDEO_CHILD
+    # Keep the exact validated upstream child available to the independent
+    # commercial-status probe. Audio children never own this probe.
+    await _v789s25w107f6_register_video_child(
+        master_url,
+        child_url,
+    )
+
     client = await get_shared_http_client()
+
+    # V789N2-R5 proactive Pluto master keepalive.
+    await _v789n2_r5_pluto_master_keepalive(
+        client,
+        master_url,
+    )
 
     try:
         response = await _v726_safe_addon_get(
@@ -4538,17 +16712,576 @@ async def v786f_pluto_child_playlist(
             },
         )
 
-    # V789N1_APPLY_TIMELINE_NORMALIZATION
-    normalized_media_text = (
-        await _v789n1_normalize_media_timeline(
+    # V789S25O_PRE_N1_STALE_REENTRY_GUARD
+    #
+    # A retired stale bumper must be rejected BEFORE N1 assigns
+    # logical sequence/discontinuity identity to it.
+    retired_guard = (
+        await _v789s25o_retired_break_guard(
             response.text,
             child_url,
         )
     )
 
+    if bool(
+        retired_guard.get(
+            "stale"
+        )
+    ):
+        recovered_from_stale = False
+
+        for stale_attempt in range(3):
+            try:
+                # First retry is intentionally just an immediate
+                # child refetch.
+                #
+                # Subsequent retries refresh the same Pluto
+                # master first, matching the already-proven
+                # transient-ENDLIST recovery pattern.
+                if stale_attempt > 0:
+                    master_refresh = (
+                        await _v726_safe_addon_get(
+                            client,
+                            master_url,
+                            timeout=12.0,
+                        )
+                    )
+
+                    logger.warning(
+                        (
+                            "V789S25O_PLUTO_STALE_MASTER_REFRESH "
+                            "attempt=%s status=%s"
+                        ),
+                        stale_attempt + 1,
+                        master_refresh.status_code,
+                    )
+
+                    if (
+                        master_refresh.status_code
+                        != 200
+                    ):
+                        continue
+
+                    await asyncio.sleep(
+                        0.05
+                        * stale_attempt
+                    )
+
+                candidate = (
+                    await _v726_safe_addon_get(
+                        client,
+                        child_url,
+                        timeout=12.0,
+                    )
+                )
+
+                _v789e_pluto_media_diag(
+                    candidate,
+                    child_url,
+                    "s25o-stale-retry",
+                    stale_attempt + 1,
+                )
+
+                if candidate.status_code != 200:
+                    continue
+
+                if _v786f_is_transient_empty_endlist(
+                    candidate
+                ):
+                    continue
+
+                candidate_guard = (
+                    await _v789s25o_retired_break_guard(
+                        candidate.text,
+                        child_url,
+                    )
+                )
+
+                if bool(
+                    candidate_guard.get(
+                        "stale"
+                    )
+                ):
+                    logger.warning(
+                        (
+                            "V789S25O_PLUTO_STALE_REENTRY_STILL_STALE "
+                            "attempt=%s"
+                        ),
+                        stale_attempt + 1,
+                    )
+
+                    continue
+
+                response = candidate
+                recovered_from_stale = True
+
+                logger.warning(
+                    (
+                        "V789S25O_PLUTO_STALE_REENTRY_RECOVERED "
+                        "attempt=%s"
+                    ),
+                    stale_attempt + 1,
+                )
+
+                break
+
+            except Exception as exc:
+                logger.warning(
+                    (
+                        "V789S25O_PLUTO_STALE_REENTRY_RETRY_ERROR "
+                        "attempt=%s type=%s"
+                    ),
+                    stale_attempt + 1,
+                    type(exc).__name__,
+                )
+
+        if not recovered_from_stale:
+            logger.warning(
+                "V789S25O_PLUTO_STALE_REENTRY_RETRY_EXHAUSTED"
+            )
+
+            # V789S25W107F8_STALE_REENTRY_SNAPSHOT_200
+            # Never re-introduce the retired bumper window, but also never
+            # starve Media3 with an intentional 503 when a clean approved
+            # program snapshot already exists.
+            stale_snapshot = (
+                await _v789s25w107f8_last_approved_snapshot(
+                    master_url,
+                    child_url,
+                )
+            )
+
+            stale_snapshot_text = (
+                stale_snapshot.get(
+                    "text"
+                )
+            )
+
+            stale_snapshot_source = (
+                stale_snapshot.get(
+                    "source_child_url"
+                )
+            )
+
+            if (
+                isinstance(
+                    stale_snapshot_text,
+                    str,
+                )
+                and stale_snapshot_text.strip()
+                and isinstance(
+                    stale_snapshot_source,
+                    str,
+                )
+                and stale_snapshot_source.strip()
+            ):
+                try:
+                    stale_snapshot_source = (
+                        _v786f_validate_child_url(
+                            master_url,
+                            stale_snapshot_source,
+                        )
+                    )
+
+                    rewritten_stale_snapshot = (
+                        _v786f_rewrite_media_playlist(
+                            stale_snapshot_text,
+                            stale_snapshot_source,
+                            master_url,
+                        )
+                    )
+
+                    if (
+                        _v789n4_media_kind(
+                            child_url
+                        )
+                        == "video"
+                    ):
+                        # V789S25W107F8R2_STALE_SNAPSHOT_PUBLISH_HOLD
+                        # This early-return path bypasses the normal status
+                        # publication later in the route. Publish HOLD before
+                        # returning the frozen clean snapshot so the frontend
+                        # can show the independent commercial overlay.
+                        await _v789s25w107f4_publish_status(
+                            master_url,
+                            "hold",
+                            "pass",
+                        )
+
+                        logger.warning(
+                            (
+                                "V789S25W107F8R2_STALE_SNAPSHOT_PUBLISH_HOLD "
+                                "kind=video scope=%s"
+                            ),
+                            str(
+                                stale_snapshot.get(
+                                    "scope"
+                                )
+                                or "unknown"
+                            ),
+                        )
+                    logger.warning(
+                        (
+                            "V789S25W107F8_STALE_REENTRY_SNAPSHOT_200 "
+                            "kind=%s scope=%s"
+                        ),
+                        _v789n4_media_kind(
+                            child_url
+                        ),
+                        str(
+                            stale_snapshot.get(
+                                "scope"
+                            )
+                            or "unknown"
+                        ),
+                    )
+
+                    return Response(
+                        content=rewritten_stale_snapshot,
+                        status_code=200,
+                        media_type=(
+                            "application/vnd.apple.mpegurl"
+                        ),
+                        headers=(
+                            _v786f_playlist_headers()
+                        ),
+                    )
+
+                except Exception as exc:
+                    logger.warning(
+                        (
+                            "V789S25W107F8_STALE_SNAPSHOT_REWRITE_ERROR "
+                            "kind=%s type=%s"
+                        ),
+                        _v789n4_media_kind(
+                            child_url
+                        ),
+                        type(exc).__name__,
+                    )
+
+            # Tune-in can reach a retired/stale upstream window before any
+            # approved clean snapshot exists. Preserve the old retry behavior
+            # only for that narrow bootstrap case.
+            logger.warning(
+                "V789S25W107F8_STALE_REENTRY_NO_SNAPSHOT_503"
+            )
+
+            return Response(
+                status_code=503,
+                headers={
+                    **_v786f_playlist_headers(),
+                    "Retry-After": "1",
+                },
+            )
+
+    # V789N1_APPLY_TIMELINE_NORMALIZATION
+    normalized_media_text = (
+        await _v789n1_normalize_media_timeline(
+            response.text,
+            child_url,
+            master_url,
+        )
+    )
+
+    # V789N4_APPLY_BUMPER_SUPPRESSION
+    suppressed_media_text = (
+        await _v789n4_apply_bumper_suppression(
+            normalized_media_text,
+            child_url,
+            master_url,
+        )
+    )
+
+    # V789S25W107F3_COMMERCIAL_GATE_APPLY
+    #
+    # N4 still owns internal break/timeline state. F3 identifies which clean
+    # portion, if any, may be delivered.
+    commercial_gate = (
+        _v789s25w107f3_gate_commercial_playlist(
+            normalized_media_text,
+            suppressed_media_text,
+            child_url,
+        )
+    )
+
+    commercial_mode = str(
+        commercial_gate.get(
+            "mode"
+        )
+        or "pass"
+    )
+
+    # V789S25W107F5_MONOTONIC_PROGRAM_GATE_APPLY
+    #
+    # Run the final clean-delivery firewall AFTER F3 has removed commercial
+    # media and BEFORE the playlist is exposed to Media3.
+    if bool(
+        commercial_gate.get(
+            "hold"
+        )
+    ):
+        program_candidate_text = None
+    else:
+        program_candidate_text = str(
+            commercial_gate.get(
+                "text"
+            )
+            or suppressed_media_text
+        )
+
+    program_gate = (
+        await _v789s25w107f5_gate_program_delivery(
+            program_candidate_text,
+            master_url,
+            child_url,
+            commercial_mode,
+        )
+    )
+
+    program_decision = str(
+        program_gate.get(
+            "decision"
+        )
+        or "unknown"
+    )
+
+    effective_commercial_mode = (
+        commercial_mode
+    )
+
+    # W121ZPLAY6_POSTBREAK_BYPASS_MONOTONIC_LATCH
+    #
+    # The independent W107F6 probe can prove advancing clean program media
+    # before the resumed Media3 delivery request catches up. Once BYPASS has
+    # established that proof, an older/non-advancing PASS/BYPASS snapshot must
+    # not revoke it and put the viewer back into the same commercial break.
+    #
+    # PREFIX/HOLD are intentionally excluded: fresh commercial evidence must
+    # still be able to start the next legitimate break.
+    previous_commercial_status = (
+        await _v789s25w107f4_read_status(
+            master_url
+        )
+    )
+
+    postbreak_bypass_latched = bool(
+        isinstance(
+            previous_commercial_status,
+            dict,
+        )
+        and str(
+            previous_commercial_status.get(
+                "mode"
+            )
+            or ""
+        ).strip().lower()
+        == "bypass"
+        and not bool(
+            previous_commercial_status.get(
+                "active"
+            )
+        )
+    )
+
+    if (
+        postbreak_bypass_latched
+        and commercial_mode in (
+            "pass",
+            "bypass",
+        )
+    ):
+        effective_commercial_mode = "bypass"
+
+        logger.warning(
+            (
+                "W121ZPLAY6_POSTBREAK_BYPASS_PRESERVED "
+                "kind=%s commercial=%s decision=%s snapshot=%s"
+            ),
+            _v789n4_media_kind(
+                child_url
+            ),
+            commercial_mode,
+            program_decision,
+            1 if bool(
+                program_gate.get(
+                    "snapshot"
+                )
+            )
+            else 0,
+        )
+
+    # A BYPASS is allowed to clear the gold overlay only after the monotonic
+    # gate proves a genuinely advancing clean logical tail.
+    if (
+        not postbreak_bypass_latched
+        and commercial_mode == "bypass"
+        and not bool(
+            program_gate.get(
+                "advanced"
+            )
+        )
+    ):
+        effective_commercial_mode = (
+            "hold"
+        )
+
+        logger.warning(
+            (
+                "V789S25W107F5_POSTBREAK_NOT_ADVANCED "
+                "kind=%s decision=%s"
+            ),
+            _v789n4_media_kind(
+                child_url
+            ),
+            program_decision,
+        )
+
+    # V789S25W121ZSR_PASS_SNAPSHOT_QUARANTINE
+    # W121ZSP proved that returning a frozen snapshot while status remains PASS
+    # lets Media3 surface PlaylistStuckException/recovery and visible catch-up
+    # jumps. The snapshot itself may still be served as safe media, but the app
+    # must keep the independent overlay active until clean media advances.
+    if (
+        not postbreak_bypass_latched
+        and commercial_mode == "pass"
+        and bool(
+            program_gate.get(
+                "snapshot"
+            )
+        )
+    ):
+        effective_commercial_mode = (
+            "hold"
+        )
+
+        logger.warning(
+            (
+                "V789S25W121ZSR_PASS_SNAPSHOT_HOLD "
+                "source=delivery kind=%s decision=%s"
+            ),
+            _v789n4_media_kind(
+                child_url
+            ),
+            program_decision,
+        )
+
+    # V789S25W121ZSR_PREFIX_PREBREAK_ONLY
+    # PREFIX means clean program remains before a future commercial tail.
+    # Never start a new visible break merely because that trimmed prefix did
+    # not advance the delivery watermark. If a HOLD is already active,
+    # publish_status(prefix) preserves it; otherwise the viewer keeps consuming
+    # already-buffered clean program until authoritative HOLD arrives.
+    if (
+        commercial_mode == "prefix"
+        and not bool(
+            program_gate.get(
+                "advanced"
+            )
+        )
+    ):
+        logger.warning(
+            (
+                "V789S25W121ZSR_PREFIX_PREBREAK_ONLY "
+                "kind=%s decision=%s snapshot=%s"
+            ),
+            _v789n4_media_kind(
+                child_url
+            ),
+            program_decision,
+            1 if bool(
+                program_gate.get(
+                    "snapshot"
+                )
+            )
+            else 0,
+        )
+
+    # Only video children own the user-facing commercial status.
+    if (
+        _v789n4_media_kind(
+            child_url
+        )
+        == "video"
+    ):
+        await _v789s25w107f4_publish_status(
+            master_url,
+            effective_commercial_mode,
+            commercial_mode,
+        )
+
+    gated_media_text = (
+        program_gate.get(
+            "text"
+        )
+    )
+
+    if not isinstance(
+        gated_media_text,
+        str,
+    ) or not gated_media_text.strip():
+        # Tune-in during a commercial can occur before W107F5 has any prior
+        # clean child snapshot. Preserve W107F4's proven bootstrap behavior
+        # only for that exceptional case; normal in-session HOLD never uses
+        # N4 filler once a clean snapshot exists.
+        gated_media_text = (
+            suppressed_media_text
+        )
+
+        logger.warning(
+            (
+                "V789S25W107F5_BOOTSTRAP_FILLER_FALLBACK "
+                "kind=%s mode=%s decision=%s"
+            ),
+            _v789n4_media_kind(
+                child_url
+            ),
+            commercial_mode,
+            program_decision,
+        )
+    else:
+        logger.warning(
+            (
+                "V789S25W107F5_DELIVERY "
+                "kind=%s commercial=%s effective=%s decision=%s snapshot=%s"
+            ),
+            _v789n4_media_kind(
+                child_url
+            ),
+            commercial_mode,
+            effective_commercial_mode,
+            program_decision,
+            1 if bool(
+                program_gate.get(
+                    "snapshot"
+                )
+            )
+            else 0,
+        )
+
+    # V789S25W107F7_SNAPSHOT_SOURCE_CHILD
+    # A blocked adaptive rendition can be served from the last master-approved
+    # sibling snapshot. Rewrite relative segment/key URIs against the child
+    # that actually produced that snapshot, never against the regressive child.
+    snapshot_source_child_url = str(
+        program_gate.get(
+            "source_child_url"
+        )
+        or child_url
+    )
+
+    try:
+        snapshot_source_child_url = (
+            _v786f_validate_child_url(
+                master_url,
+                snapshot_source_child_url,
+            )
+        )
+    except Exception:
+        snapshot_source_child_url = child_url
+
     rewritten = _v786f_rewrite_media_playlist(
-        normalized_media_text,
-        child_url,
+        gated_media_text,
+        snapshot_source_child_url,
         master_url,
     )
 
@@ -13380,6 +26113,11 @@ async def get_live_tv_epg(
                                 pluto_id
                             )
                             or meta.get("logo")
+                            or (
+                                "https://images.pluto.tv/channels/"
+                                + pluto_id
+                                + "/colorLogoPNG.png"
+                            )
                         ),
                     "background":
                         meta.get(
@@ -16187,9 +28925,19 @@ async def add_to_library(item: LibraryItem, current_user: User = Depends(get_cur
     item_dict = item.dict()
     item_dict["user_id"] = current_user.id
     
+    # W121ZPLAY10Y24X_LIBRARY_NULL_IMDB_DEDUPE
+    # TV channels commonly have no imdb_id. Never include a null/empty
+    # imdb_id in the duplicate query: MongoDB {imdb_id: None} also
+    # matches documents where the field is null or missing, which makes
+    # every no-IMDb TV channel collide with the first one in the library.
+    identity_filters = [{"id": item.id}]
+    normalized_imdb_id = (item.imdb_id or "").strip()
+    if normalized_imdb_id:
+        identity_filters.append({"imdb_id": normalized_imdb_id})
+
     existing = await db.library.find_one({
         "user_id": current_user.id,
-        "$or": [{"id": item.id}, {"imdb_id": item.imdb_id}]
+        "$or": identity_filters
     })
     if existing:
         return {"message": "Already in library"}

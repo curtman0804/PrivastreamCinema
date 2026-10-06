@@ -231,6 +231,66 @@ class MainActivity : ReactActivity() {
      the poster does not open Details after the menu appears. */
   private var v176fConsumeOkUp: Boolean = false
 
+  // W121ZPLAY10Y24F_LONGSELECT_PHYSICAL_HOLD_GATE
+  // One physical Fire TV hold may surface through more than one
+  // longSelect-producing Android path. Accept the first event only.
+  private var v788y24LastLongSelectDownTime: Long = Long.MIN_VALUE
+  private var v788y24LastLongSelectEventTime: Long = Long.MIN_VALUE
+
+  private fun v788y24AcceptLongSelect(
+    event: KeyEvent,
+    source: String
+  ): Boolean {
+    val samePhysicalPress =
+      event.downTime == v788y24LastLongSelectDownTime
+
+    val deltaMs =
+      if (
+        v788y24LastLongSelectEventTime == Long.MIN_VALUE ||
+        event.eventTime < v788y24LastLongSelectEventTime
+      ) {
+        Long.MAX_VALUE
+      } else {
+        event.eventTime - v788y24LastLongSelectEventTime
+      }
+
+    // Runtime Y24 capture showed duplicate longSelect deliveries
+    // separated by roughly 368 ms and 416 ms.
+    val rapidDuplicate =
+      deltaMs <= 500L
+
+    v788y24LastLongSelectDownTime =
+      event.downTime
+
+    v788y24LastLongSelectEventTime =
+      event.eventTime
+
+    if (samePhysicalPress || rapidDuplicate) {
+      android.util.Log.d(
+        "PSTV",
+        "W121ZPLAY10Y24F LONGSELECT SUPPRESSED " +
+          "source=" + source +
+          " key=" + event.keyCode +
+          " downTime=" + event.downTime +
+          " repeat=" + event.repeatCount +
+          " deltaMs=" + deltaMs
+      )
+
+      return false
+    }
+
+    android.util.Log.d(
+      "PSTV",
+      "W121ZPLAY10Y24F LONGSELECT ACCEPTED " +
+        "source=" + source +
+        " key=" + event.keyCode +
+        " downTime=" + event.downTime +
+        " repeat=" + event.repeatCount
+    )
+
+    return true
+  }
+
   /* V625_DIRECT_NATIVE_LONGPRESS
      Walk upward from the currently focused poster and locate its
      native Privastream row. */
@@ -353,6 +413,11 @@ class MainActivity : ReactActivity() {
        * Non-native cards / other TV surfaces retain the existing
        * generic JS longSelect path.
        */
+      if (!v788y24AcceptLongSelect(event, "ok")) {
+        v176fConsumeOkUp = true
+        return true
+      }
+
       android.util.Log.d(
         "PSTV",
         "non-native long-press -> generic longSelect"
@@ -511,6 +576,12 @@ class MainActivity : ReactActivity() {
       }
 
       if (eventName != null) {
+        if (
+          eventName == "longSelect" &&
+          !v788y24AcceptLongSelect(event, "menu")
+        ) {
+          return true
+        }
 
         var emitted = false
 

@@ -2222,10 +2222,22 @@ class PrivastreamLiveTVGuideView(
                 if (data[i].favorite != incoming.favorite) {
                     data[i] = incoming
 
+                    // W121ZPLAY10Y24F_FAVORITE_HOLDER_FALLBACK
+                    // During an active RecyclerView layout pass the
+                    // adapter-position lookup can temporarily be null.
+                    // Fall back to the holder's layout position and
+                    // repaint only; never rebind or move focus.
                     val holder =
-                        recycler
-                            .findViewHolderForAdapterPosition(i)
-                            as? Holder
+                        (
+                            recycler
+                                .findViewHolderForAdapterPosition(i)
+                                as? Holder
+                        )
+                            ?: (
+                                recycler
+                                    .findViewHolderForLayoutPosition(i)
+                                    as? Holder
+                            )
 
                     if (holder != null) {
                         // V788T8ZB_REALTIME_ALPHA_BOOKMARK

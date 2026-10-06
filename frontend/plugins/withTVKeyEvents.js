@@ -43,6 +43,32 @@ const withTVKeyEvents = (config) => {
      stop Pressable.onPress from firing after the menu opens. */
   private var v176fConsumeOkUp: Boolean = false
 
+  // W121ZPLAY10Y24F_LONGSELECT_PHYSICAL_HOLD_GATE
+  private var v788y24LastLongSelectDownTime: Long = Long.MIN_VALUE
+  private var v788y24LastLongSelectEventTime: Long = Long.MIN_VALUE
+
+  private fun v788y24AcceptLongSelect(event: KeyEvent, source: String): Boolean {
+    val samePhysicalPress = event.downTime == v788y24LastLongSelectDownTime
+    val deltaMs =
+      if (v788y24LastLongSelectEventTime == Long.MIN_VALUE || event.eventTime < v788y24LastLongSelectEventTime)
+        Long.MAX_VALUE
+      else
+        event.eventTime - v788y24LastLongSelectEventTime
+
+    val rapidDuplicate = deltaMs <= 500L
+
+    v788y24LastLongSelectDownTime = event.downTime
+    v788y24LastLongSelectEventTime = event.eventTime
+
+    if (samePhysicalPress || rapidDuplicate) {
+      android.util.Log.d("PSTV", "W121ZPLAY10Y24F LONGSELECT SUPPRESSED source=" + source + " key=" + event.keyCode + " downTime=" + event.downTime + " repeat=" + event.repeatCount + " deltaMs=" + deltaMs)
+      return false
+    }
+
+    android.util.Log.d("PSTV", "W121ZPLAY10Y24F LONGSELECT ACCEPTED source=" + source + " key=" + event.keyCode + " downTime=" + event.downTime + " repeat=" + event.repeatCount)
+    return true
+  }
+
   override fun dispatchKeyEvent(event: KeyEvent): Boolean {
     /* V176F diagnostic — see in logcat with: adb logcat -d -t 500 PSTV:V *:S */
     android.util.Log.d("PSTV", "key action=" + event.action + " code=" + event.keyCode + " isLong=" + event.isLongPress + " repeat=" + event.repeatCount)
@@ -51,8 +77,12 @@ const withTVKeyEvents = (config) => {
     val isOk = keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
 
     /* OK long-press: fire longSelect AND consume the next KEY_UP. */
-    if (isOk && event.action == KeyEvent.ACTION_DOWN && event.isLongPress) {
+    if (isOk && event.action == KeyEvent.ACTION_DOWN && !v176fConsumeOkUp && (event.isLongPress || event.repeatCount > 0)) {
       android.util.Log.d("PSTV", "OK long-press detected -> emitting longSelect")
+      if (!v788y24AcceptLongSelect(event, "ok")) {
+        v176fConsumeOkUp = true
+        return true
+      }
       try {
         val reactApp = application as? com.facebook.react.ReactApplication
         if (reactApp != null) {
@@ -123,6 +153,9 @@ const withTVKeyEvents = (config) => {
       }
 
       if (eventName != null) {
+        if (eventName == "longSelect" && !v788y24AcceptLongSelect(event, "menu")) {
+          return true
+        }
         var emitted = false
         try {
           val reactApp = application as? com.facebook.react.ReactApplication
