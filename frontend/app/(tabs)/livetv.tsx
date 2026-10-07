@@ -2104,19 +2104,21 @@ const timelineStart = floorHalfHour(now);
           };
         })();
 
+      // W121ZOD49A_LIVE_TV_DISCOVER_BYPASS
+      //
+      // Live TV membership comes from the playable inventory.
+      // EPG provides schedule/logo enrichment.
+      // Discover must not block guide startup.
       const [
-        discoverResult,
         epgResult,
         inventoryResult,
       ] = await Promise.allSettled([
-        api.content.getDiscover(),
         api.content.getLiveTvEpg(date),
         v788t12kInventoryPromise,
       ]);
 
       console.log(
-        '[V788T12K LIVE LOAD] parallel barrier complete',
-        'discover=' + discoverResult.status,
+        '[W121ZOD49A LIVE LOAD] guide barrier complete',
         'epg=' + epgResult.status,
         'inventory=' + inventoryResult.status
       );
@@ -2142,71 +2144,11 @@ const timelineStart = floorHalfHour(now);
         console.warn('[V784J_EPG] unavailable', epgResult.reason);
       }
 
+      // W121ZOD49A_NO_DISCOVER_ENRICHMENT
+      //
+      // Inventory + EPG already provide every field required by
+      // the authoritative final merge below.
       const next: GuideChannel[] = [];
-      const seen = new Set<string>();
-
-      if (discoverResult.status === 'fulfilled') {
-        const services = (discoverResult.value as any)?.services || {};
-
-        for (const [sourceName, service] of Object.entries(services)) {
-          const list = Array.isArray((service as any)?.channels)
-            ? (service as any).channels
-            : [];
-
-          const serviceAddonId = String(
-            (service as any)?._addon_id || ''
-          ).trim();
-
-          for (const raw of list) {
-            const id = String(
-              (raw as any)?.imdb_id || (raw as any)?.id || ''
-            ).trim();
-
-            if (!id) continue;
-
-            // V786B_LIVE_TV_OWNER_ID_DEDUPE
-            // A channel belongs to its addon, not to the catalog/service
-            // label it happened to arrive through. The same Pluto station
-            // may appear in more than one service bucket.
-            const identityOwner =
-              serviceAddonId || `source:${String(sourceName)}`;
-            const key = `${identityOwner}:${id}`;
-
-            if (seen.has(key)) continue;
-            seen.add(key);
-
-            const epg = epgById.get(id);
-            // V788M_GUIDE_LOGO_ONLY_COMPACT
-            // Never use catalog posters as station icons.
-            // Prefer authoritative EPG logos when available.
-            const stationLogo = String(
-              epg?.logo ||
-              (raw as any)?.logo ||
-              ''
-            ).trim();
-
-            next.push({
-              key,
-              item: {
-                ...(raw as any),
-                id,
-                type: 'tv',
-                name: String(
-                  (raw as any)?.name || epg?.name || id
-                ),
-                poster: stationLogo,
-              },
-              name: String((raw as any)?.name || epg?.name || id),
-              logo: stationLogo,
-              sourceName: String(sourceName),
-              addonId: serviceAddonId,
-              programs: Array.isArray(epg?.programs)
-                ? epg.programs
-                : [],
-            });
-          }
-        }
-      }
 
       // V788T16F_INVENTORY_OWNS_GUIDE_MEMBERSHIP
       //
@@ -2232,11 +2174,11 @@ const timelineStart = floorHalfHour(now);
 
       // V788T12K_PARALLEL_STABLE_GUIDE_COMMIT
       //
-      // Discover, EPG and the COMPLETE playable inventory have now
+      // EPG and the COMPLETE playable inventory have now
       // reached the same barrier.
       //
       // Inventory controls visibility.
-      // Discover/EPG enrich verified playable channels only.
+      // EPG enriches verified playable channels only.
       // Native guide receives ONE final stable array.
 
       if (
