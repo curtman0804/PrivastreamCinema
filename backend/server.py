@@ -22005,6 +22005,947 @@ async def _v788t11w_probe_channel_stream(
         # Never cache unknown/error as zero streams.
         return "unknown"
 
+# W121ZOD77_FINISHED_SNAPSHOT
+#
+# Short-lived completed Live TV inventory snapshot.
+#
+# The snapshot never persists deviceCheckStreams.  Uncertain
+# channels retain ordinary channel metadata + stable source
+# identity only.  Their candidate stream URLs are regenerated
+# on every finished-snapshot hit.
+_W121ZOD77_FINISHED_TTL_SECONDS = 120
+_W121ZOD77_BUILD_TTL_SECONDS = 300
+
+_W121ZOD77_FINISHED_PREFIX = (
+    "w121zod77:live-tv:finished:v1:"
+)
+
+_W121ZOD77_BUILD_PREFIX = (
+    "w121zod77:live-tv:build:v1:"
+)
+
+
+def _w121zod77_source_fingerprint(
+    sources,
+):
+    normalized_sources = []
+
+    for position, source in enumerate(
+        sources or []
+    ):
+        if not isinstance(source, dict):
+            return None
+
+        normalized_sources.append(
+            {
+                "position": position,
+                "addonId": str(
+                    source.get("addonId")
+                    or ""
+                ),
+                "addonName": str(
+                    source.get("addonName")
+                    or ""
+                ),
+                "catalogId": str(
+                    source.get("catalogId")
+                    or ""
+                ),
+                "catalogName": str(
+                    source.get("catalogName")
+                    or ""
+                ),
+                "baseUrl": str(
+                    source.get("baseUrl")
+                    or ""
+                ),
+                "supportsSkip": bool(
+                    source.get("supportsSkip")
+                ),
+            }
+        )
+
+    payload = json.dumps(
+        normalized_sources,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    return hashlib.sha256(
+        payload.encode("utf-8")
+    ).hexdigest()
+
+
+def _w121zod77_snapshot_keys(
+    user_id,
+    adult_enabled,
+    sources,
+):
+    fingerprint = (
+        _w121zod77_source_fingerprint(
+            sources
+        )
+    )
+
+    if not fingerprint:
+        return None, None, None
+
+    identity = (
+        str(user_id)
+        + "|"
+        + str(int(bool(adult_enabled)))
+        + "|"
+        + fingerprint
+    )
+
+    digest = hashlib.sha256(
+        identity.encode("utf-8")
+    ).hexdigest()
+
+    return (
+        (
+            _W121ZOD77_FINISHED_PREFIX
+            + digest
+        ),
+        (
+            _W121ZOD77_BUILD_PREFIX
+            + digest
+        ),
+        fingerprint,
+    )
+
+
+async def _w121zod77_redis():
+    try:
+        return await _v789n1_get_redis()
+
+    except Exception as exc:
+        print(
+            "W121ZOD77_REDIS_UNAVAILABLE "
+            "type="
+            + type(exc).__name__,
+            flush=True,
+        )
+
+        return None
+
+
+async def _w121zod77_read_json(
+    redis_client,
+    key,
+):
+    if redis_client is None or not key:
+        return None
+
+    try:
+        raw_value = await redis_client.get(
+            key
+        )
+
+        if not raw_value:
+            return None
+
+        value = json.loads(raw_value)
+
+        if not isinstance(value, dict):
+            return None
+
+        return value
+
+    except Exception as exc:
+        print(
+            "W121ZOD77_JSON_READ_FAIL "
+            "type="
+            + type(exc).__name__,
+            flush=True,
+        )
+
+        return None
+
+
+def _w121zod77_source_lookup(
+    sources,
+):
+    lookup = {}
+
+    for source in sources or []:
+        if not isinstance(source, dict):
+            return None
+
+        addon_id = str(
+            source.get("addonId")
+            or ""
+        )
+
+        catalog_id = str(
+            source.get("catalogId")
+            or ""
+        )
+
+        if not addon_id or not catalog_id:
+            return None
+
+        key = (
+            addon_id,
+            catalog_id,
+        )
+
+        # Ambiguous source identity must fail open to the
+        # ordinary inventory crawl.
+        if key in lookup:
+            return None
+
+        lookup[key] = source
+
+    return lookup
+
+
+async def _w121zod77_try_finished_snapshot(
+    sources,
+    user_id,
+    adult_enabled,
+):
+    (
+        finished_key,
+        _build_key,
+        fingerprint,
+    ) = _w121zod77_snapshot_keys(
+        user_id,
+        adult_enabled,
+        sources,
+    )
+
+    if not finished_key or not fingerprint:
+        return None
+
+    redis_client = await _w121zod77_redis()
+
+    if redis_client is None:
+        return None
+
+    snapshot = await _w121zod77_read_json(
+        redis_client,
+        finished_key,
+    )
+
+    if not isinstance(snapshot, dict):
+        return None
+
+    if snapshot.get("version") != 1:
+        return None
+
+    if (
+        snapshot.get("sourceFingerprint")
+        != fingerprint
+    ):
+        return None
+
+    if (
+        int(
+            snapshot.get("sourceCount")
+            or -1
+        )
+        != len(sources)
+    ):
+        return None
+
+    safe_items_raw = snapshot.get("items")
+    uncertain_raw = snapshot.get(
+        "uncertain"
+    )
+
+    if not isinstance(
+        safe_items_raw,
+        list,
+    ):
+        return None
+
+    if not isinstance(
+        uncertain_raw,
+        list,
+    ):
+        return None
+
+    # Defensive size guard for malformed cache contents.
+    if len(safe_items_raw) > 10000:
+        return None
+
+    if len(uncertain_raw) > 5000:
+        return None
+
+    source_lookup = (
+        _w121zod77_source_lookup(
+            sources
+        )
+    )
+
+    if source_lookup is None:
+        return None
+
+    safe_items = []
+
+    for raw_item in safe_items_raw:
+        if not isinstance(raw_item, dict):
+            return None
+
+        item = dict(raw_item)
+
+        # This field must never exist in the completed
+        # server-safe item list.
+        item.pop(
+            "deviceCheckStreams",
+            None,
+        )
+
+        safe_items.append(item)
+
+    probe_contexts = []
+
+    for raw_meta in uncertain_raw:
+        if not isinstance(raw_meta, dict):
+            return None
+
+        meta = dict(raw_meta)
+
+        # Never trust stale transient candidate URLs.
+        meta.pop(
+            "deviceCheckStreams",
+            None,
+        )
+
+        addon_id = str(
+            meta.get("addonId")
+            or ""
+        )
+
+        catalog_id = str(
+            meta.get("catalogId")
+            or ""
+        )
+
+        channel_id = _v788t11w_text(
+            meta.get("id")
+        )
+
+        if (
+            not addon_id
+            or not catalog_id
+            or not channel_id
+        ):
+            return None
+
+        source = source_lookup.get(
+            (
+                addon_id,
+                catalog_id,
+            )
+        )
+
+        if source is None:
+            return None
+
+        probe_contexts.append(
+            (
+                source,
+                meta,
+                channel_id,
+            )
+        )
+
+    device_candidate_sink = {}
+
+    states = []
+
+    if probe_contexts:
+        semaphore = asyncio.Semaphore(
+            _V788T11W_STREAM_PROBE_CONCURRENCY
+        )
+
+        async with httpx.AsyncClient(
+            follow_redirects=False,
+            timeout=30.0,
+            trust_env=False,
+        ) as client:
+            states = await asyncio.gather(
+                *[
+                    _v788t11w_probe_channel_stream(
+                        client,
+                        semaphore,
+                        source,
+                        user_id,
+                        meta,
+                        False,
+                        device_candidate_sink,
+                    )
+                    for (
+                        source,
+                        meta,
+                        _channel_id,
+                    ) in probe_contexts
+                ]
+            )
+
+    warm_items = list(safe_items)
+
+    fresh_device_check_items = []
+
+    dynamic_hidden = 0
+    dynamic_unknown = 0
+
+    for (
+        (
+            source,
+            meta,
+            channel_id,
+        ),
+        state,
+    ) in zip(
+        probe_contexts,
+        states,
+    ):
+        if state == "empty":
+            dynamic_hidden += 1
+            continue
+
+        if state == "device_check":
+            cache_key = (
+                _v788t16j_streamability_cache_key(
+                    source,
+                    user_id,
+                    channel_id,
+                )
+            )
+
+            device_candidates = list(
+                device_candidate_sink.get(
+                    cache_key
+                )
+                or []
+            )
+
+            if not device_candidates:
+                dynamic_unknown += 1
+                continue
+
+            item = dict(meta)
+
+            item.pop(
+                "deviceCheckStreams",
+                None,
+            )
+
+            item["id"] = channel_id
+            item["type"] = "tv"
+
+            item["addonId"] = (
+                source["addonId"]
+            )
+
+            item["addonName"] = (
+                source["addonName"]
+            )
+
+            item["catalogId"] = (
+                source["catalogId"]
+            )
+
+            item["deviceCheckStreams"] = (
+                device_candidates
+            )
+
+            fresh_device_check_items.append(
+                item
+            )
+
+            continue
+
+        if state == "playable":
+            item = dict(meta)
+
+            item.pop(
+                "deviceCheckStreams",
+                None,
+            )
+
+            item["id"] = channel_id
+            item["type"] = "tv"
+
+            item["addonId"] = (
+                source["addonId"]
+            )
+
+            item["_addon_id"] = (
+                source["addonId"]
+            )
+
+            item["sourceName"] = (
+                source["catalogName"]
+            )
+
+            item["catalogId"] = (
+                source["catalogId"]
+            )
+
+            warm_items.append(item)
+
+            continue
+
+        dynamic_unknown += 1
+
+    static_hidden = int(
+        snapshot.get("hiddenNoStream")
+        or 0
+    )
+
+    static_unknown = int(
+        snapshot.get("unknown")
+        or 0
+    )
+
+    scanned = int(
+        snapshot.get("scanned")
+        or 0
+    )
+
+    adult_filtered = int(
+        snapshot.get("adultFiltered")
+        or 0
+    )
+
+    print(
+        "W121ZOD77_FINISHED_HIT "
+        "items="
+        + str(len(warm_items))
+        + " uncertain="
+        + str(len(probe_contexts))
+        + " deviceCheck="
+        + str(
+            len(
+                fresh_device_check_items
+            )
+        )
+        + " dynamicEmpty="
+        + str(dynamic_hidden)
+        + " dynamicUnknown="
+        + str(dynamic_unknown),
+        flush=True,
+    )
+
+    return {
+        "items": warm_items,
+        "deviceCheckItems":
+            fresh_device_check_items,
+        "sourceCount": len(sources),
+        "sourceIndex": 0,
+        "skip": 0,
+        "scanned": scanned,
+        "playable": len(warm_items),
+        "deviceCheck": len(
+            fresh_device_check_items
+        ),
+        "hiddenNoStream": (
+            static_hidden
+            + dynamic_hidden
+        ),
+        "unknown": (
+            static_unknown
+            + dynamic_unknown
+        ),
+        "adultFiltered": adult_filtered,
+        "done": True,
+        "nextSourceIndex": None,
+        "nextSkip": None,
+        "source": None,
+        "pagingMode":
+            "w121zod77-finished-snapshot",
+    }
+
+
+async def _w121zod77_record_inventory_page(
+    sources,
+    user_id,
+    adult_enabled,
+    source_index,
+    skip,
+    items,
+    device_check_items,
+    scanned,
+    hidden_no_stream,
+    unknown,
+    adult_filtered,
+    done,
+    next_source_index,
+    next_skip,
+):
+    (
+        finished_key,
+        build_key,
+        fingerprint,
+    ) = _w121zod77_snapshot_keys(
+        user_id,
+        adult_enabled,
+        sources,
+    )
+
+    if (
+        not finished_key
+        or not build_key
+        or not fingerprint
+    ):
+        return
+
+    redis_client = await _w121zod77_redis()
+
+    if redis_client is None:
+        return
+
+    try:
+        build = None
+
+        # A natural frontend crawl starts here.
+        # Reset only the short-lived build object, never
+        # the finished snapshot.
+        if (
+            int(source_index) == 0
+            and int(skip) == 0
+        ):
+            build = {
+                "version": 1,
+                "sourceFingerprint":
+                    fingerprint,
+                "sourceCount":
+                    len(sources),
+                "pages": {},
+            }
+
+        else:
+            build = (
+                await _w121zod77_read_json(
+                    redis_client,
+                    build_key,
+                )
+            )
+
+        if not isinstance(build, dict):
+            build = {
+                "version": 1,
+                "sourceFingerprint":
+                    fingerprint,
+                "sourceCount":
+                    len(sources),
+                "pages": {},
+            }
+
+        if (
+            build.get("version") != 1
+            or build.get(
+                "sourceFingerprint"
+            )
+            != fingerprint
+            or int(
+                build.get("sourceCount")
+                or -1
+            )
+            != len(sources)
+        ):
+            build = {
+                "version": 1,
+                "sourceFingerprint":
+                    fingerprint,
+                "sourceCount":
+                    len(sources),
+                "pages": {},
+            }
+
+        pages = build.get("pages")
+
+        if not isinstance(pages, dict):
+            pages = {}
+
+        stored_items = []
+
+        for raw_item in items or []:
+            if not isinstance(raw_item, dict):
+                continue
+
+            item = dict(raw_item)
+
+            item.pop(
+                "deviceCheckStreams",
+                None,
+            )
+
+            stored_items.append(item)
+
+        stored_uncertain = []
+
+        for raw_item in (
+            device_check_items
+            or []
+        ):
+            if not isinstance(raw_item, dict):
+                continue
+
+            item = dict(raw_item)
+
+            # W121ZOD77 invariant:
+            # never persist transient candidate URLs.
+            item.pop(
+                "deviceCheckStreams",
+                None,
+            )
+
+            stored_uncertain.append(item)
+
+        page_key = (
+            str(int(source_index))
+            + ":"
+            + str(int(skip))
+        )
+
+        pages[page_key] = {
+            "sourceIndex":
+                int(source_index),
+            "skip":
+                int(skip),
+            "items":
+                stored_items,
+            "uncertain":
+                stored_uncertain,
+            "scanned":
+                int(scanned or 0),
+            "hiddenNoStream":
+                int(hidden_no_stream or 0),
+            "unknown":
+                int(unknown or 0),
+            "adultFiltered":
+                int(adult_filtered or 0),
+            "done":
+                bool(done),
+            "nextSourceIndex": (
+                None
+                if done
+                else int(
+                    next_source_index
+                )
+            ),
+            "nextSkip": (
+                None
+                if done
+                else int(next_skip)
+            ),
+        }
+
+        build["pages"] = pages
+
+        await redis_client.set(
+            build_key,
+            json.dumps(
+                build,
+                separators=(",", ":"),
+            ),
+            ex=(
+                _W121ZOD77_BUILD_TTL_SECONDS
+            ),
+        )
+
+        if not done:
+            return
+
+        # Validate the completed crawl by following the
+        # actual cursor chain beginning at 0:0.  Extra or
+        # stale page records cannot enter the snapshot.
+        ordered_pages = []
+
+        cursor = "0:0"
+
+        seen = set()
+
+        for _step in range(100):
+            if cursor in seen:
+                return
+
+            seen.add(cursor)
+
+            page = pages.get(cursor)
+
+            if not isinstance(page, dict):
+                return
+
+            ordered_pages.append(page)
+
+            if bool(page.get("done")):
+                break
+
+            next_source = page.get(
+                "nextSourceIndex"
+            )
+
+            next_page_skip = page.get(
+                "nextSkip"
+            )
+
+            if (
+                next_source is None
+                or next_page_skip is None
+            ):
+                return
+
+            cursor = (
+                str(int(next_source))
+                + ":"
+                + str(
+                    int(next_page_skip)
+                )
+            )
+
+        else:
+            return
+
+        if not ordered_pages:
+            return
+
+        if not bool(
+            ordered_pages[-1].get("done")
+        ):
+            return
+
+        finished_items = []
+        finished_uncertain = []
+
+        total_scanned = 0
+        total_hidden = 0
+        total_unknown = 0
+        total_adult_filtered = 0
+
+        for page in ordered_pages:
+            page_items = page.get("items")
+            page_uncertain = page.get(
+                "uncertain"
+            )
+
+            if not isinstance(
+                page_items,
+                list,
+            ):
+                return
+
+            if not isinstance(
+                page_uncertain,
+                list,
+            ):
+                return
+
+            finished_items.extend(
+                [
+                    dict(item)
+                    for item in page_items
+                    if isinstance(
+                        item,
+                        dict,
+                    )
+                ]
+            )
+
+            finished_uncertain.extend(
+                [
+                    dict(item)
+                    for item
+                    in page_uncertain
+                    if isinstance(
+                        item,
+                        dict,
+                    )
+                ]
+            )
+
+            total_scanned += int(
+                page.get("scanned")
+                or 0
+            )
+
+            total_hidden += int(
+                page.get(
+                    "hiddenNoStream"
+                )
+                or 0
+            )
+
+            total_unknown += int(
+                page.get("unknown")
+                or 0
+            )
+
+            total_adult_filtered += int(
+                page.get(
+                    "adultFiltered"
+                )
+                or 0
+            )
+
+        snapshot = {
+            "version": 1,
+            "sourceFingerprint":
+                fingerprint,
+            "sourceCount":
+                len(sources),
+            "items":
+                finished_items,
+            "uncertain":
+                finished_uncertain,
+            "scanned":
+                total_scanned,
+            "hiddenNoStream":
+                total_hidden,
+            "unknown":
+                total_unknown,
+            "adultFiltered":
+                total_adult_filtered,
+        }
+
+        await redis_client.set(
+            finished_key,
+            json.dumps(
+                snapshot,
+                separators=(",", ":"),
+            ),
+            ex=(
+                _W121ZOD77_FINISHED_TTL_SECONDS
+            ),
+        )
+
+        await redis_client.delete(
+            build_key
+        )
+
+        print(
+            "W121ZOD77_FINISHED_STORE "
+            "pages="
+            + str(len(ordered_pages))
+            + " items="
+            + str(len(finished_items))
+            + " uncertain="
+            + str(
+                len(
+                    finished_uncertain
+                )
+            )
+            + " scanned="
+            + str(total_scanned),
+            flush=True,
+        )
+
+    except Exception as exc:
+        # Snapshot functionality is strictly fail-open.
+        # The ordinary inventory response must never fail
+        # because Redis/snapshot bookkeeping failed.
+        print(
+            "W121ZOD77_FINISHED_RECORD_FAIL "
+            "type="
+            + type(exc).__name__,
+            flush=True,
+        )
+
 @api_router.get("/content/live-tv/inventory-page")
 async def get_live_tv_inventory_page(
     source_index: int = 0,
@@ -22044,6 +22985,21 @@ async def get_live_tv_inventory_page(
     sources = await _v788t11w_live_tv_sources(
         current_user.id
     )
+
+    # W121ZOD77_FINISHED_SNAPSHOT_HIT
+    # Only the natural first cursor may collapse the
+    # completed inventory into one response.
+    if source_index == 0 and skip == 0:
+        finished_snapshot = (
+            await _w121zod77_try_finished_snapshot(
+                sources,
+                current_user.id,
+                adult_enabled,
+            )
+        )
+
+        if finished_snapshot is not None:
+            return finished_snapshot
 
     if source_index >= len(sources):
         return {
@@ -22309,6 +23265,34 @@ async def get_live_tv_inventory_page(
         next_source_index,
         returned_next_skip,
         done,
+    )
+
+    # W121ZOD77_FINISHED_SNAPSHOT_RECORD
+    # Record the already-computed ordinary page result.
+    # This does not alter the cold response contract.
+    await _w121zod77_record_inventory_page(
+        sources,
+        current_user.id,
+        adult_enabled,
+        source_index,
+        skip,
+        items,
+        device_check_items,
+        len(candidates),
+        hidden_no_stream,
+        unknown,
+        adult_filtered,
+        done,
+        (
+            None
+            if done
+            else next_source_index
+        ),
+        (
+            None
+            if done
+            else returned_next_skip
+        ),
     )
 
     return {
