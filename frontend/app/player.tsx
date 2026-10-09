@@ -1670,24 +1670,12 @@ export default function PlayerScreen() {
             _v789s25w112BackendCleanSinceRef.current = 0;
             _v789s25w111SetCommercialPhase('off');
           } else if (currentPhase === 'hold') {
-            // V789S25W121ZR_BYPASS_IMMEDIATE_RESUME
-            // Backend bypass means clean programming has already advanced
-            // beyond the held commercial snapshot. Do not add the generic
-            // 12-second pass-mode clean proof on top of that backend proof.
-            if (mode === 'bypass') {
-              console.log(
-                '[V789S25W121ZR BYPASS IMMEDIATE RESUME]',
-                'mode=' + mode,
-                'action=skip-12s-clean-window'
-              );
-
-              _v789s25w111CleanPollsRef.current = 0;
-              _v789s25w112BackendCleanSinceRef.current = 0;
-
-              beginResume(mode);
-              return;
-            }
-
+            // W121ZPLAY10Y30_BYPASS_REQUIRES_CLEAN_WINDOW
+            //
+            // Y28R proved that BYPASS can flip back to HOLD only a few
+            // seconds after an immediate reveal. Treat BYPASS exactly like
+            // PASS here: keep the commercial layer up until the existing
+            // 12-second continuous backend-clean window is proven.
             const holdOrigin =
               _v789s25w112HoldOriginRef.current;
 
@@ -4362,11 +4350,13 @@ export default function PlayerScreen() {
             'positionMs=' + String(status.positionMillis || 0)
           );
 
+          // W121ZPLAY10Y30_UNIFIED_RESUME_HEALTH
+          //
+          // BYPASS is not trusted as a special fast-return signal anymore.
+          // Require the same four seconds of healthy advancing playback
+          // before revealing the main player for every commercial resume.
           const _v789s25w121zsaRequiredHealthyMs =
-            _v789s25w121zsaResumeModeRef.current ===
-              'bypass'
-              ? 1000
-              : 4000;
+            4000;
 
           if (
             stableForMs >=
@@ -8155,48 +8145,58 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
               <Animated.View style={[styles.controlsOverlay, { opacity: controlsOpacity }]} pointerEvents="box-none">
                 {/* Top Bar - Back, Title, CC */}
                 <View style={styles.topControls} pointerEvents="box-none">
-                  <TVFocusButton 
-                    style={styles.controlButton}
-                    focusedStyle={styles.controlButtonFocused}
-                    onPress={handleBack}
-                  >
-                    <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
-                  </TVFocusButton>
+                  <View style={styles.topLeftControls}>
+                    <TVFocusButton
+                      style={styles.controlButton}
+                      focusedStyle={styles.controlButtonFocused}
+                      onPress={handleBack}
+                    >
+                      <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+                    </TVFocusButton>
+
+                    {isLive === 'true' && logo ? (
+                      <Image
+                        source={{ uri: logo }}
+                        style={styles.liveStationLogo}
+                        resizeMode="contain"
+                      />
+                    ) : null}
+                  </View>
                   
                   {/* V787D_LIVE_NOW_PLAYING */}
                   <View style={styles.titleCenterWrap} pointerEvents="none">
-                    <Text style={styles.titleText} numberOfLines={1}>
-                      {title || 'Playing'}
-                    </Text>
-
-                    {isLive === 'true' && _v787LiveNowPlaying?.title ? (
-                      <Text
-                        numberOfLines={1}
-                        style={{
-                          color: '#B8A05C',
-                          fontSize: 13,
-                          fontWeight: '600',
-                          marginTop: 2,
-                          textAlign: 'center',
-                        }}
-                      >
-                        {_v787LiveNowPlaying.title}
-                        {(
-                          _v787FormatLiveClock(
-                            _v787LiveNowPlaying.startTime
-                          ) &&
-                          _v787FormatLiveClock(
-                            _v787LiveNowPlaying.endTime
-                          )
-                        )
-                          ? `  Ã‚Â·  ${_v787FormatLiveClock(
+                    {isLive === 'true' ? (
+                      _v787LiveNowPlaying?.title ? (
+                        <Text
+                          numberOfLines={1}
+                          style={styles.liveNowPlayingLine}
+                        >
+                          <Text style={styles.liveNowPlayingTitleInline}>
+                            {_v787LiveNowPlaying.title}
+                          </Text>
+                          {(
+                            _v787FormatLiveClock(
                               _v787LiveNowPlaying.startTime
-                            )}Ã¢â‚¬â€œ${_v787FormatLiveClock(
+                            ) &&
+                            _v787FormatLiveClock(
                               _v787LiveNowPlaying.endTime
-                            )}`
-                          : ''}
+                            )
+                          ) ? (
+                            <Text style={styles.liveNowPlayingTimeInline}>
+                              {`   ${_v787FormatLiveClock(
+                                _v787LiveNowPlaying.startTime
+                              )} - ${_v787FormatLiveClock(
+                                _v787LiveNowPlaying.endTime
+                              )}`}
+                            </Text>
+                          ) : null}
+                        </Text>
+                      ) : null
+                    ) : (
+                      <Text style={styles.titleText} numberOfLines={1}>
+                        {title || 'Playing'}
                       </Text>
-                    ) : null}
+                    )}
                   </View>
                   
                   <View style={styles.topRightControls}>
@@ -8972,12 +8972,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
   },
+  topLeftControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  liveStationLogo: {
+    width: 48,
+    height: 48,
+    marginLeft: 12,
+  },
   titleCenterWrap: {
     position: 'absolute',
     left: '25%',
     right: '25%',
     top: 16,
-    height: 44,
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -8987,6 +8996,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  liveNowPlayingLine: {
+    width: '100%',
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  liveNowPlayingTitleInline: {
+    color: '#B8A05C',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  liveNowPlayingTimeInline: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
   },
   topRightControls: {
     flexDirection: 'row',
