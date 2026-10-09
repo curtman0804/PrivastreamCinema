@@ -17360,6 +17360,98 @@ _V788T16AH_USATV_EPG_SAFE_IDS = frozenset({
 })
 
 
+# ================= W121ZPLAY10Y52 USA TV STALE PLUTO CANDIDATE FILTER =================
+#
+# Y51 proved these embedded service-stitcher Pluto channel IDs
+# are absent from Pluto's current US channel guide.
+#
+# Scope is intentionally narrow:
+#   - community.usa-tv-next only
+#   - exact service-stitcher.clusters.pluto.tv host only
+#   - exact 24-hex channel IDs only
+#
+# Removing a stale stream does NOT remove the USA TV channel.
+# Remaining TVPass/direct/active-Pluto candidates continue normally.
+#
+_W121ZPLAY10Y52_STALE_USATV_PLUTO_IDS = frozenset({
+    "5f92b5ba040eaa0007074d0a",
+    "5d51e6949ab8e2b35bdcaa9f",
+    "6231ec4b62cd1f0007093c7b",
+    "5dcc42446750e200093b15e2",
+    "5ca6899a37b88b269472ea4b",
+    "5db6a697d5f34a000934cd13",
+    "5ea815a515d149000748ee9b",
+    "5caf325764025859afdd6c4d",
+    "5caf330ea5068259a32320fd",
+    "5ea812e0ba6c1f00079d3b7e",
+    "5f988934a507de00075d9ae7",
+    "5f0d668b872e4400073acc68",
+})
+
+
+def _w121zplay10y52_is_stale_usatv_pluto_stream(stream):
+    if not isinstance(stream, dict):
+        return False
+
+    value = str(
+        stream.get('url')
+        or stream.get('directUrl')
+        or stream.get('proxyUrl')
+        or ''
+    ).strip()
+
+    if not value:
+        return False
+
+    try:
+        import urllib.parse as _w121zplay10y52_urlparse
+
+        parsed = _w121zplay10y52_urlparse.urlsplit(value)
+    except Exception:
+        return False
+
+    hostname = str(parsed.hostname or '').strip().lower()
+
+    if hostname != 'service-stitcher.clusters.pluto.tv':
+        return False
+
+    path = str(parsed.path or '')
+    marker = '/channel/'
+
+    if marker not in path:
+        return False
+
+    channel_id = (
+        path.split(marker, 1)[1]
+        .split('/', 1)[0]
+        .strip()
+        .lower()
+    )
+
+    if len(channel_id) != 24:
+        return False
+
+    if any(
+        char not in '0123456789abcdef'
+        for char in channel_id
+    ):
+        return False
+
+    return channel_id in _W121ZPLAY10Y52_STALE_USATV_PLUTO_IDS
+
+
+def _w121zplay10y52_filter_stale_usatv_pluto_streams(streams):
+    source_streams = streams if isinstance(streams, list) else []
+
+    return [
+        stream
+        for stream in source_streams
+        if not _w121zplay10y52_is_stale_usatv_pluto_stream(stream)
+    ]
+
+
+# ================= /W121ZPLAY10Y52 USA TV STALE PLUTO CANDIDATE FILTER =================
+
 def _v788t16ah_filter_usa_tv_epg_safe_streams(
     manifest_id,
     content_type,
@@ -17372,7 +17464,24 @@ def _v788t16ah_filter_usa_tv_epg_safe_streams(
     if str(content_type or '').strip().lower() != 'tv':
         return streams if isinstance(streams, list) else []
 
+    streams = _w121zplay10y52_filter_stale_usatv_pluto_streams(
+        streams
+    )
+
     channel_id = str(content_id or '').strip()
+
+    # W121ZPLAY10Y56_BET_HER_REMOVE_NO_RESOLVABLE_SOURCE
+    # Y55 proved the stale Pluto candidate is unusable and
+    # both Firestick and backend DNS cannot resolve tvpass.org.
+    # Return zero candidates for this exact USA TV channel.
+    if channel_id == "ustv-962e4ffa-3feb-480a-9e2f-086101f34d8e":
+        return []
+
+    # W121ZPLAY10Y59_SHOWTIME_NO_USABLE_SOURCE
+    # Y58 proved the selected surviving HLS candidate returns 404.
+    # The only other survivor is tvpass.org, already DNS-dead in Y55.
+    if channel_id == "ustv-74d2e5b1-bdb4-4975-a7f2-a4b9e8250d38":
+        return []
 
     if channel_id not in _V788T16AH_USATV_EPG_SAFE_IDS:
         return streams if isinstance(streams, list) else []
@@ -21724,6 +21833,18 @@ async def _v788t11w_probe_channel_stream(
 
     addon_id = source["addonId"]
 
+    # W121ZPLAY10Y59_CONFIRMED_DEAD_USATV_VISIBILITY
+    # Bypass worker-local and Redis streamability caches for exact
+    # channels whose complete candidate sets are already disproven.
+    if (
+        addon_id == "community.usa-tv-next"
+        and channel_id in {
+            "ustv-962e4ffa-3feb-480a-9e2f-086101f34d8e",
+            "ustv-74d2e5b1-bdb4-4975-a7f2-a4b9e8250d38",
+        }
+    ):
+        return "empty"
+
     cache_key = _v788t16j_streamability_cache_key(
         source,
         user_id,
@@ -23020,6 +23141,81 @@ async def get_live_tv_inventory_page(
 
     source = sources[source_index]
 
+    # W121ZOD21C_INVENTORY_OWNED_STATION_LOGO
+    #
+    # Station logo data must be available with channel inventory.
+    # Reuse the already-persisted Pluto addon-channel -> official
+    # Pluto-ID mapping. This requires no EPG request.
+    pluto_inventory_channel_map = {}
+
+    if (
+        source.get("addonId") == "org.plutotv"
+        and source.get("catalogId") == "pluto"
+    ):
+        try:
+            pluto_cache_doc = await db[
+                "live_tv_epg_cache"
+            ].find_one(
+                {
+                    "_id":
+                        "pluto:org.plutotv:pluto"
+                },
+                {
+                    "channelMap": 1
+                },
+            )
+
+            pluto_inventory_channel_map = (
+                pluto_cache_doc.get("channelMap")
+                if isinstance(pluto_cache_doc, dict)
+                else {}
+            ) or {}
+
+            if not isinstance(
+                pluto_inventory_channel_map,
+                dict,
+            ):
+                pluto_inventory_channel_map = {}
+
+        except Exception as exc:
+            pluto_inventory_channel_map = {}
+
+            logger.info(
+                "W121ZOD21C_PLUTO_LOGO_MAP_FALLBACK "
+                "type=%s",
+                type(exc).__name__,
+            )
+
+    def _w121zod21c_apply_inventory_logo(
+        item,
+        channel_id,
+    ):
+        if not isinstance(item, dict):
+            return item
+
+        # Preserve any explicit logo supplied by the provider.
+        if _v788t11w_text(item.get("logo")):
+            return item
+
+        if (
+            source.get("addonId") == "org.plutotv"
+            and source.get("catalogId") == "pluto"
+        ):
+            pluto_id = _v788t11w_text(
+                pluto_inventory_channel_map.get(
+                    channel_id
+                )
+            ).lower()
+
+            if pluto_id:
+                item["logo"] = (
+                    "https://images.pluto.tv/channels/"
+                    + pluto_id
+                    + "/colorLogoPNG.png"
+                )
+
+        return item
+
     # V788T14AN_HYBRID_TRANSPORT_BASELINE
     async with (
         httpx.AsyncClient(
@@ -23171,6 +23367,11 @@ async def get_live_tv_inventory_page(
 
             item = dict(meta)
 
+            item = _w121zod21c_apply_inventory_logo(
+                item,
+                channel_id,
+            )
+
             item["id"] = channel_id
             item["type"] = "tv"
             item["addonId"] = (
@@ -23198,6 +23399,11 @@ async def get_live_tv_inventory_page(
         )
 
         item = dict(meta)
+
+        item = _w121zod21c_apply_inventory_logo(
+            item,
+            channel_id,
+        )
 
         item["id"] = channel_id
         item["type"] = "tv"
@@ -23782,6 +23988,230 @@ async def get_live_tv_epg(
         )
 
     adult_enabled = bool(adult == 1)
+
+    # W121ZOD33_SHARED_EPG_REDIS_CACHE
+    #
+    # Cache the FINISHED EPG response in shared Redis so all
+    # Gunicorn workers reuse one guide instead of independently
+    # rebuilding Pluto XMLTV / USA TV / generic provider data.
+    #
+    # The existing EPG builder below is intentionally unchanged.
+    import uuid as _w121zod33_uuid
+
+    _w121zod33_cache_ttl = 1800
+    _w121zod33_lock_ttl = 300
+
+    _w121zod33_cache_key = (
+        "privastream:w121zod33:epg:v1:"
+        + str(current_user.id)
+        + ":"
+        + raw_date
+        + ":"
+        + ("1" if adult_enabled else "0")
+        + ":"
+        + str(tz or "").strip()
+    )
+
+    _w121zod33_lock_key = (
+        _w121zod33_cache_key
+        + ":build-lock"
+    )
+
+    _w121zod33_redis = None
+    _w121zod33_lock_token = None
+    _w121zod33_lock_acquired = False
+
+    # W121ZOD40_FILE_TRACE
+    def _w121zod40_trace(message):
+        try:
+            with open(
+                "/tmp/w121zod40-epg-cache.log",
+                "a",
+                encoding="utf-8",
+            ) as _w121zod40_file:
+                _w121zod40_file.write(
+                    str(__import__("time").time())
+                    + " pid="
+                    + str(__import__("os").getpid())
+                    + " "
+                    + str(message)
+                    + "\n"
+                )
+                _w121zod40_file.flush()
+        except Exception:
+            pass
+
+    _w121zod40_trace(
+        "ENTER key=" + _w121zod33_cache_key
+    )
+
+    logger.warning(
+        "W121ZOD39_EPG_CACHE_ENTER "
+        "pid=%s date=%s adult=%s tz=%s",
+        __import__("os").getpid(),
+        raw_date,
+        int(adult_enabled),
+        str(tz or "")[:128],
+    )
+
+    try:
+        _w121zod33_redis = (
+            await _v789n1_get_redis()
+        )
+
+        _w121zod33_cached_raw = (
+            await _w121zod33_redis.get(
+                _w121zod33_cache_key
+            )
+        )
+
+        _w121zod40_trace(
+            "GET hit="
+            + str(bool(_w121zod33_cached_raw))
+            + " chars="
+            + str(len(_w121zod33_cached_raw or ""))
+            + " key="
+            + _w121zod33_cache_key
+        )
+
+        logger.warning(
+            "W121ZOD39_EPG_CACHE_GET "
+            "pid=%s hit=%s chars=%s",
+            __import__("os").getpid(),
+            bool(_w121zod33_cached_raw),
+            len(_w121zod33_cached_raw or ""),
+        )
+
+        if _w121zod33_cached_raw:
+            try:
+                _w121zod33_cached = (
+                    json.loads(
+                        _w121zod33_cached_raw
+                    )
+                )
+            except Exception:
+                _w121zod33_cached = None
+
+            if isinstance(
+                _w121zod33_cached,
+                dict,
+            ):
+                logger.info(
+                    "W121ZOD33_EPG_CACHE_HIT "
+                    "date=%s adult=%s tz=%s",
+                    raw_date,
+                    int(adult_enabled),
+                    str(tz or "")[:128],
+                )
+
+                _w121zod40_trace(
+                    "RETURN_HIT channels="
+                    + str(
+                        _w121zod33_cached.get(
+                            "channelCount"
+                        )
+                    )
+                    + " programs="
+                    + str(
+                        _w121zod33_cached.get(
+                            "programCount"
+                        )
+                    )
+                )
+
+                logger.warning(
+                    "W121ZOD39_EPG_CACHE_RETURN_HIT "
+                    "pid=%s channels=%s programs=%s",
+                    __import__("os").getpid(),
+                    _w121zod33_cached.get(
+                        "channelCount"
+                    ),
+                    _w121zod33_cached.get(
+                        "programCount"
+                    ),
+                )
+
+                return _w121zod33_cached
+
+        _w121zod33_lock_token = (
+            _w121zod33_uuid.uuid4().hex
+        )
+
+        _w121zod33_lock_acquired = bool(
+            await _w121zod33_redis.set(
+                _w121zod33_lock_key,
+                _w121zod33_lock_token,
+                nx=True,
+                ex=_w121zod33_lock_ttl,
+            )
+        )
+
+        if not _w121zod33_lock_acquired:
+            logger.info(
+                "W121ZOD33_EPG_CACHE_WAIT "
+                "date=%s adult=%s",
+                raw_date,
+                int(adult_enabled),
+            )
+
+            # Another Gunicorn worker is building this exact guide.
+            # Wait for its shared result instead of duplicating the
+            # expensive provider/XMLTV work.
+            for _w121zod33_wait in range(600):
+                await asyncio.sleep(0.25)
+
+                _w121zod33_wait_raw = (
+                    await _w121zod33_redis.get(
+                        _w121zod33_cache_key
+                    )
+                )
+
+                if not _w121zod33_wait_raw:
+                    continue
+
+                try:
+                    _w121zod33_wait_cached = (
+                        json.loads(
+                            _w121zod33_wait_raw
+                        )
+                    )
+                except Exception:
+                    _w121zod33_wait_cached = None
+
+                if isinstance(
+                    _w121zod33_wait_cached,
+                    dict,
+                ):
+                    logger.info(
+                        "W121ZOD33_EPG_CACHE_WAIT_HIT "
+                        "date=%s waitMs=%s",
+                        raw_date,
+                        int(
+                            (_w121zod33_wait + 1)
+                            * 250
+                        ),
+                    )
+
+                    return _w121zod33_wait_cached
+
+            logger.warning(
+                "W121ZOD33_EPG_CACHE_WAIT_TIMEOUT "
+                "date=%s",
+                raw_date,
+            )
+
+    except Exception as _w121zod33_cache_exc:
+        logger.warning(
+            "W121ZOD33_EPG_CACHE_READ_ERROR "
+            "type=%s",
+            type(
+                _w121zod33_cache_exc
+            ).__name__,
+        )
+
+        _w121zod33_redis = None
+        _w121zod33_lock_token = None
+        _w121zod33_lock_acquired = False
 
     addons = await db.addons.find({
         "userId": current_user.id
@@ -27170,12 +27600,67 @@ async def get_live_tv_epg(
         for channel in provider["channels"]
     )
 
-    return {
+    _w121zod33_result = {
         "date": raw_date,
         "providers": providers,
         "channelCount": channel_count,
         "programCount": program_count,
     }
+
+    if _w121zod33_redis is not None:
+        try:
+            _w121zod33_payload = (
+                json.dumps(
+                    _w121zod33_result,
+                    separators=(",", ":"),
+                )
+            )
+
+            await _w121zod33_redis.set(
+                _w121zod33_cache_key,
+                _w121zod33_payload,
+                ex=_w121zod33_cache_ttl,
+            )
+
+            logger.info(
+                "W121ZOD33_EPG_CACHE_STORE "
+                "date=%s bytes=%s channels=%s "
+                "programs=%s",
+                raw_date,
+                len(_w121zod33_payload),
+                channel_count,
+                program_count,
+            )
+
+        except Exception as _w121zod33_store_exc:
+            logger.warning(
+                "W121ZOD33_EPG_CACHE_STORE_ERROR "
+                "type=%s",
+                type(
+                    _w121zod33_store_exc
+                ).__name__,
+            )
+
+        if (
+            _w121zod33_lock_acquired
+            and _w121zod33_lock_token
+        ):
+            try:
+                await _w121zod33_redis.eval(
+                    (
+                        "if redis.call('get', KEYS[1]) "
+                        "== ARGV[1] then "
+                        "return redis.call('del', KEYS[1]) "
+                        "else return 0 end"
+                    ),
+                    1,
+                    _w121zod33_lock_key,
+                    _w121zod33_lock_token,
+                )
+            except Exception:
+                pass
+
+    return _w121zod33_result
 
 @api_router.get("/content/discover-organized")
 async def get_discover(adult: int = 0, current_user: User = Depends(get_current_user)):
