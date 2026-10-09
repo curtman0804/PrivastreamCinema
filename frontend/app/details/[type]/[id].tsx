@@ -282,6 +282,94 @@ function AutoPlayLoadingBar() {
 // MUST be module-level (was nested inside handleStreamSelect â†’ caused
 // ReferenceError when the overlay tried to render).
 const _v238ValidNum = (n: any) => (n != null && !Number.isNaN(Number(n)));
+// V780E_TPB_JSTRM_IDENTITY
+// TPB jstrm IDs contain the authoritative torrent identity
+// inside a base64url JSON payload. Decode payload.t only.
+function _v780eJstrmTitle(value: any): string {
+  try {
+    const raw = String(value || '').trim();
+
+    if (!raw.toLowerCase().startsWith('jstrm:')) {
+      return '';
+    }
+
+    let encoded = raw
+      .slice(6)
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+
+    while (encoded.length % 4 !== 0) {
+      encoded += '=';
+    }
+
+    const alphabet =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+    const bytes: number[] = [];
+
+    for (let i = 0; i < encoded.length; i += 4) {
+      const c0 = alphabet.indexOf(encoded[i] || '');
+      const c1 = alphabet.indexOf(encoded[i + 1] || '');
+
+      if (c0 < 0 || c1 < 0) {
+        break;
+      }
+
+      const ch2 = encoded[i + 2] || '=';
+      const ch3 = encoded[i + 3] || '=';
+
+      const c2 =
+        ch2 === '='
+          ? -1
+          : alphabet.indexOf(ch2);
+
+      const c3 =
+        ch3 === '='
+          ? -1
+          : alphabet.indexOf(ch3);
+
+      bytes.push(
+        ((c0 << 2) | (c1 >> 4)) & 0xff
+      );
+
+      if (c2 >= 0) {
+        bytes.push(
+          (((c1 & 0x0f) << 4) | (c2 >> 2)) & 0xff
+        );
+      }
+
+      if (c2 >= 0 && c3 >= 0) {
+        bytes.push(
+          (((c2 & 0x03) << 6) | c3) & 0xff
+        );
+      }
+    }
+
+    const escaped = bytes
+      .map(
+        b =>
+          '%' +
+          b.toString(16).padStart(2, '0')
+      )
+      .join('');
+
+    let jsonText = '';
+
+    try {
+      jsonText = decodeURIComponent(escaped);
+    } catch (_) {
+      jsonText = bytes
+        .map(b => String.fromCharCode(b))
+        .join('');
+    }
+
+    const payload = JSON.parse(jsonText);
+
+    return String(payload?.t || '').trim();
+  } catch (_) {
+    return '';
+  }
+}
 
 // PATCH_V244_MEMO â€” kill re-render storms during stream loading on Firestick.
 // FocusableButton/ChipButton/EpisodeCard each render dozens of times per page;
@@ -682,6 +770,79 @@ function _v747TrustedPornTubeStream(
   }
 }
 
+// V783P_ASA_NATIVE_TRUST
+function _v783pTrustedAsaStream(
+  contentId: any,
+  contentMeta: any,
+  stream: any
+): boolean {
+  try {
+    const key = String(contentId || '')
+      .trim()
+      .toLowerCase();
+
+    if (
+      !key.startsWith('knaben:') &&
+      !key.startsWith('pornrips:')
+    ) {
+      return false;
+    }
+
+    const metaKey = String(
+      contentMeta?.id ||
+      contentMeta?.imdb_id ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!metaKey || metaKey !== key) {
+      return false;
+    }
+
+    const addon = String(
+      stream?.addon ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+    if (addon !== 'adult videos') {
+      return false;
+    }
+
+    const hash = String(
+      stream?.infoHash ||
+      stream?.info_hash ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+    return /^[a-f0-9]{40}$/.test(hash);
+  } catch (_) {
+    return false;
+  }
+}
+
+function _v783pTrustedAdultNativeStream(
+  contentId: any,
+  contentMeta: any,
+  stream: any
+): boolean {
+  return (
+    _v747TrustedPornTubeStream(
+      contentId,
+      contentMeta,
+      stream
+    ) ||
+    _v783pTrustedAsaStream(
+      contentId,
+      contentMeta,
+      stream
+    )
+  );
+}
 // V759_ADULT_TRANSCODE_ROUTE
 function _v759AdultNeedsTranscode(
   contentId: any,
@@ -871,7 +1032,7 @@ function _v747MovieIdentityMatches(
       requestedYear,
       candidateIdentity
     ) ||
-    _v747TrustedPornTubeStream(
+    _v783pTrustedAdultNativeStream(
       contentId,
       contentMeta,
       stream
@@ -896,6 +1057,42 @@ function _v441_movieTitleMatch(filePath: string, movieTitle: string, movieYear: 
   let hits = 0;
   for (const t of titleTokens) if (fileTokens.has(t)) hits++;
   const ratio = hits / titleTokens.length;
+
+  // W121ZOD5A_MOVIE_IDENTITY_GATE
+  // A year match alone must never make an unrelated title valid.
+  if (ratio <= 0) {
+    return 0;
+  }
+
+  // When both canonical metadata and the candidate advertise
+  // a movie year, require the exact canonical year.
+  const _v441CanonicalYear =
+    parseInt(String(movieYear || '').slice(0, 4), 10);
+
+  if (
+    !isNaN(_v441CanonicalYear) &&
+    _v441CanonicalYear >= 1900 &&
+    _v441CanonicalYear <= 2099
+  ) {
+    const _v441CandidateYears =
+      String(filePath || '').match(/\b(19\d{2}|20\d{2})\b/g);
+
+    if (
+      _v441CandidateYears &&
+      _v441CandidateYears.length > 0
+    ) {
+      const _v441ExactYear =
+        _v441CandidateYears.some(
+          (candidateYear: string) =>
+            parseInt(candidateYear, 10) === _v441CanonicalYear
+        );
+
+      if (!_v441ExactYear) {
+        return 0;
+      }
+    }
+  }
+
   let yearBonus = 0;
   if (movieYear) {
     const y = parseInt(String(movieYear).slice(0, 4), 10);
@@ -2199,18 +2396,16 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
     );
 
     /*
-     * V665 device-safe resolution ranking.
+     * W121ZOD104H2_RESTORE_1080_FIRST
      *
-     * 4K outranks 1080p only when this exact device and this exact
-     * advertised video codec are both proven 4K-capable.
+     * Restore the proven V652 automatic resolution policy:
+     * 1080p outranks 4K for automatic Play.
      *
-     * Constrained TVs and unknown devices retain 1080p-first.
+     * Manual stream cards are unchanged.
+     * Device capability logic remains available elsewhere.
      */
-    if (q === '4K') {
-      return _v665CanAuto4kStream(s) ? 6 : 4;
-    }
-
     if (q === '1080p') return 5;
+    if (q === '4K')    return 4;
     if (q === '720p')  return 3;
     if (q === 'HD')    return 2;
     if (q === 'SD')    return 1;
@@ -2278,6 +2473,57 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
     }
 
     const a: any = _v665AudioCaps;
+
+    // W121ZOD104H2_RESTORE_KNOWN_GOOD_AUDIO_ORDER
+    //
+    // Restore the proven V652 Google TV Streamer automatic preference:
+    // E-AC3/DDP -> AC3 -> AAC -> Opus.
+    //
+    // Existing capability checks, bad-hash filtering and the
+    // E-AC3 runtime-broken circuit breaker remain authoritative.
+    const _v121zod9bKirkwood =
+      String((_v659DeviceCaps as any)?.device || '')
+        .toLowerCase() === 'kirkwood' ||
+      String((_v659DeviceCaps as any)?.model || '')
+        .toLowerCase() === 'google tv streamer';
+
+    if (_v121zod9bKirkwood) {
+      if (
+        /\bATMOS\b/.test(t) &&
+        _v767dIsEac3Tagged(t) &&
+        a.eac3 === true
+      ) {
+        return 100;
+      }
+
+      if (
+        _v767dIsEac3Tagged(t) &&
+        a.eac3 === true
+      ) {
+        return 90;
+      }
+
+      if (
+        /\b(?:AC-?3|DD ?5)\b/.test(t) &&
+        a.ac3 === true
+      ) {
+        return 80;
+      }
+
+      if (
+        /\bAAC\b/.test(t) &&
+        a.aac === true
+      ) {
+        return 70;
+      }
+
+      if (
+        /\bOPUS\b/.test(t) &&
+        a.opus === true
+      ) {
+        return 60;
+      }
+    }
 
     if (
       /\bTRUE[\s._-]?HD\b/.test(t) &&
@@ -2361,6 +2607,16 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       if (/\b(?:H\.?265|HEVC|X265)\b/.test(t)) n -= 100;
     }
 
+    // W121ZOD8_CAPABLE_DEVICE_CODEC_RELIABILITY
+    // Restore the proven September-7 H264-vs-HEVC
+    // reliability tiebreaker on capable devices.
+    // This executes only at the final reliability level;
+    // it cannot override quality/audio/source preference.
+    if (!_v665LowMemoryTv) {
+      if (/\b(?:H\.?264|AVC|X264)\b/.test(t)) n += 250;
+      if (/\b(?:H\.?265|HEVC|X265)\b/.test(t)) n -= 100;
+    }
+
     // SDR is already preferred by the V665 automatic-selection wall.
     if (info?.isHDR) n -= 150;
 
@@ -2370,7 +2626,20 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       n -= 100;
     }
 
-    const seeders = Number(info?.seeders || 0);
+    // W121ZOD104I7_RAW_SEEDER_TIEBREAKER
+    // Read current raw-stream seeders at decision time. parseStreamInfo
+    // can contain an earlier cached value from progressive discovery.
+    const _v104i7SeedText = String(
+      (s as any)?.title || (s as any)?.name || ''
+    );
+    const _v104i7SeedMatch = _v104i7SeedText.match(
+      /(?:\uD83D\uDC64|\uD83C\uDF31)\s*(\d+)/
+    );
+    const seeders = Number(
+      (s as any)?.seeders ||
+      info?.seeders ||
+      (_v104i7SeedMatch ? _v104i7SeedMatch[1] : 0)
+    );
 
     if (Number.isFinite(seeders) && seeders > 0) {
       n += Math.min(seeders, 500);
@@ -2434,9 +2703,29 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
     const health =
       hash ? _v769SeekHealth[hash] : null;
 
+    // W121ZOD104J27_PLAYBACK_HEALTH_RANK
+    const _v104j27PlaybackFailedAt =
+      Number(
+        health?.playbackFailedAt ||
+        health?.updatedAt ||
+        0
+      );
+
+    const _v104j27PlaybackFailAgeMs =
+      Date.now() - _v104j27PlaybackFailedAt;
+
+    const _v104j27PlaybackFailActive =
+      health?.playback === 'fail' &&
+      Number.isFinite(_v104j27PlaybackFailedAt) &&
+      _v104j27PlaybackFailedAt > 0 &&
+      _v104j27PlaybackFailAgeMs >= 0 &&
+      _v104j27PlaybackFailAgeMs <
+        6 * 60 * 60 * 1000;
+
     if (
       health?.ff === 'fail' ||
-      health?.rw === 'fail'
+      health?.rw === 'fail' ||
+      _v104j27PlaybackFailActive
     ) {
       return -1;
     }
@@ -2494,11 +2783,15 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       r: reliabilityRank(s),
     }))
     .sort((x: any, y: any) =>
+      // W121ZOD8_AUTHORITATIVE_PLAY_ORDER
+      // Device-safe quality -> device-safe audio -> source
+      // preference -> codec compatibility -> learned seek
+      // health -> final reliability tiebreaker.
       (y.q - x.q) ||
-      (y.h - x.h) ||
+      (y.a - x.a) ||
       (y.m - x.m) ||
       (y.c - x.c) ||
-      (y.a - x.a) ||
+      (y.h - x.h) ||
       (y.r - x.r) ||
       (x.i - y.i)
     );
@@ -2512,7 +2805,7 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       '[V652 AUTO PICK]',
       'pool=' + (nonForeign.length > 0 ? 'ENGLISH' : 'FOREIGN_FALLBACK'),
       'audioPool=' + (_v652UsingSafeAudio ? 'SAFE' : 'UNSAFE_FALLBACK'),
-      'videoOrder=ENGLISH>SDR>Q>SEEK>MASTER>C>A>R',
+      'videoOrder=ENGLISH>SDR>Q>A>MASTER>C>SEEK>R',
       'master=' + pick.m,
       'deviceProfile=' + (
         _v665LowMemoryTv
@@ -3483,10 +3776,22 @@ export default function DetailsScreen() {
     if (_v706c2n4AccessAllowed !== true) return;
 
     // If we have cached meta with background, skip the meta fetch entirely
-    const hasCachedMeta = cachedMeta && cachedMeta.background;
+    // V783Y2_JSTRM_FORCE_META_FETCH
+    // TPB jstrm cards already have artwork, but Details still needs
+    // the addon's richer metadata for tags/cast.
+    const _v783yForceJstrmMeta =
+      String(id || '').startsWith('jstrm:');
+
+    const hasCachedMeta =
+      !_v783yForceJstrmMeta &&
+      cachedMeta &&
+      cachedMeta.background;
     if (!hasCachedMeta) {
       // Only fetch meta for series (need episodes) or if missing background
-      const needsMeta = type === 'series' || !content?.background;
+      const needsMeta =
+        _v783yForceJstrmMeta ||
+        type === 'series' ||
+        !content?.background;
       if (needsMeta) {
         // PATCH_V39_DEFER_MOUNT_IO â€” defer meta fetch off the mount path
         setTimeout(() => { try { loadContent(); } catch (_) {} }, 0);
@@ -3494,7 +3799,19 @@ export default function DetailsScreen() {
     }
     // PATCH_V39_DEFER_MOUNT_IO â€” defer library fetch off the mount path
     setTimeout(() => { try { fetchLibrary(); } catch (_) {} }, 0);
-    if (type && id && (type === 'movie' || type === 'tv' || isEpisodePage)) {
+    // V780A_ADULT_DETAILS_STREAM_GATE
+    if (
+      type &&
+      id &&
+      (
+        type === 'movie' ||
+        type === 'tv' ||
+        type === 'Porn' ||
+        type === 'porn' ||
+        type === 'adult' ||
+        isEpisodePage
+      )
+    ) {
       if (_v667ExpectedStreamKey) {
         _setV667StreamRequestKey(_v667ExpectedStreamKey);
       }
@@ -3838,9 +4155,68 @@ export default function DetailsScreen() {
   const prewarmedRef = useRef<string | null>(null);
   useEffect(() => {
     if (streams && streams.length > 0 && !isLoadingStreams) {
-      // Find the best English stream to prewarm (highest seeders)
+      // W121ZOD9B_CORRECT_ID_POLICY_PREWARM
       const sorted = sortStreamsByLanguage(streams);
-      const topStream = sorted[0]; // English first, highest seeders
+
+      const _v121zod9bReqT = String(
+        (content as any)?.name ||
+        (content as any)?.title ||
+        (paramName as any) ||
+        ''
+      );
+
+      const _v121zod9bReqY =
+        (content as any)?.releaseInfo ||
+        (content as any)?.year ||
+        (content as any)?.releaseYear ||
+        '';
+
+      const _v121zod9bIdentified =
+        type === 'movie' && _v121zod9bReqT
+          ? sorted.filter((s: any) => {
+              const identity = String(
+                s?.filename ||
+                s?.title ||
+                s?.name ||
+                ''
+              ).trim();
+
+              if (!identity) return false;
+
+              return _v747MovieIdentityMatches(
+                id,
+                content,
+                s,
+                _v121zod9bReqT,
+                _v121zod9bReqY,
+                identity
+              );
+            })
+          : [];
+
+      const _v121zod9bPool =
+        _v121zod9bIdentified.length > 0
+          ? _v121zod9bIdentified
+          : sorted;
+
+      const topStream =
+        _v503PickReliableAutoStream(_v121zod9bPool) ||
+        _v121zod9bPool[0];
+
+      try {
+        console.log(
+          '[W121ZOD9B PREWARM]',
+          'identified=' + _v121zod9bIdentified.length,
+          'hash=' + String(topStream?.infoHash || '').slice(0, 12),
+          '|',
+          String(
+            topStream?.filename ||
+            topStream?.title ||
+            topStream?.name ||
+            ''
+          ).slice(0, 120)
+        );
+      } catch (_) {}
       if (topStream?.infoHash && topStream.infoHash !== prewarmedRef.current) {
         prewarmedRef.current = topStream.infoHash;
         console.log(`[PREWARM v291] Kicking client-side PM resolve for top stream: ${topStream.infoHash}`);
@@ -3874,7 +4250,7 @@ export default function DetailsScreen() {
         ).catch(() => {});
       }
     }
-  }, [streams, isLoadingStreams]);
+  }, [streams, isLoadingStreams, id, type, content, paramName]);
 
   /* V656_DETAILS_REMOVE_LEGACY_PRERESOLVE
    * Obsolete direct-backend pre-resolve hook removed.
@@ -3970,13 +4346,37 @@ export default function DetailsScreen() {
       : (nextTitleParam ? String(nextTitleParam) : (isEpisodePage ? `S${episodeSeason}E${episodeNumber} - ${content?.name || 'Loading...'}` : content?.name || 'Video'));
     const cType = type as string || 'movie';
 
-    const _v745IdentityTitle = String(
+    const _v745DefaultIdentityTitle = String(
       (content as any)?.name ||
       (content as any)?.title ||
       (paramName as any) ||
       ''
     ).trim();
 
+    const _v780eJstrmIdentityTitle =
+      (
+        type === 'Porn' ||
+        type === 'porn' ||
+        type === 'adult'
+      ) &&
+      String(id || '')
+        .toLowerCase()
+        .startsWith('jstrm:')
+        ? _v780eJstrmTitle(id)
+        : '';
+
+    const _v745IdentityTitle =
+      _v780eJstrmIdentityTitle ||
+      _v745DefaultIdentityTitle;
+
+    if (_v780eJstrmIdentityTitle) {
+      console.log(
+        '[V780E JSTRM IDENTITY]',
+        String(stream.infoHash || '').slice(0, 8),
+        '|',
+        _v780eJstrmIdentityTitle.slice(0, 120)
+      );
+    }
     const _v745IdentityYear = _v745Year(
       (content as any)?.year ||
       (content as any)?.releaseYear ||
@@ -4097,7 +4497,71 @@ const nextEpisodeData = nextEpisode ? {
         return true;
       });
 
-      const sorted = [...candidates].sort(
+      // W121ZOD104J27_FALLBACK_PLAYBACK_FILTER
+      // W121ZOD104J30_FALLBACK_HEALTH_SCOPE_FIX
+      // _v769SeekHealthRank is local to the authoritative selector
+      // and cannot be called from this fallback-builder scope.
+      // Read the same durable V769 map here instead.
+      const _v104j30FallbackHealthMap =
+        _v769GetSeekHealthMap();
+
+      const _v104j30FallbackHealthRank =
+        (s: any): number => {
+          const hash =
+            String(
+              s?.infoHash ||
+              s?.info_hash ||
+              ''
+            )
+              .trim()
+              .toLowerCase();
+
+          const h =
+            hash
+              ? _v104j30FallbackHealthMap[hash]
+              : null;
+
+          const playbackFailedAt =
+            Number(
+              h?.playbackFailedAt ||
+              h?.updatedAt ||
+              0
+            );
+
+          const playbackFailAgeMs =
+            Date.now() - playbackFailedAt;
+
+          const playbackFailActive =
+            h?.playback === 'fail' &&
+            Number.isFinite(playbackFailedAt) &&
+            playbackFailedAt > 0 &&
+            playbackFailAgeMs >= 0 &&
+            playbackFailAgeMs <
+              6 * 60 * 60 * 1000;
+
+          if (
+            h?.ff === 'fail' ||
+            h?.rw === 'fail' ||
+            playbackFailActive
+          ) {
+            return -1;
+          }
+
+          return 0;
+        };
+
+      const _v104j27NonFailedCandidates =
+        candidates.filter(
+          (s: any) =>
+            _v104j30FallbackHealthRank(s) >= 0
+        );
+
+      const _v104j27FallbackCandidates =
+        _v104j27NonFailedCandidates.length > 0
+          ? _v104j27NonFailedCandidates
+          : candidates;
+
+      const sorted = [..._v104j27FallbackCandidates].sort(
         (a: any, b: any) => seedCount(b) - seedCount(a)
       );
 
@@ -4113,6 +4577,12 @@ const nextEpisodeData = nextEpisode ? {
        * seed-ranked order.
        */
       const healthOrdered = [...healthy, ...unhealthy];
+
+      /* W121ZOD9B_FAST_FALLBACK_RESTORE
+       * Rank the first retry with the authoritative selector.
+       * Remaining retries retain health/seeder order.
+       * Do NOT rerun V503 once per fallback.
+       */
       const policyPool = healthy.length > 0 ? healthy : unhealthy;
       const policyFirst = _v503PickReliableAutoStream(policyPool);
 
@@ -4220,7 +4690,9 @@ const nextEpisodeData = nextEpisode ? {
       const _V300_BUILD_TAG = 'V300_PM_BATCH_CACHE_RESOLVE_BUILD_TAG';
       void _V300_BUILD_TAG;
       try {
-        const _v300_pm = await isPremiumizeConfigured();
+        // W121ZOD9B_NO_PM_STATUS_PREFLIGHT
+        // Cache-check/directdl are authoritative.
+        const _v300_pm = true;
         if (_v300_pm) {
           // Build ordered candidate list: chosen stream first, then the
           // rest of `streams` (already sorted by quality/language above).
@@ -4230,6 +4702,45 @@ const nextEpisodeData = nextEpisode ? {
           const _v300_pushCand = (s: any) => {
             if (!s || !s.infoHash) return;
             if (_v672IsSampleLikeStream(s)) return;
+
+            // W121ZOD9B_V300_IDENTITY_WALL
+            if (!preserveSelectedStream && type === 'movie') {
+              const reqTitle = String(
+                (content as any)?.name ||
+                (content as any)?.title ||
+                (paramName as any) ||
+                ''
+              );
+
+              const reqYear =
+                (content as any)?.releaseInfo ||
+                (content as any)?.year ||
+                (content as any)?.releaseYear ||
+                '';
+
+              const candidateIdentity = String(
+                s?.filename ||
+                s?.title ||
+                s?.name ||
+                ''
+              ).trim();
+
+              if (
+                reqTitle &&
+                candidateIdentity &&
+                !_v747MovieIdentityMatches(
+                  id,
+                  content,
+                  s,
+                  reqTitle,
+                  reqYear,
+                  candidateIdentity
+                )
+              ) {
+                return;
+              }
+            }
+
             const h = String(s.infoHash).toLowerCase();
             if (_v300_seen.has(h)) return;
             _v300_seen.add(h);
@@ -4253,7 +4764,9 @@ const nextEpisodeData = nextEpisode ? {
 
           if (_v300_candidates.length > 0) {
             // Batch cache check (max 50 per PM call).
-            const _v300_hashes = _v300_candidates.slice(0, 50).map((c) => c.hash);
+            // W121ZOD9B_FAST_PM_BATCH
+            const _v300_hashes =
+              _v300_candidates.slice(0, 12).map((c) => c.hash);
             const _v300_cached = new Set<string>();
             try {
               const _v300_ctrl1 = new AbortController();
@@ -4319,9 +4832,32 @@ const nextEpisodeData = nextEpisode ? {
                           c.hash
                         ];
 
+                      // W121ZOD104J27_PM_PLAYBACK_FILTER
+                      const _v104j27PlaybackFailedAt =
+                        Number(
+                          h?.playbackFailedAt ||
+                          h?.updatedAt ||
+                          0
+                        );
+
+                      const _v104j27PlaybackFailAgeMs =
+                        Date.now() -
+                        _v104j27PlaybackFailedAt;
+
+                      const _v104j27PlaybackFailActive =
+                        h?.playback === 'fail' &&
+                        Number.isFinite(
+                          _v104j27PlaybackFailedAt
+                        ) &&
+                        _v104j27PlaybackFailedAt > 0 &&
+                        _v104j27PlaybackFailAgeMs >= 0 &&
+                        _v104j27PlaybackFailAgeMs <
+                          6 * 60 * 60 * 1000;
+
                       return !(
                         h?.ff === 'fail' ||
-                        h?.rw === 'fail'
+                        h?.rw === 'fail' ||
+                        _v104j27PlaybackFailActive
                       );
                     }
                   );
@@ -4423,7 +4959,7 @@ const nextEpisodeData = nextEpisode ? {
 
                     if (
                       !_v300_file &&
-                      _v747TrustedPornTubeStream(
+                      _v783pTrustedAdultNativeStream(
                         id,
                         content,
                         _v300_picked?.stream
@@ -4558,7 +5094,8 @@ const nextEpisodeData = nextEpisode ? {
       const _V299_BUILD_TAG = 'V299_INLINE_PM_DIRECT_RESOLVE_BUILD_TAG';
       void _V299_BUILD_TAG;
       try {
-        const _v299_pm = await isPremiumizeConfigured();
+        // W121ZOD9B_NO_PM_STATUS_PREFLIGHT_V299
+        const _v299_pm = true;
         const _v299_streamHash = String(
           stream.infoHash || ''
         ).trim().toLowerCase();
@@ -4622,7 +5159,7 @@ const nextEpisodeData = nextEpisode ? {
 
                 if (
                   !_v299_picked &&
-                  _v747TrustedPornTubeStream(
+                  _v783pTrustedAdultNativeStream(
                     id,
                     content,
                     stream
@@ -5455,18 +5992,179 @@ const nextEpisodeData = nextEpisode ? {
           overScrollMode="never"
           bounces={false}
         >
-          {/* Genre */}
-          {content?.genre && Array.isArray(content.genre) && content.genre.length > 0 && (
-            <View style={styles.chipSection}>
-              <Text style={styles.chipLabel}>Genre</Text>
-              <View style={styles.chipRow}>
-                {content.genre.slice(0, 4).map((g: string, i: number) => (
-                  <ChipButton key={`genre-${i}`} label={g} hasTVPreferredFocus={i === 0} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: g, mode: 'genre' } })} />
-                ))}
-              </View>
-            </View>
-          )}
+          {/* V783R_UNIVERSAL_ADULT_TAG_BUTTONS */}
+          {(() => {
+            const rawId = String(
+              (content as any)?.id ||
+              id ||
+              ''
+            )
+              .trim()
+              .toLowerCase();
 
+            const rawType = String(
+              (content as any)?.type ||
+              type ||
+              ''
+            )
+              .trim()
+              .toLowerCase();
+
+            const sourceText = [
+              (content as any)?.addon,
+              (content as any)?.source,
+              (content as any)?.serviceName,
+              (content as any)?.catalogName,
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .toLowerCase();
+
+            const isAdultDetail =
+              (content as any)?.adult === true ||
+              rawType === 'porn' ||
+              rawType === 'adult' ||
+              /^(?:pt:|porndb:|porn_id:|porn_|jstrm:|knaben:|pornrips:|eporner:|xhamster:|porntrex:|spankbang:|missav:)/i.test(rawId) ||
+              /\b(?:adult videos|onlyporn|porn tube|porntube|jaxxx|dirty pink|tpb.*porn)\b/i.test(sourceText);
+
+            const rawTags: any[] = [];
+
+            const addValues = (value: any) => {
+              if (Array.isArray(value)) {
+                value.forEach(addValues);
+                return;
+              }
+
+              if (value === null || value === undefined) {
+                return;
+              }
+
+              if (typeof value === 'string') {
+                const clean = value.trim();
+
+                if (clean) {
+                  rawTags.push(clean);
+                }
+
+                return;
+              }
+
+              if (typeof value === 'object') {
+                const clean = String(
+                  value?.name ||
+                  value?.title ||
+                  value?.label ||
+                  ''
+                ).trim();
+
+                if (clean) {
+                  rawTags.push(clean);
+                }
+              }
+            };
+
+            if (isAdultDetail) {
+              // Stremio addons are inconsistent here, so accept all
+              // common metadata representations without inventing tags.
+              addValues((content as any)?.genre);
+              addValues((content as any)?.genres);
+              addValues((content as any)?.tag);
+              addValues((content as any)?.tags);
+
+              const links =
+                Array.isArray((content as any)?.links)
+                  ? (content as any).links
+                  : [];
+
+              links.forEach((link: any) => {
+                const category =
+                  String(link?.category || '')
+                    .trim()
+                    .toLowerCase();
+
+                if (
+                  category === 'genre' ||
+                  category === 'genres' ||
+                  category === 'tag' ||
+                  category === 'tags'
+                ) {
+                  addValues(
+                    link?.name ||
+                    link?.title ||
+                    link?.label
+                  );
+                }
+              });
+            } else {
+              // Preserve normal movie/TV Genre behavior.
+              addValues((content as any)?.genre);
+            }
+
+            const seen =
+              new Set<string>();
+
+            const chips =
+              rawTags.filter((value: any) => {
+                const clean =
+                  String(value || '').trim();
+
+                if (!clean) {
+                  return false;
+                }
+
+                const key =
+                  clean.toLowerCase();
+
+                if (seen.has(key)) {
+                  return false;
+                }
+
+                seen.add(key);
+                return true;
+              });
+
+            if (chips.length === 0) {
+              return null;
+            }
+
+            const visible =
+              isAdultDetail
+                ? chips.slice(0, 16)
+                : chips.slice(0, 4);
+
+            return (
+              <View style={styles.chipSection}>
+                <Text style={styles.chipLabel}>
+                  {isAdultDetail ? 'Tags' : 'Genre'}
+                </Text>
+
+                <View style={styles.chipRow}>
+                  {visible.map(
+                    (tag: string, i: number) => (
+                      <ChipButton
+                        key={`genre-${i}`}
+                        label={tag}
+                        hasTVPreferredFocus={
+                          !isAdultDetail && i === 0
+                        }
+                        onPress={() =>
+                          router.push({
+                            pathname: '/(tabs)/search',
+                            params: {
+                              q: tag,
+                              mode: isAdultDetail
+                                ? 'auto'
+                                : 'genre',
+                            },
+                          })
+                        }
+                      />
+                    )
+                  )}
+                </View>
+              </View>
+            );
+          })()}
           {/* Director */}
           {content?.director && Array.isArray(content.director) && content.director.length > 0 && (
             <View style={styles.chipSection}>
@@ -5551,7 +6249,15 @@ const nextEpisodeData = nextEpisode ? {
           )}
 
           {/* Streams Section - Stremio Style */}
-          {(type === 'movie' || type === 'tv' || isEpisodePage) && (
+          {/* V780C_ADULT_STREAM_SECTION_GATE */}
+          {(
+            type === 'movie' ||
+            type === 'tv' ||
+            type === 'Porn' ||
+            type === 'porn' ||
+            type === 'adult' ||
+            isEpisodePage
+          ) && (
             <View style={styles.streamsSection}>
               {/* Play button on left + stream count */}
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -5669,7 +6375,7 @@ const nextEpisodeData = nextEpisode ? {
                             const _v441_ts = _v441_top ? _v441_movieTitleMatch(_v441_top, _v441_reqT, _v441_reqY) : 1;
 
                             const _v747TrustedPt =
-                              _v747TrustedPornTubeStream(
+                              _v783pTrustedAdultNativeStream(
                                 id,
                                 content,
                                 picked
@@ -5694,35 +6400,78 @@ const nextEpisodeData = nextEpisode ? {
                             ) {
                               console.log('[V441 SKIP]', _v441_ts.toFixed(2), '|', _v441_top.slice(0, 100));
                               let _v441_alt: any = null;
+                              
+                              // W121ZOD8_V441_RERANK_CORRECT_IDENTITY
+                              // Do not take the first title-valid stream from the card list.
+                              // Build the correct-title/year pool, then run the SAME
+                              // authoritative device-aware selector used by normal Play.
+                              const _v441Identified: any[] = [];
+                              const _v441Unknown: any[] = [];
+                              
                               for (let _v441_i = 0; _v441_i < list.length; _v441_i++) {
-                                if (list[_v441_i] === picked) continue;
-                                const _v441_fn = _v441_probe(list[_v441_i]);
-                                if (!_v441_fn) { _v441_alt = list[_v441_i]; break; }
-                                const _v441_sc = _v441_movieTitleMatch(_v441_fn, _v441_reqT, _v441_reqY);
-
+                                const _v441_candidate = list[_v441_i];
+                              
+                                if (_v441_candidate === picked) continue;
+                              
+                                const _v441_fn = _v441_probe(_v441_candidate);
+                              
+                                if (!_v441_fn) {
+                                  _v441Unknown.push(_v441_candidate);
+                                  continue;
+                                }
+                              
+                                const _v441_sc =
+                                  _v441_movieTitleMatch(
+                                    _v441_fn,
+                                    _v441_reqT,
+                                    _v441_reqY
+                                  );
+                              
                                 const _v747TrustedAlt =
-                                  _v747TrustedPornTubeStream(
+                                  _v783pTrustedAdultNativeStream(
                                     id,
                                     content,
-                                    list[_v441_i]
+                                    _v441_candidate
                                   );
-
+                              
                                 if (_v441_sc >= 0.5 || _v747TrustedAlt) {
-                                  _v441_alt = list[_v441_i];
-
-                                  console.log(
-                                    _v747TrustedAlt
-                                      ? '[V747 PT NATIVE] V441 authoritative alternate accepted'
-                                      : '[V441 USE]',
-                                    _v441_sc.toFixed(2),
-                                    '|',
-                                    _v441_fn.slice(0, 100)
-                                  );
-
-                                  break;
+                                  _v441Identified.push(_v441_candidate);
                                 }
                               }
+                              
+                              const _v441RankPool =
+                                _v441Identified.length > 0
+                                  ? _v441Identified
+                                  : _v441Unknown;
+                              
+                              _v441_alt =
+                                _v503PickReliableAutoStream(
+                                  _v441RankPool
+                                );
+                              
                               if (_v441_alt) {
+                                const _v441ChosenName =
+                                  _v441_probe(_v441_alt);
+                              
+                                const _v441ChosenScore =
+                                  _v441ChosenName
+                                    ? _v441_movieTitleMatch(
+                                        _v441ChosenName,
+                                        _v441_reqT,
+                                        _v441_reqY
+                                      )
+                                    : 0;
+                              
+                                console.log(
+                                  '[W121ZOD8 V441 RERANK]',
+                                  'identified=' + _v441Identified.length,
+                                  'unknown=' + _v441Unknown.length,
+                                  'score=' + _v441ChosenScore.toFixed(2),
+                                  '|',
+                                  _v441ChosenName.slice(0, 100)
+                                );
+                              }
+                                                            if (_v441_alt) {
                                 picked = _v441_alt;
                               } else {
                                 console.log('[V441] no title-matching stream in top', list.length, '- aborting play. content=', String(_v441_reqT).slice(0,80));
