@@ -812,6 +812,75 @@ export default function PlayerScreen() {
   const _v789s25w111CommercialPhaseRef =
     useRef<'off' | 'arming' | 'hold' | 'resuming'>('off');
 
+  // W121ZPLAY10Y74C_PREFIX_SOURCE_ERROR_PROVISIONAL_COVER
+  //
+  // This state is deliberately NOT part of commercial authority.
+  // It may visually cover an already-failed live player only when
+  // backend status is inactive PREFIX and Media3 raises a real
+  // native source error. HOLD/PASS/BYPASS remain authoritative.
+  const [
+    _v789s25w74cProvisionalEntryCover,
+    _v789s25w74cSetProvisionalEntryCoverState,
+  ] = useState(false);
+
+  const _v789s25w74cProvisionalEntryCoverRef =
+    useRef(false);
+
+  const _v789s25w74cProvisionalEntryReadyRef =
+    useRef(false);
+
+  const _v789s25w74cProvisionalEntryTimeoutRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const _v789s25w74cSetProvisionalEntryCover =
+    useCallback((active: boolean) => {
+      _v789s25w74cProvisionalEntryCoverRef.current = active;
+
+      if (!active) {
+        _v789s25w74cProvisionalEntryReadyRef.current = false;
+      }
+
+      _v789s25w74cSetProvisionalEntryCoverState(active);
+    }, []);
+
+  const _v789s25w74cClearProvisionalEntryCover =
+    useCallback(
+      (reason: string) => {
+        if (_v789s25w74cProvisionalEntryTimeoutRef.current) {
+          clearTimeout(
+            _v789s25w74cProvisionalEntryTimeoutRef.current
+          );
+
+          _v789s25w74cProvisionalEntryTimeoutRef.current = null;
+        }
+
+        const wasActive =
+          _v789s25w74cProvisionalEntryCoverRef.current;
+
+        _v789s25w74cSetProvisionalEntryCover(false);
+
+        if (wasActive) {
+          console.log(
+            '[W121ZPLAY10Y74C PROVISIONAL ENTRY COVER CLEAR]',
+            'reason=' + reason
+          );
+        }
+      },
+      [_v789s25w74cSetProvisionalEntryCover]
+    );
+
+  useEffect(() => {
+    return () => {
+      if (_v789s25w74cProvisionalEntryTimeoutRef.current) {
+        clearTimeout(
+          _v789s25w74cProvisionalEntryTimeoutRef.current
+        );
+
+        _v789s25w74cProvisionalEntryTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   const _v789s25w111CleanPollsRef = useRef(0);
 
   const _v789s25w111ResumeFirstPositionRef =
@@ -892,6 +961,27 @@ export default function PlayerScreen() {
 
   const _v789s25w112ResumeLastProgressAtRef =
     useRef(0);
+
+  // W121ZPLAY10Y71C_FREEZE_PROVEN_RESUME
+  // Four seconds of hidden playback proves Media3 health.
+  // Freeze that same player while backend clean proof completes
+  // so returning program media does not advance invisibly.
+  const [
+    _v789s25w71ResumeFrozen,
+    _v789s25w71SetResumeFrozen,
+  ] = useState(false);
+
+  const _v789s25w71ResumeFrozenRef =
+    useRef(false);
+
+  const _v789s25w71ResumeHealthProvenRef =
+    useRef(false);
+
+  // W121ZPLAY10Y72K_PROVEN_LIVE_TIMESTAMP
+  // Preserve the absolute program timestamp rather than the
+  // rolling-window-relative positionMillis value.
+  const _v789s25w72kProvenLiveTimestampRef =
+    useRef<number | null>(null);
 
   // V789S25W118_PRESERVE_PROVEN_RESUME_PLAYER
   // Pin the exact relay URL used by the hidden resume player. The pin survives
@@ -1013,6 +1103,9 @@ export default function PlayerScreen() {
           null;
         _v789s25w112ResumeLastProgressAtRef.current =
           0;
+        _v789s25w71ResumeHealthProvenRef.current = false;
+        _v789s25w71ResumeFrozenRef.current = false;
+        _v789s25w71SetResumeFrozen(false);
 
         if (_v789s20LiveProgressWatchdogRef.current) {
           clearTimeout(
@@ -1048,14 +1141,43 @@ export default function PlayerScreen() {
         setShowAudioPicker(false);
         setShowNextEpisodeModal(false);
 
-        _v789s25w111SetCommercialPhase(
+        const _v789s25w74cHadProvisionalCover =
+          origin === 'backend' &&
+          previousPhase === 'off' &&
+          _v789s25w74cProvisionalEntryCoverRef.current;
+
+        const _v789s25w74cProvisionalAlreadyReady =
+          _v789s25w74cHadProvisionalCover &&
+          _v789s25w74cProvisionalEntryReadyRef.current;
+
+        const _v789s25w74cNextPhase =
           origin === 'backend' && previousPhase === 'off'
-            ? 'arming'
-            : 'hold'
+            ? (_v789s25w74cProvisionalAlreadyReady
+                ? 'hold'
+                : 'arming')
+            : 'hold';
+
+        _v789s25w111SetCommercialPhase(
+          _v789s25w74cNextPhase
         );
+
+        if (_v789s25w74cHadProvisionalCover) {
+          console.log(
+            '[W121ZPLAY10Y74C PROVISIONAL ENTRY PROMOTE]',
+            'ready=' +
+              String(_v789s25w74cProvisionalAlreadyReady),
+            'nextPhase=' + _v789s25w74cNextPhase,
+            'authority=backend-status'
+          );
+
+          _v789s25w74cClearProvisionalEntryCover(
+            'backend-commercial'
+          );
+        }
       },
       [
         _v789s25w111SetCommercialPhase,
+        _v789s25w74cClearProvisionalEntryCover,
       ]
     );
 
@@ -1506,9 +1628,9 @@ export default function PlayerScreen() {
       }
 
       console.log(
-        '[V789S25W111 CLEAN PROVEN]',
+        '[W121ZPLAY10Y70 OVERLAP RESUME START]',
         'mode=' + mode,
-        'remounting-main-player-behind-break-video'
+        'remounting-main-player-behind-break-video clean-gate=pending'
       );
 
       _v789s25w111CleanPollsRef.current = 0;
@@ -1520,6 +1642,9 @@ export default function PlayerScreen() {
         null;
       _v789s25w112ResumeLastProgressAtRef.current =
         0;
+      _v789s25w71ResumeHealthProvenRef.current = false;
+      _v789s25w71ResumeFrozenRef.current = false;
+      _v789s25w71SetResumeFrozen(false);
 
       _v789s25w121zsaResumeModeRef.current =
         mode;
@@ -1659,6 +1784,26 @@ export default function PlayerScreen() {
             enterHold(mode);
           }
         } else if (cleanMode) {
+          if (
+            currentPhase === 'off' &&
+            _v789s25w74cProvisionalEntryCoverRef.current
+          ) {
+            console.warn(
+              '[W121ZPLAY10Y74C PROVISIONAL ENTRY CANCEL CLEAN]',
+              'mode=' + mode,
+              'active=' + String(active),
+              'action=remove-cover-and-reconnect'
+            );
+
+            _v789s25w74cClearProvisionalEntryCover(
+              'backend-clean'
+            );
+
+            void _v785ReconnectLive(
+              'prefix-source-error-clean'
+            );
+          }
+
           if (currentPhase === 'arming') {
             console.log(
               '[V789S25W117 ARMING CANCELLED CLEAN]',
@@ -1669,13 +1814,13 @@ export default function PlayerScreen() {
             _v789s25w111CleanPollsRef.current = 0;
             _v789s25w112BackendCleanSinceRef.current = 0;
             _v789s25w111SetCommercialPhase('off');
-          } else if (currentPhase === 'hold') {
-            // W121ZPLAY10Y30_BYPASS_REQUIRES_CLEAN_WINDOW
+          } else if (currentPhase === 'hold' || currentPhase === 'resuming') {
+            // W121ZPLAY10Y70_OVERLAPPED_CLEAN_AND_RESUME_PROOF
             //
-            // Y28R proved that BYPASS can flip back to HOLD only a few
-            // seconds after an immediate reveal. Treat BYPASS exactly like
-            // PASS here: keep the commercial layer up until the existing
-            // 12-second continuous backend-clean window is proven.
+            // Keep the full 12-second continuous backend-clean proof,
+            // but start the hidden Media3 resume player immediately on
+            // clean PASS/BYPASS. The break layer remains visible until
+            // BOTH backend-clean and playback-health gates have passed.
             const holdOrigin =
               _v789s25w112HoldOriginRef.current;
 
@@ -1706,16 +1851,97 @@ export default function PlayerScreen() {
               'holdAgeMs=' + String(holdAgeMs)
             );
 
-            if (cleanForMs >= 12000) {
+            // W121ZPLAY10Y71C_CLEAN_PROVEN_UNFREEZE
+            if (
+              currentPhase === 'resuming' &&
+              cleanForMs >= 12000 &&
+              _v789s25w71ResumeFrozenRef.current
+            ) {
+              console.log(
+                '[W121ZPLAY10Y71 CLEAN PROVEN UNFREEZE]',
+                'cleanForMs=' + String(cleanForMs),
+                'action=resume-proven-hidden-player'
+              );
+
+              _v789s25w71ResumeFrozenRef.current = false;
+              _v789s25w71SetResumeFrozen(false);
+
+              // W121ZPLAY10Y72K_RESTORE_LIVE_TIMESTAMP
+              const _v789s25w72kLiveTimestamp =
+                _v789s25w72kProvenLiveTimestampRef.current;
+
+              const _v789s25w72kResumePlayer =
+                videoRef.current;
+
+              console.log(
+                '[W121ZPLAY10Y72K LIVE TIMESTAMP RESTORE REQUEST]',
+                'timestampMs=' +
+                  String(_v789s25w72kLiveTimestamp ?? 'null'),
+                'playerAvailable=' +
+                  String(!!_v789s25w72kResumePlayer)
+              );
+
+              if (
+                _v789s25w72kLiveTimestamp !== null &&
+                _v789s25w72kResumePlayer
+              ) {
+                void _v789s25w72kResumePlayer
+                  .restoreLiveTimestampAsync(
+                    _v789s25w72kLiveTimestamp
+                  )
+                  .then((restored) => {
+                    if (restored) {
+                      console.log(
+                        '[W121ZPLAY10Y72K LIVE TIMESTAMP RESTORED]',
+                        'timestampMs=' +
+                          String(_v789s25w72kLiveTimestamp)
+                      );
+                    } else {
+                      console.warn(
+                        '[W121ZPLAY10Y72K LIVE TIMESTAMP UNAVAILABLE]',
+                        'action=ordinary-unfreeze-plus-watchdog'
+                      );
+                    }
+                  })
+                  .catch((error: any) => {
+                    console.warn(
+                      '[W121ZPLAY10Y72K LIVE TIMESTAMP RESTORE FAILED]',
+                      String(error?.message || error),
+                      'action=ordinary-unfreeze-plus-watchdog'
+                    );
+                  });
+              } else {
+                console.warn(
+                  '[W121ZPLAY10Y72K LIVE TIMESTAMP UNAVAILABLE]',
+                  'action=ordinary-unfreeze-plus-watchdog'
+                );
+              }
+            }
+
+            if (currentPhase === 'hold') {
               beginResume(mode);
             }
           }
         } else {
           // Unknown/inconclusive mode never changes phase. If we were proving
           // a clean window, break continuity and require a fresh 12 seconds.
-          if (currentPhase === 'hold') {
+          if (currentPhase === 'hold' || currentPhase === 'resuming') {
             _v789s25w111CleanPollsRef.current = 0;
             _v789s25w112BackendCleanSinceRef.current = 0;
+
+            if (_v789s25w71ResumeFrozenRef.current) {
+              console.warn(
+                '[W121ZPLAY10Y71 CLEAN RESET UNFREEZE]',
+                'reason=inconclusive-status'
+              );
+            }
+
+            _v789s25w71ResumeHealthProvenRef.current = false;
+            _v789s25w71ResumeFrozenRef.current = false;
+            _v789s25w71SetResumeFrozen(false);
+            _v789s25w112ResumeStableStartedAtRef.current = 0;
+            _v789s25w112ResumeLastPositionRef.current = null;
+            _v789s25w112ResumeLastProgressAtRef.current = 0;
           }
         }
       } catch (error) {
@@ -1725,11 +1951,25 @@ export default function PlayerScreen() {
         );
 
         if (
-          _v789s25w111CommercialPhaseRef.current ===
-          'hold'
+          _v789s25w111CommercialPhaseRef.current === 'hold' ||
+          _v789s25w111CommercialPhaseRef.current === 'resuming'
         ) {
           _v789s25w111CleanPollsRef.current = 0;
           _v789s25w112BackendCleanSinceRef.current = 0;
+
+          if (_v789s25w71ResumeFrozenRef.current) {
+            console.warn(
+              '[W121ZPLAY10Y71 CLEAN RESET UNFREEZE]',
+              'reason=poll-failed'
+            );
+          }
+
+          _v789s25w71ResumeHealthProvenRef.current = false;
+          _v789s25w71ResumeFrozenRef.current = false;
+          _v789s25w71SetResumeFrozen(false);
+          _v789s25w112ResumeStableStartedAtRef.current = 0;
+          _v789s25w112ResumeLastPositionRef.current = null;
+          _v789s25w112ResumeLastProgressAtRef.current = 0;
         }
       } finally {
         scheduleNext();
@@ -1752,6 +1992,8 @@ export default function PlayerScreen() {
     _v789s25w111SetCommercialPhase,
     _v789s25w118SetPinnedResumeSourceUrl,
     _v789s25w112EnterQuarantine,
+    _v789s25w74cClearProvisionalEntryCover,
+    _v785ReconnectLive,
   ]);
 
   // V789S25W115_PLAYBACK_HEALTH_RESUME_WATCHDOG
@@ -1778,6 +2020,21 @@ export default function PlayerScreen() {
           return;
         }
 
+        // W121ZPLAY10Y72D_HEALTH_PROVEN_WATCHDOG_HANDOFF
+        // Before health proof, the original V789S25W115 watchdog remains
+        // authoritative. Once Y71 proves the hidden player healthy,
+        // intentional freeze/unfreeze is owned by the dedicated
+        // four-second post-unfreeze watchdog below.
+        if (_v789s25w71ResumeHealthProvenRef.current) {
+          console.log(
+            '[W121ZPLAY10Y72D RESUME WATCHDOG SUPPRESSED]',
+            'frozen=' +
+              String(_v789s25w71ResumeFrozenRef.current),
+            'action=health-proven-owned-by-post-unfreeze-watchdog'
+          );
+
+          return;
+        }
         const lastProgressAt =
           _v789s25w112ResumeLastProgressAtRef.current;
 
@@ -1806,6 +2063,56 @@ export default function PlayerScreen() {
     _v789s25w112EnterQuarantine,
   ]);
 
+  // W121ZPLAY10Y72D_POST_UNFREEZE_FORWARD_TIMEOUT
+  // Y71 already proved this exact hidden Media3 player healthy before
+  // intentionally freezing it. Once backend-clean reaches 12 seconds and
+  // that player is unfrozen, allow at most four seconds for the existing
+  // forward-callback gate to atomically reveal it. Remaining in resuming
+  // beyond that bound means resume failed and must return to quarantine.
+  useEffect(() => {
+    if (
+      _v789s25w111CommercialPhase !== 'resuming' ||
+      _v789s25w71ResumeFrozen ||
+      !_v789s25w71ResumeHealthProvenRef.current
+    ) {
+      return;
+    }
+
+    console.log(
+      '[W121ZPLAY10Y72D POST-UNFREEZE WATCHDOG ARMED]',
+      'timeoutMs=4000'
+    );
+
+    const timer = setTimeout(() => {
+      if (
+        _v789s25w111CommercialPhaseRef.current !== 'resuming' ||
+        _v789s25w71ResumeFrozenRef.current ||
+        !_v789s25w71ResumeHealthProvenRef.current
+      ) {
+        return;
+      }
+
+      console.warn(
+        '[W121ZPLAY10Y72D POST-UNFREEZE WATCHDOG]',
+        'no forward reveal callback within 4000ms;',
+        'returning to quarantine'
+      );
+
+      _v789s25w112EnterQuarantine(
+        'post-unfreeze-forward-timeout',
+        'client'
+      );
+    }, 4000);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [
+    _v789s25w111CommercialPhase,
+    _v789s25w71ResumeFrozen,
+    _v789s25w112EnterQuarantine,
+  ]);
+
   // A channel change is a new commercial-state identity. Never carry a HOLD
   // screen from one live channel to another.
   useEffect(() => {
@@ -1819,6 +2126,31 @@ export default function PlayerScreen() {
     _v789s25w112ResumeLastProgressAtRef.current = 0;
     _v789s25w114LastStatusKeyRef.current = '';
     _v789s25w118RevealGraceUntilRef.current = 0;
+
+    // W121ZPLAY10Y74F_PROVISIONAL_COVER_CHANNEL_RESET
+    // A different channel is a different provisional-entry identity.
+    if (_v789s25w74cProvisionalEntryTimeoutRef.current) {
+      clearTimeout(
+        _v789s25w74cProvisionalEntryTimeoutRef.current
+      );
+
+      _v789s25w74cProvisionalEntryTimeoutRef.current = null;
+    }
+
+    const _v789s25w74fHadProvisionalEntryCover =
+      _v789s25w74cProvisionalEntryCoverRef.current;
+
+    _v789s25w74cProvisionalEntryCoverRef.current = false;
+    _v789s25w74cProvisionalEntryReadyRef.current = false;
+    _v789s25w74cSetProvisionalEntryCoverState(false);
+
+    if (_v789s25w74fHadProvisionalEntryCover) {
+      console.log(
+        '[W121ZPLAY10Y74F PROVISIONAL ENTRY CHANNEL RESET]',
+        'action=clear-provisional-cover'
+      );
+    }
+
     _v789s25w118SetPinnedResumeSourceUrl(null);
     _v789s25w114SetStatusSourceUrl(null);
     _v789s25w111SetCommercialPhase('off');
@@ -4277,24 +4609,33 @@ export default function PlayerScreen() {
           !status.isPlaying ||
           status.isBuffering
         ) {
-          _v789s25w112ResumeStableStartedAtRef.current =
-            0;
-          _v789s25w112ResumeLastProgressAtRef.current =
-            0;
+          // W121ZPLAY10Y71C_INTENTIONAL_FREEZE_STATUS
+          // shouldPlay=false is deliberate after health proof.
+          // Do not erase that proof while the player is frozen.
+          if (!_v789s25w71ResumeFrozenRef.current) {
+            _v789s25w112ResumeStableStartedAtRef.current = 0;
+            _v789s25w112ResumeLastProgressAtRef.current = 0;
+          }
         } else {
           const now = Date.now();
           // W121ZPLAY10R2_RESUME_FORWARD_PROGRESS_GATE
           //
           // Playing + non-buffering alone does not prove that the hidden
           // post-break player is consuming advancing program media.
-          // Require actual forward playhead movement during the existing
-          // healthy interval. A Pluto rolling-window backward rebase simply
-          // restarts proof; it never causes a source reload.
+          // Track actual forward playhead movement without treating a Pluto
+          // rolling-window rebase as failed playback health. The final reveal
+          // still requires a currently forward-moving callback.
           const _v789s25w121zplay10r2ResumePosition =
             Number(status.positionMillis || 0);
 
           const _v789s25w121zplay10r2PreviousResumePosition =
             _v789s25w112ResumeLastPositionRef.current;
+
+          const _v789s25w121zplay10r2PositionChanged =
+            _v789s25w121zplay10r2PreviousResumePosition !==
+              null &&
+            _v789s25w121zplay10r2ResumePosition !==
+              _v789s25w121zplay10r2PreviousResumePosition;
 
           const _v789s25w121zplay10r2ForwardProgress =
             _v789s25w121zplay10r2PreviousResumePosition !==
@@ -4305,12 +4646,72 @@ export default function PlayerScreen() {
           _v789s25w112ResumeLastPositionRef.current =
             _v789s25w121zplay10r2ResumePosition;
 
-          if (!_v789s25w121zplay10r2ForwardProgress) {
-            _v789s25w112ResumeStableStartedAtRef.current =
+          // W121ZPLAY10Y72Y_MOVEMENT_GATED_RESUME_HEALTH
+          // Callback activity is not playback progress. Count any
+          // actual playhead change as liveness so rolling-window
+          // backward rebases remain valid, but an unchanged position
+          // can no longer keep a dead resume player healthy forever.
+          if (
+            _v789s25w121zplay10r2PreviousResumePosition ===
+            null
+          ) {
+            // Establish the initial observation time. This does not
+            // begin the four-second advancing-playback proof.
+            _v789s25w112ResumeLastProgressAtRef.current =
+              now;
+          } else if (
+            _v789s25w121zplay10r2PositionChanged
+          ) {
+            _v789s25w112ResumeLastProgressAtRef.current =
               now;
 
+            if (
+              _v789s25w112ResumeStableStartedAtRef.current <=
+              0
+            ) {
+              _v789s25w112ResumeStableStartedAtRef.current =
+                now;
+
+              console.log(
+                '[W121ZPLAY10Y72Y RESUME MOTION HEALTH START]',
+                'positionMs=' +
+                  String(_v789s25w121zplay10r2ResumePosition)
+              );
+            }
+          } else {
+            const _v789s25w72yLastMovementAt =
+              _v789s25w112ResumeLastProgressAtRef.current;
+
+            if (
+              _v789s25w72yLastMovementAt > 0 &&
+              now - _v789s25w72yLastMovementAt >= 4000 &&
+              _v789s25w112ResumeStableStartedAtRef.current >
+                0
+            ) {
+              console.warn(
+                '[W121ZPLAY10Y72Y RESUME MOTION HEALTH RESET]',
+                'stalledMs=' +
+                  String(
+                    now -
+                      _v789s25w72yLastMovementAt
+                  ),
+                'positionMs=' +
+                  String(_v789s25w121zplay10r2ResumePosition),
+                'action=reset-stable-proof'
+              );
+
+              _v789s25w112ResumeStableStartedAtRef.current =
+                0;
+            }
+          }
+
+          // W121ZPLAY10Y70G_REBASE_TOLERANT_RESUME_HEALTH
+          // A backward rolling-window rebase is movement/liveness,
+          // but final reveal still requires a currently forward
+          // callback after every other gate passes.
+          if (!_v789s25w121zplay10r2ForwardProgress) {
             console.log(
-              '[W121ZPLAY10R2 RESUME PROGRESS WAIT]',
+              '[W121ZPLAY10Y70G RESUME NONFORWARD TOLERATED]',
               'previousMs=' +
                 String(
                   _v789s25w121zplay10r2PreviousResumePosition
@@ -4319,30 +4720,20 @@ export default function PlayerScreen() {
                 String(
                   _v789s25w121zplay10r2ResumePosition
                 ),
-              'action=restart-health-proof'
+              'positionChanged=' +
+                String(
+                  _v789s25w121zplay10r2PositionChanged
+                ),
+              'action=keep-rebase-tolerant-health'
             );
           }
-
-          if (
-            _v789s25w112ResumeStableStartedAtRef.current <=
-            0
-          ) {
-            _v789s25w112ResumeStableStartedAtRef.current =
-              now;
-
-            console.log(
-              '[V789S25W115 RESUME HEALTH START]',
-              'playing=true',
-              'buffering=false'
-            );
-          }
-
-          _v789s25w112ResumeLastProgressAtRef.current =
-            now;
 
           const stableForMs =
-            now -
-            _v789s25w112ResumeStableStartedAtRef.current;
+            _v789s25w112ResumeStableStartedAtRef.current >
+              0
+              ? now -
+                _v789s25w112ResumeStableStartedAtRef.current
+              : 0;
 
           console.log(
             '[V789S25W115 RESUME HEALTH]',
@@ -4358,9 +4749,63 @@ export default function PlayerScreen() {
           const _v789s25w121zsaRequiredHealthyMs =
             4000;
 
+          // W121ZPLAY10Y70_DUAL_GATE_REVEAL
+          // Player health may finish before the backend-clean window.
+          // Never reveal until the original 12-second clean proof also passes.
+          const _v789s25w70BackendCleanSince =
+            _v789s25w112BackendCleanSinceRef.current;
+
+          const _v789s25w70BackendCleanForMs =
+            _v789s25w70BackendCleanSince > 0
+              ? now - _v789s25w70BackendCleanSince
+              : 0;
+
+          // W121ZPLAY10Y75B2_ORDER_INDEPENDENT_HEALTH_FREEZE
+          //
+          // Health-first and clean-first resume ordering must converge on
+          // the same timestamp-preserving freeze/unfreeze path.
+          // W121ZPLAY10Y71C_FREEZE_AFTER_HEALTH_PROOF
           if (
-            stableForMs >=
-            _v789s25w121zsaRequiredHealthyMs
+            !_v789s25w71ResumeHealthProvenRef.current &&
+            stableForMs >= _v789s25w121zsaRequiredHealthyMs &&
+            _v789s25w121zplay10r2ForwardProgress
+          ) {
+            _v789s25w71ResumeHealthProvenRef.current = true;
+
+            const _v789s25w72kLiveTimestamp =
+              videoRef.current?.getCurrentLiveTimestamp() ?? null;
+
+            _v789s25w72kProvenLiveTimestampRef.current =
+              _v789s25w72kLiveTimestamp;
+
+            console.log(
+              '[W121ZPLAY10Y72K LIVE TIMESTAMP CAPTURED]',
+              'timestampMs=' +
+                String(_v789s25w72kLiveTimestamp ?? 'null'),
+              'positionMs=' +
+                String(_v789s25w121zplay10r2ResumePosition)
+            );
+
+            _v789s25w71ResumeFrozenRef.current = true;
+            _v789s25w71SetResumeFrozen(true);
+
+            console.log(
+              '[W121ZPLAY10Y71 RESUME HEALTH PROVEN FREEZE]',
+              'stableForMs=' + String(stableForMs),
+              'cleanForMs=' + String(_v789s25w70BackendCleanForMs),
+              'action=pause-hidden-player'
+            );
+          }
+
+          const _v789s25w71ResumeHealthProofSatisfied =
+            _v789s25w71ResumeHealthProvenRef.current ||
+            stableForMs >= _v789s25w121zsaRequiredHealthyMs;
+
+          if (
+            _v789s25w71ResumeHealthProofSatisfied &&
+            _v789s25w70BackendCleanForMs >= 12000 &&
+            _v789s25w121zplay10r2ForwardProgress &&
+            !_v789s25w71ResumeFrozenRef.current
           ) {
             console.log(
               '[V789S25W115 RESUME HEALTH STABLE]',
@@ -4385,6 +4830,9 @@ export default function PlayerScreen() {
             _v789s25w111CleanPollsRef.current = 0;
             _v789s25w121zsaResumeModeRef.current =
               null;
+            _v789s25w71ResumeHealthProvenRef.current = false;
+            _v789s25w71ResumeFrozenRef.current = false;
+            _v789s25w71SetResumeFrozen(false);
 
             setError(null);
             setIsEnded(false);
@@ -4946,18 +5394,73 @@ export default function PlayerScreen() {
               }
 
               // W121ZPLAY10R2_PREFIX_BUFFER_RECOVERY_SUPPRESSED
+              // W121ZPLAY10Y75B2_PREFIX_BUFFER_PROVISIONAL_COVER
               //
-              // inactive PREFIX means the backend has reached the last clean
-              // program edge before a future commercial tail. W107 may hold
-              // that final clean snapshot until HOLD. Re-resolving the source
-              // here can land Media3 on older live content and visibly replay
-              // the final seconds before the commercial.
+              // inactive PREFIX remains non-authoritative. If Media3 has
+              // actually remained buffering long enough to reach this recovery
+              // gate, cover the dead program frame while waiting for backend
+              // HOLD rather than reconnecting to an older rolling-HLS window.
+              //
+              // This reuses the Y74C visual-only cover. It does not alter the
+              // commercial phase and does not make PREFIX authoritative.
               if (
                 _v789s25w114LastStatusKeyRef.current ===
                   'false:prefix' &&
                 _v789s25w111CommercialPhaseRef.current ===
                   'off'
               ) {
+                if (
+                  !_v789s25w74cProvisionalEntryCoverRef.current
+                ) {
+                  _v789s25w74cSetProvisionalEntryCover(true);
+
+                  console.warn(
+                    '[W121ZPLAY10Y75B2 PREFIX BUFFER PROVISIONAL COVER ARMED]',
+                    'stalledMs=' +
+                      String(_v789n7StalledMs),
+                    'status=false:prefix',
+                    'commercial-authority=unchanged'
+                  );
+
+                  if (
+                    _v789s25w74cProvisionalEntryTimeoutRef.current
+                  ) {
+                    clearTimeout(
+                      _v789s25w74cProvisionalEntryTimeoutRef.current
+                    );
+                  }
+
+                  _v789s25w74cProvisionalEntryTimeoutRef.current =
+                    setTimeout(() => {
+                      _v789s25w74cProvisionalEntryTimeoutRef.current =
+                        null;
+
+                      if (
+                        !_v789s25w74cProvisionalEntryCoverRef.current ||
+                        _v789s25w111CommercialPhaseRef.current !==
+                          'off' ||
+                        _v789s25w114LastStatusKeyRef.current !==
+                          'false:prefix'
+                      ) {
+                        return;
+                      }
+
+                      console.warn(
+                        '[W121ZPLAY10Y75B2 PREFIX BUFFER PROVISIONAL COVER TIMEOUT]',
+                        'action=remove-cover-and-reconnect',
+                        'commercial-authority=unchanged'
+                      );
+
+                      _v789s25w74cClearProvisionalEntryCover(
+                        'prefix-buffer-timeout'
+                      );
+
+                      void _v785ReconnectLive(
+                        'prefix-buffer-timeout'
+                      );
+                    }, 12000);
+                }
+
                 console.log(
                   '[W121ZPLAY10R2 PREFIX BUFFER RECOVERY SUPPRESSED]',
                   'stalledMs=' +
@@ -4966,7 +5469,7 @@ export default function PlayerScreen() {
                     _v789s25w114LastStatusKeyRef.current,
                   'phase=' +
                     _v789s25w111CommercialPhaseRef.current,
-                  'action=keep-current-source'
+                  'action=provisional-cover-keep-current-source'
                 );
 
                 return;
@@ -7673,7 +8176,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                   v457AspectMode === 'stretch' && { transform: [{ scaleY: 1.18 }] },
                 ]}
                 resizeMode={v457ResizeMode} /* v467 - was V397_FULLSCREEN COVER */
-                shouldPlay
+                shouldPlay={!(_v789s25w111CommercialPhase === 'resuming' && _v789s25w71ResumeFrozen)}
                 isLooping={false}
                 volume={1.0}
                 isMuted={_v789s25w111CommercialPhase !== 'off'}
@@ -7707,12 +8210,79 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                     }
 
                     // V789S25W113_SOURCE_ERROR_NOT_COMMERCIAL
-                    // A source error is a playback-health event. Keep recovery
-                    // silent and let backend commercial-status independently
-                    // decide whether a real break should own the screen.
+                    // A source error remains a playback-health event.
+                    // Y74C adds one visual-only exception: when the backend
+                    // is already reporting inactive PREFIX, cover the failed
+                    // player instead of reconnecting into older live content.
+                    const _v789s25w74cPrefixSourceFailure =
+                      _v789s25w114LastStatusKeyRef.current ===
+                        'false:prefix' &&
+                      _v789s25w111CommercialPhaseRef.current ===
+                        'off';
+
                     setShowControls(false);
                     setIsLoading(false);
                     setIsRebuffering(false);
+
+                    if (_v789s25w74cPrefixSourceFailure) {
+                      if (
+                        !_v789s25w74cProvisionalEntryCoverRef.current
+                      ) {
+                        _v789s25w74cProvisionalEntryReadyRef.current =
+                          false;
+
+                        _v789s25w74cSetProvisionalEntryCover(true);
+
+                        if (
+                          _v789s25w74cProvisionalEntryTimeoutRef.current
+                        ) {
+                          clearTimeout(
+                            _v789s25w74cProvisionalEntryTimeoutRef.current
+                          );
+                        }
+
+                        _v789s25w74cProvisionalEntryTimeoutRef.current =
+                          setTimeout(() => {
+                            _v789s25w74cProvisionalEntryTimeoutRef.current =
+                              null;
+
+                            if (
+                              !_v789s25w74cProvisionalEntryCoverRef.current ||
+                              _v789s25w111CommercialPhaseRef.current !==
+                                'off'
+                            ) {
+                              return;
+                            }
+
+                            console.warn(
+                              '[W121ZPLAY10Y74C PROVISIONAL ENTRY TIMEOUT]',
+                              'status=' +
+                                _v789s25w114LastStatusKeyRef.current,
+                              'action=remove-cover-and-reconnect'
+                            );
+
+                            _v789s25w74cSetProvisionalEntryCover(false);
+
+                            void _v785ReconnectLive(
+                              'prefix-source-error-timeout'
+                            );
+                          }, 12000);
+
+                        console.warn(
+                          '[W121ZPLAY10Y74C PROVISIONAL ENTRY COVER ARMED]',
+                          'status=' +
+                            _v789s25w114LastStatusKeyRef.current,
+                          'phase=' +
+                            _v789s25w111CommercialPhaseRef.current,
+                          'timeoutMs=12000',
+                          'authority=pending-backend'
+                        );
+                      }
+
+                      videoRetryCountRef.current = 0;
+
+                      return;
+                    }
 
                     console.log(
                       '[V787M LIVE SOURCE ERROR] owner reconnect'
@@ -8669,7 +9239,10 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
         </View>
       </Modal>
 
-      {_v789s25w111CommercialPhase !== 'off' && (
+      {(
+        _v789s25w111CommercialPhase !== 'off' ||
+        _v789s25w74cProvisionalEntryCover
+      ) && (
         <V789S25W111CommercialBreakOverlay
           onFirstFrameReady={() => {
             if (
@@ -8683,6 +9256,18 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
 
               _v789s25w111SetCommercialPhase(
                 'hold'
+              );
+            } else if (
+              _v789s25w74cProvisionalEntryCoverRef.current
+            ) {
+              _v789s25w74cProvisionalEntryReadyRef.current =
+                true;
+
+              console.log(
+                '[W121ZPLAY10Y74C PROVISIONAL ENTRY COVER READY]',
+                'phase=' +
+                  _v789s25w111CommercialPhaseRef.current,
+                'authority=pending-backend'
               );
             }
           }}

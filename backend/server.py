@@ -15938,13 +15938,57 @@ async def _v789s25w107f4_publish_status(
         except Exception:
             previous_updated = 0.0
 
+        # W121ZPLAY10Y69_BREAK_EVIDENCE_CLOCK
+        #
+        # updated_at records ordinary status writes. It must NOT be used
+        # as proof that commercial evidence was recently observed because
+        # clean PASS/snapshot traffic can write the status repeatedly and
+        # otherwise renew an old HOLD forever.
+        try:
+            previous_break_evidence_at = float(
+                previous.get("break_evidence_at")
+                if isinstance(previous, dict)
+                else 0.0
+            )
+        except Exception:
+            previous_break_evidence_at = 0.0
+
+        # Migration for a status created before Y69. Give an already-active
+        # HOLD/PREFIX at most one existing freshness window; clean traffic
+        # after this point cannot renew that evidence timestamp.
+        if (
+            previous_break_evidence_at <= 0.0
+            and previous_active
+            and previous_mode in ("prefix", "hold")
+        ):
+            previous_break_evidence_at = previous_updated
+
         safe_mode = requested_mode
 
+        # W121ZPLAY10Y69E_HOLD_ONLY_EVIDENCE_CLOCK
+        #
+        # PREFIX is pre-break evidence. It must not refresh the lifetime
+        # of an already-visible break. Only an actually observed HOLD
+        # proves that the current upstream window is fully commercial.
+        authoritative_hold_evidence = (
+            safe_observed_mode == "hold"
+        )
+
         authoritative_break_evidence = (
-            safe_observed_mode
-            in (
-                "prefix",
-                "hold",
+            authoritative_hold_evidence
+        )
+
+        break_evidence_at = (
+            now
+            if authoritative_hold_evidence
+            else previous_break_evidence_at
+        )
+
+        break_evidence_fresh = bool(
+            break_evidence_at > 0.0
+            and (
+                now - break_evidence_at
+                < _V789S25W107F4_HOLD_FRESH_SECONDS
             )
         )
 
@@ -15982,56 +16026,113 @@ async def _v789s25w107f4_publish_status(
         active = False
 
         if safe_mode == "hold":
-            active = True
+            if authoritative_hold_evidence:
+                active = True
+
+            elif previous_active and break_evidence_fresh:
+                # A delivery/probe quarantine may request HOLD even when
+                # upstream classification is already clean. Preserve the
+                # existing break only while REAL break evidence is fresh.
+                active = True
+
+            else:
+                # W121ZPLAY10Y69_SYNTHETIC_HOLD_RELEASE
+                #
+                # PASS/BYPASS-derived HOLD is playback safety state, not
+                # fresh commercial evidence. Do not expose it forever as
+                # the user-facing commercial overlay.
+                safe_mode = (
+                    "bypass"
+                    if safe_observed_mode == "bypass"
+                    else "pass"
+                )
+                active = False
+
+                logger.warning(
+                    (
+                        "W121ZPLAY10Y69_SYNTHETIC_HOLD_RELEASE "
+                        "requested=%s observed=%s previous=%s "
+                        "evidence_age=%.3f"
+                    ),
+                    requested_mode,
+                    safe_observed_mode,
+                    previous_mode or "unknown",
+                    (
+                        now - break_evidence_at
+                        if break_evidence_at > 0.0
+                        else -1.0
+                    ),
+                )
 
         elif safe_mode == "bypass":
             active = False
 
         elif safe_mode == "prefix":
+            # W121ZPLAY10Y69E_PREFIX_NO_RENEW
+            #
             # PREFIX alone is pre-break evidence and must not start the
-            # overlay. If a break is already active it must not clear it.
-            active = previous_active
+            # overlay. If a real HOLD was already active, PREFIX may
+            # bridge only the remaining HOLD freshness window. Repeated
+            # PREFIX observations must never renew that window forever.
+            active = bool(
+                previous_active
+                and break_evidence_fresh
+            )
 
-        elif safe_mode == "pass":
-            if previous_active:
-                hold_is_fresh = bool(
-                    now - previous_updated
-                    < _V789S25W107F4_HOLD_FRESH_SECONDS
+            if (
+                previous_active
+                and not break_evidence_fresh
+            ):
+                logger.warning(
+                    (
+                        "W121ZPLAY10Y69E_PREFIX_RELEASE "
+                        "previous=%s evidence_age=%.3f"
+                    ),
+                    previous_mode or "unknown",
+                    (
+                        now - break_evidence_at
+                        if break_evidence_at > 0.0
+                        else -1.0
+                    ),
                 )
 
-                if hold_is_fresh:
-                    active = True
+        elif safe_mode == "pass":
+            if previous_active and break_evidence_fresh:
+                active = True
 
-                    # W121ZPLAY9_ACTIVE_MODE_PRESERVED
-                    #
-                    # MODE is authoritative to the frontend. Publishing
-                    # active=1 mode=pass would still tell the frontend to
-                    # resume programming, so preserve a commercial mode.
-                    if previous_mode in (
-                        "hold",
-                        "prefix",
-                    ):
-                        safe_mode = previous_mode
+                # W121ZPLAY9_ACTIVE_MODE_PRESERVED
+                #
+                # MODE is authoritative to the frontend. Publishing
+                # active=1 mode=pass would still tell the frontend to
+                # resume programming, so preserve a commercial mode.
+                if previous_mode in (
+                    "hold",
+                    "prefix",
+                ):
+                    safe_mode = previous_mode
 
-                    if previous_mode not in (
-                        "hold",
-                        "prefix",
-                    ):
-                        safe_mode = "hold"
+                if previous_mode not in (
+                    "hold",
+                    "prefix",
+                ):
+                    safe_mode = "hold"
 
-                    logger.warning(
-                        (
-                            "W121ZPLAY9_ACTIVE_MODE_PRESERVED "
-                            "previous=%s effective=%s"
-                        ),
-                        previous_mode or "unknown",
-                        safe_mode,
-                    )
+                logger.warning(
+                    (
+                        "W121ZPLAY9_ACTIVE_MODE_PRESERVED "
+                        "previous=%s effective=%s"
+                    ),
+                    previous_mode or "unknown",
+                    safe_mode,
+                )
 
         state = {
             "active": bool(active),
             "mode": safe_mode,
             "updated_at": now,
+            "break_evidence_at": float(
+                break_evidence_at or 0.0
+            ),
         }
 
         await redis_client.set(

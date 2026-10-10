@@ -37,6 +37,23 @@ export type ExpoVideoCompatHandle = {
   pauseAsync: () => Promise<void>;
   playAsync: () => Promise<void>;
   setPositionAsync: (positionMillis: number) => Promise<void>;
+  setPositionTolerantAsync: (
+    positionMillis: number,
+    toleranceSeconds?: number
+  ) => Promise<void>;
+
+  // V789S25W108C3_INPLACE_SOURCE_RELOAD
+  //
+  // Allow player.tsx to refresh the currently-mounted native Media3
+  // source without removing the React VideoView from the tree.
+  // W121ZPLAY10Y72K_LIVE_TIMESTAMP_CONTROL
+  getCurrentLiveTimestamp: () => number | null;
+  restoreLiveTimestampAsync: (
+    liveTimestampMillis: number
+  ) => Promise<boolean>;
+
+  getSourceUri: () => string;
+  reloadSourceAsync: (nextUri?: string) => Promise<void>;
 
   getAvailableAudioTracks: () => AudioTrack[];
   getSelectedAudioTrack: () => AudioTrack | null;
@@ -60,6 +77,8 @@ type ExpoVideoCompatProps = {
   isLooping?: boolean;
   volume?: number;
   isMuted?: boolean;
+  // V789S25W121ZR_OPTIONAL_SURFACE_TYPE
+  surfaceType?: 'surfaceView' | 'textureView';
   onPlaybackStatusUpdate?: (status: any) => void;
   onError?: (error: any) => void;
 };
@@ -87,6 +106,7 @@ export const ExpoVideoCompat = forwardRef<
     isLooping = false,
     volume = 1,
     isMuted = false,
+    surfaceType = 'surfaceView',
     onPlaybackStatusUpdate,
     onError,
   },
@@ -414,9 +434,86 @@ export const ExpoVideoCompat = forwardRef<
             ? Math.max(0, positionMillis)
             : 0;
 
+        // V769S_SEEK_RESUME
+        // Media3 can temporarily drop playWhenReady/audio focus when
+        // seeking large progressive MKV files. Preserve the user's
+        // existing play intent across the seek, but never override an
+        // intentional pause made through pauseAsync().
+        const resumeAfterSeek =
+          !v690IntentionalPauseRef.current;
+
+        console.log(
+          '[V769S SEEK RESUME] request',
+          'targetMs=' + String(ms),
+          'playingBefore=' + String(player.playing),
+          'statusBefore=' + String(player.status),
+          'resume=' + String(resumeAfterSeek)
+        );
+
         player.currentTime = ms / 1000;
+
+        if (resumeAfterSeek) {
+          player.play();
+
+          console.log(
+            '[V769S SEEK RESUME] play reasserted',
+            'targetMs=' + String(ms)
+          );
+        }
       },
 
+      // V769T_TOLERANT_MANUAL_SEEK
+      setPositionTolerantAsync: async (
+        positionMillis: number,
+        toleranceSeconds: number = 5
+      ) => {
+        const ms =
+          Number.isFinite(positionMillis)
+            ? Math.max(0, positionMillis)
+            : 0;
+
+        const tolerance =
+          Number.isFinite(toleranceSeconds)
+            ? Math.max(0, toleranceSeconds)
+            : 5;
+
+        const resumeAfterSeek =
+          !v690IntentionalPauseRef.current;
+
+        const nativeSeek =
+          (player as any).seekToWithTolerance;
+
+        if (typeof nativeSeek !== 'function') {
+          throw new Error(
+            'V769T native seekToWithTolerance unavailable'
+          );
+        }
+
+        console.log(
+          '[V769T TOLERANT SEEK] request',
+          'targetMs=' + String(ms),
+          'toleranceSec=' + String(tolerance),
+          'playingBefore=' + String(player.playing),
+          'statusBefore=' + String(player.status),
+          'resume=' + String(resumeAfterSeek)
+        );
+
+        nativeSeek.call(
+          player,
+          ms / 1000,
+          tolerance,
+          tolerance
+        );
+
+        if (resumeAfterSeek) {
+          player.play();
+
+          console.log(
+            '[V769T TOLERANT SEEK] play reasserted',
+            'targetMs=' + String(ms)
+          );
+        }
+      },
       getAvailableAudioTracks: () => {
         try {
           return [...(player.availableAudioTracks || [])];
@@ -433,13 +530,282 @@ export const ExpoVideoCompat = forwardRef<
         }
       },
 
+      // V789S25W108C3_INPLACE_SOURCE_RELOAD
+      //
+      // Report the exact source currently represented by this compat
+      // instance. player.tsx uses this only to decide between:
+      //
+      //   same URL      => native same-player reload
+      //   changed URL   => normal truthy -> truthy source state update
+      //
+      // Neither path requires streamUrl=null, so VideoView remains mounted.
+      // W121ZPLAY10Y72K_LIVE_TIMESTAMP_CONTROL
+      getCurrentLiveTimestamp: () => {
+        try {
+          const value = player.currentLiveTimestamp;
+
+          return (
+      typeof value === 'number' &&
+      Number.isFinite(value)
+        ? value
+        : null
+    );
+        } catch (_) {
+          return null;
+        }
+      },
+
+      restoreLiveTimestampAsync: async (
+        liveTimestampMillis: number
+      ) => {
+        const targetTimestamp =
+          Number(liveTimestampMillis);
+
+        if (!Number.isFinite(targetTimestamp)) {
+          console.warn(
+            '[W121ZPLAY10Y73E LIVE TIMESTAMP RESTORE REJECT]',
+            'reason=invalid-target',
+            'inputTimestampMs=' + String(liveTimestampMillis),
+            'targetTimestampMs=' + String(targetTimestamp)
+          );
+
+          return false;
+        }
+
+        const rawCurrentLiveTimestamp =
+          player.currentLiveTimestamp;
+
+        const currentSeconds =
+          Number(player.currentTime);
+
+        if (
+          typeof rawCurrentLiveTimestamp !== 'number' ||
+          !Number.isFinite(rawCurrentLiveTimestamp) ||
+          !Number.isFinite(currentSeconds)
+        ) {
+          console.warn(
+            '[W121ZPLAY10Y73E LIVE TIMESTAMP RESTORE REJECT]',
+            'reason=current-live-state-unavailable',
+            'targetTimestampMs=' + String(targetTimestamp),
+            'currentLiveTimestampMs=' +
+              String(rawCurrentLiveTimestamp ?? 'null'),
+            'currentLiveTimestampType=' +
+              typeof rawCurrentLiveTimestamp,
+            'currentSeconds=' + String(currentSeconds)
+          );
+
+          return false;
+        }
+
+        // Android expo-video reports:
+        // currentLiveTimestamp = windowStartTimeMs + currentPosition.
+        // Reconstruct the current rolling-window origin, then map the
+        // previously-proven absolute program timestamp into this window.
+        const windowStartTimestamp =
+          rawCurrentLiveTimestamp -
+          currentSeconds * 1000;
+
+        const targetSeconds =
+          (targetTimestamp - windowStartTimestamp) / 1000;
+
+        if (
+          !Number.isFinite(targetSeconds) ||
+          targetSeconds < 0
+        ) {
+          console.warn(
+            '[W121ZPLAY10Y73E LIVE TIMESTAMP RESTORE REJECT]',
+            'reason=target-before-window',
+            'targetTimestampMs=' + String(targetTimestamp),
+            'currentLiveTimestampMs=' +
+              String(rawCurrentLiveTimestamp),
+            'currentSeconds=' + String(currentSeconds),
+            'windowStartTimestampMs=' +
+              String(windowStartTimestamp),
+            'targetSeconds=' + String(targetSeconds)
+          );
+
+          return false;
+        }
+
+        const durationSeconds =
+          Number(player.duration);
+
+        if (
+          Number.isFinite(durationSeconds) &&
+          durationSeconds > 0 &&
+          targetSeconds > durationSeconds
+        ) {
+          console.warn(
+            '[W121ZPLAY10Y73E LIVE TIMESTAMP RESTORE REJECT]',
+            'reason=target-after-duration',
+            'targetTimestampMs=' + String(targetTimestamp),
+            'currentLiveTimestampMs=' +
+              String(rawCurrentLiveTimestamp),
+            'currentSeconds=' + String(currentSeconds),
+            'windowStartTimestampMs=' +
+              String(windowStartTimestamp),
+            'targetSeconds=' + String(targetSeconds),
+            'durationSeconds=' + String(durationSeconds)
+          );
+
+          return false;
+        }
+
+        console.log(
+          '[W121ZPLAY10Y72K LIVE TIMESTAMP MAP]',
+          'targetTimestampMs=' + String(targetTimestamp),
+          'currentTimestampMs=' +
+            String(rawCurrentLiveTimestamp),
+          'currentSeconds=' + String(currentSeconds),
+          'windowStartTimestampMs=' +
+            String(windowStartTimestamp),
+          'targetSeconds=' + String(targetSeconds)
+        );
+
+        player.currentTime = targetSeconds;
+
+        v690IntentionalPauseRef.current = false;
+        v690ClearEndFallbackTimer();
+        player.play();
+
+        return true;
+      },
+
+      getSourceUri: () => uri,
+
+      reloadSourceAsync: async (nextUri?: string) => {
+        // V789S25W108C9_TOKEN_AWARE_NATIVE_RELOAD
+        //
+        // Pluto relay URLs carry an encrypted token. The same logical
+        // channel therefore resolves to a different URL string on later
+        // refreshes. Accept the newly-resolved URL directly instead of
+        // treating token inequality as a different player identity.
+        const reloadUri =
+          String(
+            nextUri ||
+            uri ||
+            ''
+          ).trim();
+
+        if (!reloadUri) {
+          throw new Error(
+            'V789S25W108C9 cannot reload an empty source'
+          );
+        }
+
+        v658SourceReplacingRef.current = true;
+        v690EndFallbackFiredRef.current = false;
+        v690ClearEndFallbackTimer();
+
+        try {
+          // Match the normal source-replacement contract. A refreshed
+          // source begins a new audio-selection cycle; player.tsx will
+          // restore the previously active Pluto audio track after actual
+          // playback resumes.
+          v616cUserSelectedAudioRef.current = false;
+
+          // Preserve the existing EAC3 circuit-breaker behavior.
+          if (!v766Eac3StateHydratedRef.current) {
+            try {
+              const persistedEac3State =
+                await AsyncStorage.getItem(
+                  'v766_eac3_decoder_broken'
+                );
+
+              if (persistedEac3State === '1') {
+                v766Eac3DecoderBrokenRef.current = true;
+
+                console.log(
+                  '[V789S25W108C3 INPLACE RELOAD] restored EAC3 circuit state'
+                );
+              }
+            } catch (_) {
+            } finally {
+              v766Eac3StateHydratedRef.current = true;
+            }
+          }
+
+          const nextSource: VideoSource = {
+            uri: reloadUri,
+
+            ...(sourceHeaders
+              ? {
+                  headers: sourceHeaders,
+                }
+              : {}),
+
+            contentType:
+              extensionHint === 'm3u8'
+                ? 'hls'
+                : 'progressive',
+          };
+
+          if (v766Eac3DecoderBrokenRef.current) {
+            try {
+              player.audioTrack = null;
+
+              console.log(
+                '[V789S25W108C3 INPLACE RELOAD] pre-source audio disabled by EAC3 circuit'
+              );
+            } catch (error) {
+              console.log(
+                '[V789S25W108C3 INPLACE RELOAD] EAC3 audio gate failed',
+                error
+              );
+            }
+          }
+
+          console.log(
+            '[V789S25W108C3 INPLACE RELOAD] begin',
+            extensionHint === 'm3u8'
+              ? 'hls'
+              : 'progressive'
+          );
+
+          // Critical difference from the old player.tsx recovery:
+          //
+          // DO NOT replace React streamUrl with null.
+          // DO NOT unmount VideoView.
+          //
+          // Replace only the media source owned by the already-mounted
+          // native player.
+          await player.replaceAsync(nextSource);
+
+          // The ordinary shouldPlay effect does not rerun for a same-URL
+          // imperative reload, so reassert the current play intent here.
+          if (shouldPlay) {
+            v690IntentionalPauseRef.current = false;
+            player.play();
+          } else {
+            player.pause();
+          }
+
+          emitCompatStatus(false);
+
+          console.log(
+            '[V789S25W108C3 INPLACE RELOAD] complete',
+            'shouldPlay=' + String(shouldPlay)
+          );
+        } finally {
+          v658SourceReplacingRef.current = false;
+        }
+      },
+
       selectAudioTrack: (track: AudioTrack | null) => {
         // V616C: explicit user choice wins until the next source.
         v616cUserSelectedAudioRef.current = true;
         player.audioTrack = track;
       },
     }),
-    [player]
+    [
+      player,
+      uri,
+      extensionHint,
+      sourceHeadersKey,
+      shouldPlay,
+      emitCompatStatus,
+      v690ClearEndFallbackTimer,
+    ]
   );
 
   // Replace media whenever player.tsx changes its streamUrl.
@@ -588,6 +954,67 @@ export const ExpoVideoCompat = forwardRef<
     } catch (_) {
     }
   }, [player, uri, shouldPlay]);
+
+  // W121ZOD104J10_PROGRESSIVE_BUFFER_TELEMETRY
+  // Diagnostic logging only. Progressive/on-demand only.
+  useEffect(() => {
+    if (extensionHint === 'm3u8' || !uri) {
+      return;
+    }
+
+    const emitJ10BufferTelemetry = () => {
+      try {
+        const currentSeconds = Number(player.currentTime);
+        const bufferedSeconds = Number(player.bufferedPosition);
+        const durationSeconds = Number(player.duration);
+
+        const bufferAheadSeconds =
+          Number.isFinite(currentSeconds) &&
+          Number.isFinite(bufferedSeconds) &&
+          bufferedSeconds >= 0
+            ? bufferedSeconds - currentSeconds
+            : -1;
+
+        console.log(
+          '[W121ZOD104J10 BUFFER]',
+          'current=' +
+            (Number.isFinite(currentSeconds)
+              ? currentSeconds.toFixed(3)
+              : 'NaN'),
+          'buffered=' +
+            (Number.isFinite(bufferedSeconds)
+              ? bufferedSeconds.toFixed(3)
+              : 'NaN'),
+          'ahead=' +
+            (Number.isFinite(bufferAheadSeconds)
+              ? bufferAheadSeconds.toFixed(3)
+              : 'NaN'),
+          'duration=' +
+            (Number.isFinite(durationSeconds)
+              ? durationSeconds.toFixed(3)
+              : 'NaN'),
+          'status=' + String(player.status),
+          'playing=' + String(player.playing)
+        );
+      } catch (error) {
+        console.log(
+          '[W121ZOD104J10 BUFFER READ FAILED]',
+          String(error || '')
+        );
+      }
+    };
+
+    emitJ10BufferTelemetry();
+
+    const timer = setInterval(
+      emitJ10BufferTelemetry,
+      500
+    );
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [player, uri, extensionHint]);
 
   // Re-create expo-av's onPlaybackStatusUpdate feed.
   useEventListener(
@@ -938,6 +1365,7 @@ export const ExpoVideoCompat = forwardRef<
       player={player}
       style={style}
       contentFit={contentFitFromResizeMode(resizeMode)}
+      surfaceType={surfaceType}
       nativeControls={false}
       // V617_VIDEO_NOT_TV_FOCUSABLE
       // The video surface is visual only. TV focus belongs exclusively
