@@ -1915,6 +1915,38 @@ function _v769GetSeekHealthMap(): Record<string, any> {
   return {};
 }
 
+// W121ZOD106G_PLAYBACK_HEALTH_POLICY
+// 106F proved that six seconds of playback is not enough to certify a source:
+// af81 played cleanly long enough to earn "pass" and then repeatedly exhausted
+// its buffer around 20-22 minutes. Under 106G, an observed post-start OD
+// rebuffer is immediately sticky for FUTURE automatic selection, while the
+// existing six-second watchdog remains the authority for in-session failover.
+// Only natural EOF explicitly rehabilitates a current-policy source.
+const _W121ZOD106G_PLAYBACK_HEALTH_POLICY = 'od106g-v1';
+
+// W121ZOD106H_REJECTED_106F_QUARANTINE
+// 106F was never promoted. Its six-second pass criterion was disproven by
+// runtime evidence, so every record produced by od106f-v1 is experimental
+// data and must not make a source eligible for automatic selection.
+// This is policy-based quarantine: no torrent hash is hard-coded.
+function _w121zod106gPlaybackBadForSelection(health: any): boolean {
+  const policy =
+    String(health?.playbackPolicy || '');
+
+  if (policy === 'od106f-v1') {
+    return true;
+  }
+
+  return (
+    policy ===
+      _W121ZOD106G_PLAYBACK_HEALTH_POLICY &&
+    (
+      health?.playback === 'degraded' ||
+      health?.playback === 'fail'
+    )
+  );
+}
+
 function _v767dIsEac3Tagged(value: any): boolean {
   try {
     const t = String(value || '').toUpperCase();
@@ -1938,7 +1970,15 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       return { hash: hash.slice(0, 12), q: info?.quality, size: info?.size,
         foreign: !!info?.isForeign, hdr: !!info?.isHDR, codecBad: _v767dBadHashes.has(hash),
         ff: h.ff || '?', rw: h.rw || '?', playback: h.playback || '?',
-        failedAt: h.playbackFailedAt || h.updatedAt || 0 };
+        playbackPolicy: h.playbackPolicy || 'legacy',
+        playbackQuarantined:
+          _w121zod106gPlaybackBadForSelection(h),
+        healthAt:
+          h.playbackFailedAt ||
+          h.playbackDegradedAt ||
+          h.playbackPassedAt ||
+          h.updatedAt ||
+          0 };
     });
     for (let i = 0; i < audit.length; i += 8) {
       console.log('[W121ZOD106C OD CANDIDATES]', JSON.stringify(audit.slice(i, i + 8)));
@@ -2737,24 +2777,11 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
     const health =
       hash ? _v769SeekHealth[hash] : null;
 
-    // W121ZOD104J27_PLAYBACK_HEALTH_RANK
-    const _v104j27PlaybackFailedAt =
-      Number(
-        health?.playbackFailedAt ||
-        health?.updatedAt ||
-        0
-      );
-
-    const _v104j27PlaybackFailAgeMs =
-      Date.now() - _v104j27PlaybackFailedAt;
-
+    // W121ZOD106G_PLAYBACK_HEALTH_RANK
+    // Current-policy failures are sticky until explicit playback proof.
+    // Legacy unversioned J27 failures are intentionally neutral.
     const _v104j27PlaybackFailActive =
-      health?.playback === 'fail' &&
-      Number.isFinite(_v104j27PlaybackFailedAt) &&
-      _v104j27PlaybackFailedAt > 0 &&
-      _v104j27PlaybackFailAgeMs >= 0 &&
-      _v104j27PlaybackFailAgeMs <
-        6 * 60 * 60 * 1000;
+      _w121zod106gPlaybackBadForSelection(health);
 
     if (
       health?.ff === 'fail' ||
@@ -4565,23 +4592,9 @@ const nextEpisodeData = nextEpisode ? {
               ? _v104j30FallbackHealthMap[hash]
               : null;
 
-          const playbackFailedAt =
-            Number(
-              h?.playbackFailedAt ||
-              h?.updatedAt ||
-              0
-            );
-
-          const playbackFailAgeMs =
-            Date.now() - playbackFailedAt;
-
+          // W121ZOD106G_FALLBACK_PLAYBACK_POLICY
           const playbackFailActive =
-            h?.playback === 'fail' &&
-            Number.isFinite(playbackFailedAt) &&
-            playbackFailedAt > 0 &&
-            playbackFailAgeMs >= 0 &&
-            playbackFailAgeMs <
-              6 * 60 * 60 * 1000;
+            _w121zod106gPlaybackBadForSelection(h);
 
           if (
             h?.ff === 'fail' ||
@@ -4881,27 +4894,9 @@ const nextEpisodeData = nextEpisode ? {
                           c.hash
                         ];
 
-                      // W121ZOD104J27_PM_PLAYBACK_FILTER
-                      const _v104j27PlaybackFailedAt =
-                        Number(
-                          h?.playbackFailedAt ||
-                          h?.updatedAt ||
-                          0
-                        );
-
-                      const _v104j27PlaybackFailAgeMs =
-                        Date.now() -
-                        _v104j27PlaybackFailedAt;
-
+                      // W121ZOD106G_PM_PLAYBACK_POLICY
                       const _v104j27PlaybackFailActive =
-                        h?.playback === 'fail' &&
-                        Number.isFinite(
-                          _v104j27PlaybackFailedAt
-                        ) &&
-                        _v104j27PlaybackFailedAt > 0 &&
-                        _v104j27PlaybackFailAgeMs >= 0 &&
-                        _v104j27PlaybackFailAgeMs <
-                          6 * 60 * 60 * 1000;
+                        _w121zod106gPlaybackBadForSelection(h);
 
                       return !(
                         h?.ff === 'fail' ||
