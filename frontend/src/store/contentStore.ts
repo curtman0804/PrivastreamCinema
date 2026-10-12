@@ -343,6 +343,8 @@ async function _v259EvictOldestStreams(keepNewest: number): Promise<void> {
     const KEEP_PREFIXES = [
       'auth_token',
       '@auth',
+      // W121ZAUTH5_PRESERVE_EXACT_AUTH_USER_KEY
+      'user',
       'user_',
       'jwt',
       'discoverDataUid',
