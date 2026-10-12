@@ -311,6 +311,30 @@ class MainActivity : ReactActivity() {
   }
 
   override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+    // W121ZOD106C_SEEK_RELEASE_OBSERVER
+    // Do not consume or reroute this event. OD JS uses the release to
+    // finish its paused seek preview; Live TV ignores the notification.
+    if (event.action == KeyEvent.ACTION_UP &&
+      (event.keyCode == KeyEvent.KEYCODE_MEDIA_REWIND ||
+       event.keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ||
+       event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+       event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
+      try {
+        val app = application as? com.facebook.react.ReactApplication
+        var ctx: com.facebook.react.bridge.ReactContext? = null
+        try { ctx = app?.reactHost?.currentReactContext } catch (_: Exception) {}
+        if (ctx == null) {
+          try { ctx = app?.reactNativeHost?.reactInstanceManager?.currentReactContext } catch (_: Exception) {}
+        }
+        if (ctx != null) {
+          val args = Arguments.createMap()
+          args.putInt("keyCode", event.keyCode)
+          ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("onTVSeekRelease", args)
+        }
+      } catch (_: Exception) {}
+    }
+
 
     /* V626_PLATFORM_GLOBAL_NAV_SOUND
        There is intentionally NO manual AudioManager/playSoundEffect
@@ -614,6 +638,8 @@ class MainActivity : ReactActivity() {
                 "eventType",
                 eventName
               )
+              params.putInt("action", event.action)
+              params.putInt("repeatCount", event.repeatCount)
 
               params.putInt(
                 "keyCode",

@@ -1927,9 +1927,23 @@ function _v767dIsEac3Tagged(value: any): boolean {
   }
 }
 
-function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
+function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boolean = false): Stream | null {
   const _v767dBadHashes = _v767dGetBadHashSet();
   const _v769SeekHealth = _v769GetSeekHealthMap();
+  if (usePlaybackHealth && (_v659DeviceCaps as any)?.isTelevision === true) {
+    const audit = (streams || []).map((s: any) => {
+      const hash = String(s?.infoHash || s?.info_hash || '').toLowerCase();
+      const h = _v769SeekHealth[hash] || {};
+      const info: any = parseStreamInfo(s);
+      return { hash: hash.slice(0, 12), q: info?.quality, size: info?.size,
+        foreign: !!info?.isForeign, hdr: !!info?.isHDR, codecBad: _v767dBadHashes.has(hash),
+        ff: h.ff || '?', rw: h.rw || '?', playback: h.playback || '?',
+        failedAt: h.playbackFailedAt || h.updatedAt || 0 };
+    });
+    for (let i = 0; i < audit.length; i += 8) {
+      console.log('[W121ZOD106C OD CANDIDATES]', JSON.stringify(audit.slice(i, i + 8)));
+    }
+  }
 
   const playable = (streams || []).filter((s: any) => {
     if (
@@ -2587,6 +2601,24 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
 
     return 0;
   };
+  // W121ZOD106A_COMPACT_TV_AUTOPLAY
+  // Cached/debrid media is delivered by HTTPS, so swarm seed counts do
+  // not predict its playback speed. Preserve the existing format and
+  // reliability preferences; break equivalent OD-TV ties by file size.
+  const _v106aCompactAuto = usePlaybackHealth && _v665IsTv;
+  const _v106aTransferBytes = (s: any): number => {
+    if (!_v106aCompactAuto) return 0;
+    const hintedBytes = Number(s?.behaviorHints?.videoSize || s?.videoSize || 0);
+    if (Number.isFinite(hintedBytes) && hintedBytes > 0) return hintedBytes;
+    const text = String((parseStreamInfo(s) as any)?.size || '') || blob(s);
+    const match = text.match(/(?:^|[^\d.])([\d]+(?:[.,][\d]+)?)\s*(GI?B|MI?B|TI?B)\b/i);
+    if (!match) return Number.POSITIVE_INFINITY;
+    const amount = Number(match[1].replace(',', '.'));
+    const exponent = match[2].toUpperCase().startsWith('T') ? 4
+      : match[2].toUpperCase().startsWith('G') ? 3 : 2;
+    const bytes = amount * Math.pow(1024, exponent);
+    return Number.isFinite(bytes) && bytes > 0 ? bytes : Number.POSITIVE_INFINITY;
+  };
   const reliabilityRank = (s: any): number => {
     const info: any = parseStreamInfo(s);
     const t = blob(s);
@@ -2641,7 +2673,7 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       (_v104i7SeedMatch ? _v104i7SeedMatch[1] : 0)
     );
 
-    if (Number.isFinite(seeders) && seeders > 0) {
+    if (!_v106aCompactAuto && Number.isFinite(seeders) && seeders > 0) {
       n += Math.min(seeders, 500);
     }
 
@@ -2694,6 +2726,8 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
 
   // V769V31B_FF_RW_PICKER
   const _v769SeekHealthRank = (s: any): number => {
+    // W121ZOD105ZX_ON_DEMAND_HEALTH_SCOPE
+    if (!usePlaybackHealth) return 0;
     const hash = String(
       s?.infoHash || s?.info_hash || ''
     )
@@ -2781,6 +2815,7 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       a: audioRank(s),
       h: _v769SeekHealthRank(s),
       r: reliabilityRank(s),
+      d: _v106aTransferBytes(s),
     }))
     .sort((x: any, y: any) =>
       // W121ZOD8_AUTHORITATIVE_PLAY_ORDER
@@ -2793,10 +2828,18 @@ function _v503PickReliableAutoStream(streams: Stream[]): Stream | null {
       (y.c - x.c) ||
       (y.h - x.h) ||
       (y.r - x.r) ||
+      (x.d - y.d) ||
       (x.i - y.i)
     );
 
   const pick = ranked[0];
+
+  if (_v106aCompactAuto) {
+    console.log('[W121ZOD106A OD COMPACT PICK]',
+      'hash=' + String(pick.s?.infoHash || pick.s?.info_hash || '').slice(0, 12),
+      'transferBytes=' + (Number.isFinite(pick.d) ? String(Math.round(pick.d)) : 'UNKNOWN'),
+      'seeders=not-used-for-https');
+  }
 
   try {
     const info: any = parseStreamInfo(pick.s);
@@ -4062,7 +4105,7 @@ export default function DetailsScreen() {
       const _v498_t2 = _v498_pickBest(sorted, (i, b) => i.quality === '4K'    && !i.isForeign && !i.isHDR                          && !i.isCommentary);
       const _v498_t3 = _v498_pickBest(sorted, (i, b) => i.quality === '1080p' && !i.isForeign            && !_v498_isBluRayLike(b) && !i.isCommentary);
       const _v498_t4 = _v498_pickBest(sorted, (i, _b) => i.quality === '1080p' && !i.isForeign                                     && !i.isCommentary);
-      const bestStream = _v503PickReliableAutoStream(sorted) || sorted[0];
+      const bestStream = _v503PickReliableAutoStream(sorted, type === 'movie' || type === 'series') || sorted[0];
       try {
         const _tier = _v498_t1 ? '4K_ENG_noHDR_noBluRay' : _v498_t2 ? '4K_ENG_noHDR' : _v498_t3 ? '1080p_ENG_noBluRay' : _v498_t4 ? '1080p_ENG' : 'RAW_TOP';
         console.log('[v498] auto-play tier=' + _tier + ' | ' + String((bestStream && (bestStream as any).title) || '').slice(0, 110));
@@ -4200,7 +4243,7 @@ export default function DetailsScreen() {
           : sorted;
 
       const topStream =
-        _v503PickReliableAutoStream(_v121zod9bPool) ||
+        _v503PickReliableAutoStream(_v121zod9bPool, type === 'movie' || type === 'series') ||
         _v121zod9bPool[0];
 
       try {
@@ -4507,6 +4550,7 @@ const nextEpisodeData = nextEpisode ? {
 
       const _v104j30FallbackHealthRank =
         (s: any): number => {
+          if (type !== 'movie' && type !== 'series') return 0;
           const hash =
             String(
               s?.infoHash ||
@@ -4584,7 +4628,7 @@ const nextEpisodeData = nextEpisode ? {
        * Do NOT rerun V503 once per fallback.
        */
       const policyPool = healthy.length > 0 ? healthy : unhealthy;
-      const policyFirst = _v503PickReliableAutoStream(policyPool);
+      const policyFirst = _v503PickReliableAutoStream(policyPool, type === 'movie' || type === 'series');
 
       const policyFirstHash = String(
         policyFirst?.infoHash || policyFirst?.info_hash || ''
@@ -4763,10 +4807,15 @@ const nextEpisodeData = nextEpisode ? {
           }
 
           if (_v300_candidates.length > 0) {
-            // Batch cache check (max 50 per PM call).
-            // W121ZOD9B_FAST_PM_BATCH
+            // W121ZOD106A_CACHE_CANDIDATE_COVERAGE
+            // One OD cache-check request can cover 50 candidates. The
+            // former first-12 shortcut hid later compact alternatives.
+            // Explicit selections and non-OD requests keep their pool.
             const _v300_hashes =
-              _v300_candidates.slice(0, 12).map((c) => c.hash);
+              _v300_candidates.slice(0,
+                !preserveSelectedStream && (type === 'movie' || type === 'series')
+                  ? 50 : 12
+              ).map((c) => c.hash);
             const _v300_cached = new Set<string>();
             try {
               const _v300_ctrl1 = new AbortController();
@@ -4823,7 +4872,7 @@ const nextEpisodeData = nextEpisode ? {
             } catch (_) {}
 
             const _v300_seekEligibleCached =
-              preserveSelectedStream
+              (preserveSelectedStream || (type !== 'movie' && type !== 'series'))
                 ? _v300_cachedCandidates
                 : _v300_cachedCandidates.filter(
                     c => {
@@ -4862,6 +4911,10 @@ const nextEpisodeData = nextEpisode ? {
                     }
                   );
 
+            if (type === 'movie' || type === 'series') {
+              console.log('[W121ZOD105ZX OD HEALTH RESTORED]', 'cached=' + _v300_cachedCandidates.length, 'eligible=' + _v300_seekEligibleCached.length);
+            }
+
             console.log(
               '[V769 PM SEEK FILTER]',
               'manual=' +
@@ -4896,7 +4949,8 @@ const nextEpisodeData = nextEpisode ? {
 
             const _v665cPolicyStream =
               _v503PickReliableAutoStream(
-                _v665cCachedPool.map((c) => c.stream)
+                _v665cCachedPool.map((c) => c.stream),
+                type === 'movie' || type === 'series'
               );
 
             const _v300_picked =
@@ -6318,7 +6372,7 @@ const nextEpisodeData = nextEpisode ? {
                              from Torrentio can be dead RD links. Trust the ranker. */
                           const _v356Playable = (s: any) =>
                             !!(s && (s.url || s.externalUrl || s.direct_url || s.infoHash || (s as any).info_hash));
-                          picked = _v503PickReliableAutoStream(list) || (list.find((s: any) => _v356Playable(s)) || null);
+                          picked = _v503PickReliableAutoStream(list, type === 'movie' || type === 'series') || (list.find((s: any) => _v356Playable(s)) || null);
                         }
                         // Normalize info_hash -> infoHash so handleStreamSelect's downstream
                         // checks find what they expect.
@@ -6446,7 +6500,8 @@ const nextEpisodeData = nextEpisode ? {
                               
                               _v441_alt =
                                 _v503PickReliableAutoStream(
-                                  _v441RankPool
+                                  _v441RankPool,
+                                  type === 'movie' || type === 'series'
                                 );
                               
                               if (_v441_alt) {

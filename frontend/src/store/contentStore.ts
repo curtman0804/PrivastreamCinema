@@ -228,7 +228,11 @@ export const setStreamsCache = (key: string, data: Stream[]) => {
 
 // PATCH_V19B_DISK_HELPERS — AsyncStorage-backed persistent cache (6h TTL).
 const STREAMS_DISK_TTL_MS = 6 * 60 * 60 * 1000;
-const STREAMS_DISK_KEY = (key: string) => '@streamsCache:' + key;
+// W121ZOD106C_OD_DISCOVERY_CACHE_EPOCH
+// Old snapshots can omit sources for six hours without any network refresh.
+// Give this OD policy a fresh catalog once, retaining all legacy files.
+const STREAMS_DISK_KEY = (key: string) =>
+  '@streamsCache:' + (/^(?:movie|series)\//.test(key) ? 'od106c:' : '') + key;
 /* V170B_PREFETCH_REGISTRY — promote from a plain Set to a Map keyed by
    cacheKey, storing the in-flight promise so fetchStreams can await it
    instead of starting a duplicate parallel network call. */

@@ -3601,7 +3601,234 @@ export default function PlayerScreen() {
   const v621SeekLastAtRef = useRef(0);
   const durationRef = useRef(duration);
   durationRef.current = duration;
+  // W121ZOD105ZF2_USER_SEEK_BOUNDARY
+  //
+  // Preserve the mounted OD source during remote FF/RW.
+  // J27 receives its own grace boundary so an early isPlaying callback
+  // cannot turn normal post-seek refill into a source failover.
+  const v105zf2UserSeekGraceUntilRef = useRef(0);
+  // W121ZOD105ZR_REMOTE_SEEK_COALESCE
+  // Keep UI targets immediate, but submit just the final native target
+  // after a repeat burst. Source changes and unmount cancel pending work.
+  const v105zrSeekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const v106cHeldSeekKeyRef = useRef<number | null>(null);
+  const v106cSeekCommitRef = useRef<(() => void) | null>(null);
+  const v106cScrubOwnerRef = useRef<{
+    player: NonNullable<typeof videoRef.current>; uri: string;
+  } | null>(null);
+  useEffect(() => {
+    return () => {
+      if (v105zrSeekTimerRef.current !== null) {
+        clearTimeout(v105zrSeekTimerRef.current);
+        v105zrSeekTimerRef.current = null;
+      }
+      v106cHeldSeekKeyRef.current = null;
+      v106cSeekCommitRef.current = null;
+      const owner = v106cScrubOwnerRef.current;
+      v106cScrubOwnerRef.current = null;
+      if (owner) void owner.player.endScrubAsync(false).catch(() => {});
+    };
+  }, [streamUrl]);
 
+  const v105zf2RemoteRelativeSeek = (
+    requestedDeltaMs: number,
+    requestedTargetMs: number,
+    requestedPreSeekMs: number
+  ) => {
+    const player = videoRef.current;
+
+    if (!player) {
+      return;
+    }
+
+    const durationMs =
+      Math.max(
+        0,
+        Number(durationRef.current || 0)
+      );
+
+    const clampPosition = (
+      value: number
+    ) =>
+      Math.max(
+        0,
+        Math.min(
+          durationMs,
+          Number(value || 0)
+        )
+      );
+
+    const targetMs =
+      clampPosition(
+        requestedTargetMs
+      );
+
+    // Live TV remains outside this OD change.
+    if (isLive === 'true') {
+      void player.setPositionAsync(targetMs);
+      return;
+    }
+
+    /*
+     * Use the actual position from before this remote step.
+     * Do not reconstruct it from target +/- 10 seconds because
+     * clamping at 0/duration would produce the wrong recovery point.
+     */
+    const preSeekMs =
+      clampPosition(
+        requestedPreSeekMs
+      );
+
+    /*
+     * Native relative seek must honor the clamped target.
+     *
+     * Example:
+     *   position 5s
+     *   rewind request -10s
+     *   target 0s
+     *   effective native seek = -5s
+     */
+    const effectiveDeltaMs =
+      targetMs -
+      preSeekMs;
+
+    if (
+      !Number.isFinite(effectiveDeltaMs) ||
+      effectiveDeltaMs === 0
+    ) {
+      return;
+    }
+
+    if (!v106cScrubOwnerRef.current) {
+      v106cScrubOwnerRef.current = { player, uri: player.getSourceUri() };
+      preSeekPositionMsRef.current = preSeekMs;
+      void player.beginScrubAsync().catch((error: any) => {
+        console.warn('[W121ZOD106C SCRUB PAUSE FAILED]', String(error?.message || error));
+      });
+    }
+    // Hardware FF/RW and on-screen buttons must accumulate immediately too.
+    positionRef.current = targetMs;
+    v621SeekTargetRef.current = targetMs;
+    v621SeekLastAtRef.current = Date.now();
+    setPosition(targetMs);
+    lastSeekPositionRef.current = targetMs;
+
+    isSeekingRef.current =
+      true;
+
+    const now =
+      Date.now();
+
+    /*
+     * Independent J27 grace.
+     * isSeekingRef may be cleared by an early isPlaying callback,
+     * but J27 still cannot classify this seek refill as a dead source.
+     */
+    v105zf2UserSeekGraceUntilRef.current =
+      now + 30000;
+
+    /*
+     * Preserve PATCH_V10's local error-storm suppression after a
+     * deliberate user seek.
+     */
+    seekCooldownUntilRef.current =
+      now + 10000;
+
+    v104j27OnDemandBufferSinceRef.current =
+      0;
+
+    v104j27PlaybackFailoverRef.current =
+      false;
+
+    /*
+     * Remote FF/RW never participates in V769 persistent
+     * seek-health recovery or torrent advancement.
+     */
+    if (v769SeekWatchdogRef.current) {
+      clearTimeout(
+        v769SeekWatchdogRef.current
+      );
+
+      v769SeekWatchdogRef.current =
+        null;
+    }
+
+    v769SeekDirectionRef.current =
+      null;
+
+    v769SeekHashRef.current =
+      '';
+
+    v769SeekRecoveryTargetRef.current =
+      null;
+
+    v769SeekRecoveryDirectionRef.current =
+      null;
+
+    v769SeekRecoveryInFlightRef.current =
+      false;
+
+    console.log(
+      '[W121ZOD105ZF2 REMOTE SEEK]',
+      'requestedDeltaMs=' +
+        String(requestedDeltaMs),
+      'effectiveDeltaMs=' +
+        String(effectiveDeltaMs),
+      'preSeekMs=' +
+        String(Math.round(preSeekMs)),
+      'targetMs=' +
+        String(Math.round(targetMs)),
+      'source=preserved'
+    );
+
+    if (v105zrSeekTimerRef.current !== null) {
+      clearTimeout(v105zrSeekTimerRef.current);
+    }
+    const requestedSourceUri = player.getSourceUri();
+    const commitSeek = () => {
+      if (v105zrSeekTimerRef.current !== null) clearTimeout(v105zrSeekTimerRef.current);
+      v105zrSeekTimerRef.current = null;
+      v106cHeldSeekKeyRef.current = null;
+      v106cSeekCommitRef.current = null;
+      if (
+        videoRef.current !== player ||
+        player.getSourceUri() !== requestedSourceUri
+      ) return;
+      const recoveryMs = preSeekPositionMsRef.current;
+      console.log(
+        '[W121ZOD106C NATIVE SEEK COMMIT]',
+        'targetMs=' + String(Math.round(targetMs)),
+        'toleranceSec=1',
+        'source=preserved'
+      );
+      // Use the existing native bounded-tolerance method for the final
+      // absolute UI target; repeated events do not restart native refill.
+      void (async () => {
+        try {
+          await player.setPositionTolerantAsync(targetMs, 1);
+        } catch (error: any) {
+          if (videoRef.current !== player || player.getSourceUri() !== requestedSourceUri ||
+              v105zrSeekTimerRef.current !== null || lastSeekPositionRef.current !== targetMs) return;
+          console.warn('[W121ZOD106C NATIVE SEEK FAILED]', String(error?.message || error));
+          isSeekingRef.current = false;
+          setIsRebuffering(false);
+          await player.setPositionAsync(recoveryMs).catch(() => {});
+        }
+        if (videoRef.current !== player || player.getSourceUri() !== requestedSourceUri ||
+            v105zrSeekTimerRef.current !== null || lastSeekPositionRef.current !== targetMs) return;
+        const owner = v106cScrubOwnerRef.current;
+        if (owner?.player === player && owner.uri === requestedSourceUri) {
+          v106cScrubOwnerRef.current = null;
+          await player.endScrubAsync(true);
+        }
+      })().catch((error: any) => console.warn('[W121ZOD106C SCRUB END FAILED]', String(error?.message || error)));
+    };
+    v106cSeekCommitRef.current = commitSeek;
+    // Native remote holds commit on actual release. A missing release
+    // expires after two idle seconds; touch/buttons keep the 500ms debounce.
+    v105zrSeekTimerRef.current = setTimeout(commitSeek,
+      v106cHeldSeekKeyRef.current !== null ? 2000 : 500);
+  };
   /* V685_DYNAMIC_SEGMENTS
      Dynamic release fingerprints are authoritative.
      TheIntroDB remains intro-only fallback. Playback is never
@@ -4593,7 +4820,10 @@ export default function PlayerScreen() {
   // Handle playback status updates
   const handlePlaybackStatus = (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
-      setIsPlaying(status.isPlaying);
+      // Keep control intent distinct from the temporary native seek pause.
+      const preview = v106cScrubOwnerRef.current;
+      setIsPlaying(preview?.player === videoRef.current
+        ? preview.player.getPlaybackIntent() : status.isPlaying);
 
       // V789S25W115_PLAYBACK_STATE_RESUME_CONFIRM
       //
@@ -5527,6 +5757,7 @@ export default function PlayerScreen() {
             // W121ZOD104J27_REBUFFER_FAIL
             if (
               isLive !== 'true' &&
+              Date.now() >= v105zf2UserSeekGraceUntilRef.current &&
               !isSeekingRef.current &&
               !resumeSeekInFlightRef.current &&
               !(
@@ -6575,6 +6806,11 @@ export default function PlayerScreen() {
       if (!evt || !evt.eventType) return;
       
       console.log('[TV] Key event:', evt.eventType, 'keyCode:', evt.keyCode);
+      if (!_v785lIsLiveRef.current && evt.action === 0 &&
+          (evt.eventType === 'rewind' || evt.eventType === 'fastForward' ||
+           ((evt.eventType === 'left' || evt.eventType === 'right') && progressBarFocusedRef.current))) {
+        v106cHeldSeekKeyRef.current = evt.keyCode;
+      }
       
       const _v395WasHidden = !_v395CtrlRef.current; /* V395_SKIP_PRESS */
       // V785L5G3_LIVE_SURF_NO_CONTROL_REVEAL
@@ -6622,7 +6858,7 @@ switch (evt.eventType) {
           _v396NoteSeek(-10000); /* V396 */
           if (videoRef.current) {
             const newPos = Math.max(0, positionRef.current - 10000);
-            videoRef.current.setPositionAsync(newPos);
+            v105zf2RemoteRelativeSeek(-10000, newPos, positionRef.current);
           }
           break;
         case 'fastForward':
@@ -6631,7 +6867,7 @@ switch (evt.eventType) {
           _v396NoteSeek(10000); /* V396 */
           if (videoRef.current) {
             const newPos = Math.min(durationRef.current, positionRef.current + 10000);
-            videoRef.current.setPositionAsync(newPos);
+            v105zf2RemoteRelativeSeek(10000, newPos, positionRef.current);
           }
           break;
         case 'left':
@@ -6655,7 +6891,7 @@ switch (evt.eventType) {
             positionRef.current = newPos;
             setPosition(newPos);
 
-            videoRef.current.setPositionAsync(newPos);
+            v105zf2RemoteRelativeSeek(-10000, newPos, base);
           }
           break;
         case 'right':
@@ -6682,7 +6918,7 @@ switch (evt.eventType) {
             positionRef.current = newPos;
             setPosition(newPos);
 
-            videoRef.current.setPositionAsync(newPos);
+            v105zf2RemoteRelativeSeek(10000, newPos, base);
           }
           break;
         case 'select':
@@ -6743,13 +6979,13 @@ switch (evt.eventType) {
             case 'rewind':
               if (videoRef.current) {
                 const newPos = Math.max(0, positionRef.current - 10000);
-                videoRef.current.setPositionAsync(newPos);
+                v105zf2RemoteRelativeSeek(-10000, newPos, positionRef.current);
               }
               break;
             case 'fastForward':
               if (videoRef.current) {
                 const newPos = Math.min(durationRef.current, positionRef.current + 10000);
-                videoRef.current.setPositionAsync(newPos);
+                v105zf2RemoteRelativeSeek(10000, newPos, positionRef.current);
               }
               break;
           }
@@ -6759,8 +6995,14 @@ switch (evt.eventType) {
       console.log('[TV] Legacy TVEventHandler not available:', e);
     }
     
+    const seekReleaseSubscription = DeviceEventEmitter.addListener('onTVSeekRelease', (evt: any) => {
+      if (_v785lIsLiveRef.current || v106cHeldSeekKeyRef.current !== evt?.keyCode) return;
+      console.log('[W121ZOD106C KEY RELEASE]', 'keyCode=' + String(evt.keyCode));
+      v106cSeekCommitRef.current?.();
+    });
     return () => {
       subscription.remove();
+      seekReleaseSubscription.remove();
       if (tvEventHandler) {
         try { tvEventHandler.disable(); } catch (e) {}
       }
@@ -7484,6 +7726,99 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
       // api.stream.start below is the single infoHash entry point and
       // resolves through Premiumize only under V656.
       await api.stream.start(infoHash, validFileIdx, filename || undefined, streamSources, seasonNum, episodeNum, String(identityTitle || ovName || ''), String(identityYear || ''));
+      // W121ZOD105ZE_PM_PREWARM_FAST_START
+      //
+      // Details prewarms Premiumize before the user presses Play. Re-read the
+      // client-side PM resolver immediately after start(); if the absolute URL
+      // is already available, mount it without waiting for the status race.
+      //
+      // If no resolved URL exists yet, fall through to the existing path.
+      const _v105zePrewarmedUrl =
+        api.stream.getVideoUrl(
+          infoHash,
+          validFileIdx,
+          undefined,
+          seasonNum,
+          episodeNum
+        );
+
+      if (_v105zePrewarmedUrl) {
+        console.log(
+          '[W121ZOD105ZE PM FAST START]',
+          'hash=' +
+            String(infoHash)
+              .trim()
+              .toLowerCase()
+              .slice(0, 12),
+          'url=' +
+            _v105zePrewarmedUrl.slice(0, 80)
+        );
+
+        setDownloadProgress(100);
+        setLoadingStatus('');
+        videoRetryCountRef.current = 0;
+
+        /*
+         * V771 remains authoritative for the visual loading boundary:
+         * setStreamUrl mounts the source now, while isLoading stays true
+         * until status.isPlaying confirms real playback.
+         */
+        setStreamUrl(_v105zePrewarmedUrl);
+
+        const _v105zeWinHash =
+          String(infoHash);
+
+        /*
+         * Preserve the same lightweight PM keepalive used by commitWinner().
+         * Also opportunistically capture video_size for later absolute seeks.
+         */
+        void api.stream
+          .status(
+            _v105zeWinHash,
+            seasonNum,
+            episodeNum
+          )
+          .then((status: any) => {
+            const size =
+              Number(
+                status?.video_size ||
+                0
+              );
+
+            if (
+              Number.isFinite(size) &&
+              size > 0
+            ) {
+              videoFileSizeRef.current =
+                size;
+            }
+          })
+          .catch(() => {});
+
+        pollIntervalRef.current =
+          setTimeout(
+            function _v105zeKeepAlive() {
+              if (continuePollingRef.current) {
+                void api.stream
+                  .status(
+                    _v105zeWinHash,
+                    seasonNum,
+                    episodeNum
+                  )
+                  .catch(() => {});
+
+                pollIntervalRef.current =
+                  setTimeout(
+                    _v105zeKeepAlive,
+                    10000
+                  ) as any;
+              }
+            },
+            10000
+          ) as any;
+
+        return;
+      }
       
       // Quality ranking: higher = better
       const qualityRank = (label: string): number => {
@@ -8169,6 +8504,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                      from what was used to obtain the URL.  ExoPlayer's default UA
                      (ExoPlayerLib/2.x) is what Stremio uses and PM accepts. */
                 }}
+                onDemandBufferGuard={isLive !== 'true' && !isLiveTV}
                 style={[
                   styles.videoPlayer,
                   // v476b: enforce visible aspect change even on native-16:9 content

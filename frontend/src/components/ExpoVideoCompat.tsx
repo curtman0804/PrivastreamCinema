@@ -36,7 +36,12 @@ import AsyncStorage, { setItemDurable } from '../utils/mmkvStorage';
 export type ExpoVideoCompatHandle = {
   pauseAsync: () => Promise<void>;
   playAsync: () => Promise<void>;
+  beginScrubAsync: () => Promise<void>;
+  endScrubAsync: (resume: boolean) => Promise<void>;
+  getPlaybackIntent: () => boolean;
   setPositionAsync: (positionMillis: number) => Promise<void>;
+  // W121ZOD105ZE_RELATIVE_REMOTE_SEEK
+  seekByAsync: (deltaMillis: number) => Promise<void>;
   setPositionTolerantAsync: (
     positionMillis: number,
     toleranceSeconds?: number
@@ -77,6 +82,10 @@ type ExpoVideoCompatProps = {
   isLooping?: boolean;
   volume?: number;
   isMuted?: boolean;
+  // W121ZOD106D_OD_BUFFER_GUARD
+  // Ordinary on-demand playback may require a larger Media3 start/rebuffer
+  // reserve on the Google TV Streamer. Live/commercial players leave this off.
+  onDemandBufferGuard?: boolean;
   // V789S25W121ZR_OPTIONAL_SURFACE_TYPE
   surfaceType?: 'surfaceView' | 'textureView';
   onPlaybackStatusUpdate?: (status: any) => void;
@@ -106,6 +115,7 @@ export const ExpoVideoCompat = forwardRef<
     isLooping = false,
     volume = 1,
     isMuted = false,
+    onDemandBufferGuard = false,
     surfaceType = 'surfaceView',
     onPlaybackStatusUpdate,
     onError,
@@ -163,6 +173,8 @@ export const ExpoVideoCompat = forwardRef<
   // before Media3 publishes STATE_ENDED. Preserve expo-av's
   // didJustFinish contract without treating a manual pause as EOF.
   const v690IntentionalPauseRef = useRef(false);
+  // W121ZOD106C_TEMPORARY_SCRUB_PAUSE: only OD remote preview enables this.
+  const v106cScrubbingRef = useRef(false);
   const v690EndFallbackFiredRef = useRef(false);
   const v690EndFallbackTimerRef =
     useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -191,7 +203,33 @@ export const ExpoVideoCompat = forwardRef<
       memoryClassMb > 0 &&
       memoryClassMb <= 192;
 
-    if (isLowMemoryTv) {
+    // W121ZOD106D_OD_BUFFER_FLOOR
+    // 106C runtime proof showed ordinary OD playback and post-seek recovery
+    // resuming with about one second (or less) of media ahead while delivery
+    // was only marginally faster than consumption. Require five seconds on
+    // the Google TV Streamer for OD only. BufferOptions leaves the existing
+    // 50-second forward target and automatic byte target unchanged.
+    const isGoogleTvStreamer =
+      caps?.isTelevision === true &&
+      (
+        String((caps as any)?.model || '').toLowerCase() ===
+          'google tv streamer' ||
+        String((caps as any)?.device || '').toLowerCase() ===
+          'kirkwood'
+      );
+
+    if (onDemandBufferGuard && isGoogleTvStreamer) {
+      p.bufferOptions = {
+        minBufferForPlayback: 5,
+      };
+
+      console.log(
+        '[W121ZOD106D OD BUFFER FLOOR]',
+        'minBufferForPlayback=5',
+        'targetBuffer=default-50s',
+        'scope=kirkwood-od'
+      );
+    } else if (isLowMemoryTv) {
       p.bufferOptions = {
         maxBufferBytes: 64 * 1024 * 1024,
         prioritizeTimeOverSizeThreshold: false,
@@ -282,6 +320,7 @@ export const ExpoVideoCompat = forwardRef<
         extensionHint === 'm3u8' ||
         v658SourceReplacingRef.current ||
         v690IntentionalPauseRef.current ||
+        v106cScrubbingRef.current ||
         v690EndFallbackFiredRef.current ||
         v690EndFallbackTimerRef.current
       ) {
@@ -322,6 +361,7 @@ export const ExpoVideoCompat = forwardRef<
           if (
             v658SourceReplacingRef.current ||
             v690IntentionalPauseRef.current ||
+            v106cScrubbingRef.current ||
             v690EndFallbackFiredRef.current
           ) {
             return;
@@ -418,14 +458,58 @@ export const ExpoVideoCompat = forwardRef<
         v690IntentionalPauseRef.current = true;
         v690ClearEndFallbackTimer();
         player.pause();
+        if (v106cScrubbingRef.current) emitCompatStatus(false);
       },
 
       playAsync: async () => {
         v690IntentionalPauseRef.current = false;
         v690ClearEndFallbackTimer();
-        player.play();
+        if (!v106cScrubbingRef.current) player.play();
+        else emitCompatStatus(false);
       },
 
+      getPlaybackIntent: () => !v690IntentionalPauseRef.current,
+      beginScrubAsync: async () => {
+        if (v106cScrubbingRef.current) return;
+        v106cScrubbingRef.current = true;
+        v690ClearEndFallbackTimer();
+        player.pause();
+        console.log('[W121ZOD106C SCRUB PAUSE]', 'intentPlaying=' + String(!v690IntentionalPauseRef.current));
+      },
+      endScrubAsync: async (resume: boolean) => {
+        if (!v106cScrubbingRef.current) return;
+        v106cScrubbingRef.current = false;
+        if (resume && !v690IntentionalPauseRef.current) player.play();
+        console.log('[W121ZOD106C SCRUB END]', 'resume=' + String(resume && !v690IntentionalPauseRef.current));
+      },
+
+      // W121ZOD105ZE_RELATIVE_REMOTE_SEEK
+      //
+      // expo-video documents seekBy(seconds) as the efficient primitive for
+      // playback controls that move by a relative amount. Keep the existing
+      // frame-accurate currentTime path untouched for absolute/resume seeks.
+      seekByAsync: async (
+        deltaMillis: number
+      ) => {
+        const deltaMs =
+          Number.isFinite(deltaMillis)
+            ? deltaMillis
+            : 0;
+
+        if (deltaMs === 0) {
+          return;
+        }
+
+        console.log(
+          '[W121ZOD105ZE RELATIVE SEEK]',
+          'deltaMs=' + String(deltaMs),
+          'playingBefore=' + String(player.playing),
+          'statusBefore=' + String(player.status)
+        );
+
+        player.seekBy(deltaMs / 1000);
+        if (!v690IntentionalPauseRef.current && !v106cScrubbingRef.current) player.play();
+      },
       setPositionAsync: async (
         positionMillis: number
       ) => {
@@ -440,7 +524,7 @@ export const ExpoVideoCompat = forwardRef<
         // existing play intent across the seek, but never override an
         // intentional pause made through pauseAsync().
         const resumeAfterSeek =
-          !v690IntentionalPauseRef.current;
+          !v690IntentionalPauseRef.current && !v106cScrubbingRef.current;
 
         console.log(
           '[V769S SEEK RESUME] request',
@@ -478,7 +562,7 @@ export const ExpoVideoCompat = forwardRef<
             : 5;
 
         const resumeAfterSeek =
-          !v690IntentionalPauseRef.current;
+          !v690IntentionalPauseRef.current && !v106cScrubbingRef.current;
 
         const nativeSeek =
           (player as any).seekToWithTolerance;
@@ -814,6 +898,7 @@ export const ExpoVideoCompat = forwardRef<
 
     const replaceSource = async () => {
       v658SourceReplacingRef.current = true;
+      v106cScrubbingRef.current = false;
       v690IntentionalPauseRef.current = false;
       v690EndFallbackFiredRef.current = false;
       v690ClearEndFallbackTimer();
@@ -1194,8 +1279,16 @@ export const ExpoVideoCompat = forwardRef<
             );
           };
 
+          // W121ZOD105ZM_TRUEHD_ALTERNATE_AUDIO
+          const englishTracks = tracks.filter(isEnglish);
+          const trueHdSupported =
+            getDevicePlaybackCapabilities()?.audio?.trueHd === true;
           const englishTrack =
-            tracks.find(isEnglish) || null;
+            englishTracks.find((track: any) => {
+              const mime = String(track?.mimeType || '').trim().toLowerCase();
+              return trueHdSupported ||
+                (mime !== 'audio/true-hd' && mime !== 'audio/truehd');
+            }) || englishTracks[0] || null;
 
           if (englishTrack) {
             player.audioTrack = englishTrack;
@@ -1211,7 +1304,8 @@ export const ExpoVideoCompat = forwardRef<
                 String(
                   (englishTrack as any)?.label ||
                     'unknown'
-                )
+                ) +
+                ' mime=' + String((englishTrack as any)?.mimeType || 'unknown')
             );
           } else if (v766Eac3DecoderBrokenRef.current) {
             // V767G_SAFE_NON_EAC3_AUDIO_RESTORE
