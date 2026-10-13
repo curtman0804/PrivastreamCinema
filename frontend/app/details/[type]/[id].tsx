@@ -45,7 +45,7 @@ const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
 
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage, { getItemSyncFast } from '../../../src/utils/mmkvStorage';
-import { premiumizeCacheCheck, isPremiumizeConfigured, premiumizeDirectDL } from '../../../src/services/premiumizeClient';
+import { premiumizeCacheCheck, isPremiumizeConfigured, premiumizeDirectDL, premiumizeMediaProbe, premiumizeSeekReadinessProbe } from '../../../src/services/premiumizeClient';
 /* V176C_EPISODE_MENU_IMPORT â€” Stremio-style menu helpers for episode posters. */
 import {
   v172IsWatched as _v176cV172IsWatched,
@@ -1959,6 +1959,321 @@ function _v767dIsEac3Tagged(value: any): boolean {
   }
 }
 
+// W121ZOD108E1_STRICT_AUTO_FOREIGN
+function _w121zod108e1IsStrictForeignStream(stream: any): boolean {
+  try {
+    const info: any = parseStreamInfo(stream);
+    if (info?.isForeign) return true;
+
+    const t = String(
+      (stream?.title || '') + ' ' +
+      (stream?.name || '') + ' ' +
+      (stream?.filename || '')
+    )
+      .replace(/\\n/g, ' ')
+      .replace(/\\r/g, ' ')
+      .replace(/\r|\n|\t/g, ' ')
+      .toUpperCase();
+
+    if (
+      /\bDUBBING[\s._-]+(?:PL|POL|POLISH)\b/.test(t) ||
+      /\b(?:PLDUB|PLSUBBED)\b/.test(t) ||
+      /\bLEKTOR\b/.test(t) ||
+      /\bPOLISH\b/.test(t) ||
+      /\bPOLSKI\b/.test(t) ||
+      /\bPOLSKA\b/.test(t)
+    ) {
+      return true;
+    }
+
+    return /\b(?:RUS|RUSSIAN|HINDI|TAMIL|TELUGU|VOSTFR|VOSTA|VFF|VFQ|TRUEFRENCH|FRENCH|FRA|LATINO|CASTELLANO|SPANISH|ESPANOL|GERMAN|DEUTSCH|GER|DEU|ITALIAN|ITALIANO|ITA|DUBLADO|PORTUGUESE|KOREAN|KOR|JAPANESE|JPN|CHINESE|CHS|CHT|UKRAINIAN|UKR|TURKISH|DUTCH|DUBBED|MULTI|DUAL)\b/.test(t) ||
+      /[\u0400-\u04FF\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(t);
+  } catch (_) {
+    return true;
+  }
+}
+
+// W121ZOD108E1_ACTUAL_MEDIA_COMPAT
+function _w121zod108e1ActualAudioDecision(probe: any): {
+  ok: boolean;
+  reason: string;
+  codec: string;
+  videoCodec: string;
+} {
+  try {
+    if (!probe || probe.status !== 'success') {
+      return {
+        ok: false,
+        reason: 'probe-invalid',
+        codec: '',
+        videoCodec: '',
+      };
+    }
+
+    const video = Array.isArray(probe.video) ? probe.video : [];
+    const audio = Array.isArray(probe.audio) ? probe.audio : [];
+
+    if (video.length === 0) {
+      return {
+        ok: false,
+        reason: 'no-video-track',
+        codec: '',
+        videoCodec: '',
+      };
+    }
+
+    if (audio.length === 0) {
+      return {
+        ok: false,
+        reason: 'no-audio-track',
+        codec: '',
+        videoCodec: '',
+      };
+    }
+
+    const allCaps: any = (_v659DeviceCaps as any) || {};
+    const videoCaps: any = allCaps?.video || {};
+    const audioCaps: any = allCaps?.audio || {};
+
+    const videoTrack =
+      video.find(
+        (track: any) =>
+          Number(track?.default || 0) === 1
+      ) ||
+      video[0];
+
+    const videoCodec = String(videoTrack?.codec_name || '')
+      .trim()
+      .toLowerCase();
+
+    if (!videoCodec) {
+      return {
+        ok: false,
+        reason: 'video-codec-missing',
+        codec: '',
+        videoCodec: '',
+      };
+    }
+
+    const videoKey: Record<string, string> = {
+      h264: 'h264',
+      hevc: 'hevc',
+      vp9: 'vp9',
+      av1: 'av1',
+    };
+
+    const resolvedVideoKey = videoKey[videoCodec];
+
+    if (!resolvedVideoKey) {
+      return {
+        ok: false,
+        reason: 'video-codec-unmapped',
+        codec: '',
+        videoCodec,
+      };
+    }
+
+    const selectedVideoCaps =
+      videoCaps?.[resolvedVideoKey];
+
+    if (
+      Number(selectedVideoCaps?.decoderCount || 0) <= 0
+    ) {
+      return {
+        ok: false,
+        reason: 'video-codec-unsupported',
+        codec: '',
+        videoCodec,
+      };
+    }
+
+    const videoWidth =
+      Number(videoTrack?.width || 0);
+
+    const videoHeight =
+      Number(videoTrack?.height || 0);
+
+    const actual4k =
+      videoWidth >= 3500 ||
+      videoHeight >= 2000;
+
+    if (actual4k) {
+      const displayWidth =
+        Number(allCaps?.display?.maxWidth || 0);
+
+      const displayHeight =
+        Number(allCaps?.display?.maxHeight || 0);
+
+      const displayIs4k =
+        displayWidth >= 3840 &&
+        displayHeight >= 2160;
+
+      const decoderCan4k =
+        selectedVideoCaps?.supports4k30 === true ||
+        selectedVideoCaps?.supports4k60 === true;
+
+      if (!displayIs4k) {
+        return {
+          ok: false,
+          reason: 'actual-4k-display-unsupported',
+          codec: '',
+          videoCodec,
+        };
+      }
+
+      if (!decoderCan4k) {
+        return {
+          ok: false,
+          reason: 'actual-4k-decoder-unsupported',
+          codec: '',
+          videoCodec,
+        };
+      }
+    }
+
+    const brokenRaw = getItemSyncFast('v766_eac3_decoder_broken');
+    const eac3RuntimeBroken =
+      String(brokenRaw || '').trim().toLowerCase() === '1' ||
+      String(brokenRaw || '').trim().toLowerCase() === 'true';
+
+    const codecOf = (track: any): string =>
+      String(track?.codec_name || '')
+        .trim()
+        .toLowerCase();
+
+    const profileOf = (track: any): string =>
+      String(track?.profile || '')
+        .trim()
+        .toLowerCase();
+
+    const isEnglish = (track: any): boolean => {
+      const language =
+        String(track?.language || '')
+          .trim()
+          .toLowerCase();
+
+      const title =
+        String(track?.title || '')
+          .trim()
+          .toLowerCase();
+
+      return (
+        language === 'en' ||
+        language === 'eng' ||
+        language === 'english' ||
+        language.startsWith('en-') ||
+        language.startsWith('en_') ||
+        /\benglish\b/.test(title) ||
+        /\beng\b/.test(title)
+      );
+    };
+
+    let selected: any = null;
+
+    if (eac3RuntimeBroken) {
+      const safeTracks =
+        audio.filter((track: any) => codecOf(track) !== 'eac3');
+
+      if (safeTracks.length === 0) {
+        return {
+          ok: false,
+          reason: 'eac3-runtime-broken-no-safe-track',
+          codec: 'eac3',
+          videoCodec,
+        };
+      }
+
+      selected =
+        safeTracks.find(isEnglish) ||
+        safeTracks[0];
+    } else {
+      const englishTracks =
+        audio.filter(isEnglish);
+
+      const trueHdSupported =
+        audioCaps?.trueHd === true;
+
+      selected =
+        englishTracks.find(
+          (track: any) =>
+            trueHdSupported ||
+            codecOf(track) !== 'truehd'
+        ) ||
+        englishTracks[0] ||
+        audio.find(
+          (track: any) =>
+            Number(track?.default || 0) === 1
+        ) ||
+        audio[0];
+    }
+
+    const codec = codecOf(selected);
+
+    if (!codec) {
+      return {
+        ok: false,
+        reason: 'audio-codec-missing',
+        codec: '',
+        videoCodec,
+      };
+    }
+
+    let key = '';
+
+    if (codec === 'aac') {
+      key = 'aac';
+    } else if (codec === 'ac3') {
+      key = 'ac3';
+    } else if (codec === 'eac3') {
+      key = 'eac3';
+    } else if (codec === 'opus') {
+      key = 'opus';
+    } else if (codec === 'truehd') {
+      key = 'trueHd';
+    } else if (codec === 'dts') {
+      const profile = profileOf(selected);
+
+      key =
+        /dts[- ]?hd|master audio|high resolution/.test(profile)
+          ? 'dtsHd'
+          : 'dts';
+    }
+
+    if (!key) {
+      return {
+        ok: false,
+        reason: 'audio-codec-unmapped',
+        codec,
+        videoCodec,
+      };
+    }
+
+    if (audioCaps?.[key] !== true) {
+      return {
+        ok: false,
+        reason: 'audio-codec-unsupported',
+        codec,
+        videoCodec,
+      };
+    }
+
+    return {
+      ok: true,
+      reason: 'actual-media-supported',
+      codec,
+      videoCodec,
+    };
+  } catch (_) {
+    return {
+      ok: false,
+      reason: 'probe-evaluation-error',
+      codec: '',
+      videoCodec: '',
+    };
+  }
+}
+
+
 function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boolean = false): Stream | null {
   const _v767dBadHashes = _v767dGetBadHashSet();
   const _v769SeekHealth = _v769GetSeekHealthMap();
@@ -2041,7 +2356,7 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
      */
     if (
       /\bDUBBING[\s._-]+(?:PL|POL|POLISH)\b/.test(t) ||
-      /\bPLDUB\b/.test(t) ||
+      /\b(?:PLDUB|PLSUBBED)\b/.test(t) ||
       /\bLEKTOR\b/.test(t) ||
       /\bPOLISH\b/.test(t) ||
       /\bPOLSKI\b/.test(t) ||
@@ -2797,12 +3112,29 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
     const rwPass =
       health?.rw === 'pass';
 
+    // W121ZOD108H4D_PROVEN_BEHAVIOR_RANK
+    // Under 106G a playback pass is only written at genuine natural EOF.
+    // That long-play proof must outrank an unproven higher-resolution source.
+    const playbackPass =
+      health?.playbackPolicy ===
+        _W121ZOD106G_PLAYBACK_HEALTH_POLICY &&
+      health?.playback === 'pass' &&
+      health?.playbackPassReason === 'natural-eof';
+
+    if (ffPass && rwPass && playbackPass) {
+      return 5;
+    }
+
     if (ffPass && rwPass) {
-      return 2;
+      return 4;
+    }
+
+    if (playbackPass) {
+      return 3;
     }
 
     if (ffPass || rwPass) {
-      return 1;
+      return 2;
     }
 
     return 0;
@@ -2845,15 +3177,14 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       d: _v106aTransferBytes(s),
     }))
     .sort((x: any, y: any) =>
-      // W121ZOD8_AUTHORITATIVE_PLAY_ORDER
-      // Device-safe quality -> device-safe audio -> source
-      // preference -> codec compatibility -> learned seek
-      // health -> final reliability tiebreaker.
+      // W121ZOD108H4D_AUTHORITATIVE_PLAY_ORDER
+      // Proven uninterrupted/seek behavior outranks resolution.
+      // Quality remains the first preference when behavioral proof ties.
+      (y.h - x.h) ||
       (y.q - x.q) ||
       (y.a - x.a) ||
       (y.m - x.m) ||
       (y.c - x.c) ||
-      (y.h - x.h) ||
       (y.r - x.r) ||
       (x.d - y.d) ||
       (x.i - y.i)
@@ -2875,7 +3206,7 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       '[V652 AUTO PICK]',
       'pool=' + (nonForeign.length > 0 ? 'ENGLISH' : 'FOREIGN_FALLBACK'),
       'audioPool=' + (_v652UsingSafeAudio ? 'SAFE' : 'UNSAFE_FALLBACK'),
-      'videoOrder=ENGLISH>SDR>Q>A>MASTER>C>SEEK>R',
+      'videoOrder=ENGLISH>SDR>PROVEN>Q>A>MASTER>C>R',
       'master=' + pick.m,
       'deviceProfile=' + (
         _v665LowMemoryTv
@@ -2892,13 +3223,17 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       'quality=' + String(info?.quality || '?'),
       'audio=' + pick.a,
       'seekHealth=' + (
-        pick.h === 2
-          ? 'FF+RW_PASS'
-          : pick.h === 1
-            ? 'PARTIAL_PASS'
-            : pick.h < 0
-              ? 'FAIL_ONLY_FALLBACK'
-              : 'UNKNOWN'
+        pick.h === 5
+          ? 'EOF+FF+RW_PASS'
+          : pick.h === 4
+            ? 'FF+RW_PASS'
+            : pick.h === 3
+              ? 'NATURAL_EOF_PASS'
+              : pick.h === 2
+                ? 'PARTIAL_SEEK_PASS'
+                : pick.h < 0
+                  ? 'FAIL_ONLY_FALLBACK'
+                  : 'UNKNOWN'
       ),
       'seekPool=' + (
         _v769UsingNonFailed
@@ -3640,8 +3975,10 @@ export default function DetailsScreen() {
   const [isPlayLoading, setIsPlayLoading] = useState(false);
   useEffect(() => {
     if (!isPlayLoading) return;
-    // Safety net: clear after 15s if navigation didn't fire
-    const _t = setTimeout(() => setIsPlayLoading(false), 15000);
+    // W121ZOD108H4D_PREFLIGHT_OVERLAY_BUDGET
+    // Keep the one loading handoff intact while bounded compatibility and
+    // random-access readiness checks finish before player mount.
+    const _t = setTimeout(() => setIsPlayLoading(false), 30000);
     return () => clearTimeout(_t);
   }, [isPlayLoading]);
   // v121j-overlay-removed
@@ -4343,7 +4680,8 @@ export default function DetailsScreen() {
 
   const handleStreamSelect = async (
     stream: Stream,
-    preserveSelectedStream: boolean = false
+    preserveSelectedStream: boolean = false,
+    autoRejectedHashes: Set<string> = new Set<string>()
   ) => {
     if (_v672IsSampleLikeStream(stream)) {
       console.warn(
@@ -4415,6 +4753,181 @@ export default function DetailsScreen() {
       ? `S${episodeSeason}E${episodeNumber} - ${currentEpisode.name || content?.name || 'Video'}`
       : (nextTitleParam ? String(nextTitleParam) : (isEpisodePage ? `S${episodeSeason}E${episodeNumber} - ${content?.name || 'Loading...'}` : content?.name || 'Video'));
     const cType = type as string || 'movie';
+
+
+    // W121ZOD108E1_PREPLAYER_AUTO_SOURCE_GATE
+    const _w121zod108e1AutoOd =
+      !preserveSelectedStream &&
+      (cType === 'movie' || cType === 'series') &&
+      !_v783pTrustedAdultNativeStream(id, content, stream);
+
+    const _w121zod108e1Rejected =
+      autoRejectedHashes instanceof Set
+        ? autoRejectedHashes
+        : new Set<string>();
+
+    const _w121zod108e1TryNextAutoCandidate = async (
+      failedHash: string,
+      reason: string,
+      candidatePool: Stream[] = streams || []
+    ): Promise<boolean> => {
+      if (!_w121zod108e1AutoOd) return false;
+
+      const rejected = new Set<string>(_w121zod108e1Rejected);
+      const normalizedFailedHash = String(failedHash || '')
+        .trim()
+        .toLowerCase();
+
+      if (normalizedFailedHash) {
+        rejected.add(normalizedFailedHash);
+      }
+
+      const remaining = (candidatePool || []).filter((candidate: any) => {
+        const hash = String(
+          candidate?.infoHash || candidate?.info_hash || ''
+        )
+          .trim()
+          .toLowerCase();
+
+        if (!hash || rejected.has(hash)) return false;
+        if (_v672IsSampleLikeStream(candidate)) return false;
+        if (_w121zod108e1IsStrictForeignStream(candidate)) return false;
+        return true;
+      });
+
+      // W121ZOD108H4D_READINESS_DOWNSHIFT
+      // If no previously proven candidate is available, a failed device-side
+      // random-access test immediately reduces delivery burden instead of
+      // cycling through another unproven stream at the same quality tier.
+      let selectionPool = remaining;
+
+      if (String(reason || '').startsWith('seek-readiness-')) {
+        const healthMap = _v769GetSeekHealthMap();
+
+        const provenRemaining = remaining.filter((candidate: any) => {
+          const hash = String(
+            candidate?.infoHash || candidate?.info_hash || ''
+          )
+            .trim()
+            .toLowerCase();
+
+          const health = hash ? healthMap[hash] : null;
+
+          const playbackPass =
+            health?.playbackPolicy ===
+              _W121ZOD106G_PLAYBACK_HEALTH_POLICY &&
+            health?.playback === 'pass' &&
+            health?.playbackPassReason === 'natural-eof';
+
+          return (
+            health?.ff === 'pass' ||
+            health?.rw === 'pass' ||
+            playbackPass
+          );
+        });
+
+        if (provenRemaining.length > 0) {
+          selectionPool = provenRemaining;
+        } else {
+          const failedStream = (candidatePool || []).find((candidate: any) => {
+            const hash = String(
+              candidate?.infoHash || candidate?.info_hash || ''
+            )
+              .trim()
+              .toLowerCase();
+
+            return hash === normalizedFailedHash;
+          });
+
+          const qualityLevel = (candidate: any): number => {
+            const quality = String(
+              (parseStreamInfo(candidate) as any)?.quality || ''
+            ).toUpperCase();
+
+            if (quality === '4K' || quality.includes('2160')) return 4;
+            if (quality.includes('1080')) return 3;
+            if (quality.includes('720')) return 2;
+            if (quality === 'SD' || quality.includes('480')) return 1;
+            return 0;
+          };
+
+          const failedLevel = qualityLevel(failedStream);
+
+          if (failedLevel > 1) {
+            const lowerTier = remaining.filter(
+              (candidate: any) => {
+                const level = qualityLevel(candidate);
+                return level > 0 && level < failedLevel;
+              }
+            );
+
+            if (lowerTier.length > 0) {
+              selectionPool = lowerTier;
+
+              console.log(
+                '[W121ZOD108H4D READINESS DOWNSHIFT]',
+                'reason=' + reason,
+                'fromLevel=' + String(failedLevel),
+                'candidates=' + String(lowerTier.length)
+              );
+            }
+          }
+        }
+      }
+
+      const next =
+        _v503PickReliableAutoStream(selectionPool, true);
+
+      if (!next) {
+        console.warn(
+          '[W121ZOD108E1 AUTO PREFLIGHT EXHAUSTED]',
+          'reason=' + reason,
+          'rejected=' + rejected.size
+        );
+
+        setIsPlayLoading(false);
+
+        try {
+          _V176cAlert.alert(
+            'No compatible source',
+            'No compatible English source passed the device preflight.'
+          );
+        } catch (_) {}
+
+        return false;
+      }
+
+      const nextHash = String(
+        (next as any)?.infoHash ||
+        (next as any)?.info_hash ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+
+      console.warn(
+        '[W121ZOD108E1 AUTO PREFLIGHT NEXT]',
+        'rejected=' + normalizedFailedHash.slice(0, 12),
+        'reason=' + reason,
+        'next=' + nextHash.slice(0, 12)
+      );
+
+      await handleStreamSelect(next, false, rejected);
+      return true;
+    };
+
+    if (
+      _w121zod108e1AutoOd &&
+      stream.infoHash &&
+      _w121zod108e1IsStrictForeignStream(stream)
+    ) {
+      await _w121zod108e1TryNextAutoCandidate(
+        String(stream.infoHash || ''),
+        'strict-foreign',
+        streams || []
+      );
+      return;
+    }
 
     const _v745DefaultIdentityTitle = String(
       (content as any)?.name ||
@@ -4560,6 +5073,35 @@ const nextEpisodeData = nextEpisode ? {
         }
         const hash = String(s?.infoHash || s?.info_hash || '').toLowerCase();
         if (!hash) return false;
+
+        // W121ZOD108H1B_AUTO_RUNTIME_FALLBACK_GUARD
+        // Do not resurrect anything rejected earlier by this Play attempt.
+        // Keep English/content identity protection active through every retry.
+        if (_w121zod108e1AutoOd) {
+          if (_w121zod108e1Rejected.has(hash)) return false;
+          if (_w121zod108e1IsStrictForeignStream(s)) return false;
+
+          const candidateIdentity = String(
+            s?.filename ||
+            s?.title ||
+            s?.name ||
+            ''
+          ).trim();
+
+          if (
+            type === 'series' &&
+            _v745IdentityTitle &&
+            candidateIdentity &&
+            !_v745EpisodeIdentityMatches(
+              _v745IdentityTitle,
+              episodeSeason,
+              episodeNumber,
+              candidateIdentity
+            )
+          ) {
+            return false;
+          }
+        }
         if (_v767dFallbackBadHashes.has(hash)) return false;
         if (excluded && hash === excluded) return false;
         if (seen.has(hash)) return false;
@@ -4694,7 +5236,86 @@ const nextEpisodeData = nextEpisode ? {
           return isFinite(n) ? n : 0;
         } catch { return 0; }
       };
-      const others = streams.filter(s => s !== stream).filter(s => !_v672IsSampleLikeStream(s)).filter(s => s.url || s.directUrl);
+      const others = streams
+        .filter(s => s !== stream)
+        .filter(s => !_v672IsSampleLikeStream(s))
+        .filter((s: any) => {
+          if (!_w121zod108e1AutoOd) return true;
+
+          // W121ZOD108H1B_AUTO_URL_FALLBACK_GUARD
+          const hash = String(
+            s?.infoHash ||
+            s?.info_hash ||
+            ''
+          )
+            .trim()
+            .toLowerCase();
+
+          if (
+            hash &&
+            _w121zod108e1Rejected.has(hash)
+          ) {
+            return false;
+          }
+
+          if (_w121zod108e1IsStrictForeignStream(s)) {
+            return false;
+          }
+
+          const candidateIdentity = String(
+            s?.filename ||
+            s?.title ||
+            s?.name ||
+            ''
+          ).trim();
+
+          if (type === 'movie') {
+            const requestedTitle = String(
+              (content as any)?.name ||
+              (content as any)?.title ||
+              (paramName as any) ||
+              ''
+            );
+
+            const requestedYear =
+              (content as any)?.releaseInfo ||
+              (content as any)?.year ||
+              (content as any)?.releaseYear ||
+              '';
+
+            if (
+              requestedTitle &&
+              candidateIdentity &&
+              !_v747MovieIdentityMatches(
+                id,
+                content,
+                s,
+                requestedTitle,
+                requestedYear,
+                candidateIdentity
+              )
+            ) {
+              return false;
+            }
+          }
+
+          if (
+            type === 'series' &&
+            _v745IdentityTitle &&
+            candidateIdentity &&
+            !_v745EpisodeIdentityMatches(
+              _v745IdentityTitle,
+              episodeSeason,
+              episodeNumber,
+              candidateIdentity
+            )
+          ) {
+            return false;
+          }
+
+          return true;
+        })
+        .filter(s => s.url || s.directUrl);
       // Sort by seeders DESC so cascade tries healthy torrents first.
       const bySeeds = [...others].sort((a, b) => _v354_seed(b) - _v354_seed(a));
       // Prefer streams with >=5 seeders; if pool exhausted, include the rest.
@@ -4799,6 +5420,12 @@ const nextEpisodeData = nextEpisode ? {
             }
 
             const h = String(s.infoHash).toLowerCase();
+
+            if (_w121zod108e1AutoOd) {
+              if (_w121zod108e1Rejected.has(h)) return;
+              if (_w121zod108e1IsStrictForeignStream(s)) return;
+            }
+
             if (_v300_seen.has(h)) return;
             _v300_seen.add(h);
             _v300_candidates.push({ stream: s, hash: h });
@@ -5078,9 +5705,110 @@ const nextEpisodeData = nextEpisode ? {
 
                   if (_v300_file && _v300_file.link && _v744V300Ok) {
                     console.log('[v300] PM SUCCESS via', _v300_picked.hash.slice(0,12), 'â†’', String(_v300_file.link).slice(0,80));
-                    /* V353_ADD_FALLBACKS â€” compute the full 60-URL fallback
-                       list even for PM-directdl path so that if this direct
-                       link fails to play, the cascade kicks in. */
+
+                    if (_w121zod108e1AutoOd) {
+                      const _v108e1Path = String(
+                        _v300_file?.path || ''
+                      ).trim();
+
+                      if (!_v108e1Path) {
+                        await _w121zod108e1TryNextAutoCandidate(
+                          _v300_picked.hash,
+                          'media-path-missing',
+                          _v665cCachedPool.map((c) => c.stream)
+                        );
+                        return;
+                      }
+
+                      try {
+                        const _v108e1Probe =
+                          await premiumizeMediaProbe(
+                            `magnet:?xt=urn:btih:${_v300_picked.hash}`,
+                            _v108e1Path
+                          );
+
+                        const _v108e1Decision =
+                          _w121zod108e1ActualAudioDecision(
+                            _v108e1Probe
+                          );
+
+                        console.log(
+                          '[W121ZOD108E1 ACTUAL MEDIA PREFLIGHT]',
+                          'hash=' + _v300_picked.hash.slice(0, 12),
+                          'codec=' + (_v108e1Decision.codec || 'none'),
+                          'video=' + (_v108e1Decision.videoCodec || 'none'),
+                          'ok=' + String(_v108e1Decision.ok),
+                          'reason=' + _v108e1Decision.reason
+                        );
+
+                        if (!_v108e1Decision.ok) {
+                          await _w121zod108e1TryNextAutoCandidate(
+                            _v300_picked.hash,
+                            _v108e1Decision.reason,
+                            _v665cCachedPool.map((c) => c.stream)
+                          );
+                          return;
+                        }
+
+                        // W121ZOD108H4D_PRIMARY_RANDOM_ACCESS_READINESS_V300
+                        const _v108h4dReadiness =
+                          await premiumizeSeekReadinessProbe(
+                            _v108e1Probe.link,
+                            _v108e1Probe.format?.bit_rate,
+                            _v108e1Probe.format?.duration,
+                            _v108e1Probe.size
+                          );
+
+                        console.log(
+                          '[W121ZOD108H4D PRIMARY READINESS]',
+                          'path=V300',
+                          'hash=' + _v300_picked.hash.slice(0, 12),
+                          'mediaMbps=' + _v108h4dReadiness.mediaMbps.toFixed(2),
+                          'samples=' +
+                            _v108h4dReadiness.sampleMbps
+                              .map((v) => v.toFixed(2))
+                              .join(','),
+                          'minRatio=' + _v108h4dReadiness.minRatio.toFixed(2),
+                          'ok=' + String(_v108h4dReadiness.ok),
+                          'reason=' + _v108h4dReadiness.reason
+                        );
+
+                        if (!_v108h4dReadiness.ok) {
+                          await _w121zod108e1TryNextAutoCandidate(
+                            _v300_picked.hash,
+                            _v108h4dReadiness.reason,
+                            _v665cCachedPool.map((c) => c.stream)
+                          );
+                          return;
+                        }
+
+                        if (_v108e1Probe.link) {
+                          _v300_file = {
+                            ..._v300_file,
+                            link: _v108e1Probe.link,
+                          };
+                        }
+                      } catch (_v108e1ProbeError) {
+                        console.warn(
+                          '[W121ZOD108E1 ACTUAL MEDIA PREFLIGHT]',
+                          'hash=' + _v300_picked.hash.slice(0, 12),
+                          'ok=false',
+                          'reason=probe-error',
+                          String(
+                            (_v108e1ProbeError as any)?.message ||
+                            _v108e1ProbeError
+                          )
+                        );
+
+                        await _w121zod108e1TryNextAutoCandidate(
+                          _v300_picked.hash,
+                          'probe-error',
+                          _v665cCachedPool.map((c) => c.stream)
+                        );
+                        return;
+                      }
+                    }
+
                     const _v759V300PlaybackUrl =
                       await _v759MaybeCreateAdultTranscodeUrl(
                         id,
@@ -5089,14 +5817,21 @@ const nextEpisodeData = nextEpisode ? {
                         _v300_file
                       );
 
-                    const _v353_fb_v300 = await buildFallbackUrls();
                     const _v655_tor_v300 = buildRuntimeCodecFallbackTorrents(_v300_picked.hash);
-                    console.log('[V655] PM-direct runtime torrent fallbacks=', _v655_tor_v300.length);
+                    const _v353_fb_v300 = _v655_tor_v300.length > 0 ? [] : await buildFallbackUrls();
+                    console.log(
+                      '[W121ZOD108H1 RUNTIME FALLBACKS]',
+                      'path=V300',
+                      'primary=' + _v300_picked.hash.slice(0, 12),
+                      'torrentFallbacks=' + String(_v655_tor_v300.length),
+                      'urlFallbacks=' + String(_v353_fb_v300.length)
+                    );
+
                     router.push({
                       pathname: '/player',
                       params: {
                         directUrl: _v237_bustUrl(_v759V300PlaybackUrl),
-                infoHash: _v300_picked.hash,
+                        infoHash: _v300_picked.hash,
                         title: contentTitle,
                         isLive: 'false',
                         contentType: cType,
@@ -5165,6 +5900,7 @@ const nextEpisodeData = nextEpisode ? {
           const _v299_ctrl = new AbortController();
           const _v299_to = setTimeout(() => _v299_ctrl.abort(), 15000);
           let _v299_link: string | null = null;
+          let _v299_mediaPath = '';
           try {
             console.log('[v299] inline PM resolve â†’', _v299_hash.slice(0, 12));
             const _v299_backend = await premiumizeDirectDL(_v299_magnet);
@@ -5278,6 +6014,7 @@ const nextEpisodeData = nextEpisode ? {
 
               if (_v299_picked && _v299_picked.link && _v744V299Ok) {
                 _v299_link = String(_v299_picked.link);
+                _v299_mediaPath = String(_v299_picked.path || '').trim();
                 console.log('[v299] PM SUCCESS â†’', _v299_link.slice(0, 80));
               } else {
                 console.log('[v299] PM success but no playable file in content[]');
@@ -5290,11 +6027,112 @@ const nextEpisodeData = nextEpisode ? {
             console.log('[v299] PM fetch threw:', String((_v299_e as any)?.message || _v299_e));
           }
           if (_v299_link) {
-            // Got an absolute PM CDN URL â€” push to player directly.
-            /* V353_ADD_FALLBACKS â€” see V300 comment above */
-            const _v353_fb_v299 = await buildFallbackUrls();
+            if (_w121zod108e1AutoOd) {
+              if (!_v299_mediaPath) {
+                await _w121zod108e1TryNextAutoCandidate(
+                  _v299_hash,
+                  'media-path-missing',
+                  streams || []
+                );
+                return;
+              }
+
+              try {
+                const _v108e1Probe =
+                  await premiumizeMediaProbe(
+                    _v299_magnet,
+                    _v299_mediaPath
+                  );
+
+                const _v108e1Decision =
+                  _w121zod108e1ActualAudioDecision(
+                    _v108e1Probe
+                  );
+
+                console.log(
+                  '[W121ZOD108E1 ACTUAL MEDIA PREFLIGHT V299]',
+                  'hash=' + _v299_hash.slice(0, 12),
+                  'codec=' + (_v108e1Decision.codec || 'none'),
+                  'video=' + (_v108e1Decision.videoCodec || 'none'),
+                  'ok=' + String(_v108e1Decision.ok),
+                  'reason=' + _v108e1Decision.reason
+                );
+
+                if (!_v108e1Decision.ok) {
+                  await _w121zod108e1TryNextAutoCandidate(
+                    _v299_hash,
+                    _v108e1Decision.reason,
+                    streams || []
+                  );
+                  return;
+                }
+
+                // W121ZOD108H4D_PRIMARY_RANDOM_ACCESS_READINESS_V299
+                const _v108h4dReadiness =
+                  await premiumizeSeekReadinessProbe(
+                    _v108e1Probe.link,
+                    _v108e1Probe.format?.bit_rate,
+                    _v108e1Probe.format?.duration,
+                    _v108e1Probe.size
+                  );
+
+                console.log(
+                  '[W121ZOD108H4D PRIMARY READINESS]',
+                  'path=V299',
+                  'hash=' + _v299_hash.slice(0, 12),
+                  'mediaMbps=' + _v108h4dReadiness.mediaMbps.toFixed(2),
+                  'samples=' +
+                    _v108h4dReadiness.sampleMbps
+                      .map((v) => v.toFixed(2))
+                      .join(','),
+                  'minRatio=' + _v108h4dReadiness.minRatio.toFixed(2),
+                  'ok=' + String(_v108h4dReadiness.ok),
+                  'reason=' + _v108h4dReadiness.reason
+                );
+
+                if (!_v108h4dReadiness.ok) {
+                  await _w121zod108e1TryNextAutoCandidate(
+                    _v299_hash,
+                    _v108h4dReadiness.reason,
+                    streams || []
+                  );
+                  return;
+                }
+
+                if (_v108e1Probe.link) {
+                  _v299_link = _v108e1Probe.link;
+                }
+              } catch (_v108e1ProbeError) {
+                console.warn(
+                  '[W121ZOD108E1 ACTUAL MEDIA PREFLIGHT V299]',
+                  'hash=' + _v299_hash.slice(0, 12),
+                  'ok=false',
+                  'reason=probe-error',
+                  String(
+                    (_v108e1ProbeError as any)?.message ||
+                    _v108e1ProbeError
+                  )
+                );
+
+                await _w121zod108e1TryNextAutoCandidate(
+                  _v299_hash,
+                  'probe-error',
+                  streams || []
+                );
+                return;
+              }
+            }
+
             const _v655_tor_v299 = buildRuntimeCodecFallbackTorrents(_v299_hash);
-            console.log('[V655] PM-direct runtime torrent fallbacks=', _v655_tor_v299.length);
+            const _v353_fb_v299 = _v655_tor_v299.length > 0 ? [] : await buildFallbackUrls();
+            console.log(
+              '[W121ZOD108H1 RUNTIME FALLBACKS]',
+              'path=V299',
+              'primary=' + _v299_hash.slice(0, 12),
+              'torrentFallbacks=' + String(_v655_tor_v299.length),
+              'urlFallbacks=' + String(_v353_fb_v299.length)
+            );
+
             router.push({
               pathname: '/player',
               params: {
@@ -5318,13 +6156,39 @@ const nextEpisodeData = nextEpisode ? {
             });
             return;
           }
-          // PM said uncached / error â€” fall through to existing logic
-          // (V295 will strip url, infoHash path will retry via player's
-          // own machinery which may pick a cached fallback torrent).
+
+          if (_w121zod108e1AutoOd) {
+            await _w121zod108e1TryNextAutoCandidate(
+              _v299_hash,
+              'directdl-unresolved',
+              streams || []
+            );
+            return;
+          }
+
+          // Manual/non-OD behavior remains unchanged.
           console.log('[v299] falling through to existing branches');
+        }
+
+        if (_w121zod108e1AutoOd && stream.infoHash) {
+          await _w121zod108e1TryNextAutoCandidate(
+            _v299_streamHash,
+            _v299KnownBad ? 'known-bad-hash' : 'preflight-unresolved',
+            streams || []
+          );
+          return;
         }
       } catch (_v299_outer) {
         console.log('[v299] outer threw:', String((_v299_outer as any)?.message || _v299_outer));
+
+        if (_w121zod108e1AutoOd) {
+          await _w121zod108e1TryNextAutoCandidate(
+            String(stream.infoHash || ''),
+            'v299-outer-error',
+            streams || []
+          );
+          return;
+        }
       }
     }
     

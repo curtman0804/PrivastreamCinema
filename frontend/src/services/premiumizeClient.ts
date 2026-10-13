@@ -162,6 +162,721 @@ export async function premiumizeDirectDL(src: string): Promise<any[]> {
   return j.content;
 }
 
+export type PremiumizeMediaProbeResult = {
+  status: 'success';
+  path: string;
+  link: string;
+  size?: string | number | null;
+  format?: {
+    format_name?: string | null;
+    duration?: string | null;
+    bit_rate?: string | null;
+  };
+  video: any[];
+  audio: any[];
+};
+
+// W121ZOD108E1_AUTHENTICATED_MEDIA_PROBE_CLIENT
+// The backend re-resolves the magnet with the logged-in user's Premiumize
+// credential and probes only the exact returned content path. No arbitrary
+// media URL is accepted from the client.
+export async function premiumizeMediaProbe(
+  src: string,
+  path: string
+): Promise<PremiumizeMediaProbeResult> {
+  const magnet = String(src || '').trim();
+  const mediaPath = String(path || '').trim();
+
+  if (!magnet.toLowerCase().startsWith('magnet:?xt=urn:btih:')) {
+    throw new Error('INVALID_MAGNET');
+  }
+
+  if (!mediaPath) {
+    throw new Error('PM_PROBE_PATH_REQUIRED');
+  }
+
+  const auth = await _getAuthHeader();
+  if (!auth) throw new Error('NO_AUTH');
+
+  const res = await _fetchWithTimeout(
+    `${BACKEND_URL}/api/premiumize/media-probe`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': auth,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        src: magnet,
+        path: mediaPath,
+      }),
+    },
+    45000
+  );
+
+  if (res.status === 409) throw new Error('NO_PM_KEY');
+
+  const j = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(
+      `PM_MEDIA_PROBE_HTTP_${res.status}:${String(j?.detail || '')}`
+    );
+  }
+
+  if (
+    j?.status !== 'success' ||
+    typeof j?.link !== 'string' ||
+    !Array.isArray(j?.video) ||
+    !Array.isArray(j?.audio)
+  ) {
+    throw new Error('PM_MEDIA_PROBE_INVALID');
+  }
+
+  return j as PremiumizeMediaProbeResult;
+}
+
+export type PremiumizeDeliveryProbeResult = {
+  ok: boolean;
+  reason: string;
+  mediaMbps: number;
+  sampleMbps: number[];
+  minMbps: number;
+  medianMbps: number;
+  minRatio: number;
+  medianRatio: number;
+  sampleBytes: number;
+  fileSizeBytes: number;
+};
+
+type _W121ZOD108GRangeSample = {
+  bytes: number;
+  elapsedMs: number;
+  mbps: number;
+};
+
+function _w121zod108gRangeSample(
+  url: string,
+  startByte: number,
+  sampleBytes: number,
+  timeoutMs: number
+): Promise<_W121ZOD108GRangeSample> {
+  return new Promise((resolve, reject) => {
+    const XhrCtor: any = (globalThis as any).XMLHttpRequest;
+
+    if (!XhrCtor) {
+      reject(new Error('XHR_UNAVAILABLE'));
+      return;
+    }
+
+    const xhr: any = new XhrCtor();
+    const startedAt = Date.now();
+    const endByte = startByte + sampleBytes - 1;
+
+    let settled = false;
+    let lastLoaded = 0;
+
+    const finishOk = (bytes: number) => {
+      if (settled) return;
+
+      settled = true;
+
+      const elapsedMs =
+        Math.max(1, Date.now() - startedAt);
+
+      const mbps =
+        (bytes * 8) /
+        (elapsedMs / 1000) /
+        1000000;
+
+      resolve({
+        bytes,
+        elapsedMs,
+        mbps,
+      });
+
+      try {
+        xhr.abort();
+      } catch (_) {}
+    };
+
+    const finishError = (code: string) => {
+      if (settled) return;
+
+      settled = true;
+
+      try {
+        xhr.abort();
+      } catch (_) {}
+
+      reject(new Error(code));
+    };
+
+    xhr.open('GET', url, true);
+    xhr.responseType = 'arraybuffer';
+    xhr.timeout = timeoutMs;
+
+    xhr.setRequestHeader(
+      'Range',
+      'bytes=' + startByte + '-' + endByte
+    );
+
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState !== 2 || settled) {
+        return;
+      }
+
+      const status =
+        Number(xhr.status || 0);
+
+      const contentRange =
+        String(
+          xhr.getResponseHeader('Content-Range') || ''
+        );
+
+      if (
+        status !== 206 ||
+        !/^bytes\s+\d+-\d+\/(?:\d+|\*)$/i.test(
+          contentRange
+        )
+      ) {
+        finishError('RANGE_UNSUPPORTED');
+      }
+    };
+
+    xhr.onprogress = (event: any) => {
+      if (settled) return;
+
+      const loaded =
+        Number(event?.loaded || 0);
+
+      if (loaded > lastLoaded) {
+        lastLoaded = loaded;
+      }
+
+      if (loaded >= sampleBytes) {
+        finishOk(sampleBytes);
+      }
+    };
+
+    xhr.onload = () => {
+      if (settled) return;
+
+      const responseBytes =
+        Number(xhr?.response?.byteLength || 0);
+
+      const loaded =
+        Math.max(lastLoaded, responseBytes);
+
+      if (loaded <= 0) {
+        finishError('EMPTY_RANGE');
+        return;
+      }
+
+      finishOk(
+        Math.min(loaded, sampleBytes)
+      );
+    };
+
+    xhr.onerror = () =>
+      finishError('NETWORK_ERROR');
+
+    xhr.ontimeout = () =>
+      finishError('TIMEOUT');
+
+    xhr.onabort = () => {
+      if (!settled) {
+        finishError('ABORTED');
+      }
+    };
+
+    try {
+      xhr.send();
+    } catch (_) {
+      finishError('SEND_ERROR');
+    }
+  });
+}
+
+// W121ZOD108G_DEVICE_DELIVERY_PROBE
+// Measure the exact Premiumize HTTPS media URL on the playback
+// device after codec compatibility passes and before player mount.
+// Three separated byte ranges must maintain substantial headroom
+// above the media's own actual bitrate.
+export async function premiumizeDeliveryProbe(
+  link: string,
+  bitRate: string | number | null | undefined,
+  duration: string | number | null | undefined,
+  fileSize: string | number | null | undefined
+): Promise<PremiumizeDeliveryProbeResult> {
+  const empty = (
+    reason: string
+  ): PremiumizeDeliveryProbeResult => ({
+    ok: false,
+    reason,
+    mediaMbps: 0,
+    sampleMbps: [],
+    minMbps: 0,
+    medianMbps: 0,
+    minRatio: 0,
+    medianRatio: 0,
+    sampleBytes: 0,
+    fileSizeBytes: 0,
+  });
+
+  const url =
+    String(link || '').trim();
+
+  if (
+    !url.toLowerCase().startsWith('https://')
+  ) {
+    return empty('delivery-url-invalid');
+  }
+
+  const fileSizeBytes =
+    Number(fileSize || 0);
+
+  const durationSeconds =
+    Number(duration || 0);
+
+  let mediaBitRateBps =
+    Number(bitRate || 0);
+
+  if (
+    (
+      !Number.isFinite(mediaBitRateBps) ||
+      mediaBitRateBps <= 0
+    ) &&
+    Number.isFinite(fileSizeBytes) &&
+    fileSizeBytes > 0 &&
+    Number.isFinite(durationSeconds) &&
+    durationSeconds > 0
+  ) {
+    mediaBitRateBps =
+      (fileSizeBytes * 8) /
+      durationSeconds;
+  }
+
+  if (
+    !Number.isFinite(mediaBitRateBps) ||
+    mediaBitRateBps <= 0
+  ) {
+    return empty(
+      'delivery-bitrate-missing'
+    );
+  }
+
+  if (
+    !Number.isFinite(fileSizeBytes) ||
+    fileSizeBytes <= 0
+  ) {
+    return empty(
+      'delivery-size-missing'
+    );
+  }
+
+  const mediaMbps =
+    mediaBitRateBps / 1000000;
+
+  const oneMiB =
+    1024 * 1024;
+
+  const fourMiB =
+    4 * oneMiB;
+
+  const quarterMiB =
+    256 * 1024;
+
+  // Roughly two seconds of media, bounded to 1-4 MiB.
+  // This keeps the test short while preventing a tiny burst test.
+  let sampleBytes =
+    Math.round(mediaBitRateBps / 4);
+
+  sampleBytes =
+    Math.max(
+      oneMiB,
+      Math.min(
+        fourMiB,
+        sampleBytes
+      )
+    );
+
+  sampleBytes =
+    Math.min(
+      sampleBytes,
+      Math.max(
+        quarterMiB,
+        Math.floor(
+          fileSizeBytes / 16
+        )
+      )
+    );
+
+  if (
+    sampleBytes <= 0 ||
+    fileSizeBytes <= sampleBytes
+  ) {
+    return empty(
+      'delivery-file-too-small'
+    );
+  }
+
+  const maxStart =
+    Math.max(
+      0,
+      Math.floor(
+        fileSizeBytes -
+        sampleBytes -
+        1
+      )
+    );
+
+  const starts =
+    [0.10, 0.50, 0.90].map(
+      fraction =>
+        Math.max(
+          0,
+          Math.min(
+            maxStart,
+            Math.floor(
+              maxStart * fraction
+            )
+          )
+        )
+    );
+
+  const sampleMbps: number[] = [];
+
+  try {
+    for (const start of starts) {
+      const sample =
+        await _w121zod108gRangeSample(
+          url,
+          start,
+          sampleBytes,
+          6000
+        );
+
+      sampleMbps.push(
+        sample.mbps
+      );
+    }
+  } catch (error) {
+    const message =
+      String(
+        (error as any)?.message ||
+        error ||
+        ''
+      );
+
+    const reason =
+      message === 'RANGE_UNSUPPORTED'
+        ? 'delivery-range-unsupported'
+        : message === 'TIMEOUT'
+          ? 'delivery-timeout'
+          : 'delivery-sample-error';
+
+    return {
+      ...empty(reason),
+      mediaMbps,
+      sampleMbps,
+      sampleBytes,
+      fileSizeBytes,
+    };
+  }
+
+  if (sampleMbps.length !== 3) {
+    return {
+      ...empty(
+        'delivery-sample-incomplete'
+      ),
+      mediaMbps,
+      sampleMbps,
+      sampleBytes,
+      fileSizeBytes,
+    };
+  }
+
+  const sorted =
+    [...sampleMbps].sort(
+      (a, b) => a - b
+    );
+
+  const minMbps =
+    sorted[0];
+
+  const medianMbps =
+    sorted[1];
+
+  const minRatio =
+    minMbps / mediaMbps;
+
+  const medianRatio =
+    medianMbps / mediaMbps;
+
+  // Candidate safety policy:
+  // - no sampled region below 1.5x media bitrate
+  // - median sampled delivery at least 2.0x media bitrate
+  // This is intentionally conservative and will be runtime-proven
+  // before promotion/commit.
+  const minPass =
+    minRatio >= 1.5;
+
+  const medianPass =
+    medianRatio >= 2.0;
+
+  return {
+    ok:
+      minPass &&
+      medianPass,
+
+    reason:
+      !minPass
+        ? 'delivery-min-headroom'
+        : !medianPass
+          ? 'delivery-median-headroom'
+          : 'delivery-ok',
+
+    mediaMbps,
+    sampleMbps,
+    minMbps,
+    medianMbps,
+    minRatio,
+    medianRatio,
+    sampleBytes,
+    fileSizeBytes,
+  };
+}
+
+// W121ZOD108H4D_DEVICE_SEEK_READINESS_PROBE
+// This is intentionally different from the old G delivery benchmark.
+// It performs two bounded random-access reads on the exact Premiumize media
+// URL from the playback device. The goal is to reject a source whose CDN path
+// cannot sustain arbitrary FF/RW reads before the player is opened.
+export type PremiumizeSeekReadinessResult = {
+  ok: boolean;
+  reason: string;
+  mediaMbps: number;
+  sampleMbps: number[];
+  minMbps: number;
+  minRatio: number;
+  sampleBytes: number;
+  fileSizeBytes: number;
+};
+
+export async function premiumizeSeekReadinessProbe(
+  link: string,
+  bitRate: string | number | null | undefined,
+  duration: string | number | null | undefined,
+  fileSize: string | number | null | undefined
+): Promise<PremiumizeSeekReadinessResult> {
+  const empty = (
+    reason: string
+  ): PremiumizeSeekReadinessResult => ({
+    ok: false,
+    reason,
+    mediaMbps: 0,
+    sampleMbps: [],
+    minMbps: 0,
+    minRatio: 0,
+    sampleBytes: 0,
+    fileSizeBytes: 0,
+  });
+
+  const url = String(link || '').trim();
+
+  if (!url.toLowerCase().startsWith('https://')) {
+    return empty('seek-readiness-url-invalid');
+  }
+
+  const fileSizeBytes = Number(fileSize || 0);
+  const durationSeconds = Number(duration || 0);
+  let mediaBitRateBps = Number(bitRate || 0);
+
+  if (
+    (!Number.isFinite(mediaBitRateBps) || mediaBitRateBps <= 0) &&
+    Number.isFinite(fileSizeBytes) &&
+    fileSizeBytes > 0 &&
+    Number.isFinite(durationSeconds) &&
+    durationSeconds > 0
+  ) {
+    mediaBitRateBps =
+      (fileSizeBytes * 8) /
+      durationSeconds;
+  }
+
+  if (
+    !Number.isFinite(mediaBitRateBps) ||
+    mediaBitRateBps <= 0
+  ) {
+    return empty('seek-readiness-bitrate-missing');
+  }
+
+  if (
+    !Number.isFinite(fileSizeBytes) ||
+    fileSizeBytes <= 0
+  ) {
+    return empty('seek-readiness-size-missing');
+  }
+
+  const mediaMbps =
+    mediaBitRateBps / 1000000;
+
+  const halfMiB =
+    512 * 1024;
+
+  const twoMiB =
+    2 * 1024 * 1024;
+
+  // Roughly one second of media, bounded to 512 KiB-2 MiB.
+  // This is large enough to reject a weak CDN range read without turning
+  // Play into the old multi-second-per-region benchmark loop.
+  let sampleBytes =
+    Math.round(mediaBitRateBps / 8);
+
+  sampleBytes =
+    Math.max(
+      halfMiB,
+      Math.min(
+        twoMiB,
+        sampleBytes
+      )
+    );
+
+  sampleBytes =
+    Math.min(
+      sampleBytes,
+      Math.max(
+        halfMiB,
+        Math.floor(fileSizeBytes / 16)
+      )
+    );
+
+  if (
+    sampleBytes <= 0 ||
+    fileSizeBytes <= sampleBytes
+  ) {
+    return {
+      ...empty('seek-readiness-file-too-small'),
+      mediaMbps,
+      sampleBytes,
+      fileSizeBytes,
+    };
+  }
+
+  const maxStart =
+    Math.max(
+      0,
+      Math.floor(
+        fileSizeBytes -
+        sampleBytes -
+        1
+      )
+    );
+
+  // Two separated arbitrary regions exercise the same HTTP Range behavior
+  // FF/RW needs while keeping the probe bounded.
+  const starts =
+    [0.35, 0.70].map(
+      fraction =>
+        Math.max(
+          0,
+          Math.min(
+            maxStart,
+            Math.floor(
+              maxStart * fraction
+            )
+          )
+        )
+    );
+
+  const sampleMbps: number[] = [];
+
+  try {
+    for (const start of starts) {
+      const sample =
+        await _w121zod108gRangeSample(
+          url,
+          start,
+          sampleBytes,
+          3000
+        );
+
+      if (sample.bytes < sampleBytes) {
+        return {
+          ...empty('seek-readiness-short-read'),
+          mediaMbps,
+          sampleMbps,
+          sampleBytes,
+          fileSizeBytes,
+        };
+      }
+
+      sampleMbps.push(sample.mbps);
+    }
+  } catch (error) {
+    const message =
+      String(
+        (error as any)?.message ||
+        error ||
+        ''
+      );
+
+    const reason =
+      message === 'RANGE_UNSUPPORTED'
+        ? 'seek-readiness-range-unsupported'
+        : message === 'TIMEOUT'
+          ? 'seek-readiness-timeout'
+          : 'seek-readiness-sample-error';
+
+    return {
+      ...empty(reason),
+      mediaMbps,
+      sampleMbps,
+      sampleBytes,
+      fileSizeBytes,
+    };
+  }
+
+  if (sampleMbps.length !== starts.length) {
+    return {
+      ...empty('seek-readiness-incomplete'),
+      mediaMbps,
+      sampleMbps,
+      sampleBytes,
+      fileSizeBytes,
+    };
+  }
+
+  const minMbps =
+    Math.min(...sampleMbps);
+
+  const minRatio =
+    minMbps / mediaMbps;
+
+  // H4 runtime proof showed the failed b4e7 path at only ~1.2-1.3x.
+  // Reuse the existing G probe's 1.5x minimum-region safety floor, but
+  // apply it only to these short FF/RW-style reads. This is a candidate
+  // gate to be runtime-proven before promotion, not a hardcoded hash rule.
+  const ok =
+    minRatio >= 1.5;
+
+  return {
+    ok,
+    reason:
+      ok
+        ? 'seek-readiness-ok'
+        : 'seek-readiness-low-headroom',
+    mediaMbps,
+    sampleMbps,
+    minMbps,
+    minRatio,
+    sampleBytes,
+    fileSizeBytes,
+  };
+}
+
 // ============================================================
 // V751_PREMIUMIZE_QUEUE_FALLBACK
 //
