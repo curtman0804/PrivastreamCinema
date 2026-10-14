@@ -8294,7 +8294,12 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
   
   // Start a torrent with explicit hash (for fallback torrents)
   const startTorrentStreamWithHash = async (hash: string, fIdx?: number, fname?: string, srcs: string[] = [], retryCount = 0) => {
-    const MAX_RETRIES = 2;
+    // W121ZOD108H4AY_FAST_STARTUP_FALLBACK_CASCADE
+    // Startup is latency-sensitive: do not retry the same failed hash three times.
+    // Seek recovery preserves existing retries because it protects an active session.
+    const _v108h4ayStartupFallback =
+      v769SeekRecoveryTargetRef.current === null;
+    const MAX_RETRIES = _v108h4ayStartupFallback ? 0 : 2;
 
     // V766M3_FALLBACK_HASH_OWNERSHIP
     v766mActiveInfoHashRef.current =
@@ -8395,6 +8400,28 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
             _v769CommitFallbackUrl(_v294Fresh || videoUrl);
           }
           
+          // W121ZOD108H4AY_BOUNDED_STARTUP_FALLBACK
+          // If this is not an instant cached replacement within 2s, move to
+          // the next ranked hash. Never wait minutes on an uncached queue.
+          // Seek-recovery behavior remains unchanged.
+          if (
+            _v108h4ayStartupFallback &&
+            !videoUrlSet &&
+            elapsedSec >= 2
+          ) {
+            if (pollIntervalRef.current) {
+              clearTimeout(pollIntervalRef.current as any);
+            }
+            console.log(
+              '[W121ZOD108H4AY FAST FALLBACK CASCADE]',
+              'hash=' + String(hash || '').slice(0, 12),
+              'status=' + String(status.status || ''),
+              'elapsed=' + elapsedSec.toFixed(1)
+            );
+            tryNextFallbackTorrent();
+            return;
+          }
+          
           if (status.status === 'not_found' || status.status === 'invalid' || status.status === 'error') {
             if (retryCount < MAX_RETRIES) {
               if (pollIntervalRef.current) clearTimeout(pollIntervalRef.current as any);
@@ -8423,7 +8450,21 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
           const pollInterval = videoUrlSet ? 10000 : 500;
           pollIntervalRef.current = setTimeout(pollStatus, pollInterval) as any;
         } catch (err) {
-          pollIntervalRef.current = setTimeout(pollStatus, 1500) as any;
+          if (
+            _v108h4ayStartupFallback &&
+            (Date.now() - startTime) >= 2000
+          ) {
+            console.log(
+              '[W121ZOD108H4AY FAST FALLBACK POLL ERROR]',
+              'hash=' + String(hash || '').slice(0, 12)
+            );
+            tryNextFallbackTorrent();
+            return;
+          }
+          pollIntervalRef.current = setTimeout(
+            pollStatus,
+            _v108h4ayStartupFallback ? 250 : 1500
+          ) as any;
         }
       };
       
