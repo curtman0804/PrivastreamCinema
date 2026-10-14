@@ -3478,10 +3478,19 @@ export default function PlayerScreen() {
   const [castAvailable, setCastAvailable] = useState(false);
   
   // Custom player controls state
-  const [showControls, setShowControls] = useState(true);
+  // W121ZLIVE112C_LIVE_TUNE_NO_AUTO_CONTROLS
+  // Live TV enters playback cleanly with chrome hidden.
+  // On-demand preserves the exact historical controls-visible startup.
+  const _w121zlive112cInitialControlsVisible =
+    isLive !== 'true';
+  const [showControls, setShowControls] = useState(
+    _w121zlive112cInitialControlsVisible
+  );
   /* V391_SKIP_INTRO - pill shown during the intro window of series eps. */
   const [_v391SkipVisible, setV391SkipVisible] = useState(false);
-  const _v395CtrlRef = useRef(true); /* V395_SKIP_PRESS */
+  const _v395CtrlRef = useRef(
+    _w121zlive112cInitialControlsVisible
+  ); /* V395_SKIP_PRESS */
   useEffect(() => { _v395CtrlRef.current = showControls; }, [showControls]);
   /* V396_ADAPTIVE_SKIP - per-series learned intro length. Default 60s;
      corrections (seeks within 30s of skipping) adjust and persist it. */
@@ -7357,6 +7366,15 @@ switch (evt.eventType) {
       if (isLive === 'true' && _v785lSuppressNextControlRevealRef.current) {
         _v785lSuppressNextControlRevealRef.current = false;
         console.log('[V785L6B LIVE SURF] startup controls suppressed');
+      } else if (isLive === 'true' && !_v395CtrlRef.current) {
+        // W121ZLIVE112C_LIVE_READY_NO_AUTO_REVEAL
+        // Channel tune/loading has completed. Keep Live TV clean;
+        // controls are revealed only by explicit user interaction.
+        console.log(
+          '[W121ZLIVE112C LIVE READY]',
+          'controls=hidden',
+          'autoReveal=suppressed'
+        );
       } else {
         showControlsWithTimeout();
       }
