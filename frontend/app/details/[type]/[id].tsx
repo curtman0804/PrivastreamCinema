@@ -4616,6 +4616,90 @@ export default function DetailsScreen() {
     _w121zod110yPrepContextRef.current =
       _w121zod110yPrepContextKey;
   }
+
+  // W121ZOD111E_PREPARING_MEDIA_UI
+  //
+  // Normal movie/episode Play remains hidden until the current
+  // auto-selected candidate has completed the expensive preparation
+  // that makes Play useful: directDL + exact file + media compatibility.
+  //
+  // H4AL readiness may continue in the background. V300 remains the
+  // authoritative Play-time safety gate.
+  //
+  // Never strand the user: after 8 seconds the Play button is released
+  // and the existing V300 path handles whatever preparation remains.
+  const [
+    _w121zod111ePrepUiTick,
+    _w121zod111eSetPrepUiTick,
+  ] = useState(0);
+
+  const [
+    _w121zod111eGateExpired,
+    _w121zod111eSetGateExpired,
+  ] = useState(false);
+
+  useEffect(() => {
+    _w121zod111eSetGateExpired(false);
+
+    const _w121zod111eTimer = setTimeout(() => {
+      console.log(
+        '[W121ZOD111E PREPARING MEDIA]',
+        'state=max-wait',
+        'context=' + _w121zod110yPrepContextKey,
+        'elapsedMs=8000'
+      );
+
+      _w121zod111eSetGateExpired(true);
+    }, 8000);
+
+    return () => {
+      clearTimeout(_w121zod111eTimer);
+    };
+  }, [_w121zod110yPrepContextKey]);
+
+  // Reading the tick intentionally ties ref-only preparation changes
+  // to a lightweight React render without moving the preparation cache
+  // itself into React state.
+  void _w121zod111ePrepUiTick;
+
+  const _w121zod111ePreparedEntryForUi =
+    Array.from(
+      _w121zod110yPrepCacheRef.current.values()
+    ).find((entry: any) =>
+      String(entry?.key || '').startsWith(
+        _w121zod110yPrepContextKey + '|'
+      )
+    ) || null;
+
+  const _w121zod111eAutoPlayGateApplies =
+    type === 'movie' || isEpisodePage;
+
+  const _w121zod111eUsefulPrepReady =
+    !!_w121zod111ePreparedEntryForUi &&
+    Array.isArray(
+      _w121zod111ePreparedEntryForUi.directDlContent
+    ) &&
+    _w121zod111ePreparedEntryForUi
+      .directDlContent.length > 0 &&
+    !!_w121zod111ePreparedEntryForUi.mediaPath &&
+    !!_w121zod111ePreparedEntryForUi.probe &&
+    _w121zod111ePreparedEntryForUi
+      .mediaCompatible === true;
+
+  const _w121zod111eHoldPlay =
+    _w121zod111eAutoPlayGateApplies &&
+    !_w121zod111eGateExpired &&
+    !_w121zod111eUsefulPrepReady;
+
+  const _w121zod111eShowPreparingUi =
+    _w121zod111eAutoPlayGateApplies &&
+    (
+      _v667EffectiveStreamLoading ||
+      (
+        sortedStreams.length > 0 &&
+        _w121zod111eHoldPlay
+      )
+    );
   // PRE-WARM: When streams are loaded, silently pre-start the top ENGLISH torrent
   // This saves 5-10 seconds of metadata download when user taps play
   const prewarmedRef = useRef<string | null>(null);
@@ -4823,6 +4907,7 @@ export default function DetailsScreen() {
               directDlContent: null,
               directDlAtMs: 0,
               mediaPath: '',
+              mediaCompatible: false,
               probe: null,
               probeAtMs: 0,
               readiness: null,
@@ -4834,6 +4919,10 @@ export default function DetailsScreen() {
             _w121zod110yPrepCacheRef.current.set(
               _w121zod110yPrepKey,
               _w121zod110yEntry
+            );
+
+            _w121zod111eSetPrepUiTick(
+              (tick) => tick + 1
             );
 
             const _w121zod110yPromise =
@@ -5103,6 +5192,19 @@ export default function DetailsScreen() {
                   _w121zod110yEntry.finished = true;
                   return;
                 }
+
+                _w121zod110yEntry.mediaCompatible = true;
+
+                console.log(
+                  '[W121ZOD111E PREPARING MEDIA]',
+                  'state=useful-prep-ready',
+                  'hash=' +
+                    _w121zod110yHash.slice(0, 12)
+                );
+
+                _w121zod111eSetPrepUiTick(
+                  (tick) => tick + 1
+                );
 
                 const _w121zod110yReadiness =
                   await premiumizeSeekReadinessProbe(
@@ -8241,7 +8343,18 @@ const nextEpisodeData = nextEpisode ? {
               {/* Play button on left + stream count */}
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                 {/* V169_STREAM_COUNT_USES_SORTED â€” use filtered list for gating */}
-                {!_v667EffectiveStreamLoading && sortedStreams.length > 0 && (
+                {_w121zod111eShowPreparingUi ? (
+                  <View style={styles.preparingMediaButton}>
+                    <ActivityIndicator
+                      size="small"
+                      color="#B8A05C"
+                    />
+                    <Text style={styles.preparingMediaText}>
+                      Preparing Media...
+                    </Text>
+                  </View>
+                ) : !_v667EffectiveStreamLoading &&
+                  sortedStreams.length > 0 ? (
                   <FocusableButton
                     onPress={async () => {
                       /* v238b â€” Play button picks the FIRST resolved stream
@@ -8481,7 +8594,7 @@ const nextEpisodeData = nextEpisode ? {
                     <Ionicons name="play" size={18} color="#000" />
                     <Text style={styles.playButtonText}>Play</Text>
                   </FocusableButton>
-                )}
+                ) : null}
                 <Text style={styles.sectionTitle}>
                   {/* V169_STREAM_COUNT_USES_SORTED â€” display filtered count to match list */}
                   {_v667EffectiveStreamLoading ? (type === 'tv' ? 'Verifying Live Streams...' : 'Finding Streams...') : `${sortedStreams.length} Stream${sortedStreams.length !== 1 ? 's' : ''}`}
@@ -8734,6 +8847,24 @@ const styles = StyleSheet.create({
     marginRight: 12,
     borderWidth: 2,
     borderColor: 'transparent',
+  },
+  preparingMediaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(184, 160, 92, 0.16)',
+    borderRadius: 8,
+    marginRight: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(184, 160, 92, 0.35)',
+  },
+  preparingMediaText: {
+    color: '#B8A05C',
+    fontWeight: '600',
+    fontSize: 15,
+    marginLeft: 4,
   },
   playButtonFocused: {
     borderColor: '#FFFFFF',
