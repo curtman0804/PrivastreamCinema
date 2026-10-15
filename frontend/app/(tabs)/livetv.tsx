@@ -382,6 +382,89 @@ const v789gMatchesCategory = (
       categories.includes(value)
     );
 
+  // W121ZLIVE119D_DK_CONTENT_ALIASES
+  //
+  // Denmark remains the language/region identity.
+  // These aliases only let DK feeds also appear in the
+  // appropriate content rails.
+  const v119dIsDanishOnly =
+    regions.length > 0 &&
+    regions.every(
+      (region) => region === 'dk'
+    );
+
+  if (v119dIsDanishOnly) {
+    if (
+      category === 'comedy' &&
+      hasCategory(
+        'humor',
+        'sitcoms',
+        'south park'
+      )
+    ) {
+      return true;
+    }
+
+    if (
+      category === 'entertainment' &&
+      hasCategory(
+        'klassiske tv-serier',
+        'sci-fi',
+        'star trek 60-ars jubil\u00e6um',
+        'talkshow',
+        'paranormal'
+      )
+    ) {
+      return true;
+    }
+
+    if (
+      category === 'reality' &&
+      hasCategory(
+        'realityserier',
+        'det bedste fra mtv',
+        'dansk reality & underholdning'
+      )
+    ) {
+      return true;
+    }
+
+    if (
+      category === 'sports' &&
+      hasCategory('sport')
+    ) {
+      return true;
+    }
+
+    if (
+      category === 'movies' &&
+      hasCategory('film')
+    ) {
+      return true;
+    }
+
+    if (
+      category === 'kids' &&
+      hasCategory('for b\u00f8rn')
+    ) {
+      return true;
+    }
+
+    if (
+      category === 'documentary' &&
+      hasCategory('dokumentarer')
+    ) {
+      return true;
+    }
+
+    if (
+      category === 'lifestyle' &&
+      hasCategory('mad & livsstil')
+    ) {
+      return true;
+    }
+  }
+
   if (category === 'us') {
     return (
       addonId ===
@@ -2562,14 +2645,18 @@ const timelineStart = floorHalfHour(now);
     }
   }, []);
 
-  // V788T12H_LOAD_ON_AUTHENTICATED_TAB_MOUNT
+  // W121ZOD110N_LIVE_TV_FOCUS_OWNED_LOAD
   //
-  // Live TV is eagerly mounted by the tab navigator. Start one inventory
-  // generation immediately so loading continues even if another tab is
-  // currently selected. guideLoadInFlightRef prevents duplicate work.
-  useEffect(() => {
-    void loadGuide(false);
-  }, [loadGuide]);
+  // Live TV is eagerly mounted by the tab navigator, but expensive
+  // inventory / device preflight work must not start merely because
+  // this tab exists in the mounted tree.
+  //
+  // The useFocusEffect below is the sole owner of initial guide load.
+  // It already cold-loads when Live TV actually receives focus and
+  // preserves the completed guide while /player sits above it.
+  //
+  // This prevents background Live-TV probes from competing with
+  // on-demand Details / Premiumize startup on constrained TV devices.
 
   // V788T8V_RETURN_FOCUS_HANDSHAKE
   //
