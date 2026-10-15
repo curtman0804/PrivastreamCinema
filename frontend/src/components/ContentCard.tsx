@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 
 import { Image } from 'expo-image';
+import { V780J_ADULT_FALLBACK_DATA_URI } from '../assets/adultFallbackData';
 import { Ionicons } from '@expo/vector-icons';
 import { ContentItem, SearchResult, api } from '../api/client';
 import { useContentStore as _v169UseContentStore /* V169_FOCUS_STREAM_PREWARM */, getMetaCache, setMetaCache } from '../store/contentStore'; // PATCH_V248_HOVER_META
@@ -38,6 +39,48 @@ import Constants from 'expo-constants';
 import AsyncStorage from '../utils/mmkvStorage';
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
+
+// V777B_ADULT_POSTER_FALLBACK
+
+function _v777bIsAdultContent(item: any): boolean {
+  try {
+    const type = String(item?.type || '').trim().toLowerCase();
+
+    if (type === 'porn' || type === 'adult') {
+      return true;
+    }
+
+    const id = String(
+      item?.id ||
+      item?.content_id ||
+      item?.imdb_id ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+    if (
+      id.startsWith('pt:') ||
+      id.startsWith('porndb:') ||
+      id.startsWith('porn_id:') ||
+      id.startsWith('porn_') ||
+      id.startsWith('jstrm:')
+    ) {
+      return true;
+    }
+
+    const source = String(
+      item?.addon ||
+      item?.provider ||
+      item?.source ||
+      ''
+    ).toLowerCase();
+
+    return /porn|adult|onlyporn|jaxxx|redtube|eporner|porntrex|xhamster|spankbang|missav|tpbporn/.test(source);
+  } catch (_) {
+    return false;
+  }
+}
 
 // V160_POSTER_REGISTRY â€” single source of truth for posters across the app.
 // First valid render per IMDb-id "wins" and all later renders (any surface:
@@ -841,15 +884,45 @@ export function v365MarkCleared(contentId: string | undefined | null, opts?: { s
     try { DeviceEventEmitter.emit('v365:cwCleared', key); } catch (_) {}
   }
 }
-export function v365IsCleared(contentId: string | undefined | null): boolean {
+// W121ZCW117D2_FRESH_PROGRESS_BEATS_CLEAR_TOMBSTONE
+// Keep the stale-delete protection, but do not hide a genuinely new
+// viewing session created after the user cleared the old progress.
+export function v365IsCleared(
+  contentId: string | undefined | null,
+  progressUpdatedAt?: string | number | Date | null
+): boolean {
   if (!contentId) return false;
+
   const key = String(contentId);
-  const at = _v365ClearedAt.get(key);
-  if (!at) return false;
-  if (Date.now() - at > _V365_TOMBSTONE_TTL_MS) {
+  const clearedAt = _v365ClearedAt.get(key);
+
+  if (!clearedAt) return false;
+
+  if (Date.now() - clearedAt > _V365_TOMBSTONE_TTL_MS) {
     _v365ClearedAt.delete(key);
     return false;
   }
+
+  if (progressUpdatedAt != null) {
+    let progressUpdatedAtMs = Number.NaN;
+
+    if (progressUpdatedAt instanceof Date) {
+      progressUpdatedAtMs = progressUpdatedAt.getTime();
+    } else if (typeof progressUpdatedAt === 'number') {
+      progressUpdatedAtMs = progressUpdatedAt;
+    } else {
+      progressUpdatedAtMs = Date.parse(String(progressUpdatedAt));
+    }
+
+    if (
+      Number.isFinite(progressUpdatedAtMs) &&
+      progressUpdatedAtMs > clearedAt
+    ) {
+      _v365ClearedAt.delete(key);
+      return false;
+    }
+  }
+
   return true;
 }
 export async function v176ClearProgress(contentId: string | undefined | null): Promise<void> {
@@ -2447,14 +2520,38 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
             <View
               style={[
                 styles.posterImage,
-                { backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center' },
+                {
+                  backgroundColor: '#1a1a1a',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                },
               ]}
             >
-              <RNImage
-                source={require('../../assets/images/logo_header.png')}
-                style={{ width: '60%', height: '35%', opacity: 0.55 }}
-                resizeMode="contain"
-              />
+              {_v777bIsAdultContent(item) ? (
+                <Image
+                  // V780O_ADULT_POSTER_DATA_URI
+                  // Porn/adult missing-or-failed poster fallback only.
+                  source={{ uri: V780J_ADULT_FALLBACK_DATA_URI }}
+                  style={{
+                    width: '74%',
+                    height: '74%',
+                    opacity: 0.95,
+                    // V780R_USER_EDITED_IMAGE_AS_IS
+                  }}
+                  contentFit="contain"
+                  cachePolicy="none"
+                />
+              ) : (
+                <RNImage
+                  source={require('../../assets/images/logo_header.png')}
+                  style={{
+                    width: '60%',
+                    height: '35%',
+                    opacity: 0.55,
+                  }}
+                  resizeMode="contain"
+                />
+              )}
             </View>
           )}
         </View>

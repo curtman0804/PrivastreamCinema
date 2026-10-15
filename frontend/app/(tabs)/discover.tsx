@@ -414,7 +414,10 @@ export default function DiscoverScreen() {
          race: recently-cleared ids stay tombstoned until the background
          DELETE has had time to commit server-side (5 min TTL). */
       const _v706c2q3RawCW = (response.continueWatching || []).filter(
-        (it: any) => !_v365IsCleared(it && it.content_id)
+        (it: any) => !_v365IsCleared(
+          it && it.content_id,
+          it && it.updated_at
+        )
       );
 
       const _v204Next =
