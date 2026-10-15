@@ -2799,8 +2799,11 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
      * Manual stream cards are unchanged.
      * Device capability logic remains available elsewhere.
      */
-    if (q === '1080p') return 5;
-    if (q === '4K')    return 4;
+    // W121ZOD116S1B_QUALITY_AFTER_SUSTAINABILITY
+    // Once sustainability is equal, choose the best quality this
+    // device can genuinely support.
+    if (q === '4K')    return _v665DeviceCanPrefer4k ? 5 : 3;
+    if (q === '1080p') return 4;
     if (q === '720p')  return 3;
     if (q === 'HD')    return 2;
     if (q === 'SD')    return 1;
@@ -3106,10 +3109,18 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
     return 2;
   };
 
-  // V769V31B_FF_RW_PICKER
+  // W121ZOD116S1B_DEVICE_LOCAL_SUSTAINABILITY_PRIORITY
+  //
+  // English/title/device-compatibility gates execute before this rank.
+  //
+  // Within the safe pool:
+  //   PROVEN SUSTAINED > UNKNOWN > DEGRADED > FAILED
+  //
+  // Health is local app storage, so each physical device learns
+  // independently which torrent/source is sustainable on that device.
   const _v769SeekHealthRank = (s: any): number => {
-    // W121ZOD105ZX_ON_DEMAND_HEALTH_SCOPE
     if (!usePlaybackHealth) return 0;
+
     const hash = String(
       s?.infoHash || s?.info_hash || ''
     )
@@ -3119,60 +3130,59 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
     const health =
       hash ? _v769SeekHealth[hash] : null;
 
-    // W121ZOD106G_PLAYBACK_HEALTH_RANK
-    // Current-policy failures are sticky until explicit playback proof.
-    // Legacy unversioned J27 failures are intentionally neutral.
-    // W121ZOD115N2_DEVICE_FAILURE_AUTHORITY
-    // Playback history is local to this app installation/device. If this
-    // device has already proved a current-policy source cannot start, keep
-    // it out of automatic selection while another candidate exists.
-    const _v104j27PlaybackFailActive =
-      usePlaybackHealth &&
-      _w121zod106gPlaybackBadForSelection(health);
-
+    // Required FF/RW behavior remains a hard compatibility signal.
     if (
       health?.ff === 'fail' ||
-      health?.rw === 'fail' ||
-      _v104j27PlaybackFailActive
+      health?.rw === 'fail'
     ) {
       return -1;
     }
 
-    const ffPass =
-      health?.ff === 'pass';
+    const policy =
+      String(health?.playbackPolicy || '');
 
-    const rwPass =
-      health?.rw === 'pass';
-
-    // W121ZOD108H4D_PROVEN_BEHAVIOR_RANK
-    // Under 106G a playback pass is only written at genuine natural EOF.
-    // That long-play proof must outrank an unproven higher-resolution source.
-    // W121ZOD115I_PHONE_OD_POLICY
-    // W121ZSA did not promote a source because of later natural-EOF history.
-    const playbackPass = false;
-
-    if (ffPass && rwPass && playbackPass) {
-      return 5;
+    // Rejected experimental six-second proof.
+    if (policy === 'od106f-v1') {
+      return -1;
     }
 
-    if (ffPass && rwPass) {
-      return 4;
+    if (
+      policy === _W121ZOD106G_PLAYBACK_HEALTH_POLICY &&
+      health?.playback === 'fail'
+    ) {
+      return -1;
     }
 
-    if (playbackPass) {
-      return 3;
+    const seekBonus =
+      health?.ff === 'pass' && health?.rw === 'pass'
+        ? 4
+        : health?.ff === 'pass' || health?.rw === 'pass'
+          ? 2
+          : 0;
+
+    const sustainedPass =
+      policy === _W121ZOD106G_PLAYBACK_HEALTH_POLICY &&
+      health?.playback === 'pass' &&
+      (
+        health?.playbackPassReason === 'natural-eof' ||
+        health?.playbackPassReason === 'sustained-120s'
+      );
+
+    if (sustainedPass) {
+      return 60 + seekBonus;
     }
 
-    if (ffPass || rwPass) {
-      // W121ZOD115M1_COMPLETE_SEEK_PROOF
-      // A one-sided historical FF or RW pass is not enough to steer automatic
-      // first Play. Only complete FF+RW proof gets a positive seek-health rank.
-      return 0;
+    if (
+      policy === _W121ZOD106G_PLAYBACK_HEALTH_POLICY &&
+      health?.playback === 'degraded'
+    ) {
+      return 10 + seekBonus;
     }
 
-    return 0;
+    // Untested on THIS device gets a chance before retrying a source
+    // already known to buffer here.
+    return 30 + seekBonus;
   };
-
   /*
    * A proven FF/RW failure is excluded from automatic
    * selection whenever another candidate remains.
@@ -3224,8 +3234,8 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       // W121ZOD115I_PHONE_OD_POLICY
       // W121ZSA order: quality -> FF/RW health -> source master ->
       // device video compatibility -> audio -> reliability.
-      (y.q - x.q) ||
       (y.h - x.h) ||
+      (y.q - x.q) ||
       (y.m - x.m) ||
       (y.c - x.c) ||
       (y.a - x.a) ||
@@ -3249,7 +3259,7 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       '[V652 AUTO PICK]',
       'pool=' + (nonForeign.length > 0 ? 'ENGLISH' : 'FOREIGN_FALLBACK'),
       'audioPool=' + (_v652UsingSafeAudio ? 'SAFE' : 'UNSAFE_FALLBACK'),
-      'videoOrder=ENGLISH>DEVICE_SAFE>SDR>Q>SEEK>MASTER>C>A>R',
+      'videoOrder=ENGLISH>DEVICE_SAFE>SDR>SUSTAINABILITY>Q>MASTER>C>A>RELIABILITY',
       'master=' + pick.m,
       'deviceProfile=' + (
         _v665LowMemoryTv
@@ -3265,6 +3275,17 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       'playable=' + playable.length,
       'quality=' + String(info?.quality || '?'),
       'audio=' + pick.a,
+      'sustainability=' + (
+        pick.h >= 60
+          ? 'PROVEN_SUSTAINED'
+          : pick.h >= 30
+            ? 'UNKNOWN'
+            : pick.h >= 10
+              ? 'DEGRADED'
+              : pick.h < 0
+                ? 'FAILED'
+                : 'N/A'
+      ),
       'seekHealth=' + (
         pick.h === 5
           ? 'EOF+FF+RW_PASS'
