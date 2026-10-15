@@ -224,7 +224,7 @@ const _v271BootSnapshotPromise: Promise<_V271Snapshot> = (async () => {
       const urls: string[] = [];
       const services = (snap.discover as any)?.services || {};
       for (const svc of Object.values(services)) {
-        for (const bucket of ['movies', 'series', 'channels']) {
+        for (const bucket of ['movies', 'series']) {
           const list = (svc as any)?.[bucket] || [];
           for (const it of list.slice(0, 6)) {
             if (it && it.poster) urls.push(String(it.poster));
@@ -494,7 +494,7 @@ export default function DiscoverScreen() {
     try {
       const services = (source as any).services || {};
       for (const svc of Object.values(services)) {
-        for (const bucket of ['movies', 'series', 'channels']) {
+        for (const bucket of ['movies', 'series']) {
           const list = (svc as any)?.[bucket] || [];
           for (const it of list.slice(0, 6)) {
             if (it && it.poster) urls.push(String(it.poster));
@@ -792,8 +792,7 @@ export default function DiscoverScreen() {
     return Object.values(services).some(
       (content: any) => 
         (content?.movies?.length > 0) || 
-        (content?.series?.length > 0) || 
-        (content?.channels?.length > 0)
+        (content?.series?.length > 0)
     );
   }, [discoverData, cachedDiscover]);
 
@@ -861,18 +860,16 @@ export default function DiscoverScreen() {
   const prefetchingRef = useRef<Set<string>>(new Set());
   const focusDebounceTimerRef = useRef<any>(null);
   const pendingFocusItemRef = useRef<ContentItem | null>(null);
-  /* v138-stream-prefetch */
-  // Second-tier prefetch: at 900ms of stable focus on a MOVIE poster,
-  // kick off /api/streams.  Lands in both the content-store cache AND
-  // the server-side 2-min cache, so the eventual click is a cache hit.
-  const streamPrefetchingRef = useRef<Set<string>>(new Set());
-  const streamPrefetchTimerRef = useRef<any>(null);
-  const fetchStreamsForPrefetch = useContentStore(s => s.fetchStreams);
+  // W121ZUI116H_FOCUS_STREAM_PREFETCH_DISABLED
+  // Keep the lightweight 350ms metadata/artwork prefetch, but do NOT launch
+  // full stream discovery merely because a movie poster stays focused.
+  // On Firestick those network requests survive focus changes and can still be
+  // running when a different title enters Details. Poster press remains the
+  // authoritative early stream-preparation trigger.
   const handleItemFocus = useCallback((item: ContentItem) => {
     { const _v343dt = Date.now() - (_v343NavBackAt.current || 0); if (_v343dt >= 0 && _v343dt < 800) false && console.log('[V343 NAV_BACK] first item focus t+' + _v343dt + 'ms id=' + String((item as any)?.id || (item as any)?.imdb_id || '?')); }
     pendingFocusItemRef.current = item;
     if (focusDebounceTimerRef.current) clearTimeout(focusDebounceTimerRef.current);
-    if (streamPrefetchTimerRef.current) clearTimeout(streamPrefetchTimerRef.current);
     focusDebounceTimerRef.current = setTimeout(() => {
       focusDebounceTimerRef.current = null;
       const it = pendingFocusItemRef.current;
@@ -889,24 +886,7 @@ export default function DiscoverScreen() {
         }
       }).catch(() => {});
     }, 350);
-    // v138: stream prefetch on extended focus.  Movies only -- series
-    // posters land on the series root (no stream fetch there).
-    streamPrefetchTimerRef.current = setTimeout(() => {
-      streamPrefetchTimerRef.current = null;
-      const it = pendingFocusItemRef.current;
-      if (!it) return;
-      if (it.type !== 'movie') return;
-      const id = it.imdb_id || it.id;
-      if (!id || streamPrefetchingRef.current.has(id)) return;
-      streamPrefetchingRef.current.add(id);
-      console.log('[PREFETCH v138] kicking /api/streams for focused movie', id);
-      try {
-        fetchStreamsForPrefetch(it.type, id);
-      } catch (e) {
-        console.log('[PREFETCH v138] failed', e);
-      }
-    }, 900);
-  }, [fetchStreamsForPrefetch]);
+  }, []);
 
   // PATCH_V54_VIRTUALIZE ├óΓé¼ΓÇ¥ progressive: 6 services first, expand after 700ms.
  const [maxRowsV54, setMaxRowsV54] = useState(6); // PATCH_V54_FLATROWS
@@ -949,7 +929,7 @@ const flatRowsV54 = useMemo(() => {
 
     const movies = c.movies;
     const series = c.series;
-    const channels = c.channels;
+    const channels: any[] = []; // V789S15B_ON_DEMAND_CHANNELS_DISABLED
 
     if (movies?.length) {
       rows.push({
@@ -1139,6 +1119,39 @@ const _v371NearViewport = (row: any): boolean => {
 const handleItemPress = useCallback((item: ContentItem) => {
   const id = item.imdb_id || item.id;
   if (!id) return;
+  // W121ZOD109D_POSTER_PREP_START
+  //
+  // Start/reuse preparation BEFORE Details navigation.
+  // Fire-and-forget: navigation remains immediate.
+  //
+  // Start preparation only when the user actually chooses this title.
+  // Details mount reuses this same-content promise through V257 dedup.
+  try {
+    const _w109dPrefetch =
+      useContentStore.getState().prefetchStreams;
+
+    if (typeof _w109dPrefetch === 'function') {
+      console.log(
+        '[W121ZOD109D POSTER PREP]',
+        'start',
+        item.type,
+        id
+      );
+
+      void _w109dPrefetch(
+        item.type,
+        id
+      );
+    }
+  } catch (error) {
+    console.log(
+      '[W121ZOD109D POSTER PREP]',
+      'failed',
+      item.type,
+      id,
+      String((error as any)?.message || error)
+    );
+  }
 
   // V443_EMIT_NAVBACK - remember which item was clicked so useFocusEffect
   // can emit v443:navBack on the way back.  Independent of v442's ref.

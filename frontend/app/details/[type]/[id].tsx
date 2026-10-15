@@ -2986,7 +2986,8 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
   // Cached/debrid media is delivered by HTTPS, so swarm seed counts do
   // not predict its playback speed. Preserve the existing format and
   // reliability preferences; break equivalent OD-TV ties by file size.
-  const _v106aCompactAuto = usePlaybackHealth && _v665IsTv;
+  // W121ZOD115I_PHONE_OD_POLICY: restore W121ZSA TV autoplay ranking semantics.
+  const _v106aCompactAuto = false;
   const _v106aTransferBytes = (s: any): number => {
     if (!_v106aCompactAuto) return 0;
     const hintedBytes = Number(s?.behaviorHints?.videoSize || s?.videoSize || 0);
@@ -3121,7 +3122,12 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
     // W121ZOD106G_PLAYBACK_HEALTH_RANK
     // Current-policy failures are sticky until explicit playback proof.
     // Legacy unversioned J27 failures are intentionally neutral.
+    // W121ZOD115N2_DEVICE_FAILURE_AUTHORITY
+    // Playback history is local to this app installation/device. If this
+    // device has already proved a current-policy source cannot start, keep
+    // it out of automatic selection while another candidate exists.
     const _v104j27PlaybackFailActive =
+      usePlaybackHealth &&
       _w121zod106gPlaybackBadForSelection(health);
 
     if (
@@ -3141,11 +3147,9 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
     // W121ZOD108H4D_PROVEN_BEHAVIOR_RANK
     // Under 106G a playback pass is only written at genuine natural EOF.
     // That long-play proof must outrank an unproven higher-resolution source.
-    const playbackPass =
-      health?.playbackPolicy ===
-        _W121ZOD106G_PLAYBACK_HEALTH_POLICY &&
-      health?.playback === 'pass' &&
-      health?.playbackPassReason === 'natural-eof';
+    // W121ZOD115I_PHONE_OD_POLICY
+    // W121ZSA did not promote a source because of later natural-EOF history.
+    const playbackPass = false;
 
     if (ffPass && rwPass && playbackPass) {
       return 5;
@@ -3160,7 +3164,10 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
     }
 
     if (ffPass || rwPass) {
-      return 2;
+      // W121ZOD115M1_COMPLETE_SEEK_PROOF
+      // A one-sided historical FF or RW pass is not enough to steer automatic
+      // first Play. Only complete FF+RW proof gets a positive seek-health rank.
+      return 0;
     }
 
     return 0;
@@ -3214,13 +3221,15 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       // A 1080p source with negative reliability must not outrank another
       // device-safe 1080p source with strong reliability simply because its
       // audio score is slightly higher.
-      (y.h - x.h) ||
-      (y.r - x.r) ||
+      // W121ZOD115I_PHONE_OD_POLICY
+      // W121ZSA order: quality -> FF/RW health -> source master ->
+      // device video compatibility -> audio -> reliability.
       (y.q - x.q) ||
-      (y.a - x.a) ||
+      (y.h - x.h) ||
       (y.m - x.m) ||
       (y.c - x.c) ||
-      (x.d - y.d) ||
+      (y.a - x.a) ||
+      (y.r - x.r) ||
       (x.i - y.i)
     );
 
@@ -3240,7 +3249,7 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       '[V652 AUTO PICK]',
       'pool=' + (nonForeign.length > 0 ? 'ENGLISH' : 'FOREIGN_FALLBACK'),
       'audioPool=' + (_v652UsingSafeAudio ? 'SAFE' : 'UNSAFE_FALLBACK'),
-      'videoOrder=ENGLISH>DEVICE_SAFE>SDR>PROVEN>RELIABLE>Q>A>MASTER>C',
+      'videoOrder=ENGLISH>DEVICE_SAFE>SDR>Q>SEEK>MASTER>C>A>R',
       'master=' + pick.m,
       'deviceProfile=' + (
         _v665LowMemoryTv
@@ -3912,7 +3921,22 @@ export default function DetailsScreen() {
   const id = rawId ? decodeURIComponent(rawId) : rawId;
   
   // Try meta cache first (instant), then route params, then bare minimum
-  const cachedMeta = id ? getMetaCache(id) : null;
+  // W121ZUI116B_META_BASE_ID
+  // Episode routes use series metadata. Key memory/disk metadata by the series
+  // base ID so the FIRST episode Details visit can hydrate the same rich object
+  // that the series root uses.
+  const _w121zui116bMetaId =
+    type === 'series' &&
+    id?.includes(':') &&
+    !id?.startsWith('porn') &&
+    !id?.startsWith('http')
+      ? id.split(':')[0]
+      : id;
+
+  const cachedMeta =
+    _w121zui116bMetaId
+      ? getMetaCache(_w121zui116bMetaId)
+      : null;
   // V306_INITIAL_BACKDROP_BUILD_TAG â€” wire the background + logo router
   // params into initialContent so the backdrop image renders on the FIRST
   // frame instead of staying blank until the /meta network call returns
@@ -3921,7 +3945,11 @@ export default function DetailsScreen() {
   // perceived "6 seconds to get to the details page" delay.
   const _V306_BUILD_TAG = 'V306_INITIAL_BACKDROP_BUILD_TAG';
   void _V306_BUILD_TAG;
-  const initialContent: ContentItem = cachedMeta || {
+  // W121ZUI116E_FIRST_FRAME_ART_MERGE
+  // A partial in-memory meta record must not suppress richer artwork already
+  // carried by the Discover route. Seed from route params, overlay cached meta,
+  // then explicitly fall back to route artwork for any missing cached fields.
+  const initialContent: ContentItem = {
     id: id!,
     imdb_id: id,
     name: paramName || '',
@@ -3929,6 +3957,11 @@ export default function DetailsScreen() {
     poster: paramPoster || '',
     background: paramBackground || '',
     logo: paramLogo || '',
+    ...(cachedMeta || {}),
+    name: cachedMeta?.name || paramName || '',
+    poster: cachedMeta?.poster || paramPoster || '',
+    background: cachedMeta?.background || paramBackground || '',
+    logo: cachedMeta?.logo || paramLogo || '',
   } as any;
   
   const [content, setContent] = useState<ContentItem | null>(initialContent);
@@ -3940,26 +3973,51 @@ export default function DetailsScreen() {
     tomatoes_score: number | null;
   } | null>(null);
 
-  // PATCH_V244_META_HYDRATE â€” on cold start, in-memory _metaCache is
-  // empty so Details would paint with just (paramName + paramPoster)
-  // while waiting ~7s for the network /meta call.  Try the 24h disk
-  // cache FIRST â€” typically yields a full meta object in ~30-80ms,
-  // so the user sees cast / plot / episodes almost immediately.
-  // Network refresh still runs after to pull any updates.
+  // W121ZUI116B_RATINGS_IDENTITY
+  // Avoid clearing a score when metadata hydration causes the same IMDb ID to
+  // re-render, and allow a 24h local last-known score to paint immediately.
+  const _w121zui116bRatingsIdentityRef = useRef<string>('');
+
+  // W121ZUI116B_META_HYDRATE
+  // Paint cached rich metadata immediately. Preserve route-provided first-frame
+  // artwork if a cached record is missing a field.
   useEffect(() => {
-    if (!id) return;
-    if (cachedMeta) return; // already painted from memory
+    if (!_w121zui116bMetaId) return;
+    if (cachedMeta) return;
+
     let cancelled = false;
-    (async () => {
+
+    void (async () => {
       try {
-        const fromDisk = await hydrateMetaFromDisk(id);
-        if (cancelled) return;
-        if (fromDisk) setContent(fromDisk);
+        const fromDisk =
+          await hydrateMetaFromDisk(_w121zui116bMetaId);
+
+        if (cancelled || !fromDisk) return;
+
+        setContent((previous: any) => ({
+          ...(previous || {}),
+          ...fromDisk,
+          background:
+            (fromDisk as any)?.background ||
+            previous?.background ||
+            '',
+          poster:
+            (fromDisk as any)?.poster ||
+            previous?.poster ||
+            '',
+          logo:
+            (fromDisk as any)?.logo ||
+            previous?.logo ||
+            '',
+        }));
       } catch (_) {}
     })();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [_w121zui116bMetaId]);
   // V157_META_INJECTED_HERE â€” synchronously update the module-level meta
   // holder BEFORE the sort useMemo runs.  This guarantees the title/year
   // guard in sortStreamsByLanguage sees the current content's name+year
@@ -4068,10 +4126,26 @@ export default function DetailsScreen() {
   useEffect(() => {
     let active = true;
 
-    // Cancel stream work owned by the previous Details route before
-    // deciding whether this route may access any content.
+    // W121ZUI116E_PREFETCH_HANDOFF
+    // Preserve a Discover focus/click prefetch when no different Details route
+    // currently owns stream state. The old unconditional cancel cleared the
+    // dedup registry without aborting native HTTP, so Details immediately
+    // started a second provider-discovery pass while the first was still alive.
+    // Only invalidate work when a DIFFERENT Details owner is actually present.
     try {
-      useContentStore.getState().cancelInFlightStreams();
+      const _w121zui116eStore =
+        useContentStore.getState() as any;
+
+      const _w121zui116eOwner = String(
+        _w121zui116eStore?.currentStreamsKey || ''
+      );
+
+      if (
+        _w121zui116eOwner &&
+        _w121zui116eOwner !== _v706c2n4AccessKey
+      ) {
+        _w121zui116eStore.cancelInFlightStreams();
+      }
     } catch (_) {}
 
     if (!_v706c2n4AccessKey || !type || !id) {
@@ -4218,29 +4292,28 @@ export default function DetailsScreen() {
   useEffect(() => {
     if (_v706c2n4AccessAllowed !== true) return;
 
-    // If we have cached meta with background, skip the meta fetch entirely
-    // V783Y2_JSTRM_FORCE_META_FETCH
-    // TPB jstrm cards already have artwork, but Details still needs
-    // the addon's richer metadata for tags/cast.
-    const _v783yForceJstrmMeta =
+    // W121ZUI116B_RICH_META_REFRESH
+    // A backdrop proves only that artwork exists; it does NOT prove genre,
+    // director, cast, runtime, description, or episodes are populated.
+    // Always refresh normal movie/series metadata in the background after the
+    // parental gate allows access. api.content.getMeta already owns a short
+    // memory cache, so repeat Details navigation remains cheap.
+    const _w121zui116bForceJstrmMeta =
       String(id || '').startsWith('jstrm:');
 
-    const hasCachedMeta =
-      !_v783yForceJstrmMeta &&
-      cachedMeta &&
-      cachedMeta.background;
-    if (!hasCachedMeta) {
-      // Only fetch meta for series (need episodes) or if missing background
-      const needsMeta =
-        _v783yForceJstrmMeta ||
-        type === 'series' ||
-        !content?.background;
-      if (needsMeta) {
-        // PATCH_V39_DEFER_MOUNT_IO â€” defer meta fetch off the mount path
-        setTimeout(() => { try { loadContent(); } catch (_) {} }, 0);
-      }
+    const _w121zui116bNeedsRichMeta =
+      _w121zui116bForceJstrmMeta ||
+      type === 'movie' ||
+      type === 'series' ||
+      !content?.background;
+
+    if (_w121zui116bNeedsRichMeta) {
+      setTimeout(() => {
+        try {
+          void loadContent();
+        } catch (_) {}
+      }, 0);
     }
-    // PATCH_V39_DEFER_MOUNT_IO â€” defer library fetch off the mount path
     setTimeout(() => { try { fetchLibrary(); } catch (_) {} }, 0);
     // V780A_ADULT_DETAILS_STREAM_GATE
     if (
@@ -4277,12 +4350,13 @@ export default function DetailsScreen() {
     }
   }, [id, type, _v706c2n4AccessAllowed]);
 
-  // V707 Details enrichment starts only after the existing parental gate allows access.
-  // It never blocks normal metadata, streams, prewarm, or playback.
+  // W121ZUI116B_DETAILS_RATINGS_FAST
+  // Ratings remain independent of normal metadata/playback. Start network
+  // enrichment immediately once access is allowed, while painting a 24h
+  // locally-cached last-known result when available.
   useEffect(() => {
     let cancelled = false;
-
-    setV707DetailsRatings(null);
+    let networkApplied = false;
 
     if (_v706c2n4AccessAllowed !== true) {
       return () => {
@@ -4296,8 +4370,6 @@ export default function DetailsScreen() {
       };
     }
 
-    // Prefer hydrated metadata IMDb ID when available; otherwise use the route ID.
-    // Episode suffixes are stripped before calling the backend ratings endpoint.
     const ratingsImdbId = String(
       content?.imdb_id ||
       (isEpisodePage ? baseId : id) ||
@@ -4310,22 +4382,97 @@ export default function DetailsScreen() {
       };
     }
 
+    const ratingsIdentity =
+      `${String(type)}:${ratingsImdbId}`;
+
+    const ratingsDiskKey =
+      `@detailsRatings:v1:${ratingsIdentity}`;
+
+    if (
+      _w121zui116bRatingsIdentityRef.current !==
+      ratingsIdentity
+    ) {
+      _w121zui116bRatingsIdentityRef.current =
+        ratingsIdentity;
+
+      setV707DetailsRatings(null);
+    }
+
+    const applyRatings = (data: any) => {
+      if (cancelled || !data) return;
+
+      setV707DetailsRatings({
+        certification:
+          data.certification ?? null,
+        imdb_score:
+          data.imdb_score ?? null,
+        tomatoes_score:
+          data.tomatoes_score ?? null,
+      });
+    };
+
+    // Local paint and network refresh deliberately run in parallel.
+    void AsyncStorage.getItem(ratingsDiskKey)
+      .then((raw) => {
+        if (
+          cancelled ||
+          networkApplied ||
+          !raw
+        ) {
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(raw);
+          const age =
+            Date.now() -
+            Number(parsed?.time || 0);
+
+          if (
+            parsed?.data &&
+            Number.isFinite(age) &&
+            age >= 0 &&
+            age < 24 * 60 * 60 * 1000
+          ) {
+            applyRatings(parsed.data);
+
+            console.log(
+              '[W121ZUI116B RATINGS DISK HIT]',
+              ratingsIdentity
+            );
+          }
+        } catch (_) {}
+      })
+      .catch(() => {});
+
     void api.content
       .getRatings(type, ratingsImdbId)
       .then((data) => {
         if (cancelled) return;
 
-        setV707DetailsRatings({
-          certification: data.certification,
-          imdb_score: data.imdb_score,
-          tomatoes_score: data.tomatoes_score,
-        });
+        networkApplied = true;
+        applyRatings(data);
+
+        void AsyncStorage.setItem(
+          ratingsDiskKey,
+          JSON.stringify({
+            time: Date.now(),
+            data: {
+              certification:
+                data.certification ?? null,
+              imdb_score:
+                data.imdb_score ?? null,
+              tomatoes_score:
+                data.tomatoes_score ?? null,
+            },
+          })
+        ).catch(() => {});
       })
       .catch((error) => {
         if (cancelled) return;
 
         console.log(
-          '[V707] Details ratings enrichment failed:',
+          '[W121ZUI116B] Details ratings enrichment failed:',
           String((error as any)?.message || error)
         );
       });
@@ -4341,7 +4488,6 @@ export default function DetailsScreen() {
     content?.imdb_id,
     _v706c2n4AccessAllowed,
   ]);
-
   /* V656_DETAILS_PM_ONLY_PREWARM_OWNER
    * Legacy V180 server prewarm removed.
    * The active V291 hook below owns details-page prewarm through
@@ -4646,11 +4792,11 @@ export default function DetailsScreen() {
         '[W121ZOD111E PREPARING MEDIA]',
         'state=max-wait',
         'context=' + _w121zod110yPrepContextKey,
-        'elapsedMs=8000'
+        'elapsedMs=15000'
       );
 
       _w121zod111eSetGateExpired(true);
-    }, 8000);
+    }, 15000);
 
     return () => {
       clearTimeout(_w121zod111eTimer);
@@ -4674,32 +4820,58 @@ export default function DetailsScreen() {
   const _w121zod111eAutoPlayGateApplies =
     type === 'movie' || isEpisodePage;
 
+  // W121ZOD115N2_PHONE_CACHE_GATE
+  // W121ZSA did its real automatic choice from the broad Premiumize cache
+  // result, not from one prewarmed hash. Keep Preparing Media visible until
+  // the background V296 check has authoritative cache state for the same
+  // first-50 universe V300 will use. This work happens before Play, so the
+  // click itself can stay near-instant.
+  const _w121zod115n2CacheHashes = (() => {
+    const hashes: string[] = [];
+    const seen = new Set<string>();
+
+    for (const candidate of (streams || [])) {
+      const hash = String(
+        (candidate as any)?.infoHash ||
+        (candidate as any)?.info_hash ||
+        ''
+      ).trim().toLowerCase();
+
+      if (!hash || seen.has(hash)) continue;
+      seen.add(hash);
+      hashes.push(hash);
+
+      if (hashes.length >= 50) break;
+    }
+
+    return hashes;
+  })();
+
+  const _w121zod115n2KnownCacheStates =
+    _w121zod115n2CacheHashes.filter(
+      (hash) => _v296_cacheMap.has(hash)
+    ).length;
+
+  const _w121zod115n2BroadCacheReady =
+    _w121zod115n2CacheHashes.length === 0 ||
+    _w121zod115n2KnownCacheStates >=
+      _w121zod115n2CacheHashes.length;
+
   const _w121zod111eUsefulPrepReady =
-    !!_w121zod111ePreparedEntryForUi &&
-    Array.isArray(
-      _w121zod111ePreparedEntryForUi.directDlContent
-    ) &&
-    _w121zod111ePreparedEntryForUi
-      .directDlContent.length > 0 &&
-    !!_w121zod111ePreparedEntryForUi.mediaPath &&
-    !!_w121zod111ePreparedEntryForUi.probe &&
-    _w121zod111ePreparedEntryForUi
-      .mediaCompatible === true;
+    _w121zod115n2BroadCacheReady;
 
   const _w121zod111eHoldPlay =
     _w121zod111eAutoPlayGateApplies &&
     !_w121zod111eGateExpired &&
     !_w121zod111eUsefulPrepReady;
 
+  // W121ZOD115N2_PHONE_CLICK_PARITY
+  // The user explicitly accepts Preparing Media before Play. Release Play
+  // only after broad cache discovery is ready (or the fail-open max wait),
+  // so clicking Play does not begin a slow candidate-discovery cycle.
   const _w121zod111eShowPreparingUi =
-    _w121zod111eAutoPlayGateApplies &&
-    (
-      _v667EffectiveStreamLoading ||
-      (
-        sortedStreams.length > 0 &&
-        _w121zod111eHoldPlay
-      )
-    );
+    _v667EffectiveStreamLoading ||
+    _w121zod111eHoldPlay;
   // PRE-WARM: When streams are loaded, silently pre-start the top ENGLISH torrent
   // This saves 5-10 seconds of metadata download when user taps play
   const prewarmedRef = useRef<string | null>(null);
@@ -4858,7 +5030,12 @@ export default function DetailsScreen() {
             .trim()
             .toLowerCase();
 
+        // W121ZOD115I_PHONE_OD_POLICY
+        // Preserve V291's lightweight Premiumize prewarm, but do not run
+        // the post-W121ZSA directDL/media-probe/readiness pipeline while
+        // the user is still on Details.
         if (
+          false &&
           _w121zod110yHash &&
           (type === 'movie' || type === 'series')
         ) {
@@ -5278,18 +5455,54 @@ export default function DetailsScreen() {
 
   const loadContent = async () => {
     try {
-      const contentId = isEpisodePage ? baseId : id;
-      const data = await api.content.getMeta(type!, contentId!);
-      // Cache the meta data for instant re-access
-      if (contentId) setMetaCache(contentId, data);
-      setContent(data);
+      const contentId =
+        isEpisodePage
+          ? baseId
+          : id;
+
+      const data =
+        await api.content.getMeta(
+          type!,
+          contentId!
+        );
+
+      setContent((previous: any) => {
+        const merged = {
+          ...(previous || {}),
+          ...(data || {}),
+          background:
+            (data as any)?.background ||
+            previous?.background ||
+            '',
+          poster:
+            (data as any)?.poster ||
+            previous?.poster ||
+            '',
+          logo:
+            (data as any)?.logo ||
+            previous?.logo ||
+            '',
+        } as ContentItem;
+
+        if (contentId) {
+          setMetaCache(
+            contentId,
+            merged
+          );
+        }
+
+        return merged;
+      });
     } catch (error) {
-      console.log('Failed to fetch meta:', error);
-      // Keep using the initial content from params â€” already set
+      console.log(
+        'Failed to fetch meta:',
+        error
+      );
+      // Keep using route/disk metadata already painted.
     }
+
     setIsLoadingContent(false);
   };
-
   const handleStreamSelect = async (
     stream: Stream,
     preserveSelectedStream: boolean = false,
@@ -5368,10 +5581,11 @@ export default function DetailsScreen() {
 
 
     // W121ZOD108E1_PREPLAYER_AUTO_SOURCE_GATE
-    const _w121zod108e1AutoOd =
-      !preserveSelectedStream &&
-      (cType === 'movie' || cType === 'series') &&
-      !_v783pTrustedAdultNativeStream(id, content, stream);
+    // W121ZOD115I_PHONE_OD_POLICY
+    // W121ZSA handed a correctly ranked/identity-checked Premiumize URL
+    // directly to Player. Disable the later pre-player media/readiness
+    // rejection loop for normal OD; runtime fallback remains in Player.
+    const _w121zod108e1AutoOd = false;
 
     const _w121zod108e1Rejected =
       autoRejectedHashes instanceof Set
@@ -6339,7 +6553,9 @@ const nextEpisodeData = nextEpisode ? {
                           c.hash
                         ];
 
-                      // W121ZOD106G_PM_PLAYBACK_POLICY
+                      // W121ZOD115N2_DEVICE_FAILURE_AUTHORITY
+                      // Do not re-select a source this device has already
+                      // proved unable to start under the current policy.
                       const _v104j27PlaybackFailActive =
                         _w121zod106gPlaybackBadForSelection(h);
 
@@ -8041,308 +8257,17 @@ const nextEpisodeData = nextEpisode ? {
             </Text>
           ) : null}
 
-          {/* Add to Library - under description */}
+          {/* W121ZUI116B_PRIMARY_ACTIONS - visible without scrolling */}
           <View style={styles.fixedActionRow}>
-            <FocusableButton 
-              hasTVPreferredFocus={true}
-              style={styles.libraryButton}
-              focusedStyle={styles.libraryButtonFocused}
-              onPress={toggleLibrary}
-            >
-              <Ionicons 
-                name={inLibrary ? "checkmark" : "add"} 
-                size={20} 
-                color="#FFFFFF" 
-              />
-              <Text style={styles.libraryButtonText}>
-                {inLibrary ? 'In Library' : 'Add to Library'}
-              </Text>
-            </FocusableButton>
-          </View>
-        </View>
-
-        {/* Scrollable Content - everything below the pinned area */}
-        <ScrollView
-          ref={_v508DetailsScrollRef}
-          style={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContentContainer}
-          // v214b details bounded â€” stop the Android TV over-scroll past
-          // the bottom padding so DOWN at the last section does nothing
-          // instead of revealing a blank void (which confused focus search).
-          overScrollMode="never"
-          bounces={false}
-        >
-          {/* V783R_UNIVERSAL_ADULT_TAG_BUTTONS */}
-          {(() => {
-            const rawId = String(
-              (content as any)?.id ||
-              id ||
-              ''
-            )
-              .trim()
-              .toLowerCase();
-
-            const rawType = String(
-              (content as any)?.type ||
-              type ||
-              ''
-            )
-              .trim()
-              .toLowerCase();
-
-            const sourceText = [
-              (content as any)?.addon,
-              (content as any)?.source,
-              (content as any)?.serviceName,
-              (content as any)?.catalogName,
-            ]
-              .filter(Boolean)
-              .join(' ')
-              .toLowerCase();
-
-            const isAdultDetail =
-              (content as any)?.adult === true ||
-              rawType === 'porn' ||
-              rawType === 'adult' ||
-              /^(?:pt:|porndb:|porn_id:|porn_|jstrm:|knaben:|pornrips:|eporner:|xhamster:|porntrex:|spankbang:|missav:)/i.test(rawId) ||
-              /\b(?:adult videos|onlyporn|porn tube|porntube|jaxxx|dirty pink|tpb.*porn)\b/i.test(sourceText);
-
-            const rawTags: any[] = [];
-
-            const addValues = (value: any) => {
-              if (Array.isArray(value)) {
-                value.forEach(addValues);
-                return;
-              }
-
-              if (value === null || value === undefined) {
-                return;
-              }
-
-              if (typeof value === 'string') {
-                const clean = value.trim();
-
-                if (clean) {
-                  rawTags.push(clean);
-                }
-
-                return;
-              }
-
-              if (typeof value === 'object') {
-                const clean = String(
-                  value?.name ||
-                  value?.title ||
-                  value?.label ||
-                  ''
-                ).trim();
-
-                if (clean) {
-                  rawTags.push(clean);
-                }
-              }
-            };
-
-            if (isAdultDetail) {
-              // Stremio addons are inconsistent here, so accept all
-              // common metadata representations without inventing tags.
-              addValues((content as any)?.genre);
-              addValues((content as any)?.genres);
-              addValues((content as any)?.tag);
-              addValues((content as any)?.tags);
-
-              const links =
-                Array.isArray((content as any)?.links)
-                  ? (content as any).links
-                  : [];
-
-              links.forEach((link: any) => {
-                const category =
-                  String(link?.category || '')
-                    .trim()
-                    .toLowerCase();
-
-                if (
-                  category === 'genre' ||
-                  category === 'genres' ||
-                  category === 'tag' ||
-                  category === 'tags'
-                ) {
-                  addValues(
-                    link?.name ||
-                    link?.title ||
-                    link?.label
-                  );
-                }
-              });
-            } else {
-              // Preserve normal movie/TV Genre behavior.
-              addValues((content as any)?.genre);
-            }
-
-            const seen =
-              new Set<string>();
-
-            const chips =
-              rawTags.filter((value: any) => {
-                const clean =
-                  String(value || '').trim();
-
-                if (!clean) {
-                  return false;
-                }
-
-                const key =
-                  clean.toLowerCase();
-
-                if (seen.has(key)) {
-                  return false;
-                }
-
-                seen.add(key);
-                return true;
-              });
-
-            if (chips.length === 0) {
-              return null;
-            }
-
-            const visible =
-              isAdultDetail
-                ? chips.slice(0, 16)
-                : chips.slice(0, 4);
-
-            return (
-              <View style={styles.chipSection}>
-                <Text style={styles.chipLabel}>
-                  {isAdultDetail ? 'Tags' : 'Genre'}
-                </Text>
-
-                <View style={styles.chipRow}>
-                  {visible.map(
-                    (tag: string, i: number) => (
-                      <ChipButton
-                        key={`genre-${i}`}
-                        label={tag}
-                        hasTVPreferredFocus={
-                          !isAdultDetail && i === 0
-                        }
-                        onPress={() =>
-                          router.push({
-                            pathname: '/(tabs)/search',
-                            params: {
-                              q: tag,
-                              mode: isAdultDetail
-                                ? 'auto'
-                                : 'genre',
-                            },
-                          })
-                        }
-                      />
-                    )
-                  )}
-                </View>
-              </View>
-            );
-          })()}
-          {/* Director */}
-          {content?.director && Array.isArray(content.director) && content.director.length > 0 && (
-            <View style={styles.chipSection}>
-              <Text style={styles.chipLabel}>Director</Text>
-              <View style={styles.chipRow}>
-                {content.director.slice(0, 3).map((d: string, i: number) => (
-                  <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d, mode: 'director' } })} />
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Cast */}
-          {content?.cast && Array.isArray(content.cast) && content.cast.length > 0 && (
-            <View style={styles.chipSection}>
-              <Text style={styles.chipLabel}>Cast</Text>
-              <View style={styles.chipRow}>
-                {content.cast.slice(0, 6).map((c: string, i: number) => (
-                  <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c, mode: 'cast' } })} />
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Season Selector for Series */}
-          {type === 'series' && !isEpisodePage && seasons.length > 0 && (
-            <View
-              style={styles.seasonSection}
-              onLayout={(e) => {
-                _v508SeasonSectionYRef.current = e.nativeEvent.layout.y;
-                if (fromEpisodeBackParam === 'true') _v508ScrollEpisodeRowIntoView();
-              }}
-            >
-              <Text style={styles.sectionTitle}>Episodes</Text>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                style={styles.seasonSelector}
-              >
-                {seasons.map((season, idx) => (
-                  <FocusableButton
-                    key={season}
-                    style={[
-                      styles.seasonButton,
-                      selectedSeason === season && styles.seasonButtonActive,
-                    ]}
-                    focusedStyle={styles.seasonButtonFocused}
-                    onPress={() => setSelectedSeason(season)}
-                  >
-                    <Text style={[
-                      styles.seasonButtonText,
-                      selectedSeason === season && styles.seasonButtonTextActive,
-                    ]}>
-                      Season {season}
-                    </Text>
-                  </FocusableButton>
-                ))}
-              </ScrollView>
-              
-              {/* Episodes List */}
-              {/* v125b-flatlist-scroll */}
-              <FlatList
-                key={`episodes-${selectedSeason}-${targetEpisodeIndex}`}
-                data={episodesForSeason}
-                renderItem={renderEpisodeItem}
-                keyExtractor={(item) => `${item.season}-${item.episode}`}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.episodesList}
-                // v125b FIX B: mount the target card at first paint, scroll it
-                // into view, and guarantee the existing v124ab pressableRef
-                // + setNativeProps retry actually has a node to focus.
-                initialScrollIndex={targetEpisodeIndex}
-                getItemLayout={(_, index) => ({ length: 160, offset: 172 * index, index })}
-                initialNumToRender={Math.max(8, targetEpisodeIndex + 3)}
-                onScrollToIndexFailed={() => {
-                  // getItemLayout makes this practically unreachable, but
-                  // keep a no-op handler so React Native doesn't warn.
-                }}
-              />
-            </View>
-          )}
-
-          {/* Streams Section - Stremio Style */}
-          {/* V780C_ADULT_STREAM_SECTION_GATE */}
-          {(
-            type === 'movie' ||
-            type === 'tv' ||
-            type === 'Porn' ||
-            type === 'porn' ||
-            type === 'adult' ||
-            isEpisodePage
-          ) && (
-            <View style={styles.streamsSection}>
-              {/* Play button on left + stream count */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                {/* V169_STREAM_COUNT_USES_SORTED â€” use filtered list for gating */}
+            {(
+              type === 'movie' ||
+              type === 'tv' ||
+              type === 'Porn' ||
+              type === 'porn' ||
+              type === 'adult' ||
+              isEpisodePage
+            ) && (
+              <>
                 {_w121zod111eShowPreparingUi ? (
                   <View style={styles.preparingMediaButton}>
                     <ActivityIndicator
@@ -8356,6 +8281,7 @@ const nextEpisodeData = nextEpisode ? {
                 ) : !_v667EffectiveStreamLoading &&
                   sortedStreams.length > 0 ? (
                   <FocusableButton
+                    hasTVPreferredFocus={true}
                     onPress={async () => {
                       /* v238b â€” Play button picks the FIRST resolved stream
                          (one with a real URL: stream.url / externalUrl /
@@ -8595,6 +8521,306 @@ const nextEpisodeData = nextEpisode ? {
                     <Text style={styles.playButtonText}>Play</Text>
                   </FocusableButton>
                 ) : null}
+              </>
+            )}
+            <FocusableButton 
+              hasTVPreferredFocus={type === 'series' && !isEpisodePage}
+              style={styles.libraryButton}
+              focusedStyle={styles.libraryButtonFocused}
+              onPress={toggleLibrary}
+            >
+              <Ionicons 
+                name={inLibrary ? "checkmark" : "add"} 
+                size={20} 
+                color="#FFFFFF" 
+              />
+              <Text style={styles.libraryButtonText}>
+                {inLibrary ? 'In Library' : 'Add to Library'}
+              </Text>
+            </FocusableButton>
+          </View>
+        </View>
+
+        {/* Scrollable Content - everything below the pinned area */}
+        <ScrollView
+          ref={_v508DetailsScrollRef}
+          style={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContentContainer}
+          // v214b details bounded â€” stop the Android TV over-scroll past
+          // the bottom padding so DOWN at the last section does nothing
+          // instead of revealing a blank void (which confused focus search).
+          overScrollMode="never"
+          bounces={false}
+        >
+          {/* V783R_UNIVERSAL_ADULT_TAG_BUTTONS */}
+          {(() => {
+            const rawId = String(
+              (content as any)?.id ||
+              id ||
+              ''
+            )
+              .trim()
+              .toLowerCase();
+
+            const rawType = String(
+              (content as any)?.type ||
+              type ||
+              ''
+            )
+              .trim()
+              .toLowerCase();
+
+            const sourceText = [
+              (content as any)?.addon,
+              (content as any)?.source,
+              (content as any)?.serviceName,
+              (content as any)?.catalogName,
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .toLowerCase();
+
+            const isAdultDetail =
+              (content as any)?.adult === true ||
+              rawType === 'porn' ||
+              rawType === 'adult' ||
+              /^(?:pt:|porndb:|porn_id:|porn_|jstrm:|knaben:|pornrips:|eporner:|xhamster:|porntrex:|spankbang:|missav:)/i.test(rawId) ||
+              /\b(?:adult videos|onlyporn|porn tube|porntube|jaxxx|dirty pink|tpb.*porn)\b/i.test(sourceText);
+
+            const rawTags: any[] = [];
+
+            const addValues = (value: any) => {
+              if (Array.isArray(value)) {
+                value.forEach(addValues);
+                return;
+              }
+
+              if (value === null || value === undefined) {
+                return;
+              }
+
+              if (typeof value === 'string') {
+                const clean = value.trim();
+
+                if (clean) {
+                  rawTags.push(clean);
+                }
+
+                return;
+              }
+
+              if (typeof value === 'object') {
+                const clean = String(
+                  value?.name ||
+                  value?.title ||
+                  value?.label ||
+                  ''
+                ).trim();
+
+                if (clean) {
+                  rawTags.push(clean);
+                }
+              }
+            };
+
+            if (isAdultDetail) {
+              // Stremio addons are inconsistent here, so accept all
+              // common metadata representations without inventing tags.
+              addValues((content as any)?.genre);
+              addValues((content as any)?.genres);
+              addValues((content as any)?.tag);
+              addValues((content as any)?.tags);
+
+              const links =
+                Array.isArray((content as any)?.links)
+                  ? (content as any).links
+                  : [];
+
+              links.forEach((link: any) => {
+                const category =
+                  String(link?.category || '')
+                    .trim()
+                    .toLowerCase();
+
+                if (
+                  category === 'genre' ||
+                  category === 'genres' ||
+                  category === 'tag' ||
+                  category === 'tags'
+                ) {
+                  addValues(
+                    link?.name ||
+                    link?.title ||
+                    link?.label
+                  );
+                }
+              });
+            } else {
+              // Preserve normal movie/TV Genre behavior.
+              addValues((content as any)?.genre);
+            }
+
+            const seen =
+              new Set<string>();
+
+            const chips =
+              rawTags.filter((value: any) => {
+                const clean =
+                  String(value || '').trim();
+
+                if (!clean) {
+                  return false;
+                }
+
+                const key =
+                  clean.toLowerCase();
+
+                if (seen.has(key)) {
+                  return false;
+                }
+
+                seen.add(key);
+                return true;
+              });
+
+            if (chips.length === 0) {
+              return null;
+            }
+
+            const visible =
+              isAdultDetail
+                ? chips.slice(0, 16)
+                : chips.slice(0, 4);
+
+            return (
+              <View style={styles.chipSection}>
+                <Text style={styles.chipLabel}>
+                  {isAdultDetail ? 'Tags' : 'Genre'}
+                </Text>
+
+                <View style={styles.chipRow}>
+                  {visible.map(
+                    (tag: string, i: number) => (
+                      <ChipButton
+                        key={`genre-${i}`}
+                        label={tag}
+                        hasTVPreferredFocus={false}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/(tabs)/search',
+                            params: {
+                              q: tag,
+                              mode: isAdultDetail
+                                ? 'auto'
+                                : 'genre',
+                            },
+                          })
+                        }
+                      />
+                    )
+                  )}
+                </View>
+              </View>
+            );
+          })()}
+          {/* Director */}
+          {content?.director && Array.isArray(content.director) && content.director.length > 0 && (
+            <View style={styles.chipSection}>
+              <Text style={styles.chipLabel}>Director</Text>
+              <View style={styles.chipRow}>
+                {content.director.slice(0, 3).map((d: string, i: number) => (
+                  <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d, mode: 'director' } })} />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Cast */}
+          {content?.cast && Array.isArray(content.cast) && content.cast.length > 0 && (
+            <View style={styles.chipSection}>
+              <Text style={styles.chipLabel}>Cast</Text>
+              <View style={styles.chipRow}>
+                {content.cast.slice(0, 6).map((c: string, i: number) => (
+                  <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c, mode: 'cast' } })} />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Season Selector for Series */}
+          {type === 'series' && !isEpisodePage && seasons.length > 0 && (
+            <View
+              style={styles.seasonSection}
+              onLayout={(e) => {
+                _v508SeasonSectionYRef.current = e.nativeEvent.layout.y;
+                if (fromEpisodeBackParam === 'true') _v508ScrollEpisodeRowIntoView();
+              }}
+            >
+              <Text style={styles.sectionTitle}>Episodes</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.seasonSelector}
+              >
+                {seasons.map((season, idx) => (
+                  <FocusableButton
+                    key={season}
+                    style={[
+                      styles.seasonButton,
+                      selectedSeason === season && styles.seasonButtonActive,
+                    ]}
+                    focusedStyle={styles.seasonButtonFocused}
+                    onPress={() => setSelectedSeason(season)}
+                  >
+                    <Text style={[
+                      styles.seasonButtonText,
+                      selectedSeason === season && styles.seasonButtonTextActive,
+                    ]}>
+                      Season {season}
+                    </Text>
+                  </FocusableButton>
+                ))}
+              </ScrollView>
+              
+              {/* Episodes List */}
+              {/* v125b-flatlist-scroll */}
+              <FlatList
+                key={`episodes-${selectedSeason}-${targetEpisodeIndex}`}
+                data={episodesForSeason}
+                renderItem={renderEpisodeItem}
+                keyExtractor={(item) => `${item.season}-${item.episode}`}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.episodesList}
+                // v125b FIX B: mount the target card at first paint, scroll it
+                // into view, and guarantee the existing v124ab pressableRef
+                // + setNativeProps retry actually has a node to focus.
+                initialScrollIndex={targetEpisodeIndex}
+                getItemLayout={(_, index) => ({ length: 160, offset: 172 * index, index })}
+                initialNumToRender={Math.max(8, targetEpisodeIndex + 3)}
+                onScrollToIndexFailed={() => {
+                  // getItemLayout makes this practically unreachable, but
+                  // keep a no-op handler so React Native doesn't warn.
+                }}
+              />
+            </View>
+          )}
+
+          {/* Streams Section - Stremio Style */}
+          {/* V780C_ADULT_STREAM_SECTION_GATE */}
+          {(
+            type === 'movie' ||
+            type === 'tv' ||
+            type === 'Porn' ||
+            type === 'porn' ||
+            type === 'adult' ||
+            isEpisodePage
+          ) && (
+            <View style={styles.streamsSection}>
+              {/* Play button on left + stream count */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                {/* V169_STREAM_COUNT_USES_SORTED â€” use filtered list for gating */}
                 <Text style={styles.sectionTitle}>
                   {/* V169_STREAM_COUNT_USES_SORTED â€” display filtered count to match list */}
                   {_v667EffectiveStreamLoading ? (type === 'tv' ? 'Verifying Live Streams...' : 'Finding Streams...') : `${sortedStreams.length} Stream${sortedStreams.length !== 1 ? 's' : ''}`}
@@ -8839,12 +9065,14 @@ const styles = StyleSheet.create({
   playButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    justifyContent: 'center',
+    gap: 8,
+    minWidth: 150,
+    paddingHorizontal: 26,
+    paddingVertical: 11,
     backgroundColor: '#B8A05C',
     borderRadius: 8,
-    marginRight: 12,
+    marginRight: 0,
     borderWidth: 2,
     borderColor: 'transparent',
   },

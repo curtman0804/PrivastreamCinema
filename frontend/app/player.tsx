@@ -6029,6 +6029,11 @@ export default function PlayerScreen() {
                 v104j27OnDemandBufferSinceRef.current;
 
               if (
+                // W121ZOD115M1_NO_TIMER_REBUFFER_FAILOVER
+                // A transient OD rebuffer is not enough evidence to destroy a
+                // healthy direct source. Native/source errors still retain the
+                // existing explicit recovery path.
+                false &&
                 _v104j27StalledMs >= 6000 &&
                 !v104j27PlaybackFailoverRef.current
               ) {
@@ -6174,6 +6179,19 @@ export default function PlayerScreen() {
               if (!resumeSeekInFlightRef.current) {
                 resumeSeekInFlightRef.current = true;
                 resumeSeekStartedAtRef.current = Date.now();
+
+                // W121ZOD115M1_RESUME_GRACE
+                // A Continue-Watching jump is an intentional seek. Give it the
+                // same J27 protection as user FF/RW so refill at the target
+                // cannot be persisted as degradation or trigger source churn.
+                v105zf2UserSeekGraceUntilRef.current = Math.max(
+                  v105zf2UserSeekGraceUntilRef.current,
+                  Date.now() + 30000
+                );
+                console.log(
+                  '[W121ZOD115M1 RESUME GRACE]',
+                  'until=' + String(v105zf2UserSeekGraceUntilRef.current)
+                );
 
                 console.log(`[PLAYER] Seeking to resume position: ${pendingResumePosition}s`);
                 videoRef.current.setPositionAsync(resumeMs).then(() => {
@@ -7573,9 +7591,12 @@ switch (evt.eventType) {
         !!directUrl &&
         streamUrl === directUrl;
 
+      // W121ZOD115M1_DIRECT_START_DEADLINE
+      // Normal healthy OD must already be playing by the five-second product
+      // target. A miss is recovery territory, not a reason to wait eight seconds.
       const timeoutMs =
-        _v104j27IsPrimaryDirect
-          ? 8000
+        _v104j27IsPrimaryDirect && isLive !== 'true'
+          ? 5000
           : 30000;
       playbackTimeoutRef.current = setTimeout(() => {
         if (!playbackStartedRef.current) {
@@ -8826,7 +8847,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                      from what was used to obtain the URL.  ExoPlayer's default UA
                      (ExoPlayerLib/2.x) is what Stremio uses and PM accepts. */
                 }}
-                onDemandBufferGuard={isLive !== 'true' && !isLiveTV}
+                onDemandBufferGuard={false /* W121ZOD115M1_PHONE_BUFFERING */}
                 style={[
                   styles.videoPlayer,
                   // v476b: enforce visible aspect change even on native-16:9 content
