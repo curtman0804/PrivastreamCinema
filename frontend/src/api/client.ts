@@ -10,7 +10,7 @@ import { Platform } from 'react-native';
 import { resolveMagnet as _pmResolveMagnet, isPremiumizeConfigured } from '../services/premiumizeClient';
 
 // ============================================================
-// V287 — Premiumize client-side resolver cache.
+// V287 â€” Premiumize client-side resolver cache.
 // When a Premiumize key is stored in @pm_key_v1, all stream
 // resolution happens on-device.  Backend is bypassed entirely
 // for /api/stream/start, /status, /video.
@@ -102,7 +102,7 @@ function _kickPmResolve(opts: {
       if (url) {
         _pmResolved.set(k, url);
         _pmFailed.delete(k);
-        console.log('[PM v287] resolved', h.slice(0, 8), '→', String(url).slice(0, 60));
+        console.log('[PM v287] resolved', h.slice(0, 8), 'â†’', String(url).slice(0, 60));
       } else {
         _pmFailed.add(k);
         console.warn('[PM v287] resolve returned null for', h.slice(0, 8));
@@ -119,7 +119,7 @@ function _kickPmResolve(opts: {
 }
 
 // ============================================
-// V288 — Backend URL corrected: 71.9.152.146 was the
+// V288 â€” Backend URL corrected: 71.9.152.146 was the
 // ProtonVPN/Gluetun exit IP (outbound only).  The actual
 // Hetzner public IPv4 is 5.161.49.99.  Inbound traffic
 // must hit that address.
@@ -245,7 +245,7 @@ export interface ContentItem {
   id: string;
   imdb_id?: string;
   name: string;
-  type: 'movie' | 'series';
+  type: 'movie' | 'series' | 'tv';
   poster: string;
   year?: string;
   imdbRating?: string | number;
@@ -636,6 +636,7 @@ async function _v706c2gIsAllowedById(
   // Mode is ON, regardless of the route/content type supplied.
   const explicitAdultId =
     id.startsWith('pt:') ||
+    id.startsWith('knaben:') ||
     id.startsWith('jt:') ||
     id.startsWith('porn') ||
     id.startsWith('xxx:');
@@ -708,6 +709,62 @@ export const api = {
 
       return _v706c2eFilterDiscover(data);
     },
+    // V784I_ADDON_EPG_CLIENT
+    getLiveTvEpg: async (date: string): Promise<any> => {
+      const parentalModeEnabled = await getParentalModeEnabled();
+
+      // V788T15V-R5: preserve the device-local EPG calendar day.
+      let timeZone = '';
+
+      try {
+        timeZone =
+          Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      } catch (_) {
+        timeZone = '';
+      }
+
+      const response = await apiClient.get(
+        `/api/content/live-tv/epg/${encodeURIComponent(date)}`,
+        {
+          params: {
+            adult: parentalModeEnabled ? 0 : 1,
+            tz: timeZone,
+          },
+          timeout: 240000,
+        }
+      );
+
+      return response.data;
+    },
+
+    // V788T11X2_UNIVERSAL_LIVE_TV_INVENTORY_CLIENT
+    //
+    // Provider-neutral cursor over every installed TV addon/catalog
+    // exposed by the universal backend inventory layer.
+    getLiveTvInventoryPage: async (
+      sourceIndex: number = 0,
+      skip: number = 0,
+      limit: number = 100
+    ): Promise<any> => {
+      const parentalModeEnabled = await getParentalModeEnabled();
+
+      const response = await apiClient.get(
+        '/api/content/live-tv/inventory-page',
+        {
+          params: {
+            source_index: sourceIndex,
+            skip,
+            limit,
+            adult: parentalModeEnabled ? 0 : 1,
+          },
+
+          // Background only. It does not block the initial guide.
+          timeout: 150000,
+        }
+      );
+
+      return response.data;
+    },
     isAllowedByParentalMode: async (
       type: string,
       id: string
@@ -716,9 +773,105 @@ export const api = {
     },
 
     search: async (query: string, skip: number = 0, limit: number = 30, mode: string = 'auto'): Promise<{ movies: SearchResult[]; series: SearchResult[]; hasMore: boolean; total: number }> => { // V711F2_SEARCH_INTENT
-      const response = await apiClient.get(`/api/content/search?q=${encodeURIComponent(query)}&skip=${skip}&limit=${limit}&mode=${encodeURIComponent(mode)}`);
+      // V783Q_ASA_SEARCH_MERGE
+      const mainSearchUrl =
+        `/api/content/search?q=${encodeURIComponent(query)}&skip=${skip}&limit=${limit}&mode=${encodeURIComponent(mode)}`;
 
-      const data = response.data as V706C2GSearchResponse;
+      const adultSearchUrl =
+        `/api/content/search-adult?q=${encodeURIComponent(query)}&skip=${skip}&limit=${limit}`;
+
+      const [response, adultResponse] =
+        await Promise.all([
+          apiClient.get(mainSearchUrl),
+
+          apiClient
+            .get(adultSearchUrl)
+            .catch((error: any) => {
+              console.log(
+                '[V783Q ASA SEARCH] unavailable:',
+                error?.message || error
+              );
+
+              return null;
+            }),
+        ]);
+
+      const baseData =
+        response.data as V706C2GSearchResponse;
+
+      const adultData =
+        (
+          adultResponse?.data || {
+            movies: [],
+            series: [],
+            hasMore: false,
+            total: 0,
+          }
+        ) as V706C2GSearchResponse;
+
+      const seenMovieIds =
+        new Set<string>();
+
+      const mergedMovies =
+        [
+          ...(
+            Array.isArray(baseData?.movies)
+              ? baseData.movies
+              : []
+          ),
+          ...(
+            Array.isArray(adultData?.movies)
+              ? adultData.movies
+              : []
+          ),
+        ].filter((item: any) => {
+          const key =
+            String(
+              item?.id ||
+              item?.imdb_id ||
+              ''
+            )
+              .trim()
+              .toLowerCase();
+
+          if (!key) {
+            return true;
+          }
+
+          if (seenMovieIds.has(key)) {
+            return false;
+          }
+
+          seenMovieIds.add(key);
+          return true;
+        });
+
+      const data: V706C2GSearchResponse = {
+        ...baseData,
+        movies: mergedMovies,
+
+        series:
+          Array.isArray(baseData?.series)
+            ? baseData.series
+            : [],
+
+        hasMore:
+          Boolean(
+            baseData?.hasMore ||
+            adultData?.hasMore
+          ),
+
+        total:
+          (Number(baseData?.total) || 0) +
+          (Number(adultData?.total) || 0),
+      };
+
+      console.log(
+        '[V783Q ASA SEARCH]',
+        `query=${query}`,
+        `adult=${Array.isArray(adultData?.movies) ? adultData.movies.length : 0}`,
+        `merged=${mergedMovies.length}`
+      );
 
       // V714D_CANONICAL_SEARCH_POSTERS
       // Cinemeta/Discover use MetaHub artwork for canonical IMDb titles.
@@ -852,7 +1005,7 @@ export const api = {
       const response = await apiClient.get(`/api/addons/${addonId}/stream/${type}/${id}`);
       return response.data;
     },
-    getAllStreams: async (type: string, id: string, onProgress?: (streams: Stream[]) => void): Promise<{ streams: Stream[] }> => {
+    getAllStreams: async (type: string, id: string, onProgress?: (streams: Stream[]) => void): Promise<{ streams: Stream[]; discoveryStatus?: { backend: 'success' | 'empty' | 'failed'; torrentio: 'success' | 'empty' | 'failed'; tpb: 'success' | 'empty' | 'failed'; hadFailure: boolean; authoritativeEmpty: boolean } }> => {
       console.log(`[STREAMS] ========== Fetching streams for ${type}/${id} ==========`);
       const startTime = Date.now();
       
@@ -878,6 +1031,63 @@ export const api = {
       
       const encodedId = encodeURIComponent(id);
       
+      /*
+       * V773_ADULT_STREAM_BACKEND_ONLY
+       *
+       * Adult addon-native IDs use their dedicated backend resolver.
+       * Do not race unrelated Torrentio/TPB discovery, and do not
+       * apply V669's 3-second general backend timeout.
+       */
+      // V778C_TPBPORN_JSTRM_FRONTEND
+      const isAdultAddonId =
+        /^(?:pt:|porndb:|porn_id:|porn_|jstrm:|knaben:)/i.test(id) ||
+        /^RedTube-movie-/i.test(id) ||
+        /^https?:\/\//i.test(id);
+
+      if (isAdultAddonId) {
+        try {
+          const result = await apiClient.get(
+            `/api/streams/${type}/${encodedId}`,
+            { timeout: 30000 }
+          );
+
+          const streams: Stream[] =
+            Array.isArray(result.data?.streams)
+              ? result.data.streams
+              : [];
+
+          console.log(
+            `[V773 ADULT STREAMS] backend-only: ${streams.length} streams in ${Date.now() - startTime}ms`
+          );
+
+          if (!((api as any)._streamCache)) {
+            (api as any)._streamCache = new Map();
+          }
+
+          if (streams.length > 0) {
+            (api as any)._streamCache.set(
+              cacheKey,
+              { streams, time: Date.now() }
+            );
+          } else {
+            (api as any)._streamCache.delete(cacheKey);
+          }
+
+          if (onProgress) onProgress(streams);
+          return { streams };
+        } catch (e) {
+          console.log(
+            `[V773 ADULT STREAMS] backend-only fetch failed:`,
+            e
+          );
+
+          if ((api as any)._streamCache) {
+            (api as any)._streamCache.delete(cacheKey);
+          }
+
+          return { streams: [] };
+        }
+      }
       if (type === 'tv') {
         try {
           const result = await apiClient.get(`/api/streams/${type}/${encodedId}`);
@@ -926,7 +1136,7 @@ export const api = {
           const titleAndName = `${s.title || ''} ${s.name || ''} ${s.filename || ''}`.toUpperCase();
           
           if (/COMPLETE|ALL\s*SEASONS|FULL\s*SERIES/i.test(titleAndName)) return false;
-          if (/S\d{1,2}\s*[-–]\s*S\d{1,2}/i.test(titleAndName)) return false;
+          if (/S\d{1,2}\s*[-â€“]\s*S\d{1,2}/i.test(titleAndName)) return false;
           
           const seasonMatch = titleAndName.match(/\bS(\d{1,2})(?=E)/i);
           if (seasonMatch && parseInt(seasonMatch[1], 10) !== sInt) return false;
@@ -935,7 +1145,7 @@ export const api = {
           if (s.filename && targetPattern.test(s.filename)) return true;
           if (targetPattern.test(titleAndName)) return true;
           
-          const rangePattern = /S(\d{1,2})E(\d{1,2})\s*[-–]\s*E?(\d{1,2})/gi;
+          const rangePattern = /S(\d{1,2})E(\d{1,2})\s*[-â€“]\s*E?(\d{1,2})/gi;
           let rangeMatch;
           while ((rangeMatch = rangePattern.exec(titleAndName)) !== null) {
             const startE = parseInt(rangeMatch[2], 10);
@@ -968,35 +1178,103 @@ export const api = {
        * /api/streams request hold the entire discovery attempt for the
        * global 15-second Axios timeout. V406 owns retries on an empty pass.
        */
+      /*
+       * W121ZOD108H4AQ5_STREAM_FAILURE_SEMANTICS
+       *
+       * Stream[] output and ranking stay unchanged.
+       * Failure state is carried separately for contentStore.
+       */
+      let _h4aqBackendStatus: 'success' | 'empty' | 'failed' = 'failed';
+      let _h4aqTorrentioStatus: 'success' | 'empty' | 'failed' = 'failed';
+      let _h4aqTpbStatus: 'success' | 'empty' | 'failed' = 'failed';
+      
       const backendPromise = apiClient.get(
         `/api/streams/${type}/${encodedId}`,
         { timeout: 3000 }
       )
         .then(r => {
           const streams = filterForEpisode(r.data.streams || []);
+
+          _h4aqBackendStatus =
+            streams.length > 0
+              ? 'success'
+              : 'empty';
+
           mergeAndNotify(streams, 'Backend');
         })
-        .catch(e => console.log(`[STREAMS] Backend failed:`, e));
+        .catch(e => {
+          _h4aqBackendStatus = 'failed';
+          console.log(`[STREAMS] Backend failed:`, e);
+        });
       
       const torrentioPromise = api.addons.fetchTorrentioStreams(type, id)
-        .then(streams => mergeAndNotify(filterForEpisode(streams), 'Torrentio'))
-        .catch(e => console.log(`[STREAMS] Torrentio failed:`, e));
+        .then(streams => {
+          const usable = filterForEpisode(streams);
+
+          _h4aqTorrentioStatus =
+            usable.length > 0
+              ? 'success'
+              : 'empty';
+
+          mergeAndNotify(
+            usable,
+            'Torrentio'
+          );
+        })
+        .catch(e => {
+          _h4aqTorrentioStatus = 'failed';
+          console.log(`[STREAMS] Torrentio failed:`, e);
+        });
       
       const tpbPromise = api.addons.fetchTPBStreams(type, id)
-        .then(streams => mergeAndNotify(filterForEpisode(streams), 'TPB+'))
-        .catch(e => console.log(`[STREAMS] TPB+ failed:`, e));
+        .then(streams => {
+          const usable = filterForEpisode(streams);
+
+          _h4aqTpbStatus =
+            usable.length > 0
+              ? 'success'
+              : 'empty';
+
+          mergeAndNotify(
+            usable,
+            'TPB+'
+          );
+        })
+        .catch(e => {
+          _h4aqTpbStatus = 'failed';
+          console.log(`[STREAMS] TPB+ failed:`, e);
+        });
       
       await Promise.allSettled([backendPromise, torrentioPromise, tpbPromise]);
+
+      const _h4aqHadFailure =
+        _h4aqBackendStatus === 'failed' ||
+        _h4aqTorrentioStatus === 'failed' ||
+        _h4aqTpbStatus === 'failed';
+
+      const _h4aqAuthoritativeEmpty =
+        !_h4aqHadFailure &&
+        allStreams.length === 0;
+
+      console.log(
+        '[W121ZOD108H4AQ5 DISCOVERY STATUS]',
+        'backend=' + _h4aqBackendStatus,
+        'torrentio=' + _h4aqTorrentioStatus,
+        'tpb=' + _h4aqTpbStatus,
+        'hadFailure=' + String(_h4aqHadFailure),
+        'authoritativeEmpty=' + String(_h4aqAuthoritativeEmpty),
+        'streams=' + String(allStreams.length)
+      );
       
       console.log(`[STREAMS] All sources done: ${allStreams.length} total streams in ${Date.now() - startTime}ms`);
       
       allStreams.forEach((s: any) => {
         if (!s.seeders && s.title) {
-          const m = s.title.match(/👤\s*(\d+)/);
+          const m = s.title.match(/ðŸ‘¤\s*(\d+)/);
           if (m) s.seeders = parseInt(m[1], 10);
         }
         if (!s.seeders && s.title) {
-          const m = s.title.match(/🌱\s*(\d+)/);
+          const m = s.title.match(/ðŸŒ±\s*(\d+)/);
           if (m) s.seeders = parseInt(m[1], 10);
         }
       });
@@ -1020,7 +1298,16 @@ export const api = {
         console.log('[V668] refusing zero-stream cache for', cacheKey);
       }
       
-      return { streams: allStreams };
+      return {
+        streams: allStreams,
+        discoveryStatus: {
+          backend: _h4aqBackendStatus,
+          torrentio: _h4aqTorrentioStatus,
+          tpb: _h4aqTpbStatus,
+          hadFailure: _h4aqHadFailure,
+          authoritativeEmpty: _h4aqAuthoritativeEmpty,
+        },
+      };
     },
     
     fetchTorrentioStreams: async (type: string, id: string): Promise<Stream[]> => {
@@ -1066,8 +1353,30 @@ export const api = {
         
         try {
           data = await Promise.any(racePromises);
-        } catch (e) {
-          return [];
+        } catch (e: any) {
+          const errors =
+            Array.isArray(e?.errors)
+              ? e.errors
+              : [];
+
+          const explicitEmpty =
+            errors.length === racePromises.length &&
+            errors.every(
+              (reason: any) =>
+                String(
+                  reason?.message ||
+                  reason ||
+                  ''
+                ) === 'No streams'
+            );
+
+          if (explicitEmpty) {
+            return [];
+          }
+
+          throw new Error(
+            'STREAM_DISCOVERY_PROVIDER_FAILED:torrentio'
+          );
         }
         
         const rawStreams = data?.streams || [];
@@ -1086,7 +1395,7 @@ export const api = {
           }
           
           let seeders = 0;
-          const seederMatch = title.match(/👤\s*(\d+)/);
+          const seederMatch = title.match(/ðŸ‘¤\s*(\d+)/);
           if (seederMatch) seeders = parseInt(seederMatch[1], 10);
           
           const quality = name.toUpperCase().includes('4K') || name.includes('2160') ? '4K' :
@@ -1097,7 +1406,7 @@ export const api = {
           const fileIdx = stream.fileIdx;
           
           return {
-            name: `⚡ ${name}`,
+            name: `âš¡ ${name}`,
             title: title,
             infoHash: infoHash?.toLowerCase(),
             sources: stream.sources || ['tracker:http://tracker.opentrackr.org:1337/announce'],
@@ -1121,9 +1430,14 @@ export const api = {
         
         return parsedStreams;
       } catch (e: any) {
-        console.log(`[TORRENTIO] Fetch error: ${e.message || e}`);
+        console.log(
+          `[TORRENTIO] Fetch error: ${e.message || e}`
+        );
+
+        throw new Error(
+          'STREAM_DISCOVERY_PROVIDER_FAILED:torrentio'
+        );
       }
-      return [];
     },
     
     fetchTPBStreams: async (type: string, id: string): Promise<Stream[]> => {
@@ -1161,8 +1475,30 @@ export const api = {
         
         try {
           data = await Promise.any(racePromises);
-        } catch (e) {
-          return [];
+        } catch (e: any) {
+          const errors =
+            Array.isArray(e?.errors)
+              ? e.errors
+              : [];
+
+          const explicitEmpty =
+            errors.length === racePromises.length &&
+            errors.every(
+              (reason: any) =>
+                String(
+                  reason?.message ||
+                  reason ||
+                  ''
+                ) === 'No streams'
+            );
+
+          if (explicitEmpty) {
+            return [];
+          }
+
+          throw new Error(
+            'STREAM_DISCOVERY_PROVIDER_FAILED:tpb'
+          );
         }
         
         const rawStreams = data?.streams || [];
@@ -1181,7 +1517,7 @@ export const api = {
           }
           
           let seeders = 0;
-          const seederMatch = title.match(/👤\s*(\d+)/) || title.match(/Seeds?:\s*(\d+)/i) || title.match(/(\d+)\s*seeds?/i);
+          const seederMatch = title.match(/ðŸ‘¤\s*(\d+)/) || title.match(/Seeds?:\s*(\d+)/i) || title.match(/(\d+)\s*seeds?/i);
           if (seederMatch) seeders = parseInt(seederMatch[1], 10);
           
           const quality = name.toUpperCase().includes('4K') || name.includes('2160') ? '4K' :
@@ -1192,7 +1528,7 @@ export const api = {
           const fileIdx = stream.fileIdx;
           
           return {
-            name: `🏴‍☠️ ${name}`,
+            name: `ðŸ´â€â˜ ï¸ ${name}`,
             title: title,
             infoHash: infoHash?.toLowerCase(),
             sources: stream.sources || ['tracker:http://tracker.opentrackr.org:1337/announce'],
@@ -1222,9 +1558,14 @@ export const api = {
         
         return parsedStreams;
       } catch (e: any) {
-        console.log(`[TPB+] Fetch error: ${e.message || e}`);
+        console.log(
+          `[TPB+] Fetch error: ${e.message || e}`
+        );
+
+        throw new Error(
+          'STREAM_DISCOVERY_PROVIDER_FAILED:tpb'
+        );
       }
-      return [];
     },
     
     install: async (manifestUrl: string): Promise<Addon> => {
@@ -1306,14 +1647,14 @@ export const api = {
         return { status: 'error', info_hash: h };
       }
 
-      if (!(await _hasPMKey())) {
-        console.warn(
-          '[V656] Premiumize is required for infoHash playback; server-side P2P is disabled',
-          h.slice(0, 8)
-        );
-        return { status: 'error', info_hash: h };
-      }
-
+      /*
+       * W121ZOD104B_PM_RESOLVE_FIRST
+       *
+       * Do not synchronously gate stream start on /premiumize/status.
+       * That status request can consume the prewarm window before
+       * actual resolution begins. The authenticated Premiumize
+       * resolver remains authoritative and fails closed itself.
+       */
       const baseKey = _pmStateKey(h, season, episode);
       const activeKey = _pmStateKey(h, season, episode, title, year);
 

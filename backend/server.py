@@ -811,6 +811,12 @@ class PremiumizeDirectDLRequest(BaseModel):
     src: str
 
 
+# W121ZOD108E1_AUTHENTICATED_MEDIA_PROBE_MODEL
+class PremiumizeMediaProbeRequest(BaseModel):
+    src: str
+    path: str
+
+
 # V759_ADULT_TRANSCODE_MODEL
 class AdultTranscodeSessionRequest(BaseModel):
     source_url: str
@@ -2297,6 +2303,214 @@ async def premiumize_directdl(request: PremiumizeDirectDLRequest, current_user: 
     except Exception as exc:
         logger.warning("Premiumize directdl error for user %s: %s", current_user.id, type(exc).__name__)
         raise HTTPException(status_code=502, detail="Premiumize direct resolve failed")
+
+# ==================== W121ZOD108E1 AUTHENTICATED MEDIA PROBE ====================
+# Resolve the caller's magnet through the caller's own Premiumize account,
+# find the exact requested file path in that fresh directdl response, and
+# inspect ONLY that returned Premiumize link with ffprobe. The caller cannot
+# submit an arbitrary URL to this endpoint.
+@api_router.post("/premiumize/media-probe")
+async def premiumize_media_probe(
+    request: PremiumizeMediaProbeRequest,
+    current_user: User = Depends(get_current_user),
+):
+    src = (request.src or "").strip()
+    requested_path = (request.path or "").strip()
+
+    if not src.lower().startswith("magnet:?xt=urn:btih:"):
+        raise HTTPException(status_code=400, detail="Invalid magnet source")
+
+    if len(src) > 8192:
+        raise HTTPException(status_code=400, detail="Magnet source is too long")
+
+    if not requested_path:
+        raise HTTPException(status_code=400, detail="Media path is required")
+
+    if len(requested_path) > 8192:
+        raise HTTPException(status_code=400, detail="Media path is too long")
+
+    premiumize_key = get_premiumize_key_for_user(current_user)
+
+    try:
+        client = await get_shared_http_client()
+        response = await client.post(
+            "https://www.premiumize.me/api/transfer/directdl",
+            data={"apikey": premiumize_key, "src": src},
+            timeout=20.0,
+        )
+
+        if response.status_code != 200:
+            logger.warning(
+                "W121ZOD108E1 media-probe directdl HTTP %s for user %s",
+                response.status_code,
+                current_user.id,
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Premiumize media probe resolve failed",
+            )
+
+        data = response.json()
+        content = data.get("content")
+
+        if data.get("status") != "success" or not isinstance(content, list):
+            raise HTTPException(
+                status_code=502,
+                detail="Premiumize media probe resolve failed",
+            )
+
+        def _norm_media_path(value: Any) -> str:
+            return str(value or "").replace("\\", "/").strip()
+
+        requested_norm = _norm_media_path(requested_path)
+        selected = None
+
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+
+            if _norm_media_path(item.get("path")) == requested_norm:
+                selected = item
+                break
+
+        if selected is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Requested media path was not returned by Premiumize",
+            )
+
+        link = str(selected.get("link") or "").strip()
+
+        if not link.lower().startswith("https://"):
+            raise HTTPException(
+                status_code=502,
+                detail="Premiumize media probe did not return an HTTPS media link",
+            )
+
+        def _run_ffprobe():
+            return subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-rw_timeout",
+                    "15000000",
+                    "-analyzeduration",
+                    "5000000",
+                    "-probesize",
+                    "8388608",
+                    "-show_streams",
+                    "-show_format",
+                    "-of",
+                    "json",
+                    link,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20.0,
+                check=False,
+            )
+
+        try:
+            probe_proc = await asyncio.to_thread(_run_ffprobe)
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                "W121ZOD108E1 media-probe timeout user=%s path=%s",
+                current_user.id,
+                requested_norm[:180],
+            )
+            raise HTTPException(status_code=504, detail="Media probe timed out")
+
+        if probe_proc.returncode != 0:
+            logger.warning(
+                "W121ZOD108E1 media-probe ffprobe rc=%s user=%s path=%s",
+                probe_proc.returncode,
+                current_user.id,
+                requested_norm[:180],
+            )
+            raise HTTPException(status_code=502, detail="Media probe failed")
+
+        try:
+            probe_json = json.loads(probe_proc.stdout or "{}")
+        except Exception:
+            raise HTTPException(status_code=502, detail="Media probe returned invalid metadata")
+
+        streams = probe_json.get("streams")
+        if not isinstance(streams, list):
+            streams = []
+
+        def _stream_summary(stream: Dict[str, Any]) -> Dict[str, Any]:
+            tags = stream.get("tags") if isinstance(stream.get("tags"), dict) else {}
+            disposition = (
+                stream.get("disposition")
+                if isinstance(stream.get("disposition"), dict)
+                else {}
+            )
+
+            return {
+                "index": stream.get("index"),
+                "codec_type": stream.get("codec_type"),
+                "codec_name": stream.get("codec_name"),
+                "profile": stream.get("profile"),
+                "width": stream.get("width"),
+                "height": stream.get("height"),
+                "channels": stream.get("channels"),
+                "channel_layout": stream.get("channel_layout"),
+                "sample_rate": stream.get("sample_rate"),
+                "bit_rate": stream.get("bit_rate"),
+                "language": tags.get("language"),
+                "title": tags.get("title"),
+                "default": disposition.get("default"),
+                "forced": disposition.get("forced"),
+            }
+
+        video = [
+            _stream_summary(stream)
+            for stream in streams
+            if isinstance(stream, dict) and stream.get("codec_type") == "video"
+        ]
+        audio = [
+            _stream_summary(stream)
+            for stream in streams
+            if isinstance(stream, dict) and stream.get("codec_type") == "audio"
+        ]
+
+        fmt = probe_json.get("format")
+        if not isinstance(fmt, dict):
+            fmt = {}
+
+        logger.info(
+            "W121ZOD108E1 media-probe success user=%s path=%s video=%s audio=%s",
+            current_user.id,
+            requested_norm[:180],
+            str(video[0].get("codec_name") if video else "none"),
+            str(audio[0].get("codec_name") if audio else "none"),
+        )
+
+        return {
+            "status": "success",
+            "path": requested_path,
+            "link": link,
+            "size": selected.get("size"),
+            "format": {
+                "format_name": fmt.get("format_name"),
+                "duration": fmt.get("duration"),
+                "bit_rate": fmt.get("bit_rate"),
+            },
+            "video": video,
+            "audio": audio,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "W121ZOD108E1 media-probe error for user %s: %s",
+            current_user.id,
+            type(exc).__name__,
+        )
+        raise HTTPException(status_code=502, detail="Media probe failed")
+
+# ================== /W121ZOD108E1 AUTHENTICATED MEDIA PROBE ====================
 
 # ==================== V751_PREMIUMIZE_QUEUE_FALLBACK ====================
 # If Premiumize cannot instant-directdl a magnet, place it into the
@@ -26283,10 +26497,33 @@ async def get_live_tv_epg(
 
             usa_tv_channels = []
 
-            for addon_channel_id, mapping in (
-                usa_tv_valid.items()
+            # W121ZUSATV114D_FULL_CATALOG_MEMBERSHIP
+            # USA TV Next catalog membership is authoritative.
+            # EPG/provenance enriches channels but must not hide
+            # otherwise-current catalog members.
+            _w121zusatv114d_confirmed_dead_ids = {
+                # Existing Y56/Y59 runtime-proven dead channels.
+                "ustv-962e4ffa-3feb-480a-9e2f-086101f34d8e",
+                "ustv-74d2e5b1-bdb4-4975-a7f2-a4b9e8250d38",
+            }
+
+            for addon_channel_id, meta in (
+                usa_tv_meta_by_id.items()
             ):
-                meta = mapping["meta"]
+                if not isinstance(meta, dict):
+                    continue
+
+                if (
+                    not adult_enabled
+                    and _v788t9d_is_adult_live_tv_meta(meta)
+                ):
+                    continue
+
+                if (
+                    addon_channel_id
+                    in _w121zusatv114d_confirmed_dead_ids
+                ):
+                    continue
 
                 channel_programs = (
                     programs_by_addon_id.get(

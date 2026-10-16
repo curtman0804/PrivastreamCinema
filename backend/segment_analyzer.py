@@ -198,15 +198,38 @@ def compare_signatures(sig_a:Dict[str,Any],sig_b:Dict[str,Any])->Dict[str,Any]:
     # Preserve the existing strong path while allowing a conservative
     # near-threshold recurring-audio candidate to reach independent
     # visual-boundary corroboration.
+    # V769_MULTISIGNAL_CREDITS_RESCUE
+    # Existing V723 candidates are unchanged. The calibrated R3 path only
+    # permits a weaker recurring-audio candidate to reach visual analysis;
+    # final acceptance remains independently gated in server.py.
+    if not ca or ca["length_sec"] < 18.0:
+        return result
+    v769_existing_audio_candidate = ca["core_score"] >= 0.80
+    v769_rescue_audio_candidate = (
+        ca["core_score"] >= 0.63
+        and ca["confidence"] >= 0.665
+        and ca["length_sec"] >= 20.0
+    )
+    # V769_R4_LOW_BAND_VISUAL_RESCUE
+    # Calibrated extension only for 0.62 <= core < 0.63.
+    # It must still pass the independent audio-timing and visual gates.
+    v769_r4_audio_candidate = (
+        ca["core_score"] >= 0.62
+        and ca["core_score"] < 0.63
+        and ca["confidence"] >= 0.665
+        and ca["length_sec"] >= 20.0
+    )
     if (
-        not ca
-        or ca["core_score"] < 0.80
-        or ca["length_sec"] < 18.0
+        not v769_existing_audio_candidate
+        and not v769_rescue_audio_candidate
+        and not v769_r4_audio_candidate
     ):
         return result
     da=float(sig_a["duration_sec"]); db=float(sig_b["duration_sec"])
     anchor_a=float(ta["start_sec"])+ca["a_start_sec"]; anchor_b=float(tb["start_sec"])+ca["b_start_sec"]
     rem_anchor_a=da-anchor_a; rem_anchor_b=db-anchor_b
+    # V769_MULTISIGNAL_CREDITS_RESCUE
+    audio_remaining_delta_sec=abs(rem_anchor_a-rem_anchor_b)
     pairs=[]
     for a in _visual_candidates(sig_a):
         for b in _visual_candidates(sig_b):
@@ -216,11 +239,30 @@ def compare_signatures(sig_a:Dict[str,Any],sig_b:Dict[str,Any])->Dict[str,Any]:
             pair_score=a["score"]+b["score"]+((6.0-delta)/6.0)*3.0
             pairs.append({"pair_score":pair_score,"remaining_delta_sec":delta,"a":a,"b":b})
     if not pairs: return result
-    pairs.sort(key=lambda x:x["pair_score"],reverse=True); best=pairs[0]
+    # V769_R4_LOW_BAND_VISUAL_RESCUE
+    # Preserve the existing pair selection for every established path.
+    # The new low band may select only from pairs that already satisfy
+    # the independent <=2.5s visual timing requirement.
+    if v769_r4_audio_candidate:
+        v769_r4_pairs = [
+            pair
+            for pair in pairs
+            if pair["remaining_delta_sec"] <= 2.5
+        ]
+        if not v769_r4_pairs:
+            return result
+        v769_r4_pairs.sort(
+            key=lambda x: x["pair_score"],
+            reverse=True,
+        )
+        best = v769_r4_pairs[0]
+    else:
+        pairs.sort(key=lambda x:x["pair_score"],reverse=True); best=pairs[0]
     result["credits"]={"a_start_sec":best["a"]["absolute_sec"],"b_start_sec":best["b"]["absolute_sec"],
                        "a_remaining_sec":best["a"]["remaining_sec"],"b_remaining_sec":best["b"]["remaining_sec"],
                        "remaining_delta_sec":best["remaining_delta_sec"],"pair_score":best["pair_score"],
                        "audio_anchor_a_sec":anchor_a,"audio_anchor_b_sec":anchor_b,
+                       "audio_remaining_delta_sec":audio_remaining_delta_sec,
                        "audio_core_score":ca["core_score"],"audio_confidence":ca["confidence"],
                        "audio_length_sec":ca["length_sec"]}
     return result

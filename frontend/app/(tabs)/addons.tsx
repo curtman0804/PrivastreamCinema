@@ -15,16 +15,20 @@ import {
   Share,
   useWindowDimensions,
   InteractionManager,
+  Image as RNImage,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { useAuthStore } from '../../src/store/authStore';
 import { Addon, api } from '../../src/api/client';
+import { V780J_ADULT_FALLBACK_DATA_URI } from '../../src/assets/adultFallbackData';
 import { Image } from 'expo-image';
 import { colors } from '../../src/styles/colors';
 import AsyncStorage from '../../src/utils/mmkvStorage';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { probeLiveTvDeviceCandidates } from '../../src/native/devicePlaybackCapabilities';
+import { markLiveTvSourcesDirty } from '../../src/liveTvNav';
 
 // V309_SHORT_SHARE_CODES — replaces the V308 PRIVA on-device share code
 // with a backend-generated 7-digit numeric code (same UX as the AFTVnews
@@ -43,6 +47,74 @@ const _V309_TAG = 'V309_SHORT_SHARE_CODES';
 // become one-tap direct-play tiles.
 const _V310_TAG = 'V310_DIRECT_URL_SOURCES';
 const _V310_SAVED_SOURCES_KEY = 'privastream:saved_sources';
+
+// V777A_ADULT_FALLBACK_BADGE
+const _V777A_ADULT_FALLBACK_IMAGE =
+  { uri: V780J_ADULT_FALLBACK_DATA_URI };
+
+// V777B_CINEMETA_FALLBACK
+const _V777B_CINEMETA_IMAGE =
+  require('../../assets/images/cinemeta-logo.png');
+
+function _v777aIsAdultAddon(addon: any): boolean {
+  try {
+    const manifest = addon?.manifest || {};
+
+    const id = String(manifest?.id || '').toLowerCase();
+    const name = String(manifest?.name || '').toLowerCase();
+    const url = String(
+      addon?.manifestUrl ||
+      addon?.url ||
+      ''
+    ).toLowerCase();
+
+    const types = Array.isArray(manifest?.types)
+      ? manifest.types.map(
+          (v: any) => String(v || '').toLowerCase()
+        )
+      : [];
+
+    if (
+      types.some(
+        (v: string) => v === 'porn' || v === 'adult'
+      )
+    ) {
+      return true;
+    }
+
+    return /porn|adult|onlyporn|jaxxx|redtube|eporner|porntrex|xhamster|spankbang|missav|tpbporn/.test(
+      `${id} ${name} ${url}`
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+function _v777bIsCinemetaAddon(addon: any): boolean {
+  try {
+    const manifest = addon?.manifest || {};
+
+    const id = String(manifest?.id || '').trim().toLowerCase();
+    const name = String(manifest?.name || '').trim().toLowerCase();
+    const url = String(
+      addon?.manifestUrl ||
+      addon?.url ||
+      ''
+    ).trim().toLowerCase();
+
+    if (id === 'com.linvo.cinemeta') {
+      return true;
+    }
+
+    if (name === 'cinemeta' || name.includes('cinemeta')) {
+      return true;
+    }
+
+    return /v3-cinemeta\.strem\.io|cinemeta-live\.strem\.io/.test(url);
+  } catch (_) {
+    return false;
+  }
+}
 
 type V310SourceType = 'm3u' | 'hls' | 'mp4';
 interface V310Channel {
@@ -168,6 +240,31 @@ function FocusButton({
   );
 }
 
+// W121ZADDON115C_STRICT_TV_ADDON_HEALTH
+//
+// TV addon status uses the same strict media-serving rule as Live TV.
+// Catalog presence, EPG presence, installation, and URL existence
+// are NOT health.
+type W115cAddonHealth = {
+  state: 'checking' | 'live' | 'down';
+  available: number;
+};
+
+// W121ZADDON115F_BASIC_NON_TV_HEALTH
+//
+// For non-Live-TV addons this is intentionally a simple
+// third-party service reachability badge.
+//
+// LIVE = manifest endpoint is reachable and returns the
+// expected addon manifest.
+//
+// DOWN = manifest endpoint cannot currently be validated.
+//
+// It does not disable/uninstall an addon and does not affect
+// content discovery, streams, playback, or Live TV.
+type W115fBasicAddonHealth = {
+  state: 'checking' | 'live' | 'down';
+};
 export default function AddonsScreen() {
   // V326_TOS_GATE - one-time Terms of Service on first Addons entry
   const [_v326TosVisible, _setV326TosVisible] = React.useState(false);
@@ -187,6 +284,28 @@ export default function AddonsScreen() {
   const { addons, isLoadingAddons, fetchAddons, fetchDiscover } = useContentStore();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
+
+  const [
+    w115cAddonHealth,
+    setW115cAddonHealth,
+  ] = useState<Record<string, W115cAddonHealth>>({});
+
+  const w115cHealthGenerationRef =
+    React.useRef(0);
+
+  const w115cLastHealthAtRef =
+    React.useRef(0);
+
+  const [
+    w115fBasicAddonHealth,
+    setW115fBasicAddonHealth,
+  ] = useState<Record<string, W115fBasicAddonHealth>>({});
+
+  const w115fHealthGenerationRef =
+    React.useRef(0);
+
+  const w115fLastHealthAtRef =
+    React.useRef(0);
   const [showModal, setShowModal] = useState(false);
   const [addonUrl, setAddonUrl] = useState('');
   const [shortCode, setShortCode] = useState('');
@@ -217,6 +336,673 @@ export default function AddonsScreen() {
   
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
+  const w115cRefreshTvAddonHealth =
+    useCallback(
+      async (force: boolean = false) => {
+        const tvAddonIds =
+          Array.from(
+            new Set(
+              (addons || [])
+                .filter((addon: Addon) =>
+                  (addon?.manifest?.types || [])
+                    .map((value: any) =>
+                      String(value || '').toLowerCase()
+                    )
+                    .includes('tv')
+                )
+                .map((addon: Addon) =>
+                  String(
+                    addon?.manifest?.id || ''
+                  ).trim()
+                )
+                .filter(Boolean)
+            )
+          );
+
+        if (tvAddonIds.length === 0) {
+          setW115cAddonHealth({});
+          return;
+        }
+
+        const now = Date.now();
+
+        if (
+          !force &&
+          now - w115cLastHealthAtRef.current <
+            30000
+        ) {
+          return;
+        }
+
+        w115cLastHealthAtRef.current = now;
+
+        const generation =
+          ++w115cHealthGenerationRef.current;
+
+        setW115cAddonHealth((previous) => {
+          const next = {
+            ...previous,
+          };
+
+          for (const addonId of tvAddonIds) {
+            next[addonId] = {
+              state: 'checking',
+              available:
+                previous?.[addonId]?.available ||
+                0,
+            };
+          }
+
+          return next;
+        });
+
+        try {
+          let sourceIndex = 0;
+          let skip = 0;
+          let completed = false;
+
+          const visitedCursors =
+            new Set<string>();
+
+          const backendPlayableItems: any[] = [];
+          const deviceCheckItems: any[] = [];
+
+          while (!completed) {
+            const cursor =
+              `${sourceIndex}:${skip}`;
+
+            if (
+              visitedCursors.has(cursor)
+            ) {
+              throw new Error(
+                '[W115C ADDON HEALTH] repeated cursor ' +
+                  cursor
+              );
+            }
+
+            visitedCursors.add(cursor);
+
+            let page: any = null;
+            let lastPageError: any = null;
+
+            for (
+              let attempt = 1;
+              attempt <= 3;
+              attempt += 1
+            ) {
+              try {
+                page =
+                  await api.content.getLiveTvInventoryPage(
+                    sourceIndex,
+                    skip,
+                    400
+                  );
+
+                lastPageError = null;
+                break;
+              } catch (error) {
+                lastPageError = error;
+
+                if (attempt < 3) {
+                  await new Promise<void>(
+                    (resolve) =>
+                      setTimeout(
+                        resolve,
+                        500 * attempt
+                      )
+                  );
+                }
+              }
+            }
+
+            if (page == null) {
+              throw (
+                lastPageError ||
+                new Error(
+                  '[W115C ADDON HEALTH] inventory page unavailable'
+                )
+              );
+            }
+
+            if (
+              generation !==
+              w115cHealthGenerationRef.current
+            ) {
+              return;
+            }
+
+            if (Array.isArray(page?.items)) {
+              backendPlayableItems.push(
+                ...page.items
+              );
+            }
+
+            if (
+              Array.isArray(
+                page?.deviceCheckItems
+              )
+            ) {
+              deviceCheckItems.push(
+                ...page.deviceCheckItems
+              );
+            }
+
+            if (page?.done === true) {
+              completed = true;
+              break;
+            }
+
+            const nextSourceIndex =
+              Number(page?.nextSourceIndex);
+
+            const nextSkip =
+              Number(page?.nextSkip);
+
+            if (
+              !Number.isInteger(
+                nextSourceIndex
+              ) ||
+              nextSourceIndex < 0 ||
+              !Number.isInteger(nextSkip) ||
+              nextSkip < 0
+            ) {
+              throw new Error(
+                '[W115C ADDON HEALTH] invalid inventory cursor'
+              );
+            }
+
+            const nextCursor =
+              `${nextSourceIndex}:${nextSkip}`;
+
+            if (nextCursor === cursor) {
+              throw new Error(
+                '[W115C ADDON HEALTH] inventory cursor did not advance'
+              );
+            }
+
+            sourceIndex =
+              nextSourceIndex;
+
+            skip =
+              nextSkip;
+
+            await new Promise<void>(
+              (resolve) =>
+                setTimeout(resolve, 40)
+            );
+          }
+
+          const playableByAddon =
+            new Map<string, Set<string>>();
+
+          const addPlayable =
+            (raw: any) => {
+              const addonId =
+                String(
+                  raw?.addonId || ''
+                ).trim();
+
+              const id =
+                String(
+                  raw?.imdb_id ||
+                    raw?.id ||
+                    ''
+                ).trim();
+
+              if (
+                !addonId ||
+                !id ||
+                !tvAddonIds.includes(addonId)
+              ) {
+                return;
+              }
+
+              let ids =
+                playableByAddon.get(addonId);
+
+              if (!ids) {
+                ids = new Set<string>();
+
+                playableByAddon.set(
+                  addonId,
+                  ids
+                );
+              }
+
+              ids.add(id);
+            };
+
+          for (
+            const raw of backendPlayableItems
+          ) {
+            addPlayable(raw);
+          }
+
+          if (
+            deviceCheckItems.length > 0
+          ) {
+            const candidateRows: any[] = [];
+
+            for (
+              const raw of deviceCheckItems
+            ) {
+              const id =
+                String(
+                  raw?.id || ''
+                ).trim();
+
+              const addonId =
+                String(
+                  raw?.addonId || ''
+                ).trim();
+
+              if (!id || !addonId) {
+                continue;
+              }
+
+              const identity =
+                addonId + ':' + id;
+
+              const streams =
+                Array.isArray(
+                  raw?.deviceCheckStreams
+                )
+                  ? raw.deviceCheckStreams
+                  : [];
+
+              for (
+                const stream of
+                  streams.slice(0, 4)
+              ) {
+                const url =
+                  String(
+                    stream?.url || ''
+                  ).trim();
+
+                if (!url) {
+                  continue;
+                }
+
+                candidateRows.push({
+                  key: identity,
+                  url,
+                  headers:
+                    stream?.headers &&
+                    typeof stream.headers ===
+                      'object'
+                      ? stream.headers
+                      : {},
+                });
+              }
+            }
+
+            const probeResult =
+              await probeLiveTvDeviceCandidates(
+                candidateRows,
+                2500
+              );
+
+            if (
+              generation !==
+              w115cHealthGenerationRef.current
+            ) {
+              return;
+            }
+
+            const playableKeys =
+              new Set<string>(
+                (
+                  Array.isArray(
+                    probeResult?.playableKeys
+                  )
+                    ? probeResult.playableKeys
+                    : []
+                ).map((value: any) =>
+                  String(value || '')
+                )
+              );
+
+            for (
+              const raw of deviceCheckItems
+            ) {
+              const id =
+                String(
+                  raw?.id || ''
+                ).trim();
+
+              const addonId =
+                String(
+                  raw?.addonId || ''
+                ).trim();
+
+              const identity =
+                addonId && id
+                  ? addonId + ':' + id
+                  : '';
+
+              if (
+                !identity ||
+                !playableKeys.has(identity)
+              ) {
+                continue;
+              }
+
+              addPlayable(raw);
+            }
+          }
+
+          const next:
+            Record<
+              string,
+              W115cAddonHealth
+            > = {};
+
+          for (const addonId of tvAddonIds) {
+            const available =
+              playableByAddon.get(addonId)
+                ?.size || 0;
+
+            next[addonId] = {
+              state:
+                available > 0
+                  ? 'live'
+                  : 'down',
+              available,
+            };
+          }
+
+          if (
+            generation ===
+            w115cHealthGenerationRef.current
+          ) {
+            setW115cAddonHealth(next);
+
+            console.log(
+              '[W121ZADDON115C ADDON HEALTH]',
+              next
+            );
+          }
+        } catch (error) {
+          console.warn(
+            '[W121ZADDON115C ADDON HEALTH] unavailable',
+            error
+          );
+
+          if (
+            generation ===
+            w115cHealthGenerationRef.current
+          ) {
+            // Fail neutral here. A Privastream health-check failure
+            // must not falsely accuse a third-party addon of being DOWN.
+            setW115cAddonHealth({});
+            w115cLastHealthAtRef.current = 0;
+          }
+        }
+      },
+      [addons]
+    );
+
+  useEffect(() => {
+    if ((addons || []).length > 0) {
+      void w115cRefreshTvAddonHealth(true);
+    } else {
+      setW115cAddonHealth({});
+    }
+  }, [
+    addons,
+    w115cRefreshTvAddonHealth,
+  ]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void w115cRefreshTvAddonHealth(false);
+
+      return undefined;
+    }, [w115cRefreshTvAddonHealth])
+  );
+  const w115fRefreshBasicAddonHealth =
+    useCallback(
+      async (force: boolean = false) => {
+        const targets =
+          (addons || []).filter(
+            (addon: Addon) => {
+              const types =
+                (
+                  addon?.manifest?.types ||
+                  []
+                ).map((value: any) =>
+                  String(
+                    value || ''
+                  ).toLowerCase()
+                );
+
+              return !types.includes('tv');
+            }
+          );
+
+        if (targets.length === 0) {
+          setW115fBasicAddonHealth({});
+          return;
+        }
+
+        const now = Date.now();
+
+        if (
+          !force &&
+          now - w115fLastHealthAtRef.current <
+            60000
+        ) {
+          return;
+        }
+
+        w115fLastHealthAtRef.current = now;
+
+        const generation =
+          ++w115fHealthGenerationRef.current;
+
+        setW115fBasicAddonHealth(
+          (previous) => {
+            const next = {
+              ...previous,
+            };
+
+            for (const addon of targets) {
+              const addonId =
+                String(
+                  addon?.manifest?.id ||
+                    ''
+                ).trim();
+
+              if (!addonId) {
+                continue;
+              }
+
+              next[addonId] = {
+                state: 'checking',
+              };
+            }
+
+            return next;
+          }
+        );
+
+        const results =
+          await Promise.all(
+            targets.map(
+              async (addon: Addon) => {
+                const addonId =
+                  String(
+                    addon?.manifest?.id ||
+                      ''
+                  ).trim();
+
+                const manifestUrl =
+                  String(
+                    addon?.manifestUrl ||
+                      ''
+                  ).trim();
+
+                if (
+                  !addonId ||
+                  !manifestUrl
+                ) {
+                  return {
+                    addonId,
+                    state:
+                      'down' as const,
+                  };
+                }
+
+                const controller =
+                  new AbortController();
+
+                const timeout =
+                  setTimeout(
+                    () =>
+                      controller.abort(),
+                    7000
+                  );
+
+                try {
+                  const response =
+                    await fetch(
+                      manifestUrl,
+                      {
+                        method: 'GET',
+                        headers: {
+                          Accept:
+                            'application/json',
+                        },
+                        signal:
+                          controller.signal,
+                      }
+                    );
+
+                  if (!response.ok) {
+                    return {
+                      addonId,
+                      state:
+                        'down' as const,
+                    };
+                  }
+
+                  const payload: any =
+                    await response.json();
+
+                  const manifest =
+                    payload &&
+                    typeof payload ===
+                      'object' &&
+                    payload.manifest &&
+                    typeof payload.manifest ===
+                      'object'
+                      ? payload.manifest
+                      : payload;
+
+                  const returnedId =
+                    String(
+                      manifest?.id || ''
+                    ).trim();
+
+                  const expectedId =
+                    String(
+                      addon?.manifest?.id ||
+                        ''
+                    ).trim();
+
+                  const valid =
+                    !!returnedId &&
+                    (
+                      !expectedId ||
+                      returnedId ===
+                        expectedId
+                    );
+
+                  return {
+                    addonId,
+                    state:
+                      valid
+                        ? ('live' as const)
+                        : ('down' as const),
+                  };
+                } catch (error) {
+                  console.warn(
+                    '[W121ZADDON115F BASIC ADDON HEALTH]',
+                    addonId,
+                    error
+                  );
+
+                  return {
+                    addonId,
+                    state:
+                      'down' as const,
+                  };
+                } finally {
+                  clearTimeout(timeout);
+                }
+              }
+            )
+          );
+
+        if (
+          generation !==
+          w115fHealthGenerationRef.current
+        ) {
+          return;
+        }
+
+        const next:
+          Record<
+            string,
+            W115fBasicAddonHealth
+          > = {};
+
+        for (const result of results) {
+          if (!result.addonId) {
+            continue;
+          }
+
+          next[result.addonId] = {
+            state: result.state,
+          };
+        }
+
+        setW115fBasicAddonHealth(
+          next
+        );
+
+        console.log(
+          '[W121ZADDON115F BASIC ADDON HEALTH]',
+          next
+        );
+      },
+      [addons]
+    );
+
+  useEffect(() => {
+    if ((addons || []).length > 0) {
+      void w115fRefreshBasicAddonHealth(
+        true
+      );
+    } else {
+      setW115fBasicAddonHealth({});
+    }
+  }, [
+    addons,
+    w115fRefreshBasicAddonHealth,
+  ]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void w115fRefreshBasicAddonHealth(
+        false
+      );
+
+      return undefined;
+    }, [
+      w115fRefreshBasicAddonHealth,
+    ])
+  );
 
   const _v604HandleAddonActionFocus = (index: number, cardRef: any) => {
     const previousIndex = _v603LastFocusedCardIndex.current;
@@ -481,6 +1267,7 @@ export default function AddonsScreen() {
       try { await (useContentStore.getState() as any).nukeDiscoverCache?.(true); } catch (_) {}
       await fetchAddons(true);
       InteractionManager.runAfterInteractions(() => { fetchDiscover(true); });
+      markLiveTvSourcesDirty();
         Alert.alert('Success', 'Addon installed!');
       } catch (error: any) {
         const msg = error?.response?.data?.detail || error.message || 'Failed to install addon';
@@ -498,22 +1285,51 @@ export default function AddonsScreen() {
   // V308_URL_HARDENING — validate manifest URLs before attempting install.
   // Accept *.json or */manifest URLs (standard Stremio addon spec).
   // Reject M3U with a clear "coming soon" message (V309 will add M3U support).
+  // V776A_UNIVERSAL_ADDON_FRONTEND
+  // Accept normal manifests, Stremio install links, and Stremio
+  // resource JSON endpoints. The backend canonicalizes resource
+  // endpoints back to manifest.json before V726 validation.
   const _v308ValidateManifestUrl = (raw: string): { ok: boolean; reason?: string } => {
-    const u = (raw || '').trim().toLowerCase();
-    if (!/^https?:\/\//i.test(u)) {
-      return { ok: false, reason: 'URL must start with http:// or https://' };
+    const original = (raw || '').trim();
+
+    if (!original) {
+      return { ok: false, reason: 'Addon URL is empty.' };
     }
-    if (/\.m3u8?(\?|$)/i.test(u)) {
-      return { ok: false, reason: 'M3U playlists are not yet supported — coming in V309.' };
+
+    let u = original;
+
+    if (/^stremio:\/\//i.test(u)) {
+      u = 'https://' + u.slice('stremio://'.length);
     }
-    // Accept .json endpoints or URLs containing /manifest
-    const looksLikeManifest = /\.json($|\?)/i.test(u) || /\/manifest($|[/?])/i.test(u);
-    if (!looksLikeManifest) {
+
+    if (!/^https:\/\//i.test(u)) {
       return {
         ok: false,
-        reason: 'Expected a Stremio addon manifest URL (must end in .json or contain /manifest).',
+        reason: 'Addon URL must start with https:// or stremio://',
       };
     }
+
+    if (/\.m3u8?(\?|$)/i.test(u)) {
+      return {
+        ok: false,
+        reason: 'Use the Direct URL tab for M3U/M3U8 sources.',
+      };
+    }
+
+    const looksLikeAddon =
+      /\.json($|\?)/i.test(u) ||
+      /\/manifest($|[/?])/i.test(u) ||
+      /\/(?:catalog|meta|stream|subtitles)\//i.test(u);
+
+    if (!looksLikeAddon) {
+      return {
+        ok: false,
+        reason: (
+          'Expected a Stremio manifest or catalog/meta/stream/subtitles JSON URL.'
+        ),
+      };
+    }
+
     return { ok: true };
   };
 
@@ -562,6 +1378,7 @@ export default function AddonsScreen() {
       try { await (useContentStore.getState() as any).nukeDiscoverCache?.(true); } catch (_) {}
       await fetchAddons(true);
       InteractionManager.runAfterInteractions(() => { fetchDiscover(true); });
+      markLiveTvSourcesDirty();
     }
 
     if (failCount > 0) {
@@ -628,6 +1445,7 @@ export default function AddonsScreen() {
               try { await (useContentStore.getState() as any).nukeDiscoverCache?.(); } catch (_) {}
               await fetchAddons(true);
               InteractionManager.runAfterInteractions(() => { fetchDiscover(true); });
+      markLiveTvSourcesDirty();
             } catch (error: any) {
               Alert.alert('Error', error?.response?.data?.detail || 'Failed to uninstall addon');
             } finally {
@@ -655,6 +1473,16 @@ export default function AddonsScreen() {
       <AddonCard 
         addon={item}
         isTV={isTV}
+        liveHealth={
+          w115cAddonHealth[
+            String(item?.manifest?.id || '').trim()
+          ]
+        }
+        basicHealth={
+          w115fBasicAddonHealth[
+            String(item?.manifest?.id || '').trim()
+          ]
+        }
         onShare={() => handleShareAddon(item)}
         onUninstall={() => handleUninstall(item)}
         isDeleting={deletingAddonId === item.id}
@@ -1043,6 +1871,8 @@ export default function AddonsScreen() {
 function AddonCard({ 
   addon, 
   isTV, 
+  liveHealth,
+  basicHealth,
   onShare, 
   onUninstall, 
   isDeleting,
@@ -1051,6 +1881,8 @@ function AddonCard({
 }: {
   addon: Addon;
   isTV: boolean;
+  liveHealth?: W115cAddonHealth;
+  basicHealth?: W115fBasicAddonHealth;
   onShare: () => void;
   onUninstall: () => void;
   isDeleting: boolean;
@@ -1059,16 +1891,39 @@ function AddonCard({
 }) {
   const [shareFocused, setShareFocused] = useState(false);
   const [trashFocused, setTrashFocused] = useState(false);
+  // V779A_ADDON_BADGE_FAILURE_FALLBACK
+  const [addonLogoError, setAddonLogoError] = useState(false);
   const cardRef = React.useRef<any>(null);
 
   return (
     <View ref={cardRef} style={styles.addonCard}>
       <View style={styles.addonIconContainer}>
-        {addon.manifest.logo ? (
+        {addon.manifest.logo &&
+        !addonLogoError &&
+        !(
+          _v777aIsAdultAddon(addon) &&
+          /\.svg(?:\?|#|$)/i.test(String(addon.manifest.logo))
+        ) ? (
           <Image
             source={{ uri: addon.manifest.logo }}
             style={styles.addonLogo}
             contentFit="contain"
+            onError={() => setAddonLogoError(true)}
+          />
+        ) : _v777bIsCinemetaAddon(addon) ? (
+          <Image
+            source={_V777B_CINEMETA_IMAGE}
+            style={styles.addonLogo}
+            contentFit="contain"
+          />
+                ) : _v777aIsAdultAddon(addon) ? (
+          <RNImage
+            source={_V777A_ADULT_FALLBACK_IMAGE}
+            style={[
+              styles.addonLogo,
+              styles.v777aAdultFallbackBadge,
+            ]}
+            resizeMode="contain"
           />
         ) : (
           <Ionicons
@@ -1081,6 +1936,87 @@ function AddonCard({
       <View style={styles.addonInfo}>
         <Text style={styles.addonName}>{addon.manifest.name || 'Unknown Addon'}</Text>
         <Text style={styles.addonVersion}>v{addon.manifest.version || '?'}</Text>
+
+        {liveHealth?.state === 'checking' ? (
+          <View style={styles.w115cHealthRow}>
+            <ActivityIndicator
+              size="small"
+              color="#888888"
+            />
+            <Text style={styles.w115cCheckingText}>
+              Checking third-party availability...
+            </Text>
+          </View>
+        ) : liveHealth ? (
+          <View style={styles.w115cHealthRow}>
+            <View
+              style={[
+                styles.w115cHealthBadge,
+                liveHealth.state === 'live'
+                  ? styles.w115cHealthBadgeLive
+                  : styles.w115cHealthBadgeDown,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.w115cHealthBadgeText,
+                  liveHealth.state === 'live'
+                    ? styles.w115cHealthTextLive
+                    : styles.w115cHealthTextDown,
+                ]}
+              >
+                {liveHealth.state === 'live'
+                  ? 'LIVE'
+                  : 'DOWN'}
+              </Text>
+            </View>
+
+            <Text style={styles.w115cHealthCount}>
+              {liveHealth.available}{' '}
+              {liveHealth.available === 1
+                ? 'channel'
+                : 'channels'}{' '}
+              available
+            </Text>
+          </View>
+        ) : null}
+
+        {!liveHealth &&
+        basicHealth?.state === 'checking' ? (
+          <View style={styles.w115cHealthRow}>
+            <ActivityIndicator
+              size="small"
+              color="#888888"
+            />
+            <Text style={styles.w115cCheckingText}>
+              Checking third-party availability...
+            </Text>
+          </View>
+        ) : !liveHealth && basicHealth ? (
+          <View style={styles.w115cHealthRow}>
+            <View
+              style={[
+                styles.w115cHealthBadge,
+                basicHealth.state === 'live'
+                  ? styles.w115cHealthBadgeLive
+                  : styles.w115cHealthBadgeDown,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.w115cHealthBadgeText,
+                  basicHealth.state === 'live'
+                    ? styles.w115cHealthTextLive
+                    : styles.w115cHealthTextDown,
+                ]}
+              >
+                {basicHealth.state === 'live'
+                  ? 'LIVE'
+                  : 'DOWN'}
+              </Text>
+            </View>
+          </View>
+        ) : null}
         <Text style={styles.addonDescription} numberOfLines={2}>
           {addon.manifest.description || 'No description'}
         </Text>
@@ -1343,6 +2279,14 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 4,
   },
+  // V780J_EXACT_DATA_URI_FALLBACK
+  // Same original PNG, bypassing Android packaged drawable lookup.
+  v780jAdultFallbackBadge: {
+    width: 36,
+    height: 36,
+    // V780R_USER_EDITED_IMAGE_AS_IS
+    // Screen-space horizontal mirror of prior rendered orientation.
+  },
   addonInfo: {
     flex: 1,
   },
@@ -1355,6 +2299,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#888888',
     marginTop: 2,
+  },
+  w115cHealthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 8,
+  },
+
+  w115cHealthBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
+    borderWidth: 1,
+  },
+
+  w115cHealthBadgeLive: {
+    backgroundColor: 'rgba(34, 197, 94, 0.16)',
+    borderColor: '#22C55E',
+  },
+
+  w115cHealthBadgeDown: {
+    backgroundColor: 'rgba(239, 68, 68, 0.16)',
+    borderColor: '#EF4444',
+  },
+
+  w115cHealthBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+  },
+
+  w115cHealthTextLive: {
+    color: '#22C55E',
+  },
+
+  w115cHealthTextDown: {
+    color: '#EF4444',
+  },
+
+  w115cHealthCount: {
+    color: '#AAAAAA',
+    fontSize: 12,
+  },
+
+  w115cCheckingText: {
+    color: '#888888',
+    fontSize: 12,
   },
   addonDescription: {
     fontSize: 13,

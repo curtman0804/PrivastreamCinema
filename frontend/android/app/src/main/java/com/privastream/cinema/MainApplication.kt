@@ -25,6 +25,9 @@ class MainApplication : Application(), ReactApplication {
             PackageList(this).packages.apply {
               add(com.privastream.cinema.PSTVScrollViewPackage())
               add(com.privastream.cinema.PrivastreamTVRowPackage())
+              add(com.privastream.cinema.PrivastreamCategoryRowPackage()) // V789N_NATIVE_CATEGORY_ROW
+              add(com.privastream.cinema.PrivastreamLiveTVStationListPackage()) // V788T8K_NATIVE_STATION_LIST
+              add(com.privastream.cinema.PrivastreamLiveTVGuidePackage()) // V788T8P_WHOLE_ROW_GUIDE
               add(com.privastream.cinema.PrivastreamDeviceCapabilitiesPackage())
               add(com.privastream.cinema.PrivastreamTorrentPackage()) // V752_NATIVE_P2P_PROBE
               add(com.privastream.cinema.PrivastreamTunnelPackage()) // V739A_PRIVASTREAM_TUNNEL

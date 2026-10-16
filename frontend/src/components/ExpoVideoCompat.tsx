@@ -16,7 +16,7 @@ import {
   type AudioTrack,
   type VideoSource,
 } from 'expo-video';
-import { getDevicePlaybackCapabilities } from '../native/devicePlaybackCapabilities';
+import { getStoredDevicePlaybackProfile } from '../native/devicePlaybackCapabilities';
 import AsyncStorage, { setItemDurable } from '../utils/mmkvStorage';
 
 // V616A_EXPO_VIDEO_COMPAT
@@ -137,29 +137,18 @@ export const ExpoVideoCompat = forwardRef<
   // in this app installation on this device.
   const v766Eac3DecoderBrokenRef = useRef(false);
   const v766SuppressEac3ErrorUntilRef = useRef(0);
-  // V766H_PERSISTENCE_HYDRATION
-  const v766Eac3StateHydratedRef = useRef(false);
+  // W121ZOD108H4BD_EXACT_HASH_EAC3_AUTHORITY
+  // Device-wide EAC3 persistence is obsolete. Player owns runtime failures
+  // by exact infoHash, so one bad file cannot poison every DDP/EAC3 source.
+  const v766Eac3StateHydratedRef = useRef(true);
 
   useEffect(() => {
-    let active = true;
+    v766Eac3DecoderBrokenRef.current = false;
 
-    AsyncStorage.getItem('v766_eac3_decoder_broken')
-      .then(value => {
-        if (active && value === '1') {
-          v766Eac3DecoderBrokenRef.current = true;
-          console.log('[V766 EAC3 CIRCUIT] restored broken-device flag');
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (active) {
-          v766Eac3StateHydratedRef.current = true;
-        }
-      });
-
-    return () => {
-      active = false;
-    };
+    console.log(
+      '[W121ZOD108H4BD EAC3 EXACT HASH ONLY]',
+      'legacyDeviceCircuit=ignored'
+    );
   }, []);
 
   // V658_STALE_PLAYTOEND_GUARD
@@ -195,7 +184,7 @@ export const ExpoVideoCompat = forwardRef<
     // that can exhaust the process during high-bitrate 4K playback.
     // Cap only genuinely low-memory televisions; higher-memory TVs and
     // phones/tablets retain Media3's normal automatic buffering.
-    const caps = getDevicePlaybackCapabilities();
+    const caps = getStoredDevicePlaybackProfile();
     const memoryClassMb = Number(caps?.memoryClassMb ?? 0);
     const isLowMemoryTv =
       caps?.isTelevision === true &&
@@ -788,26 +777,9 @@ export const ExpoVideoCompat = forwardRef<
           // playback resumes.
           v616cUserSelectedAudioRef.current = false;
 
-          // Preserve the existing EAC3 circuit-breaker behavior.
-          if (!v766Eac3StateHydratedRef.current) {
-            try {
-              const persistedEac3State =
-                await AsyncStorage.getItem(
-                  'v766_eac3_decoder_broken'
-                );
-
-              if (persistedEac3State === '1') {
-                v766Eac3DecoderBrokenRef.current = true;
-
-                console.log(
-                  '[V789S25W108C3 INPLACE RELOAD] restored EAC3 circuit state'
-                );
-              }
-            } catch (_) {
-            } finally {
-              v766Eac3StateHydratedRef.current = true;
-            }
-          }
+          // W121ZOD108H4BD_INPLACE_EXACT_HASH_EAC3
+          // Never restore the obsolete device-wide EAC3 breaker.
+          v766Eac3DecoderBrokenRef.current = false;
 
           const nextSource: VideoSource = {
             uri: reloadUri,
@@ -907,27 +879,10 @@ export const ExpoVideoCompat = forwardRef<
         // starting language again.
         v616cUserSelectedAudioRef.current = false;
 
-        // V766H_PRE_SOURCE_PERSISTENCE_CHECK
-        // The mount restore above is asynchronous. Do not allow
-        // the first source to outrun a persisted broken-device flag.
-        if (!v766Eac3StateHydratedRef.current) {
-          try {
-            const persistedEac3State =
-              await AsyncStorage.getItem(
-                'v766_eac3_decoder_broken'
-              );
-
-            if (persistedEac3State === '1') {
-              v766Eac3DecoderBrokenRef.current = true;
-              console.log(
-                '[V766H EAC3 CIRCUIT] pre-source restored broken-device flag'
-              );
-            }
-          } catch (_) {
-          } finally {
-            v766Eac3StateHydratedRef.current = true;
-          }
-        }
+        // W121ZOD108H4BD_PRE_SOURCE_EXACT_HASH_EAC3
+        // Exact-hash runtime ownership lives in Player. Never restore
+        // a device-wide EAC3 failure before a new source is attempted.
+        v766Eac3DecoderBrokenRef.current = false;
 
         if (!uri) {
           await player.replaceAsync(null);
@@ -1406,13 +1361,14 @@ export const ExpoVideoCompat = forwardRef<
             return;
           }
 
-          v766Eac3DecoderBrokenRef.current = true;
-
-          setItemDurable('v766_eac3_decoder_broken', '1')
-            .catch(() => {});
+          // W121ZOD108H4BD_FORWARD_REAL_EAC3_FAILURE
+          // Do not learn a device-wide failure. The error continues below to
+          // Player, whose active-infoHash logic owns the exact bad source.
+          v766Eac3DecoderBrokenRef.current = false;
 
           console.log(
-            '[V766 EAC3 CIRCUIT] learned broken EAC3 decoder from runtime proof'
+            '[W121ZOD108H4BD EAC3 EXACT HASH ONLY]',
+            'nativeFailure=forward-to-player'
           );
         }
         console.log(

@@ -4569,6 +4569,344 @@ export default function PlayerScreen() {
     }
   }, [contentId, contentType, title, poster, backdrop, logo, season, episode, seriesId, isLive, infoHash, directUrl, url, fileIdx, filename]);
   
+  // W121ZOD118F2R_CW_PUBLISH
+  //
+  // Publish the just-watched item locally BEFORE Discover becomes visible.
+  // Backend watch progress remains authoritative/persistent.
+  const _w121zod118f2rPublishCW =
+    useCallback(
+      (
+        currentPosition: number,
+        totalDuration: number
+      ) => {
+        try {
+          if (
+            !contentId ||
+            !contentType ||
+            isLive === 'true' ||
+            currentPosition <= 0 ||
+            totalDuration <= 0
+          ) {
+            return;
+          }
+
+          const progressSeconds =
+            currentPosition / 1000;
+
+          const durationSeconds =
+            totalDuration / 1000;
+
+          const percentWatched =
+            durationSeconds > 0
+              ? (
+                  progressSeconds /
+                  durationSeconds
+                ) * 100
+              : 0;
+
+          const normalizedType =
+            String(
+              contentType || ''
+            )
+              .trim()
+              .toLowerCase();
+
+          const rawContentId =
+            String(
+              contentId || ''
+            ).trim();
+
+          const parentSeriesId =
+            normalizedType === 'series'
+              ? String(
+                  seriesId ||
+                  rawContentId.split(':')[0] ||
+                  rawContentId
+                ).trim()
+              : '';
+
+          let canonicalPoster =
+            String(
+              poster || ''
+            ).trim();
+
+          let canonicalBackdrop =
+            String(
+              backdrop || ''
+            ).trim();
+
+          let canonicalLogo =
+            String(
+              logo || ''
+            ).trim();
+
+          // Series CW artwork always belongs to the parent series.
+          if (
+            normalizedType === 'series' &&
+            parentSeriesId
+          ) {
+            try {
+              const parentMeta: any =
+                getMetaCache(
+                  parentSeriesId
+                );
+
+              canonicalPoster =
+                String(
+                  parentMeta?.poster ||
+                  canonicalPoster ||
+                  ''
+                ).trim();
+
+              canonicalBackdrop =
+                String(
+                  parentMeta?.background ||
+                  parentMeta?.backdrop ||
+                  canonicalBackdrop ||
+                  ''
+                ).trim();
+
+              canonicalLogo =
+                String(
+                  parentMeta?.logo ||
+                  canonicalLogo ||
+                  ''
+                ).trim();
+            } catch (_) {}
+          }
+
+          const item: any = {
+            content_id:
+              rawContentId,
+
+            content_type:
+              normalizedType,
+
+            title:
+              title || 'Unknown',
+
+            poster:
+              canonicalPoster ||
+              undefined,
+
+            backdrop:
+              canonicalBackdrop ||
+              undefined,
+
+            logo:
+              canonicalLogo ||
+              undefined,
+
+            progress:
+              progressSeconds,
+
+            duration:
+              durationSeconds,
+
+            percent_watched:
+              percentWatched,
+
+            season:
+              season
+                ? parseInt(
+                    String(season),
+                    10
+                  )
+                : undefined,
+
+            episode:
+              episode
+                ? parseInt(
+                    String(episode),
+                    10
+                  )
+                : undefined,
+
+            series_id:
+              parentSeriesId ||
+              undefined,
+
+            updated_at:
+              new Date().toISOString(),
+          };
+
+          const identity =
+            normalizedType === 'series'
+              ? (
+                  'series:' +
+                  (
+                    parentSeriesId ||
+                    rawContentId.split(':')[0] ||
+                    rawContentId
+                  )
+                )
+              : (
+                  normalizedType +
+                  ':' +
+                  rawContentId
+                );
+
+          const completed =
+            percentWatched >= 90;
+
+          const g: any =
+            globalThis as any;
+
+          if (
+            !g.__w121zod118f2rPendingCW ||
+            typeof g.__w121zod118f2rPendingCW.set !==
+              'function'
+          ) {
+            g.__w121zod118f2rPendingCW =
+              new Map();
+          }
+
+          // Keep local item authoritative for one minute while the
+          // asynchronous backend exit-save catches up.
+          g.__w121zod118f2rPendingCW.set(
+            identity,
+            {
+              identity,
+              item,
+              completed,
+              expiresAt:
+                Date.now() + 60000,
+            }
+          );
+
+          // Persistent warm/cold Discover cache.
+          void (
+            async () => {
+              try {
+                const raw =
+                  await AsyncStorage.getItem(
+                    '@ps_cw_v1'
+                  );
+
+                const existing =
+                  raw
+                    ? JSON.parse(raw)
+                    : [];
+
+                const list =
+                  Array.isArray(existing)
+                    ? existing
+                    : [];
+
+                const identityOf =
+                  (candidate: any) => {
+                    const t =
+                      String(
+                        candidate?.content_type ||
+                        candidate?.type ||
+                        ''
+                      )
+                        .trim()
+                        .toLowerCase();
+
+                    const cid =
+                      String(
+                        candidate?.content_id ||
+                        candidate?.imdb_id ||
+                        candidate?.id ||
+                        ''
+                      ).trim();
+
+                    if (t === 'series') {
+                      const sid =
+                        String(
+                          candidate?.series_id ||
+                          ''
+                        ).trim();
+
+                      return (
+                        'series:' +
+                        (
+                          sid ||
+                          cid.split(':')[0] ||
+                          cid
+                        )
+                      );
+                    }
+
+                    return (
+                      t +
+                      ':' +
+                      cid
+                    );
+                  };
+
+                const next =
+                  list.filter(
+                    (candidate: any) =>
+                      identityOf(candidate) !==
+                      identity
+                  );
+
+                if (!completed) {
+                  next.unshift(item);
+                }
+
+                await AsyncStorage.setItem(
+                  '@ps_cw_v1',
+                  JSON.stringify(next)
+                );
+              } catch (_) {}
+            }
+          )();
+
+          // Synchronous in-process handoff to the hidden Discover screen.
+          try {
+            DeviceEventEmitter.emit(
+              'w121zod118f2r:cw',
+              {
+                identity,
+                item,
+                completed,
+              }
+            );
+          } catch (_) {}
+
+          console.log(
+            '[W121ZOD118F2R CW PUBLISH]',
+            'identity=' + identity,
+            'progress=' +
+              progressSeconds.toFixed(1),
+            'pct=' +
+              percentWatched.toFixed(1),
+            'completed=' +
+              String(completed),
+            'poster=' +
+              String(
+                canonicalPoster
+                  ? 'yes'
+                  : 'no'
+              )
+          );
+        } catch (error) {
+          console.log(
+            '[W121ZOD118F2R CW PUBLISH] failed',
+            String(
+              (error as any)?.message ||
+              error
+            )
+          );
+        }
+      },
+      [
+        contentId,
+        contentType,
+        isLive,
+        seriesId,
+        poster,
+        backdrop,
+        logo,
+        title,
+        season,
+        episode,
+      ]
+    );
+
   // Save progress when component unmounts (user exits player)
   useEffect(() => {
     return () => {
@@ -4588,6 +4926,13 @@ export default function PlayerScreen() {
           }
         } catch (_) {}
         console.log('[PLAYER] Saving progress on exit:', currentPositionRef.current / 1000, 's');
+
+        // W121ZOD118F2R_EXIT_HANDOFF
+        _w121zod118f2rPublishCW(
+          currentPositionRef.current,
+          currentDurationRef.current
+        );
+
         // Use a synchronous-ish approach since we're unmounting
         api.watchProgress.save({
           content_id: contentId,

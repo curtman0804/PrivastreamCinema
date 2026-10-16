@@ -108,4 +108,18 @@ export const setLiveTvCurrentIndex = (index: number) => {
   return true;
 };
 
+// V788T10G2_LIVE_TV_SOURCES_DIRTY
+// Addon install/uninstall only marks the guide stale.
+// Live TV consumes this when its tab regains focus.
+let liveTvSourcesDirty = false;
+
+export const markLiveTvSourcesDirty = () => {
+  liveTvSourcesDirty = true;
+};
+
+export const consumeLiveTvSourcesDirty = () => {
+  const dirty = liveTvSourcesDirty;
+  liveTvSourcesDirty = false;
+  return dirty;
+};
 // V785L5_LIVE_TV_NAV

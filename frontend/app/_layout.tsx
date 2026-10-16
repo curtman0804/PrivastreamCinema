@@ -10,6 +10,7 @@ import { Platform, View } from 'react-native';
 import OTAUpdater from '../src/components/OTAUpdater'; // PATCH_V252_OTA
 import { useAuthStore } from '../src/store/authStore';
 import { ensurePrivastreamTunnel } from '../src/native/privastreamTunnelGate';
+import { ensureDevicePlaybackProfile } from '../src/native/devicePlaybackCapabilities';
 
 export default function RootLayout() {
   // V742_ROOT_TUNNEL_GATE
@@ -21,6 +22,66 @@ export default function RootLayout() {
     useState(Platform.OS !== 'android');
 
   const _v742StartedRef = useRef(false);
+
+  // W121ZOD117A_FIRST_OPEN_DEVICE_PROFILE
+  // A new installation has no stored profile. Detect once, persist it,
+  // and do not expose the app UI until that one-time initialization has
+  // completed. Existing installations read MMKV synchronously and finish
+  // this gate almost immediately.
+  const [
+    _w121zod117DeviceProfileReady,
+    _w121zod117SetDeviceProfileReady,
+  ] = useState(Platform.OS !== 'android');
+
+  const _w121zod117DeviceProfileStartedRef =
+    useRef(false);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      _w121zod117SetDeviceProfileReady(true);
+      return;
+    }
+
+    if (_w121zod117DeviceProfileStartedRef.current) {
+      return;
+    }
+
+    _w121zod117DeviceProfileStartedRef.current = true;
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const profile =
+          await ensureDevicePlaybackProfile();
+
+        console.log(
+          '[W121ZOD117 DEVICE PROFILE STARTUP]',
+          'ready=' + String(!!profile),
+          'model=' + String(profile?.model || ''),
+          'device=' + String(profile?.device || '')
+        );
+      } catch (error: any) {
+        console.error(
+          '[W121ZOD117 DEVICE PROFILE STARTUP]',
+          'error=' +
+            String(
+              error?.message ||
+              error ||
+              'unknown'
+            )
+        );
+      } finally {
+        if (!cancelled) {
+          _w121zod117SetDeviceProfileReady(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (Platform.OS !== 'android') {
@@ -82,7 +143,7 @@ export default function RootLayout() {
             against https://api.privastreamsolutions.com/api/expo-updates/manifest
             and reloads the JS bundle if a newer one is available. */}
         <OTAUpdater />
-        {_v742BlockAuthenticatedUi ? (
+        {(!_w121zod117DeviceProfileReady || _v742BlockAuthenticatedUi) ? (
           <View style={{ flex: 1, backgroundColor: '#0c0c0c' }} />
         ) : (
           <Stack screenOptions={{ headerShown: false, animation: 'none', freezeOnBlur: false /* PATCH_V48_NO_FREEZE — back-nav is instant */ }} />

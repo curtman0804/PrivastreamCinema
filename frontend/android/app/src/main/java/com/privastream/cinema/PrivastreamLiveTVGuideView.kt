@@ -514,7 +514,138 @@ class PrivastreamLiveTVGuideView(
                     "W121ZSY40 RETURN_HOLDER_MISSING row=$row"
                 )
 
-                focusRow(row, "station", null)
+                // W121ZLIVE120C_SYMMETRIC_OFFSCREEN_ROOT_RETURN
+                //
+                // The playback-return target can be above or below the row
+                // that still owns Android focus while /player is on top.
+                // Restore the actual focusable ROW ROOT, never the non-focusable
+                // station child. Keep the old row's screen position when a
+                // real focused row is available so UP and DOWN are symmetric.
+                val actualFocus =
+                    recycler.findFocus()
+
+                val actualHolder =
+                    actualFocus?.let { focusedView ->
+                        recycler.findContainingViewHolder(
+                            focusedView
+                        ) as? Holder
+                    }
+
+                val actualRow =
+                    actualHolder?.bindingAdapterPosition
+                        ?: RecyclerView.NO_POSITION
+
+                val preservedTop =
+                    if (
+                        actualHolder != null &&
+                        actualRow in 0 until adapter.itemCount
+                    ) {
+                        actualHolder.itemView.top
+                    } else {
+                        0
+                    }
+
+                val deltaRows =
+                    if (
+                        actualRow in 0 until adapter.itemCount
+                    ) {
+                        row - actualRow
+                    } else {
+                        0
+                    }
+
+                val rowStepPx =
+                    px(rowHeightDp).coerceAtLeast(1)
+
+                android.util.Log.d(
+                    "PSTV",
+                    "W121ZLIVE120C OFFSCREEN_ROOT_RETURN " +
+                        "target=$row " +
+                        "actual=$actualRow " +
+                        "delta=$deltaRows " +
+                        "top=$preservedTop"
+                )
+
+                logicalVerticalRow = row
+                preferredFocusApplied = true
+
+                recycler.stopScroll()
+
+                if (
+                    actualRow in 0 until adapter.itemCount &&
+                    deltaRows != 0
+                ) {
+                    recycler.scrollBy(
+                        0,
+                        deltaRows * rowStepPx
+                    )
+                } else {
+                    layoutManager.scrollToPositionWithOffset(
+                        row,
+                        preservedTop
+                    )
+                }
+
+                val immediateHolder =
+                    recycler.findViewHolderForAdapterPosition(
+                        row
+                    ) as? Holder
+
+                if (
+                    immediateHolder != null &&
+                    immediateHolder.root.requestFocus()
+                ) {
+                    android.util.Log.d(
+                        "PSTV",
+                        "W121ZLIVE120C ROOT_FOCUS " +
+                            "row=$row mode=immediate result=success"
+                    )
+
+                    return@post
+                }
+
+                recycler.postOnAnimation {
+                    val frameHolder =
+                        recycler.findViewHolderForAdapterPosition(
+                            row
+                        ) as? Holder
+
+                    if (
+                        frameHolder != null &&
+                        frameHolder.root.requestFocus()
+                    ) {
+                        android.util.Log.d(
+                            "PSTV",
+                            "W121ZLIVE120C ROOT_FOCUS " +
+                                "row=$row mode=frame result=success"
+                        )
+
+                        return@postOnAnimation
+                    }
+
+                    layoutManager.scrollToPositionWithOffset(
+                        row,
+                        preservedTop
+                    )
+
+                    recycler.postOnAnimation {
+                        val finalHolder =
+                            recycler.findViewHolderForAdapterPosition(
+                                row
+                            ) as? Holder
+
+                        val focused =
+                            finalHolder?.root?.requestFocus() == true
+
+                        android.util.Log.d(
+                            "PSTV",
+                            "W121ZLIVE120C ROOT_FOCUS " +
+                                "row=$row mode=final " +
+                                "result=${if (focused) "success" else "failed"}"
+                        )
+                    }
+                }
+
                 return@post
             }
             val holder =

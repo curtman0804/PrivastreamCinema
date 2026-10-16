@@ -117,3 +117,141 @@ export function getDevicePlaybackCapabilities(): any | null {
     return null;
   }
 }
+
+// W121ZOD117C_NATIVE_PROFILE_AUTHORITY
+//
+// Android owns capability persistence. SharedPreferences is
+// installation-local and hardware-fingerprint protected.
+// getConstants() either returns the native stored profile or
+// performs the one-time hardware scan and commits it.
+let _w121zod117DeviceProfileMemory: any | null = null;
+
+export function getStoredDevicePlaybackProfile(): any | null {
+  if (_w121zod117DeviceProfileMemory) {
+    return _w121zod117DeviceProfileMemory;
+  }
+
+  const profile =
+    getDevicePlaybackCapabilities();
+
+  if (profile) {
+    _w121zod117DeviceProfileMemory = profile;
+  }
+
+  return profile;
+}
+
+export async function ensureDevicePlaybackProfile():
+  Promise<any | null> {
+  const profile =
+    getStoredDevicePlaybackProfile();
+
+  console.log(
+    '[W121ZOD117C DEVICE PROFILE STARTUP]',
+    'ready=' + String(!!profile),
+    'model=' + String(profile?.model || ''),
+    'device=' + String(profile?.device || ''),
+    'sdk=' + String(profile?.sdkInt || '')
+  );
+
+  return profile;
+}
+// W121ZOD118A_NATIVE_OD_RANGE_BRIDGE
+export type NativeOdRangeSample = {
+  bytes: number;
+  elapsedMs: number;
+  mbps: number;
+  status: number;
+  contentRange: string;
+};
+
+export async function probeNativeOdRange(
+  url: string,
+  startByte: number,
+  sampleBytes: number,
+  timeoutMs: number
+): Promise<NativeOdRangeSample> {
+  const nativeModule: any =
+    NativeModules?.PrivastreamDeviceCapabilities;
+
+  if (
+    !nativeModule ||
+    typeof nativeModule.probeOdRange !== 'function'
+  ) {
+    throw new Error(
+      'PrivastreamDeviceCapabilities.probeOdRange unavailable'
+    );
+  }
+
+  const result =
+    await nativeModule.probeOdRange(
+      String(url || ''),
+      Math.max(
+        0,
+        Number(startByte) || 0
+      ),
+      Math.max(
+        64 * 1024,
+        Math.min(
+          Number(sampleBytes) || 0,
+          4 * 1024 * 1024
+        )
+      ),
+      Math.max(
+        1000,
+        Math.min(
+          Number(timeoutMs) || 3000,
+          8000
+        )
+      )
+    );
+
+  return {
+    bytes:
+      Number(result?.bytes || 0),
+    elapsedMs:
+      Number(result?.elapsedMs || 0),
+    mbps:
+      Number(result?.mbps || 0),
+    status:
+      Number(result?.status || 0),
+    contentRange:
+      String(result?.contentRange || ''),
+  };
+}
+
+// V788T16J_LIVE_TV_DEVICE_PREFLIGHT
+//
+// Resolve only transport candidates the backend could not prove.
+// Failure is intentionally fail-closed: an unverified channel must not
+// enter the guide.
+export async function probeLiveTvDeviceCandidates(
+  candidates: any[],
+  timeoutMs: number = 2500
+): Promise<any> {
+  const nativeModule: any =
+    NativeModules?.PrivastreamDeviceCapabilities;
+
+  if (
+    !nativeModule ||
+    typeof nativeModule.probeLiveTvCandidates !==
+      'function'
+  ) {
+    throw new Error(
+      'PrivastreamDeviceCapabilities.probeLiveTvCandidates unavailable'
+    );
+  }
+
+  return await nativeModule.probeLiveTvCandidates(
+    Array.isArray(candidates)
+      ? candidates
+      : [],
+    Math.max(
+      500,
+      Math.min(
+        Number(timeoutMs) || 2500,
+        4000
+      )
+    )
+  );
+}

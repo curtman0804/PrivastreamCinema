@@ -6,7 +6,7 @@ import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ensurePrivastreamTunnel } from '../../src/native/privastreamTunnelGate';
 
-// V261_TAB_FOCUS_CHAIN Ã¢â‚¬â€ module-level map of route.name -> native tag.
+// V261_TAB_FOCUS_CHAIN ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â module-level map of route.name -> native tag.
 // Populated as each tab button mounts.  Used to wire every tab's
 // nextFocusLeft / nextFocusRight to its adjacent sibling so D-pad LEFT/RIGHT
 // stays inside the tab bar instead of jumping into the content posters.
@@ -142,7 +142,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         // PATCH_V14B_FREEZE_ON_BLUR_TABS
-        // PATCH_V40_NO_FREEZE Ã¢â‚¬â€ keep Discover mounted; back returns instantly.
+        // PATCH_V40_NO_FREEZE ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â keep Discover mounted; back returns instantly.
         freezeOnBlur: false,
         lazy: true,
         headerShown: false,
@@ -165,7 +165,7 @@ export default function TabsLayout() {
           isTV && styles.tabBarItemTV,
         ],
         tabBarButton: (props: any) => {
-          // V261_TAB_FOCUS_CHAIN Ã¢â‚¬â€ every tab button now explicitly wires
+          // V261_TAB_FOCUS_CHAIN ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â every tab button now explicitly wires
           // nextFocusLeft / nextFocusRight to its adjacent tab's tag so the
           // D-pad never escapes the tab bar horizontally.  The first tab
           // traps LEFT to itself; the last tab traps RIGHT to itself.
@@ -280,7 +280,7 @@ export default function TabsLayout() {
             };
           }, [myName]);
 
-          // Ladder of retries Ã¢â‚¬â€ mount, layout, plus delayed attempts.
+          // Ladder of retries ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â mount, layout, plus delayed attempts.
           useEffect(() => {
             if (!myName) return;
             const timers = [0, 80, 250, 600, 1500].map((ms) => setTimeout(grabTag, ms));
@@ -314,7 +314,7 @@ export default function TabsLayout() {
               {...props}
               {...trap}
               focusable={true}
-              /* v238 Ã¢â‚¬â€ cold-boot focus lands on the Discover tab button.
+              /* v238 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â cold-boot focus lands on the Discover tab button.
                  Without this, no element claimed initial TV focus and the
                  selector ring was invisible until the user pressed a key. */
               hasTVPreferredFocus={isFirst}
@@ -355,6 +355,10 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="livetv"
         options={{
+          // V788T12H_EAGER_LIVE_TV_LOAD
+          // Mount Live TV with the authenticated tab navigator so its
+          // inventory load continues even when another tab is active.
+          lazy: false,
           title: 'Live TV',
           tabBarIcon: ({ color, size, focused }) => (
             <View style={focused && isTV ? styles.iconFocused : undefined}>
@@ -366,10 +370,30 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="discover"
         options={{
-          title: 'Discover',
+          // W121ZPLAY10Y19A_EAGER_ON_DEMAND_LOAD
+          // Mount On Demand with Live TV so both pipelines warm at startup.
+          // Existing discover InteractionManager deferral remains unchanged.
+          lazy: false,
+          title: 'On Demand',
           tabBarIcon: ({ color, size, focused }) => (
             <View style={focused && isTV ? styles.iconFocused : undefined}>
-              <Ionicons name="compass" size={isTV ? 28 : size} color={color} />
+              <View
+                style={{
+                  width: isTV ? 30 : 26,
+                  height: isTV ? 21 : 18,
+                  borderWidth: 2,
+                  borderColor: color,
+                  borderRadius: 6,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons
+                  name="play"
+                  size={isTV ? 13 : 11}
+                  color={color}
+                />
+              </View>
             </View>
           ),
         }}

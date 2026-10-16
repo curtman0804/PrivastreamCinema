@@ -26,7 +26,7 @@ export default function Index() {
     // Only navigate when both auth is loaded AND navigation is ready
     if (authLoaded && !isLoading && navigationReady) {
       if (isAuthenticated) {
-        router.replace('/(tabs)/discover');
+        router.replace('/(tabs)/livetv');
       } else {
         router.replace('/(auth)/login');
       }

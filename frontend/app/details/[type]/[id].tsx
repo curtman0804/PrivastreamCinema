@@ -26,7 +26,7 @@ import { useNavigation, CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import Constants from 'expo-constants';
-import { getDevicePlaybackCapabilities } from '../../../src/native/devicePlaybackCapabilities';
+import { getStoredDevicePlaybackProfile } from '../../../src/native/devicePlaybackCapabilities';
 import { useContentStore, getMetaCache, setMetaCache, hydrateMetaFromDisk } from '../../../src/store/contentStore';
 import { v311Perf } from '../../../src/utils/v311_perf'; // V311_PERF_PROFILER
 
@@ -61,9 +61,12 @@ import { Alert as _V176cAlert } from 'react-native';
 const { width, height } = Dimensions.get('window');
 
 // V659_DYNAMIC_DEVICE_CAPABILITIES_DIAG
-const _v659DeviceCaps = getDevicePlaybackCapabilities();
+const _v659DeviceCaps = getStoredDevicePlaybackProfile();
 try {
-  console.log('[V659_CAPS]', JSON.stringify(_v659DeviceCaps));
+  console.log(
+    '[W121ZOD117 STORED DEVICE PROFILE]',
+    JSON.stringify(_v659DeviceCaps)
+  );
 } catch (_) {}
 
 // Stremio-style animated indeterminate loading bar. Renders a thin gold
@@ -1995,6 +1998,19 @@ function _w121zod108e1IsStrictForeignStream(stream: any): boolean {
       return true;
     }
 
+    // W121ZOD118H1_RELEASE_LANGUAGE_HYGIENE
+    // A bare .PL./.POL. release without an advertised English track is
+    // Polish-only for automatic Play. PL/EN remains eligible here.
+    const _w121zod118h1HasExplicitEnglish =
+      /\b(?:EN|ENG|ENGLISH)\b/.test(t);
+
+    if (
+      !_w121zod118h1HasExplicitEnglish &&
+      /\b(?:PL|POL)\b/.test(t)
+    ) {
+      return true;
+    }
+
     return /\b(?:RUS|RUSSIAN|HINDI|TAMIL|TELUGU|VOSTFR|VOSTA|VFF|VFQ|TRUEFRENCH|FRENCH|FRA|LATINO|CASTELLANO|SPANISH|ESPANOL|GERMAN|DEUTSCH|GER|DEU|ITALIAN|ITALIANO|ITA|DUBLADO|PORTUGUESE|KOREAN|KOR|JAPANESE|JPN|CHINESE|CHS|CHT|UKRAINIAN|UKR|TURKISH|DUTCH|DUBBED|MULTI|DUAL)\b/.test(t) ||
       /[\u0400-\u04FF\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(t);
   } catch (_) {
@@ -2774,9 +2790,34 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
    * inside that safe pool so a broken SDR audio source cannot outrank a
    * better playable 1080p/4K candidate.
    */
+  // W121ZOD118H2_HDRIP_IS_NOT_HDR
+  // "HDRip" is a release-source label, not HDR video. The legacy parser can
+  // see the letters HDR inside HDRip and incorrectly push compact x264 files
+  // out of the SDR pool. Only explicit HDR/DV/HLG signaling counts here.
+  const _w121zod118h2IsRealHdr =
+    (s: any): boolean => {
+      const text = blob(s)
+        .toUpperCase()
+        .replace(/\bHDRIP\b/g, ' ');
+
+      if (
+        /\b(?:HDR10\+?|HDR|HLG)\b/.test(text) ||
+        /\bDOLBY[ ._-]?VISION\b/.test(text) ||
+        /(?:^|[^A-Z0-9])DV(?:$|[^A-Z0-9])/.test(text)
+      ) {
+        return true;
+      }
+
+      const legacyHdr =
+        (parseStreamInfo(s) as any)?.isHDR === true;
+
+      return legacyHdr &&
+        !/\bHDRIP\b/.test(blob(s).toUpperCase());
+    };
+
   const _v665SdrPool = pool.filter(
     (s: any) =>
-      !(parseStreamInfo(s) as any)?.isHDR
+      !_w121zod118h2IsRealHdr(s)
   );
 
   const _v665UsingSdr =
@@ -2799,11 +2840,13 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
      * Manual stream cards are unchanged.
      * Device capability logic remains available elsewhere.
      */
-    // W121ZOD116S1B_QUALITY_AFTER_SUSTAINABILITY
-    // Once sustainability is equal, choose the best quality this
-    // device can genuinely support.
-    if (q === '4K')    return _v665DeviceCanPrefer4k ? 5 : 3;
-    if (q === '1080p') return 4;
+    // W121ZOD117A_1080P_SUSTAINABLE_DEFAULT
+    //
+    // Automatic Play prefers 1080p as the universal high-quality,
+    // sustainable TV target. 4K remains available manually and remains
+    // an automatic fallback when no suitable 1080p exists.
+    if (q === '1080p') return 5;
+    if (q === '4K')    return _v665DeviceCanPrefer4k ? 4 : 2;
     if (q === '720p')  return 3;
     if (q === 'HD')    return 2;
     if (q === 'SD')    return 1;
@@ -3207,6 +3250,77 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
     pool = _v769NonFailedPool;
   }
 
+  // W121ZOD117A_PROVIDER_SEED_RANK
+  //
+  // Title/language/device/audio/SDR walls have already executed.
+  // This only orders surviving candidates.
+  const _w121zod117ProviderRank =
+    (s: any): number => {
+      const info: any =
+        parseStreamInfo(s);
+
+      const text =
+        (
+          blob(s) +
+          ' ' +
+          String(info?.source || '')
+        ).toUpperCase();
+
+      if (
+        /\bTHEPIRATEBAY\b/.test(text) ||
+        /\bTPB\+?\b/.test(text) ||
+        /PIRATE\s*BAY/.test(text)
+      ) {
+        return 4;
+      }
+
+      if (
+        /\bTORRENTGALAXY\b/.test(text) ||
+        /\bTGX\b/.test(text)
+      ) {
+        return 3;
+      }
+
+      if (
+        /\bYTS(?:\.MX)?\b/.test(text) ||
+        /\bYIFY\b/.test(text)
+      ) {
+        return 2;
+      }
+
+      if (/\bTORRENTIO\b/.test(text)) {
+        return 1;
+      }
+
+      return 0;
+    };
+
+  const _w121zod117SeederRank =
+    (s: any): number => {
+      const info: any =
+        parseStreamInfo(s);
+
+      const seeders =
+        Number(
+          s?.seeders ||
+          s?.seeds ||
+          info?.seeders ||
+          0
+        );
+
+      if (
+        !Number.isFinite(seeders) ||
+        seeders <= 0
+      ) {
+        return 0;
+      }
+
+      return Math.min(
+        seeders,
+        100000
+      );
+    };
+
   const ranked = pool
     .map((s: any, i: number) => ({
       s,
@@ -3216,6 +3330,8 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       c: _v665VideoCompatRank(s),
       a: audioRank(s),
       h: _v769SeekHealthRank(s),
+      p: _w121zod117ProviderRank(s),
+      z: _w121zod117SeederRank(s),
       r: reliabilityRank(s),
       d: _v106aTransferBytes(s),
     }))
@@ -3234,10 +3350,26 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       // W121ZOD115I_PHONE_OD_POLICY
       // W121ZSA order: quality -> FF/RW health -> source master ->
       // device video compatibility -> audio -> reliability.
-      (y.h - x.h) ||
+      // W121ZOD117A_FINAL_AUTOPLAY_ORDER
+      //
+      // English/device/audio/SDR safety are hard walls above.
+      // Then:
+      // 1080p -> decoder fit -> proven local sustainability ->
+      // preferred source -> seeders -> release -> audio -> reliability.
       (y.q - x.q) ||
-      (y.m - x.m) ||
       (y.c - x.c) ||
+      (y.h - x.h) ||
+      (
+        Number.isFinite(x.d) &&
+        Number.isFinite(y.d) &&
+        x.d > 0 &&
+        y.d > 0
+          ? (x.d - y.d)
+          : 0
+      ) ||
+      (y.p - x.p) ||
+      (y.z - x.z) ||
+      (y.m - x.m) ||
       (y.a - x.a) ||
       (y.r - x.r) ||
       (x.i - y.i)
@@ -3259,7 +3391,7 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
       '[V652 AUTO PICK]',
       'pool=' + (nonForeign.length > 0 ? 'ENGLISH' : 'FOREIGN_FALLBACK'),
       'audioPool=' + (_v652UsingSafeAudio ? 'SAFE' : 'UNSAFE_FALLBACK'),
-      'videoOrder=ENGLISH>DEVICE_SAFE>SDR>SUSTAINABILITY>Q>MASTER>C>A>RELIABILITY',
+      'videoOrder=ENGLISH>DEVICE_SAFE>SDR>1080P>CODEC>SUSTAINABILITY>COMPACT_RELATIVE>PROVIDER>SEEDERS>MASTER>AUDIO>RELIABILITY',
       'master=' + pick.m,
       'deviceProfile=' + (
         _v665LowMemoryTv
@@ -4729,21 +4861,75 @@ export default function DetailsScreen() {
       try {
         const _hashes: string[] = [];
         const _seen = new Set<string>();
+        // W121ZOD118H2_RELEASE_DEDUPE
+        // Different indexers can expose the same release under different
+        // hashes. Do not spend scarce cache-check slots on duplicate files.
+        const _w121zod118h2CacheReleaseSeen =
+          new Set<string>();
+        const _w121zod118h1HealthMap =
+          _v769GetSeekHealthMap();
+
+        // W121ZOD118H1_CACHE_CHECK_HYGIENE
+        // Do not spend Premiumize cache-check time on obvious garbage.
         for (const _s of streams) {
           if (!_s || !(_s as any).infoHash) continue;
-          const _h = String((_s as any).infoHash).toLowerCase();
-          if (_seen.has(_h)) continue;
+          if (_v672IsSampleLikeStream(_s)) continue;
+          if (_w121zod108e1IsStrictForeignStream(_s)) continue;
+
+          const _h = String((_s as any).infoHash)
+            .trim()
+            .toLowerCase();
+
+          if (!_h || _seen.has(_h)) continue;
           if (_v296_cacheMap.has(_h)) continue;
+
+          const _w121zod118h2CacheFilename =
+            String((_s as any)?.filename || '')
+              .trim()
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, ' ')
+              .trim();
+
+          if (
+            _w121zod118h2CacheFilename.length >= 24 &&
+            _w121zod118h2CacheReleaseSeen.has(
+              _w121zod118h2CacheFilename
+            )
+          ) {
+            continue;
+          }
+
+          const _health =
+            _w121zod118h1HealthMap[_h];
+
+          if (
+            _health?.ff === 'fail' ||
+            _health?.rw === 'fail' ||
+            _w121zod106gPlaybackBadForSelection(_health)
+          ) {
+            continue;
+          }
+
           _seen.add(_h);
+
+          if (_w121zod118h2CacheFilename.length >= 24) {
+            _w121zod118h2CacheReleaseSeen.add(
+              _w121zod118h2CacheFilename
+            );
+          }
+
           _hashes.push(_h);
-          if (_hashes.length >= 50) break;
+
+          // Twenty already-clean candidates are more than enough for the
+          // automatic queue. Manual cards remain untouched.
+          if (_hashes.length >= 20) break;
         }
         if (_hashes.length === 0) {
           console.log('[v296] all hashes already in cache map');
           return;
         }
         // V509: backend owns the Premiumize credential; client sends hashes only.
-        const _response = await premiumizeCacheCheck(_hashes);
+        const _response = await premiumizeCacheCheck(_hashes, 3500); // W121ZOD118H1_FAST_CACHE_CHECK
         if (_cancelled) return;
         let _cached = 0;
         for (let _i = 0; _i < _hashes.length; _i++) {
@@ -4790,53 +4976,42 @@ export default function DetailsScreen() {
   // auto-selected candidate has completed the expensive preparation
   // that makes Play useful: directDL + exact file + media compatibility.
   //
-  // H4AL readiness may continue in the background. V300 remains the
-  // authoritative Play-time safety gate.
-  //
-  // Never strand the user: after 8 seconds the Play button is released
-  // and the existing V300 path handles whatever preparation remains.
+  // W121ZOD118A_HARD_PREP_GATE
+  // Play stays hidden until the exact automatic winner has completed
+  // directDL, exact media validation and native delivery/seek readiness.
+  // There is no timer-based fail-open.
   const [
     _w121zod111ePrepUiTick,
     _w121zod111eSetPrepUiTick,
   ] = useState(0);
 
-  const [
-    _w121zod111eGateExpired,
-    _w121zod111eSetGateExpired,
-  ] = useState(false);
-
-  useEffect(() => {
-    _w121zod111eSetGateExpired(false);
-
-    const _w121zod111eTimer = setTimeout(() => {
-      console.log(
-        '[W121ZOD111E PREPARING MEDIA]',
-        'state=max-wait',
-        'context=' + _w121zod110yPrepContextKey,
-        'elapsedMs=15000'
-      );
-
-      _w121zod111eSetGateExpired(true);
-    }, 15000);
-
-    return () => {
-      clearTimeout(_w121zod111eTimer);
-    };
-  }, [_w121zod110yPrepContextKey]);
 
   // Reading the tick intentionally ties ref-only preparation changes
   // to a lightweight React render without moving the preparation cache
   // itself into React state.
   void _w121zod111ePrepUiTick;
 
-  const _w121zod111ePreparedEntryForUi =
+  // W121ZOD118H1_READY_ENTRY_FIRST
+  // If speculative/background work leaves more than one entry in this
+  // content context, UI authority belongs to a completed ready winner first.
+  const _w121zod118h1PrepEntries =
     Array.from(
       _w121zod110yPrepCacheRef.current.values()
-    ).find((entry: any) =>
+    ).filter((entry: any) =>
       String(entry?.key || '').startsWith(
         _w121zod110yPrepContextKey + '|'
       )
-    ) || null;
+    );
+
+  const _w121zod111ePreparedEntryForUi =
+    _w121zod118h1PrepEntries.find(
+      (entry: any) =>
+        entry?.finished === true &&
+        entry?.mediaCompatible === true &&
+        entry?.readiness?.ok === true
+    ) ||
+    _w121zod118h1PrepEntries[0] ||
+    null;
 
   const _w121zod111eAutoPlayGateApplies =
     type === 'movie' || isEpisodePage;
@@ -4878,12 +5053,33 @@ export default function DetailsScreen() {
     _w121zod115n2KnownCacheStates >=
       _w121zod115n2CacheHashes.length;
 
+  // W121ZOD117A_PLAY_IS_ALREADY_PREPARED
+  //
+  // Stream discovery alone is not enough. Play is considered prepared
+  // only after the selected source has resolved to the exact media,
+  // passed device compatibility and passed seek/delivery readiness.
+  // W121ZOD118H1_EXACT_WINNER_BEATS_BROAD_CACHE_WAIT
+  // A source that already completed directDL + exact-file probe + device
+  // readiness is ready even if the broad background cache map is still filling.
   const _w121zod111eUsefulPrepReady =
-    _w121zod115n2BroadCacheReady;
+    !!_w121zod111ePreparedEntryForUi &&
+    Array.isArray(
+      _w121zod111ePreparedEntryForUi
+        .directDlContent
+    ) &&
+    _w121zod111ePreparedEntryForUi
+      .directDlContent.length > 0 &&
+    !!_w121zod111ePreparedEntryForUi
+      .mediaPath &&
+    !!_w121zod111ePreparedEntryForUi
+      .probe &&
+    _w121zod111ePreparedEntryForUi
+      .mediaCompatible === true &&
+    _w121zod111ePreparedEntryForUi
+      .readiness?.ok === true;
 
   const _w121zod111eHoldPlay =
     _w121zod111eAutoPlayGateApplies &&
-    !_w121zod111eGateExpired &&
     !_w121zod111eUsefulPrepReady;
 
   // W121ZOD115N2_PHONE_CLICK_PARITY
@@ -4896,8 +5092,119 @@ export default function DetailsScreen() {
   // PRE-WARM: When streams are loaded, silently pre-start the top ENGLISH torrent
   // This saves 5-10 seconds of metadata download when user taps play
   const prewarmedRef = useRef<string | null>(null);
+
+  // W121ZOD117A_DETAILS_PREP_RETRY
+  // Rejected preparation candidates remain invisible to the user.
+  // Details immediately evaluates the next ranked candidate.
+  const _w121zod117PrepRejectedRef =
+    useRef<Set<string>>(new Set<string>());
+
+  // W121ZOD118H1_PREP_BUDGET
+  const _w121zod118h1PrepStartedAtRef =
+    useRef<number>(Date.now());
+
+  const _w121zod118h1HedgeWarmRef =
+    useRef<Set<string>>(new Set<string>());
+
+  const [
+    _w121zod117PrepRetryTick,
+    _w121zod117SetPrepRetryTick,
+  ] = useState(0);
+
+  // W121ZOD118D_FAST_PREP
+  // Preparing Media must always have a terminal state.
+  const [
+    _w121zod118dPrepExhausted,
+    _w121zod118dSetPrepExhausted,
+  ] = useState(false);
+
+  useEffect(() => {
+    _w121zod117PrepRejectedRef.current.clear();
+    _w121zod118h1HedgeWarmRef.current.clear();
+    _w121zod118h1PrepStartedAtRef.current = Date.now();
+    prewarmedRef.current = null;
+    _w121zod118dSetPrepExhausted(false);
+  }, [_w121zod110yPrepContextKey]);
+
+  // W121ZOD118A_DETAILS_PREP_LIFECYCLE
+  //
+  // Details may remain mounted underneath Player. Once Details loses
+  // focus, its background candidate work must stop influencing OD.
+  const _w121zod118DetailsPrepActiveRef =
+    useRef(true);
+
+  // W121ZOD118F_RETURN_FROM_PLAYER_PRESERVE_PREP
+  //
+  // Player is pushed over this Details screen. Blurring Details stops
+  // background mutation, but an already-prepared winner belongs to this
+  // same mounted title and must survive Back from Player.
+  useFocusEffect(
+    useCallback(() => {
+      _w121zod118DetailsPrepActiveRef.current = true;
+
+      const _w121zod118fPreservedReady =
+        Array.from(
+          _w121zod110yPrepCacheRef.current.values()
+        ).some((entry: any) =>
+          String(entry?.key || '').startsWith(
+            _w121zod110yPrepContextKey + '|'
+          ) &&
+          entry?.finished === true &&
+          !entry?.error &&
+          Array.isArray(entry?.directDlContent) &&
+          entry.directDlContent.length > 0 &&
+          !!entry?.mediaPath &&
+          !!entry?.probe &&
+          entry?.mediaCompatible === true &&
+          entry?.readiness?.ok === true
+        );
+
+      if (!_w121zod118fPreservedReady) {
+        _w121zod117SetPrepRetryTick(
+          (tick) => tick + 1
+        );
+      } else {
+        console.log(
+          '[W121ZOD118F DETAILS RETURN]',
+          'preparedMedia=preserved',
+          'context=' +
+            _w121zod110yPrepContextKey
+        );
+
+        _w121zod111eSetPrepUiTick(
+          (tick) => tick + 1
+        );
+      }
+
+      return () => {
+        // Stop async preparation while Player owns focus.
+        // DO NOT clear the already-ready stream/prep state.
+        _w121zod118DetailsPrepActiveRef.current =
+          false;
+      };
+    }, [_w121zod110yPrepContextKey])
+  );
   useEffect(() => {
     if (streams && streams.length > 0 && !isLoadingStreams) {
+      // W121ZOD118H1_KEEP_FIRST_READY_WINNER
+      // A late cache-map update must not throw away a source that has already
+      // completed exact-file/device/readiness preparation for this Details page.
+      const _w121zod118h1ExistingReady =
+        Array.from(
+          _w121zod110yPrepCacheRef.current.values()
+        ).some((entry: any) =>
+          String(entry?.key || '').startsWith(
+            _w121zod110yPrepContextKey + '|'
+          ) &&
+          entry?.finished === true &&
+          entry?.mediaCompatible === true &&
+          entry?.readiness?.ok === true
+        );
+
+      if (_w121zod118h1ExistingReady) {
+        return;
+      }
+
       // W121ZOD9B_CORRECT_ID_POLICY_PREWARM
       const sorted = sortStreamsByLanguage(streams);
 
@@ -4942,24 +5249,121 @@ export default function DetailsScreen() {
           ? _v121zod9bIdentified
           : sorted;
 
-      // W121ZOD110T_CACHE_AWARE_PREWARM_AUTHORITY
+      // W121ZOD118H1_PROACTIVE_SOURCE_HYGIENE
       //
-      // PM cache discovery runs beside V291. The first V291 pass may happen
-      // before that response arrives, so the original prewarm can resolve a
-      // candidate that Play will later replace once cached candidates are known.
-      //
-      // Re-run after _v296_cacheTick changes and, when Premiumize has identified
-      // cached candidates, apply the SAME V503 ranking policy to that cached
-      // subset. This changes prewarm ownership only.
-      //
-      // V300 remains authoritative for:
-      //   - cached candidate policy,
-      //   - exact movie / episode file identity,
-      //   - actual device codec compatibility,
-      //   - H4AL seek-readiness,
-      //   - low-headroom rejection / retry.
+      // Expensive Premiumize work sees only candidates that survive cheap,
+      // deterministic checks first: exact content identity, English/neutral,
+      // non-sample, unique hash, and no device-local hard playback/seek fail.
+      const _w121zod118h1HealthMap =
+        _v769GetSeekHealthMap();
+
+      const _w121zod118h1Seen =
+        new Set<string>();
+
+      // W121ZOD118H2_RELEASE_DEDUPE
+      // Hash-level de-dupe is not enough: Torrentio may return the exact same
+      // release from multiple indexes under different hashes. Retry the next
+      // genuinely different release instead of benchmarking the same file.
+      const _w121zod118h2ReleaseSeen =
+        new Set<string>();
+
+      const _w121zod118h1CleanBasePool =
+        _v121zod9bPool.filter(
+          (candidate: any) => {
+            const hash = String(
+              candidate?.infoHash ||
+              candidate?.info_hash ||
+              ''
+            )
+              .trim()
+              .toLowerCase();
+
+            if (!hash || _w121zod118h1Seen.has(hash)) {
+              return false;
+            }
+
+            _w121zod118h1Seen.add(hash);
+
+            if (_v672IsSampleLikeStream(candidate)) {
+              return false;
+            }
+
+            if (_w121zod108e1IsStrictForeignStream(candidate)) {
+              return false;
+            }
+
+            const health =
+              _w121zod118h1HealthMap[hash];
+
+            if (
+              health?.ff === 'fail' ||
+              health?.rw === 'fail' ||
+              _w121zod106gPlaybackBadForSelection(health)
+            ) {
+              return false;
+            }
+
+            const identity = String(
+              candidate?.filename ||
+              candidate?.title ||
+              candidate?.name ||
+              ''
+            ).trim();
+
+            const _w121zod118h2ReleaseKey =
+              String(candidate?.filename || '')
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, ' ')
+                .trim();
+
+            if (
+              _w121zod118h2ReleaseKey.length >= 24 &&
+              _w121zod118h2ReleaseSeen.has(
+                _w121zod118h2ReleaseKey
+              )
+            ) {
+              return false;
+            }
+
+            if (_w121zod118h2ReleaseKey.length >= 24) {
+              _w121zod118h2ReleaseSeen.add(
+                _w121zod118h2ReleaseKey
+              );
+            }
+
+            if (type === 'movie') {
+              return !!identity &&
+                _v747MovieIdentityMatches(
+                  id,
+                  content,
+                  candidate,
+                  _v121zod9bReqT,
+                  _v121zod9bReqY,
+                  identity
+                );
+            }
+
+            if (
+              type === 'series' &&
+              isEpisodePage
+            ) {
+              return !!identity &&
+                _v745EpisodeIdentityMatches(
+                  _v121zod9bReqT,
+                  episodeSeason,
+                  episodeNumber,
+                  identity
+                );
+            }
+
+            return true;
+          }
+        );
+
+      // Cache state is a preference, not permission to reintroduce garbage.
       const _w121zod110tCachedPool =
-        _v121zod9bPool.filter((s: any) => {
+        _w121zod118h1CleanBasePool.filter((s: any) => {
           const hash = String(
             s?.infoHash ||
             s?.info_hash ||
@@ -4974,26 +5378,134 @@ export default function DetailsScreen() {
           );
         });
 
+      // W121ZOD118H2_CACHE_PREFERENCE_NOT_PRISON
+      // Cached sources are the fast lane, not the whole universe. If every
+      // cached candidate tried so far fails, immediately broaden back to the
+      // remaining clean candidates instead of declaring the title unavailable.
+      const _w121zod118h2CachedRemaining =
+        _w121zod110tCachedPool.filter(
+          (candidate: any) => {
+            const hash = String(
+              candidate?.infoHash ||
+              candidate?.info_hash ||
+              ''
+            )
+              .trim()
+              .toLowerCase();
+
+            return (
+              !!hash &&
+              !_w121zod117PrepRejectedRef.current.has(hash)
+            );
+          }
+        );
+
       const _w121zod110tAuthorityPool =
-        _w121zod110tCachedPool.length > 0
-          ? _w121zod110tCachedPool
-          : _v121zod9bPool;
+        _w121zod118h2CachedRemaining.length > 0
+          ? _w121zod118h2CachedRemaining
+          : _w121zod118h1CleanBasePool;
+
+      const _w121zod117PrepPool =
+        _w121zod110tAuthorityPool.filter(
+          (candidate: any) => {
+            const hash = String(
+              candidate?.infoHash ||
+              candidate?.info_hash ||
+              ''
+            )
+              .trim()
+              .toLowerCase();
+
+            return (
+              !!hash &&
+              !_w121zod117PrepRejectedRef.current.has(hash)
+            );
+          }
+        );
+
+      const _w121zod118h1PrepElapsedMs =
+        Date.now() -
+        _w121zod118h1PrepStartedAtRef.current;
+
+      // W121ZOD118H3_NO_PLAYBACK_UNAVAILABLE
+      // A temporarily-empty preparation pool is NOT a playback verdict.
+      // H2 proved Details can run before the current title's stream-owner
+      // claim/current stream publish. Stay in Preparing Media and wait for
+      // the next current-stream/cache/retry update instead of terminating.
+      if (_w121zod117PrepPool.length === 0) {
+        console.warn(
+          '[W121ZOD118H3 PREP WAIT]',
+          'streams=' + String(Array.isArray(streams) ? streams.length : 0),
+          'loading=' + String(!!isLoadingStreams),
+          'clean=' + String(_w121zod118h1CleanBasePool.length),
+          'cached=' + String(_w121zod110tCachedPool.length),
+          'rejected=' + String(_w121zod117PrepRejectedRef.current.size),
+          'elapsedMs=' + String(_w121zod118h1PrepElapsedMs),
+          'action=wait-for-current-streams-or-next-queue-update'
+        );
+
+        _w121zod118dSetPrepExhausted(false);
+        return;
+      }
+
+      if (_w121zod118h1PrepElapsedMs >= 8000) {
+        console.warn(
+          '[W121ZOD118H2 PREP CONTINUE]',
+          'remaining=' + String(_w121zod117PrepPool.length),
+          'rejected=' + String(_w121zod117PrepRejectedRef.current.size),
+          'elapsedMs=' + String(_w121zod118h1PrepElapsedMs),
+          'action=keep-trying-clean-candidates'
+        );
+      }
 
       const topStream =
         _v503PickReliableAutoStream(
-          _w121zod110tAuthorityPool,
+          _w121zod117PrepPool,
           type === 'movie' || type === 'series'
         ) ||
-        _w121zod110tAuthorityPool[0];
+        _w121zod117PrepPool[0];
+
+      const _w121zod118h1TopHash = String(
+        topStream?.infoHash ||
+        (topStream as any)?.info_hash ||
+        ''
+      ).trim().toLowerCase();
+
+      const _w121zod118h1SecondPool =
+        _w121zod117PrepPool.filter((candidate: any) =>
+          String(
+            candidate?.infoHash ||
+            candidate?.info_hash ||
+            ''
+          ).trim().toLowerCase() !==
+          _w121zod118h1TopHash
+        );
+
+      const _w121zod118h1SecondStream =
+        _w121zod118h1SecondPool.length > 0
+          ? (
+              _v503PickReliableAutoStream(
+                _w121zod118h1SecondPool,
+                type === 'movie' || type === 'series'
+              ) ||
+              _w121zod118h1SecondPool[0]
+            )
+          : null;
 
       try {
         console.log(
           '[W121ZOD110T PREWARM AUTHORITY]',
           'cacheTick=' + String(_v296_cacheTick),
           'identified=' + String(_v121zod9bIdentified.length),
+          'cleanPool=' + String(_w121zod118h1CleanBasePool.length),
           'cachedPool=' + String(_w121zod110tCachedPool.length),
           'authorityPool=' + String(_w121zod110tAuthorityPool.length),
-          'hash=' + String(topStream?.infoHash || '').slice(0, 12)
+          'hash=' + String(topStream?.infoHash || '').slice(0, 12),
+          'hedge=' + String(
+            _w121zod118h1SecondStream?.infoHash ||
+            (_w121zod118h1SecondStream as any)?.info_hash ||
+            ''
+          ).slice(0, 12)
         );
       } catch (_) {}
 
@@ -5042,6 +5554,74 @@ export default function DetailsScreen() {
             ''
           ),
         ).catch(() => {});
+
+        // W121ZOD118H1_SECOND_CANDIDATE_HEDGE
+        // Warm only the second clean/ranked candidate after 900 ms. This is
+        // deliberately lightweight; it does not steal authority from #1.
+        const _w121zod118h1SecondHash = String(
+          _w121zod118h1SecondStream?.infoHash ||
+          (_w121zod118h1SecondStream as any)?.info_hash ||
+          ''
+        ).trim().toLowerCase();
+
+        if (
+          _w121zod118h1SecondStream &&
+          _w121zod118h1SecondHash &&
+          !_w121zod118h1HedgeWarmRef.current.has(
+            _w121zod118h1SecondHash
+          )
+        ) {
+          _w121zod118h1HedgeWarmRef.current.add(
+            _w121zod118h1SecondHash
+          );
+
+          setTimeout(() => {
+            if (!_w121zod118DetailsPrepActiveRef.current) return;
+
+            const alreadyReady = Array.from(
+              _w121zod110yPrepCacheRef.current.values()
+            ).some((entry: any) =>
+              String(entry?.key || '').startsWith(
+                _w121zod110yPrepContextKey + '|'
+              ) &&
+              entry?.readiness?.ok === true
+            );
+
+            if (alreadyReady) return;
+
+            console.log(
+              '[W121ZOD118H1 HEDGE WARM]',
+              'hash=' + _w121zod118h1SecondHash.slice(0, 12)
+            );
+
+            api.stream.start(
+              _w121zod118h1SecondStream.infoHash ||
+                (_w121zod118h1SecondStream as any).info_hash,
+              _w121zod118h1SecondStream.fileIdx,
+              _w121zod118h1SecondStream.filename ||
+                _w121zod118h1SecondStream.title,
+              _w121zod118h1SecondStream.sources || [],
+              Number.isFinite(_seasonNum as number)
+                ? _seasonNum
+                : undefined,
+              Number.isFinite(_episodeNum as number)
+                ? _episodeNum
+                : undefined,
+              String(
+                (content as any)?.name ||
+                (content as any)?.title ||
+                (paramName as any) ||
+                ''
+              ),
+              _v745Year(
+                (content as any)?.year ||
+                (content as any)?.releaseYear ||
+                (content as any)?.releaseInfo ||
+                ''
+              ),
+            ).catch(() => {});
+          }, 900);
+        }
         // W121ZOD110Y_DETAILS_VALIDATION_OVERLAP
         // Start the SAME expensive candidate checks V300 will require,
         // but do it while the user is still on Details.
@@ -5055,8 +5635,12 @@ export default function DetailsScreen() {
         // Preserve V291's lightweight Premiumize prewarm, but do not run
         // the post-W121ZSA directDL/media-probe/readiness pipeline while
         // the user is still on Details.
+        // W121ZOD117A_REAL_PREPARING_MEDIA
+        //
+        // This is now the purpose of the Preparing Media window:
+        // resolve, identify, probe and seek-test the automatic winner
+        // before the Play button becomes available.
         if (
-          false &&
           _w121zod110yHash &&
           (type === 'movie' || type === 'series')
         ) {
@@ -5100,6 +5684,7 @@ export default function DetailsScreen() {
             const _w121zod110yEntry: any = {
               key: _w121zod110yPrepKey,
               hash: _w121zod110yHash,
+              stream: topStream,
               running: true,
               finished: false,
               directDlContent: null,
@@ -5126,9 +5711,46 @@ export default function DetailsScreen() {
             const _w121zod110yPromise =
               (async () => {
               const _w121zod110yStillCurrent = () =>
+                _w121zod118DetailsPrepActiveRef.current &&
                 _w121zod110yPrepCacheRef.current.get(
                   _w121zod110yPrepKey
                 ) === _w121zod110yEntry;
+
+              const _w121zod117RejectPreparedCandidate =
+                (reason: string) => {
+                  if (!_w121zod110yStillCurrent()) {
+                    return;
+                  }
+
+                  _w121zod117PrepRejectedRef.current.add(
+                    _w121zod110yHash
+                  );
+
+                  _w121zod110yEntry.finished = true;
+                  _w121zod110yEntry.error =
+                    String(reason || 'prep-rejected');
+
+                  _w121zod110yPrepCacheRef.current.delete(
+                    _w121zod110yPrepKey
+                  );
+
+                  prewarmedRef.current = null;
+
+                  console.log(
+                    '[W121ZOD117 PREP REJECT]',
+                    'hash=' +
+                      _w121zod110yHash.slice(0, 12),
+                    'reason=' +
+                      String(reason || 'prep-rejected'),
+                    'action=try-next-before-play'
+                  );
+
+                  setTimeout(() => {
+                    _w121zod117SetPrepRetryTick(
+                      (tick) => tick + 1
+                    );
+                  }, 0);
+                };
 
               try {
                 const _w121zod110yMagnet =
@@ -5136,8 +5758,9 @@ export default function DetailsScreen() {
 
                 const _w121zod110yContent =
                   await premiumizeDirectDL(
-                    _w121zod110yMagnet
-                  );
+                    _w121zod110yMagnet,
+                    3000
+                  ); // W121ZOD118H1_BOUNDED_DIRECTDL
 
                 if (!_w121zod110yStillCurrent()) return;
 
@@ -5360,8 +5983,9 @@ export default function DetailsScreen() {
                 const _w121zod110yProbe =
                   await premiumizeMediaProbe(
                     _w121zod110yMagnet,
-                    _w121zod110yMediaPath
-                  );
+                    _w121zod110yMediaPath,
+                    3000
+                  ); // W121ZOD118H1_BOUNDED_MEDIA_PROBE
 
                 if (!_w121zod110yStillCurrent()) return;
 
@@ -5395,7 +6019,7 @@ export default function DetailsScreen() {
 
                 console.log(
                   '[W121ZOD111E PREPARING MEDIA]',
-                  'state=useful-prep-ready',
+                  'state=media-probe-ready',
                   'hash=' +
                     _w121zod110yHash.slice(0, 12)
                 );
@@ -5404,13 +6028,47 @@ export default function DetailsScreen() {
                   (tick) => tick + 1
                 );
 
+                // W121ZOD118H1_KNOWN_GOOD_FAST_LANE
+                // A hash already proven sustainable WITH FF and RW on this
+                // physical device does not need another network benchmark.
+                const _w121zod118h1Health =
+                  _v769GetSeekHealthMap()[
+                    _w121zod110yHash
+                  ];
+
+                const _w121zod118h1KnownGood =
+                  _w121zod118h1Health?.playbackPolicy ===
+                    _W121ZOD106G_PLAYBACK_HEALTH_POLICY &&
+                  _w121zod118h1Health?.playback === 'pass' &&
+                  (
+                    _w121zod118h1Health?.playbackPassReason ===
+                      'natural-eof' ||
+                    _w121zod118h1Health?.playbackPassReason ===
+                      'sustained-120s'
+                  ) &&
+                  _w121zod118h1Health?.ff === 'pass' &&
+                  _w121zod118h1Health?.rw === 'pass';
+
                 const _w121zod110yReadiness =
-                  await premiumizeSeekReadinessProbe(
-                    _w121zod110yProbe.link,
-                    _w121zod110yProbe.format?.bit_rate,
-                    _w121zod110yProbe.format?.duration,
-                    _w121zod110yProbe.size
-                  );
+                  _w121zod118h1KnownGood
+                    ? {
+                        ok: true,
+                        reason: 'device-known-good',
+                        mediaMbps: 0,
+                        sampleMbps: [],
+                        minMbps: 0,
+                        minRatio: 99,
+                        sampleBytes: 0,
+                        fileSizeBytes: Number(
+                          _w121zod110yProbe.size || 0
+                        ),
+                      }
+                    : await premiumizeSeekReadinessProbe(
+                        _w121zod110yProbe.link,
+                        _w121zod110yProbe.format?.bit_rate,
+                        _w121zod110yProbe.format?.duration,
+                        _w121zod110yProbe.size
+                      );
 
                 if (!_w121zod110yStillCurrent()) return;
 
@@ -5420,6 +6078,24 @@ export default function DetailsScreen() {
                   Date.now();
 
                 _w121zod110yEntry.finished = true;
+
+                if (
+                  _w121zod110yReadiness.ok === true
+                ) {
+                  console.log(
+                    '[W121ZOD118A PREPARED WINNER]',
+                    'hash=' +
+                      _w121zod110yHash.slice(0, 12),
+                    'minRatio=' +
+                      Number(
+                        _w121zod110yReadiness.minRatio || 0
+                      ).toFixed(2)
+                  );
+
+                  _w121zod111eSetPrepUiTick(
+                    (tick) => tick + 1
+                  );
+                }
 
                 console.log(
                   '[W121ZOD110Y PREP STAGE]',
@@ -5456,6 +6132,29 @@ export default function DetailsScreen() {
                 }
               } finally {
                 _w121zod110yEntry.running = false;
+
+                if (
+                  _w121zod110yStillCurrent() &&
+                  _w121zod110yEntry
+                    ?.readiness?.ok !== true
+                ) {
+                  const reason =
+                    String(
+                      _w121zod110yEntry.error ||
+                      _w121zod110yEntry
+                        ?.readiness?.reason ||
+                      (
+                        _w121zod110yEntry
+                          .mediaCompatible
+                          ? 'readiness-not-proven'
+                          : 'media-not-compatible'
+                      )
+                    );
+
+                  _w121zod117RejectPreparedCandidate(
+                    reason
+                  );
+                }
               }
             })();
 
@@ -5467,7 +6166,7 @@ export default function DetailsScreen() {
         }
       }
     }
-  }, [streams, isLoadingStreams, id, type, content, paramName, _v296_cacheTick]);
+  }, [streams, isLoadingStreams, id, type, content, paramName, _v296_cacheTick, _w121zod117PrepRetryTick]);
 
   /* V656_DETAILS_REMOVE_LEGACY_PRERESOLVE
    * Obsolete direct-backend pre-resolve hook removed.
@@ -5524,6 +6223,182 @@ export default function DetailsScreen() {
 
     setIsLoadingContent(false);
   };
+  // W121ZOD118H1_DIRECT_PREPARED_HANDOFF
+  // Normal Play consumes the exact media URL already validated by Preparing
+  // Media. It does not clear PM cache, re-rank, re-resolve, or send fallback
+  // torrents to Player.
+  const _w121zod118h1PlayPreparedEntry = (
+    entry: any
+  ): boolean => {
+    try {
+      const directUrl =
+        String(entry?.probe?.link || '').trim();
+
+      const hash =
+        String(entry?.hash || '').trim().toLowerCase();
+
+      const mediaPath =
+        String(entry?.mediaPath || '').trim();
+
+      if (
+        !/^https:\/\//i.test(directUrl) ||
+        !/^[a-f0-9]{40}$/.test(hash) ||
+        !mediaPath ||
+        entry?.mediaCompatible !== true ||
+        entry?.readiness?.ok !== true
+      ) {
+        return false;
+      }
+
+      const subtitleContentId = isEpisodePage
+        ? `${baseId}:${episodeSeason}:${episodeNumber}`
+        : (id as string);
+
+      const contentTitle = currentEpisode
+        ? `S${episodeSeason}E${episodeNumber} - ${currentEpisode.name || content?.name || 'Video'}`
+        : (
+            nextTitleParam
+              ? String(nextTitleParam)
+              : isEpisodePage
+                ? `S${episodeSeason}E${episodeNumber} - ${content?.name || 'Loading...'}`
+                : content?.name || 'Video'
+          );
+
+      const cType = (type as string) || 'movie';
+
+      const identityTitle = String(
+        (content as any)?.name ||
+        (content as any)?.title ||
+        (paramName as any) ||
+        ''
+      ).trim();
+
+      const identityYear = _v745Year(
+        (content as any)?.year ||
+        (content as any)?.releaseYear ||
+        (content as any)?.releaseInfo ||
+        ''
+      );
+
+      const currentEpisodeMeta =
+        type === 'series'
+          ? {
+              seriesId: baseId || id,
+              season: _v238ValidNum(episodeSeason)
+                ? String(episodeSeason)
+                : (_v238ValidNum(resumeSeason) ? String(resumeSeason) : ''),
+              episode: _v238ValidNum(episodeNumber)
+                ? String(episodeNumber)
+                : (_v238ValidNum(resumeEpisode) ? String(resumeEpisode) : ''),
+              episodeName: currentEpisode?.name || '',
+            }
+          : {};
+
+      const nextEpisodeData = nextEpisode
+        ? {
+            nextEpisodeId: `${baseId}:${nextEpisode.season}:${nextEpisode.episode}`,
+            nextEpisodeTitle: `S${nextEpisode.season}E${nextEpisode.episode} - ${nextEpisode.name || 'Next Episode'}`,
+            nextEpisodePoster:
+              nextEpisode.thumbnail || content?.background || '',
+            nextEpisodeBackdrop:
+              nextEpisode.thumbnail || content?.background || '',
+          }
+        : {};
+
+      const shouldResume =
+        resumePosition &&
+        parseFloat(String(resumePosition)) > 0 &&
+        (
+          (type === 'movie' && !resumeEpisodeId) ||
+          (type === 'series' && resumeEpisodeId === subtitleContentId)
+        );
+
+      const resumeData = shouldResume
+        ? { resumePosition }
+        : {};
+
+      const overlayUri = String(
+        paramPoster ||
+        currentEpisode?.thumbnail ||
+        nextBackdropParam ||
+        content?.background ||
+        content?.poster ||
+        nextPosterParam ||
+        ''
+      );
+
+      const sNum = _v238ValidNum(episodeSeason)
+        ? episodeSeason
+        : (_v238ValidNum(resumeSeason) ? resumeSeason : null);
+
+      const eNum = _v238ValidNum(episodeNumber)
+        ? episodeNumber
+        : (_v238ValidNum(resumeEpisode) ? resumeEpisode : null);
+
+      const overlayPass = {
+        ovName: (content?.name || '') as string,
+        ovEp: type === 'series'
+          ? String(
+              nextTitleParam ||
+              currentEpisode?.name ||
+              (_v238ValidNum(episodeNumber)
+                ? `Episode ${episodeNumber}`
+                : (_v238ValidNum(resumeEpisode)
+                  ? `Episode ${resumeEpisode}`
+                  : ''))
+            )
+          : '',
+        ovSE: type === 'series'
+          ? (
+              ((sNum != null) ? `S${sNum}` : '') +
+              ((eNum != null) ? ` E${eNum}` : '')
+            ).trim()
+          : '',
+      };
+
+      console.log(
+        '[W121ZOD118H1 DIRECT PREPARED HANDOFF]',
+        'hash=' + hash.slice(0, 12),
+        'fallbackTorrents=0',
+        'fallbackStreams=0',
+        'readiness=' + String(entry?.readiness?.reason || 'ok')
+      );
+
+      router.push({
+        pathname: '/player',
+        params: {
+          directUrl,
+          infoHash: hash,
+          title: contentTitle,
+          isLive: 'false',
+          contentType: cType,
+          contentId: subtitleContentId,
+          identityTitle,
+          identityYear,
+          filename: mediaPath,
+          fallbackStreams: '[]',
+          fallbackTorrents: '',
+          backdrop: overlayUri,
+          ...overlayPass,
+          poster: content?.poster || nextPosterParam || '',
+          logo: content?.logo || '',
+          ...currentEpisodeMeta,
+          ...nextEpisodeData,
+          ...resumeData,
+        },
+      });
+
+      return true;
+    } catch (error) {
+      console.warn(
+        '[W121ZOD118H1 DIRECT PREPARED HANDOFF]',
+        'ok=false',
+        String((error as any)?.message || error)
+      );
+      return false;
+    }
+  };
+
   const handleStreamSelect = async (
     stream: Stream,
     preserveSelectedStream: boolean = false,
@@ -5606,7 +6481,7 @@ export default function DetailsScreen() {
     // W121ZSA handed a correctly ranked/identity-checked Premiumize URL
     // directly to Player. Disable the later pre-player media/readiness
     // rejection loop for normal OD; runtime fallback remains in Player.
-    const _w121zod108e1AutoOd = false;
+    const _w121zod108e1AutoOd = true; // W121ZOD117A_PREPLAYER_SAFETY
 
     const _w121zod108e1Rejected =
       autoRejectedHashes instanceof Set
@@ -5651,6 +6526,43 @@ export default function DetailsScreen() {
         if (!hash || rejected.has(hash)) return false;
         if (_v672IsSampleLikeStream(candidate)) return false;
         if (_w121zod108e1IsStrictForeignStream(candidate)) return false;
+
+        // W121ZOD118H1_RETRY_MOVIE_IDENTITY
+        if (cType === 'movie') {
+          const candidateIdentity = String(
+            candidate?.filename ||
+            candidate?.title ||
+            candidate?.name ||
+            ''
+          ).trim();
+
+          const requestedTitle = String(
+            (content as any)?.name ||
+            (content as any)?.title ||
+            (paramName as any) ||
+            ''
+          ).trim();
+
+          const requestedYear =
+            (content as any)?.releaseInfo ||
+            (content as any)?.year ||
+            (content as any)?.releaseYear ||
+            '';
+
+          if (
+            !candidateIdentity ||
+            !_v747MovieIdentityMatches(
+              id,
+              content,
+              candidate,
+              requestedTitle,
+              requestedYear,
+              candidateIdentity
+            )
+          ) {
+            return false;
+          }
+        }
 
         // W121ZOD108H4P_PREFLIGHT_SERIES_IDENTITY
         // H4D readiness downshift previously operated on this pool before
@@ -5808,13 +6720,10 @@ export default function DetailsScreen() {
 
         setIsPlayLoading(false);
 
-        try {
-          _V176cAlert.alert(
-            'No compatible source',
-            'No compatible English source passed the device preflight.'
-          );
-        } catch (_) {}
-
+        // W121ZOD118H3_NO_PLAYBACK_UNAVAILABLE
+        // Exhausting one automatic selection pass is not permission to show
+        // a terminal playback state. Keep the OD gate in preparation mode.
+        _w121zod118dSetPrepExhausted(false);
         return false;
       }
 
@@ -6974,7 +7883,7 @@ const nextEpisodeData = nextEpisode ? {
                               ?.readinessAtMs ||
                             0
                           ) > 0 &&
-                          _w121zod110yReadinessAgeMs <= 15000;
+                          _w121zod110yReadinessAgeMs <= 120000; // W121ZOD118A_PREPARED_PASS_FRESHNESS
 
                         const _w121zod110yJoinedCurrent =
                           _w121zod110yJoinedInflight &&
@@ -7074,6 +7983,15 @@ const nextEpisodeData = nextEpisode ? {
 
                             await _w121zod108e1TryNextAutoCandidate(
                               _v300_picked.hash,
+                              _v108h4dReadiness.reason ||
+                                'seek-readiness-failed',
+                              streams || []
+                            );
+
+                            return;
+
+                            await _w121zod108e1TryNextAutoCandidate(
+                              _v300_picked.hash,
                               'seek-readiness-low-headroom',
                               streams || []
                             );
@@ -7084,11 +8002,11 @@ const nextEpisodeData = nextEpisode ? {
                           // W121ZOD108H4AY_INDETERMINATE_READINESS_ADVISORY_V300
                           // A probe error is not proof that compatible media cannot play.
                           console.warn(
-                            '[W121ZOD108H4AY READINESS ADVISORY]',
+                            '[W121ZOD118A READINESS REJECT]',
                             'path=V300',
                             'hash=' + _v300_picked.hash.slice(0, 12),
                             'reason=' + _v108h4dReadiness.reason,
-                            'action=play-best-compatible-source'
+                            'action=next-compatible-candidate'
                           );
                         }
 
@@ -7466,12 +8384,21 @@ const nextEpisodeData = nextEpisode ? {
 
                   // W121ZOD108H4AY_INDETERMINATE_READINESS_ADVISORY_V299
                   console.warn(
-                    '[W121ZOD108H4AY READINESS ADVISORY]',
+                    '[W121ZOD118A READINESS REJECT]',
                     'path=V299',
                     'hash=' + _v299_hash.slice(0, 12),
                     'reason=' + _v108h4dReadiness.reason,
-                    'action=play-best-compatible-source'
+                    'action=next-compatible-candidate'
                   );
+
+                  await _w121zod108e1TryNextAutoCandidate(
+                    _v299_hash,
+                    _v108h4dReadiness.reason ||
+                      'seek-readiness-failed',
+                    streams || []
+                  );
+
+                  return;
                 }
 
                 if (_v108e1Probe.link) {
@@ -7775,15 +8702,8 @@ const nextEpisodeData = nextEpisode ? {
 
         setIsPlayLoading(false);
 
-        try {
-          _V176cAlert.alert(
-            'Wrong movie detected',
-            'The selected source does not match "' +
-              _v744PrimaryTitle.slice(0, 60) +
-              '". Try another source.'
-          );
-        } catch (_) {}
-
+        // W121ZOD118H1_NO_TECHNICAL_POPUP
+        // Keep the identity guard, but do not expose internal diagnostics.
         return;
       }
 
@@ -8357,7 +9277,56 @@ const nextEpisodeData = nextEpisode ? {
                              from Torrentio can be dead RD links. Trust the ranker. */
                           const _v356Playable = (s: any) =>
                             !!(s && (s.url || s.externalUrl || s.direct_url || s.infoHash || (s as any).info_hash));
-                          picked = _v503PickReliableAutoStream(list, type === 'movie' || type === 'series') || (list.find((s: any) => _v356Playable(s)) || null);
+                          const _w121zod118PreparedWinner =
+                            _w121zod111ePreparedEntryForUi
+                              ?.readiness?.ok === true &&
+                            _w121zod111ePreparedEntryForUi
+                              ?.mediaCompatible === true
+                              ? _w121zod111ePreparedEntryForUi
+                                  ?.stream
+                              : null;
+
+                          picked =
+                            _w121zod118PreparedWinner ||
+                            _v503PickReliableAutoStream(
+                              list,
+                              type === 'movie' ||
+                                type === 'series'
+                            ) ||
+                            (
+                              list.find(
+                                (s: any) =>
+                                  _v356Playable(s)
+                              ) ||
+                              null
+                            );
+
+                          if (_w121zod118PreparedWinner) {
+                            console.log(
+                              '[W121ZOD118A PLAY PREPARED WINNER]',
+                              'hash=' +
+                                String(
+                                  (picked as any)?.infoHash ||
+                                  (picked as any)?.info_hash ||
+                                  ''
+                                ).slice(0, 12)
+                            );
+
+                            _w121zod118DetailsPrepActiveRef.current = false;
+
+                            if (
+                              _w121zod118h1PlayPreparedEntry(
+                                _w121zod111ePreparedEntryForUi
+                              )
+                            ) {
+                              return;
+                            }
+
+                            // A prepared entry that cannot hand off exactly is
+                            // not allowed to silently become another torrent.
+                            setIsPlayLoading(false);
+                            return;
+                          }
                         }
                         // Normalize info_hash -> infoHash so handleStreamSelect's downstream
                         // checks find what they expect.
@@ -8516,7 +9485,7 @@ const nextEpisodeData = nextEpisode ? {
                               } else {
                                 console.log('[V441] no title-matching stream in top', list.length, '- aborting play. content=', String(_v441_reqT).slice(0,80));
                                 setIsPlayLoading(false);
-                                try { _V176cAlert.alert('Wrong movie detected', 'Sources for "' + String(_v441_reqT).slice(0, 60) + '" all point at a different title. Try a different quality or refresh.'); } catch (_) {}
+                                // W121ZOD118H1_NO_TECHNICAL_POPUP
                                 return;
                               }
                             }
@@ -8525,8 +9494,12 @@ const nextEpisodeData = nextEpisode ? {
                                    '| hasUrl=', !!picked.url,
                                    '| infoHash=', String(picked.infoHash || '').slice(0,8),
                                    '| audio-tag=', String(picked.title || picked.name || '').match(/DTS[\-\s]?HD\s?MA|DTS[\-\s]?X|DTSX|TRUEHD|TRUE[\-\s]?HD|ATMOS|DTS/i)?.[0] || 'aac/ac3-ok');
-                          handleStreamSelect(picked);
-                        } else {
+                          // Stop Details candidate churn immediately.
+                          // Keep the prepared cache until handleStreamSelect
+                          // has reused the exact media/probe/readiness result.
+                          _w121zod118DetailsPrepActiveRef.current = false;
+
+                          handleStreamSelect(picked);                        } else {
                           setIsPlayLoading(false);
                         }
                       } catch (e) {
@@ -8830,6 +9803,7 @@ const nextEpisodeData = nextEpisode ? {
 
           {/* Streams Section - Stremio Style */}
           {/* V780C_ADULT_STREAM_SECTION_GATE */}
+          {/* W121ZOD118D_SEARCHING_STREAMS_UI */}
           {(
             type === 'movie' ||
             type === 'tv' ||
@@ -8839,33 +9813,69 @@ const nextEpisodeData = nextEpisode ? {
             isEpisodePage
           ) && (
             <View style={styles.streamsSection}>
-              {/* Play button on left + stream count */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                {/* V169_STREAM_COUNT_USES_SORTED â€” use filtered list for gating */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  marginBottom: 8,
+                }}
+              >
                 <Text style={styles.sectionTitle}>
-                  {/* V169_STREAM_COUNT_USES_SORTED â€” display filtered count to match list */}
-                  {_v667EffectiveStreamLoading ? (type === 'tv' ? 'Verifying Live Streams...' : 'Finding Streams...') : `${sortedStreams.length} Stream${sortedStreams.length !== 1 ? 's' : ''}`}
+                  {_w121zod111eAutoPlayGateApplies &&
+                  _w121zod111eShowPreparingUi
+                    ? 'Searching for Streams...'
+                    : _v667EffectiveStreamLoading
+                        ? type === 'tv'
+                          ? 'Verifying Live Streams...'
+                          : 'Finding Streams...'
+                        : String(sortedStreams.length) +
+                          ' Stream' +
+                          (sortedStreams.length !== 1 ? 's' : '')}
                 </Text>
               </View>
-              
-              {_v667EffectiveStreamLoading ? (
+
+              {_w121zod111eAutoPlayGateApplies &&
+              _w121zod111eShowPreparingUi ? (
                 <View style={styles.streamLoading}>
-                  <ActivityIndicator size="small" color="#B8A05C" />
+                  <ActivityIndicator
+                    size="small"
+                    color="#B8A05C"
+                  />
+                </View>
+              ) : _v667EffectiveStreamLoading ? (
+                <View style={styles.streamLoading}>
+                  <ActivityIndicator
+                    size="small"
+                    color="#B8A05C"
+                  />
                   <Text style={styles.streamLoadingText}>
-                    {type === 'tv' ? 'Checking available channels...' : 'Searching sources...'}
+                    {type === 'tv'
+                      ? 'Checking available channels...'
+                      : 'Searching sources...'}
                   </Text>
                 </View>
-              /* V169_STREAM_COUNT_USES_SORTED â€” empty-state uses filtered list */
               ) : sortedStreams.length === 0 ? (
                 <View style={styles.noStreams}>
-                  <Ionicons name="cloud-offline-outline" size={32} color="#666" />
-                  <Text style={styles.noStreamsText}>No streams found</Text>
+                  <Ionicons
+                    name="cloud-offline-outline"
+                    size={32}
+                    color="#666"
+                  />
+                  <Text style={styles.noStreamsText}>
+                    No streams found
+                  </Text>
                 </View>
               ) : (
                 <FlatList
                   data={sortedStreams}
                   renderItem={renderStreamItem}
-                  keyExtractor={(item, index) => `${item.infoHash || item.url || index}`}
+                  keyExtractor={(item, index) =>
+                    String(
+                      item.infoHash ||
+                      item.url ||
+                      index
+                    )
+                  }
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.streamsList}
@@ -8873,7 +9883,6 @@ const nextEpisodeData = nextEpisode ? {
               )}
             </View>
           )}
-          
           {/* No extra bottom padding â€” scroll locks at stream cards */}
         </ScrollView>
       </View>

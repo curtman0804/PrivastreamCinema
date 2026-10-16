@@ -196,6 +196,13 @@ class PrivastreamLiveTVStationListView(
             return
         }
 
+        // W121ZPLAY10Y16_STATION_FAVORITE_FAST_PATH
+        // Mirror the guide's proven favorite-only update: update the
+        // attached star directly without replacing/rebinding the row.
+        if (stationAdapter.updateFavoritesOnly(next)) {
+            return
+        }
+
         val oldFocusKey =
             stationAdapter.itemAt(
                 currentAdapterFocus()
@@ -573,6 +580,61 @@ class PrivastreamLiveTVStationListView(
             data.indexOfFirst {
                 it.key == key
             }
+
+        // W121ZPLAY10Y16_DIRECT_STATION_STAR
+        fun updateFavoritesOnly(
+            next: List<StationItem>
+        ): Boolean {
+            if (data.size != next.size) {
+                return false
+            }
+
+            // Favorite must be the only difference.
+            for (i in next.indices) {
+                val current = data[i]
+                val incoming = next[i]
+
+                if (
+                    current.key != incoming.key ||
+                    current.title != incoming.title ||
+                    current.logo != incoming.logo
+                ) {
+                    return false
+                }
+            }
+
+            var changed = false
+
+            for (i in next.indices) {
+                val incoming = next[i]
+
+                if (data[i].favorite != incoming.favorite) {
+                    data[i] = incoming
+
+                    val holder =
+                        recycler
+                            .findViewHolderForAdapterPosition(i)
+                            as? Holder
+
+                    if (holder != null) {
+                        holder.badge.visibility =
+                            if (incoming.favorite) {
+                                View.VISIBLE
+                            } else {
+                                View.GONE
+                            }
+
+                        // Draw immediately; never rebind/request focus.
+                        holder.badge.invalidate()
+                        holder.badge.postInvalidateOnAnimation()
+                    }
+
+                    changed = true
+                }
+            }
+
+            return changed
+        }
 
         fun replace(
             next: List<StationItem>

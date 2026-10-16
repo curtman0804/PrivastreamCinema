@@ -47,6 +47,20 @@ function validateNativeStatus(status: TunnelStatus): void {
 }
 
 export async function ensurePrivastreamTunnel(authToken?: string): Promise<void> {
+  // V750_FAST_DIRECT_NETWORK
+  // Use the device's own Wi-Fi/cellular network directly.
+  // Shut down any legacy Privastream WireGuard tunnel and return.
+  if (Platform.OS === 'android') {
+    try {
+      const _v750Tunnel: any = NativeModules?.PrivastreamTunnel;
+      if (_v750Tunnel && typeof _v750Tunnel.disconnect === 'function') {
+        await _v750Tunnel.disconnect();
+      }
+    } catch (_) {}
+  }
+
+  console.log('[V750_DIRECT_NETWORK] device network active');
+  return;
   if (Platform.OS !== 'android') {
     return;
   }

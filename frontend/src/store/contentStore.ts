@@ -852,30 +852,215 @@ export const useContentStore = create<ContentState>((set, get) => ({
       const result = await api.addons.getAllStreams(type, id, _v194_onProgress);
       allStreams = result.streams || allStreams;
 
-      if ((!allStreams || allStreams.length === 0) && _myToken === _v190AbortToken) {
-        console.log('[ContentStore v190] 0 streams on first try — retrying once in 3s');
-        /* V406_RESILIENT_RETRY - 3 attempts with exponential backoff.
-           Reuses _v194_onProgress so any partial results from Torrentio
-           or TPB+ during the retries still paint the UI immediately. */
+      /*
+       * W121ZOD108H4AR_TRANSIENT_STREAM_RECOVERY
+       *
+       * A provider/network failure is not an authoritative "0 Streams" result.
+       * Keep Details in Finding Streams and retry while this exact content still
+       * owns stream discovery. Only a successful all-provider empty pass may
+       * settle the UI to a real zero-stream state.
+       */
+      let _h4arDiscoveryStatus: any =
+        result?.discoveryStatus || null;
+
+      if (
+        (!allStreams || allStreams.length === 0) &&
+        _myToken === _v190AbortToken &&
+        _h4arDiscoveryStatus?.authoritativeEmpty !== true
+      ) {
+        console.log('[ContentStore v190] 0 streams on first try — retrying');
+
         const _v406Delays = [500, 1500, 3500];
-        for (let _v406i = 0; _v406i < _v406Delays.length; _v406i++) {
+
+        for (
+          let _v406i = 0;
+          _v406i < _v406Delays.length;
+          _v406i++
+        ) {
           if (_myToken !== _v190AbortToken) return [];
+          if (get().currentStreamsKey !== cacheKey) return [];
           if (allStreams && allStreams.length > 0) break;
-          await new Promise((r) => setTimeout(r, _v406Delays[_v406i]));
+
+          if (
+            _h4arDiscoveryStatus?.authoritativeEmpty === true
+          ) {
+            break;
+          }
+
+          await new Promise(
+            (r) =>
+              setTimeout(
+                r,
+                _v406Delays[_v406i]
+              )
+          );
+
           if (_myToken !== _v190AbortToken) return [];
+          if (get().currentStreamsKey !== cacheKey) return [];
+
           try {
-            const _v406R = await api.addons.getAllStreams(type, id, _v194_onProgress);
-            if (_v406R && _v406R.streams && _v406R.streams.length > 0) {
-              allStreams = _v406R.streams;
-              console.log('[V406] retry ' + (_v406i + 1) + '/3 succeeded, streams=' + allStreams.length);
+            const _v406R =
+              await api.addons.getAllStreams(
+                type,
+                id,
+                _v194_onProgress
+              );
+
+            _h4arDiscoveryStatus =
+              _v406R?.discoveryStatus ||
+              _h4arDiscoveryStatus;
+
+            if (
+              _v406R &&
+              _v406R.streams &&
+              _v406R.streams.length > 0
+            ) {
+              allStreams =
+                _v406R.streams;
+
+              console.log(
+                '[V406] retry ' +
+                (_v406i + 1) +
+                '/3 succeeded, streams=' +
+                allStreams.length
+              );
+
               break;
-            } else {
-              console.log('[V406] retry ' + (_v406i + 1) + '/3 returned 0');
             }
-          } catch (_e) {
-            console.log('[V406] retry ' + (_v406i + 1) + '/3 threw', _e);
+
+            if (
+              _h4arDiscoveryStatus?.authoritativeEmpty === true
+            ) {
+              console.log(
+                '[W121ZOD108H4AR] authoritative empty during bounded retry'
+              );
+
+              break;
+            }
+
+            console.log(
+              '[V406] retry ' +
+              (_v406i + 1) +
+              '/3 returned 0',
+              'hadFailure=' +
+              String(
+                _h4arDiscoveryStatus?.hadFailure === true
+              )
+            );
+          }
+          catch (_e) {
+            _h4arDiscoveryStatus = {
+              hadFailure: true,
+              authoritativeEmpty: false,
+            };
+
+            console.log(
+              '[V406] retry ' +
+              (_v406i + 1) +
+              '/3 threw',
+              _e
+            );
           }
         }
+      }
+
+      let _h4arRecoveryAttempt = 0;
+
+      while (
+        _myToken === _v190AbortToken &&
+        get().currentStreamsKey === cacheKey &&
+        (!allStreams || allStreams.length === 0) &&
+        _h4arDiscoveryStatus?.hadFailure === true &&
+        _h4arDiscoveryStatus?.authoritativeEmpty !== true
+      ) {
+        const _h4arDelay =
+          Math.min(
+            5000,
+            1000 +
+            (_h4arRecoveryAttempt * 1000)
+          );
+
+        _setIf({
+          streams: [],
+          isLoadingStreams: true,
+          error: null,
+        });
+
+        console.log(
+          '[W121ZOD108H4AR TRANSIENT RECOVERY]',
+          'attempt=' +
+          String(_h4arRecoveryAttempt + 1),
+          'delayMs=' +
+          String(_h4arDelay),
+          'key=' +
+          cacheKey
+        );
+
+        await new Promise(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              _h4arDelay
+            )
+        );
+
+        if (_myToken !== _v190AbortToken) return [];
+        if (get().currentStreamsKey !== cacheKey) return [];
+
+        try {
+          const _h4arR =
+            await api.addons.getAllStreams(
+              type,
+              id,
+              _v194_onProgress
+            );
+
+          _h4arDiscoveryStatus =
+            _h4arR?.discoveryStatus ||
+            _h4arDiscoveryStatus;
+
+          if (
+            _h4arR &&
+            _h4arR.streams &&
+            _h4arR.streams.length > 0
+          ) {
+            allStreams =
+              _h4arR.streams;
+
+            console.log(
+              '[W121ZOD108H4AR TRANSIENT RECOVERY] success',
+              'attempt=' +
+              String(_h4arRecoveryAttempt + 1),
+              'streams=' +
+              String(allStreams.length)
+            );
+
+            break;
+          }
+
+          if (
+            _h4arDiscoveryStatus?.authoritativeEmpty === true
+          ) {
+            console.log(
+              '[W121ZOD108H4AR TRANSIENT RECOVERY] authoritative-empty'
+            );
+
+            break;
+          }
+        }
+        catch (_h4arError) {
+          _h4arDiscoveryStatus = {
+            hadFailure: true,
+            authoritativeEmpty: false,
+          };
+
+          console.log(
+            '[W121ZOD108H4AR TRANSIENT RECOVERY] threw',
+            _h4arError
+          );
+        }
+
+        _h4arRecoveryAttempt += 1;
       }
 
       if (allStreams.length > 0) {
@@ -941,6 +1126,50 @@ export const useContentStore = create<ContentState>((set, get) => ({
     }
   },
 
+  // W121ZOD109D_PREFETCH_WRAPPER
+  //
+  // One best-effort preparation entrypoint for poster focus/click.
+  //
+  // IMPORTANT:
+  // - Reuse fetchStreams() exactly.
+  // - Do not duplicate provider discovery.
+  // - Do not bypass parental gating.
+  // - Do not claim currentStreamsKey.
+  // - V257 remains authoritative for same-content in-flight dedup.
+  // - Existing memory/disk stream caches remain authoritative.
+  //
+  prefetchStreams: async (type: string, id: string) => {
+    const key = `${type}/${id}`;
+
+    try {
+      console.log(
+        '[W121ZOD109D PREFETCH]',
+        'start',
+        key
+      );
+
+      const result = await get().fetchStreams(type, id);
+
+      console.log(
+        '[W121ZOD109D PREFETCH]',
+        'done',
+        key,
+        'streams=' +
+          String(
+            Array.isArray(result)
+              ? result.length
+              : 0
+          )
+      );
+    } catch (error: any) {
+      console.log(
+        '[W121ZOD109D PREFETCH]',
+        'failed',
+        key,
+        String(error?.message || error)
+      );
+    }
+  },
   // V198_NUKE_DISCOVER / V199_TRUE_WIPE — clear EVERY discover cache layer
   nukeDiscoverCache: async (soft = false) => {
     // V204_SOFT_NUKE — soft keeps current posters on screen (no blank flash, no

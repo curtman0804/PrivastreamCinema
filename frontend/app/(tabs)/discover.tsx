@@ -204,6 +204,154 @@ async function _v706c2q3FilterWatchProgress(
       decisions[index] === true
   );
 }
+
+// W121ZOD118F_CW_CANONICALIZE
+// One Continue Watching card per movie or parent series.
+// A series keeps the newest episode's resume payload.
+function _w121zod118fNormalizeCW(
+  items: any[]
+): any[] {
+  const source =
+    Array.isArray(items)
+      ? items
+      : [];
+
+  const byIdentity =
+    new Map<string, any>();
+
+  const updatedAtMs =
+    (item: any): number => {
+      const raw =
+        item?.updated_at ??
+        item?.updatedAt ??
+        item?.last_watched_at ??
+        item?.lastWatchedAt ??
+        '';
+
+      const numeric =
+        Number(raw);
+
+      if (
+        Number.isFinite(numeric) &&
+        numeric > 0
+      ) {
+        return numeric < 1e12
+          ? numeric * 1000
+          : numeric;
+      }
+
+      const parsed =
+        Date.parse(
+          String(raw || '')
+        );
+
+      return Number.isFinite(parsed)
+        ? parsed
+        : 0;
+    };
+
+  const isComplete =
+    (item: any): boolean => {
+      const pct =
+        Number(
+          item?.percent_watched
+        );
+
+      if (
+        Number.isFinite(pct) &&
+        pct >= 90
+      ) {
+        return true;
+      }
+
+      const progress =
+        Number(item?.progress);
+
+      const duration =
+        Number(item?.duration);
+
+      return (
+        Number.isFinite(progress) &&
+        Number.isFinite(duration) &&
+        duration > 0 &&
+        (progress / duration) >= 0.9
+      );
+    };
+
+  for (const item of source) {
+    if (!item) continue;
+
+    const contentType =
+      String(
+        item?.content_type ||
+        item?.type ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+
+    const contentId =
+      String(
+        item?.content_id ||
+        item?.imdb_id ||
+        item?.id ||
+        ''
+      ).trim();
+
+    if (!contentId) continue;
+
+    const seriesId =
+      String(
+        item?.series_id || ''
+      ).trim();
+
+    const identity =
+      contentType === 'series'
+        ? 'series:' +
+          (
+            seriesId ||
+            contentId.split(':')[0] ||
+            contentId
+          )
+        : (
+            contentType ||
+            'movie'
+          ) +
+          ':' +
+          contentId;
+
+    const previous =
+      byIdentity.get(identity);
+
+    if (
+      !previous ||
+      updatedAtMs(item) >
+        updatedAtMs(previous)
+    ) {
+      byIdentity.set(
+        identity,
+        item
+      );
+    }
+  }
+
+  // IMPORTANT:
+  // newest record is selected BEFORE completion filtering.
+  // Therefore completing a new episode cannot expose an old one.
+  return Array.from(
+    byIdentity.values()
+  )
+    .filter(
+      (item: any) =>
+        !isComplete(item)
+    )
+    .sort(
+      (a: any, b: any) =>
+        updatedAtMs(b) -
+        updatedAtMs(a)
+    );
+}
+
 type _V271Snapshot = { discover: any | null; cw: any[] | null };
 const _v271BootSnapshotPromise: Promise<_V271Snapshot> = (async () => {
   try {
@@ -273,6 +421,114 @@ function LazyMount({ delay, children, placeholder }: { delay: number; children: 
 let _v181_lastDiscoverFetch: number = 0;
 
 
+
+// W121ZOD118F2R_PENDING_CW
+const _w121zod118f2rIdentity =
+  (item: any): string => {
+    const type =
+      String(
+        item?.content_type ||
+        item?.type ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+
+    const contentId =
+      String(
+        item?.content_id ||
+        item?.imdb_id ||
+        item?.id ||
+        ''
+      ).trim();
+
+    if (type === 'series') {
+      const seriesId =
+        String(
+          item?.series_id ||
+          ''
+        ).trim();
+
+      return (
+        'series:' +
+        (
+          seriesId ||
+          contentId.split(':')[0] ||
+          contentId
+        )
+      );
+    }
+
+    return (
+      type +
+      ':' +
+      contentId
+    );
+  };
+
+const _w121zod118f2rMergePending =
+  (items: any[]): any[] => {
+    let next =
+      Array.isArray(items)
+        ? [...items]
+        : [];
+
+    try {
+      const g: any =
+        globalThis as any;
+
+      const pending =
+        g.__w121zod118f2rPendingCW;
+
+      if (
+        !pending ||
+        typeof pending.entries !==
+          'function'
+      ) {
+        return next;
+      }
+
+      const now =
+        Date.now();
+
+      for (
+        const [identity, entry]
+        of pending.entries()
+      ) {
+        if (
+          !entry ||
+          Number(
+            entry.expiresAt || 0
+          ) <= now
+        ) {
+          pending.delete(
+            identity
+          );
+          continue;
+        }
+
+        next =
+          next.filter(
+            (candidate: any) =>
+              _w121zod118f2rIdentity(
+                candidate
+              ) !== identity
+          );
+
+        if (
+          !entry.completed &&
+          entry.item
+        ) {
+          next.unshift(
+            entry.item
+          );
+        }
+      }
+    } catch (_) {}
+
+    return next;
+  };
+
 export default function DiscoverScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
@@ -326,6 +582,134 @@ export default function DiscoverScreen() {
     }
   }, [discoverNukeStamp]);
   const [cachedCW, setCachedCW] = useState<WatchProgress[]>([]);
+
+  // W121ZOD118F2R_CW_RECEIVER
+  //
+  // Discover normally stays mounted underneath Details/Player.
+  // Receive the CW item while still hidden so its first visible
+  // frame already has the row.
+  useEffect(() => {
+    const applyPayload =
+      (payload: any) => {
+        try {
+          const identity =
+            String(
+              payload?.identity ||
+              ''
+            );
+
+          if (!identity) {
+            return;
+          }
+
+          const apply =
+            (previous: any[]) => {
+              let next =
+                Array.isArray(previous)
+                  ? previous.filter(
+                      (candidate: any) =>
+                        _w121zod118f2rIdentity(
+                          candidate
+                        ) !== identity
+                    )
+                  : [];
+
+              if (
+                !payload?.completed &&
+                payload?.item
+              ) {
+                next.unshift(
+                  payload.item
+                );
+              }
+
+              return (
+                _w121zod118fNormalizeCW(
+                  next
+                )
+              );
+            };
+
+          setContinueWatching(
+            (previous: any[]) =>
+              apply(previous)
+          );
+
+          setCachedCW(
+            (previous: any[]) =>
+              apply(previous)
+          );
+
+          if (!payload?.completed) {
+            setCwForceHidden(false);
+          }
+
+          console.log(
+            '[W121ZOD118F2R CW RECEIVE]',
+            'identity=' + identity,
+            'completed=' +
+              String(
+                !!payload?.completed
+              )
+          );
+        } catch (error) {
+          console.log(
+            '[W121ZOD118F2R CW RECEIVE] failed',
+            String(
+              (error as any)?.message ||
+              error
+            )
+          );
+        }
+      };
+
+    const sub =
+      DeviceEventEmitter.addListener(
+        'w121zod118f2r:cw',
+        applyPayload
+      );
+
+    // If Discover was remounted rather than merely hidden,
+    // consume the still-pending handoff immediately.
+    try {
+      const g: any =
+        globalThis as any;
+
+      const pending =
+        g.__w121zod118f2rPendingCW;
+
+      if (
+        pending &&
+        typeof pending.values ===
+          'function'
+      ) {
+        const now =
+          Date.now();
+
+        for (
+          const entry
+          of pending.values()
+        ) {
+          if (
+            entry &&
+            Number(
+              entry.expiresAt || 0
+            ) > now
+          ) {
+            applyPayload(
+              entry
+            );
+          }
+        }
+      }
+    } catch (_) {}
+
+    return () => {
+      try {
+        sub.remove();
+      } catch (_) {}
+    };
+  }, []);
   // V706C2Q3_CLEAR_LOCAL_CW_ON_POLICY_NUKE
   // Policy changes already bump discoverNukeStamp. Drop both local
   // CW layers immediately so a blocked poster cannot survive the toggle.
@@ -420,8 +804,15 @@ export default function DiscoverScreen() {
         )
       );
 
-      const _v204Next =
+      const _v204Filtered =
         await _v706c2q3FilterWatchProgress(_v706c2q3RawCW);
+
+      const _v204Next =
+        _w121zod118fNormalizeCW(
+          _w121zod118f2rMergePending(
+            _v204Filtered
+          )
+        );
       // V274_CW_INSTANT_REMOVE ├óΓé¼ΓÇ¥ fresh CW data arrived; if it has items,
       // the force-hidden gate is no longer needed (user added something
       // new, or backend returned content they haven't seen locally).
@@ -559,7 +950,7 @@ export default function DiscoverScreen() {
     // Fast path: synchronous resolved snapshot.
     if (_v271ResolvedSnapshot) {
       if (_v271ResolvedSnapshot.discover) setCachedDiscover(_v271ResolvedSnapshot.discover);
-      if (_v271ResolvedSnapshot.cw) setCachedCW(_v271ResolvedSnapshot.cw);
+      if (_v271ResolvedSnapshot.cw) setCachedCW(_w121zod118fNormalizeCW(_v271ResolvedSnapshot.cw));
       return;
     }
     // Slow path: await the in-flight boot promise (still faster than firing
@@ -572,7 +963,7 @@ export default function DiscoverScreen() {
 
         if (!_v706c2q3HydrateParentalModeEnabled) {
           if (snap.discover) setCachedDiscover(snap.discover);
-          if (snap.cw) setCachedCW(snap.cw);
+          if (snap.cw) setCachedCW(_w121zod118fNormalizeCW(snap.cw));
         }
       } catch (_) {}
     })();
@@ -1216,6 +1607,42 @@ const handleItemPress = useCallback((item: ContentItem) => {
     // If content_id is already in tt12345:1:1 form, leave it ├óΓé¼ΓÇ¥ that's
     // exactly the episode-page URL the details screen expects.
     
+    // W121ZOD118F_CW_ROUTE_CANONICAL_POSTER
+    // Resume navigation for a series carries parent-series artwork.
+    const _w121zod118fRoutePosterId =
+      targetType === 'series'
+        ? String(
+            item.series_id ||
+            targetId ||
+            ''
+          ).split(':')[0]
+        : String(
+            targetId || ''
+          );
+
+    const _w121zod118fRouteMeta =
+      _w121zod118fRoutePosterId
+        ? (
+            getMetaCache(
+              _w121zod118fRoutePosterId
+            ) as any
+          )
+        : null;
+
+    const _w121zod118fRoutePoster =
+      targetType === 'series'
+        ? String(
+            _w121zod118fRouteMeta?.poster ||
+            _v160GetPoster(
+              _w121zod118fRoutePosterId,
+              ''
+            ) ||
+            ''
+          ).trim()
+        : String(
+            item.poster || ''
+          ).trim();
+
     const encodedId = encodeURIComponent(targetId);
     // PATCH_V147_AUTOPLAY ├óΓé¼ΓÇ¥ let details fire its built-in autoPlay path so
     // the user lands directly on playback after a fresh stream fetch.
@@ -1223,7 +1650,7 @@ const handleItemPress = useCallback((item: ContentItem) => {
       pathname: `/details/${targetType}/${encodedId}`,
       params: {
         name: item.title || '',
-        poster: item.poster || '',
+        poster: _w121zod118fRoutePoster,
         resumeEpisodeId: item.content_type === 'series' ? item.content_id : '',
         resumePosition: String(item.progress || 0),
         // v238b ├óΓé¼ΓÇ¥ was `item.season !== undefined` which let `null` slip
@@ -1748,13 +2175,65 @@ function ContinueWatchingItem({
     return contentId;
   })();
 
-  const [_v166Poster, _v166SetPoster] = useState<string>(
-    () => _v160GetPoster(_v716PosterId, item.poster)
+  const _v716IsSeries =
+    String(
+      (item as any).content_type ||
+      (item as any).type ||
+      ''
+    )
+      .trim()
+      .toLowerCase() === 'series';
+
+  const _v716InitialPoster =
+    (() => {
+      if (_v716IsSeries) {
+        const cachedParent =
+          getMetaCache(
+            _v716PosterId
+          ) as any;
+
+        return String(
+          cachedParent?.poster || ''
+        ).trim();
+      }
+
+      return String(
+        (item as any).poster ||
+        ''
+      ).trim();
+    })();
+
+  const [
+    _v166Poster,
+    _v166SetPoster,
+  ] = useState<string>(
+    () =>
+      _v160GetPoster(
+        _v716PosterId,
+        _v716InitialPoster
+      )
   );
+
   useEffect(() => {
-    const unsub = _v160SubscribePoster(_v716PosterId, (u: string) => _v166SetPoster(u));
+    _v166SetPoster(
+      _v160GetPoster(
+        _v716PosterId,
+        _v716InitialPoster
+      )
+    );
+
+    const unsub =
+      _v160SubscribePoster(
+        _v716PosterId,
+        (u: string) =>
+          _v166SetPoster(u)
+      );
+
     return unsub;
-  }, [_v716PosterId]);
+  }, [
+    _v716PosterId,
+    _v716InitialPoster,
+  ]);
 
   /* V614_CW_CURRENT_POSTER
      Watch-progress contains the poster saved at playback time. Refresh the
@@ -1781,9 +2260,17 @@ function ContinueWatchingItem({
       .getMeta(type as 'movie' | 'series', baseId)
       .then((meta: any) => {
         if (!cancelled && meta?.poster) {
+          const verifiedPoster =
+            String(meta.poster);
+
           _v614RegisterVerifiedPoster(
             baseId,
-            String(meta.poster)
+            verifiedPoster
+          );
+
+          // W121ZOD118F_CW_VERIFIED_POSTER
+          _v166SetPoster(
+            verifiedPoster
           );
         }
       })
@@ -1802,9 +2289,28 @@ function ContinueWatchingItem({
      First-write-wins: no-op when a rail already registered. Persisted by
      V383, so rails + CW agree from cold boot onward. */
   useEffect(() => {
-    const _p = (item as any).poster;
-    if (_p) { try { _v160RegisterPoster(_v716PosterId, _p); } catch (_) {} }
-  }, [_v716PosterId, (item as any).poster]);
+    const _p =
+      (item as any).poster;
+
+    // W121ZOD118F_CW_SERIES_POSTER_GUARD
+    // An episode progress row may carry an episode thumbnail.
+    // Never register it as the parent's canonical poster.
+    if (
+      _p &&
+      !_v716IsSeries
+    ) {
+      try {
+        _v160RegisterPoster(
+          _v716PosterId,
+          _p
+        );
+      } catch (_) {}
+    }
+  }, [
+    _v716PosterId,
+    _v716IsSeries,
+    (item as any).poster,
+  ]);
 
   // V280_FIRST_CW_TAG ├óΓé¼ΓÇ¥ shared module-level reference to the first CW
   // poster's native tag.  Set by the FIRST ContinueWatchingItem (index 0)

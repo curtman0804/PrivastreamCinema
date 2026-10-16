@@ -40,7 +40,7 @@ export default function RegisterScreen() {
     setIsLoading(true);
     try {
       await register(username.trim(), email.trim(), password);
-      router.replace('/(tabs)/discover');
+      router.replace('/(tabs)/livetv');
     } catch (error: any) {
       Alert.alert('Registration Failed', error.response?.data?.detail || 'Please try again');
     } finally {
