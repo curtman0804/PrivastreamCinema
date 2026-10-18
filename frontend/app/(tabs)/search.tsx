@@ -1,3 +1,4 @@
+﻿import { PrivastreamPageHeader } from '../../src/components/PrivastreamPageHeader';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
@@ -180,7 +181,7 @@ export default function SearchScreen() {
     lastFocusedSection.current = '';
   }, [currentQuery]);
 
-  // V112: row-snap â€” scroll parent ScrollView to bring focused row's title into view
+  // V112: row-snap Ã¢â‚¬â€ scroll parent ScrollView to bring focused row's title into view
   const handleSectionFocus = useCallback((sectionKey: string) => {
     if (lastFocusedSection.current === sectionKey) return;
     lastFocusedSection.current = sectionKey;
@@ -205,9 +206,9 @@ export default function SearchScreen() {
 
     try {
       await search(query, 'auto');
-    // v238 â€” if a multi-word query returned ZERO movies AND ZERO series,
+    // v238 Ã¢â‚¬â€ if a multi-word query returned ZERO movies AND ZERO series,
     // retry once with a more lenient form (drop short stop-words like
-    // "of", "the", "a", "an" â€” addons that index titles literally will
+    // "of", "the", "a", "an" Ã¢â‚¬â€ addons that index titles literally will
     // miss "pirates of the caribbean" but match "pirates caribbean").
     const { searchMovies: m2, searchSeries: s2 } = useContentStore.getState();
     if (m2.length === 0 && s2.length === 0 && /\s/.test(query.trim())) {
@@ -273,9 +274,7 @@ export default function SearchScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Search</Text>
-      </View>
+      <PrivastreamPageHeader title="Search" />
 
       <SearchBar onSearch={handleSearch} initialValue={currentQuery} />
 
@@ -406,3 +405,4 @@ const styles = StyleSheet.create({
     height: 8, // V112B: minimal padding so last row ends flush with screen
   },
 });
+

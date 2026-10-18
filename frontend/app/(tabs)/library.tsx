@@ -1,3 +1,4 @@
+﻿import { PrivastreamPageHeader } from '../../src/components/PrivastreamPageHeader';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
@@ -19,7 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useContentStore } from '../../src/store/contentStore';
 import { ContentItem } from '../../src/api/client';
 import { colors } from '../../src/styles/colors';
-/* V176_LONGPRESS_MENU — pull the unified menu opener + watched/progress
+/* V176_LONGPRESS_MENU â€” pull the unified menu opener + watched/progress
    subscriptions in so LibraryCard renders the gold check and routes
    long-press through the shared Alert. */
 import {
@@ -29,7 +30,7 @@ import {
   v176HasProgress as _v176HasProgress,
   v176SubscribeProgress as _v176SubscribeProgress,
   v176ShowLongPressMenu as _v176ShowLongPressMenu,
-  /* V176E_TV_LONGPRESS — register this card's menu handler with the
+  /* V176E_TV_LONGPRESS â€” register this card's menu handler with the
      v173 TV event dispatcher so the remote Menu button (now mapped to
      longSelect via withTVKeyEvents.js) fires this card's menu. */
   v173RegisterLongPress as _v173RegLP,
@@ -40,7 +41,7 @@ const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
 type FilterType = 'movies' | 'series' | 'channels'; // V784F TV Channels restored
 
-// Library card — EXACT same X-button pattern as ContinueWatchingCard in discover.tsx
+// Library card â€” EXACT same X-button pattern as ContinueWatchingCard in discover.tsx
 function LibraryCard({
   item,
   cardWidth,
@@ -86,7 +87,7 @@ function LibraryCard({
   const xButtonSize = isTV ? 30 : 24;
   const xRowHeight = xButtonSize + 8;
 
-  /* V176_LONGPRESS_MENU — derive watched + progress per-card; subscribe
+  /* V176_LONGPRESS_MENU â€” derive watched + progress per-card; subscribe
      so any change elsewhere (player marks watched, another long-press
      clears progress) instantly refreshes the gold badge / menu. */
   const _v176ContentId = ((item as any).imdb_id || (item as any).id || (item as any).content_id) as string | undefined;
@@ -97,7 +98,7 @@ function LibraryCard({
   const _v176HasProg = _v176HasProgress(_v176ContentId);
 
   const _v176OpenMenu = useCallback(async () => {
-    /* V176K_POPOVER_MOUNTED — measure the poster so the menu anchors
+    /* V176K_POPOVER_MOUNTED â€” measure the poster so the menu anchors
        from its corner, then emit through the existing v176 helper. */
     let anchor: any = null;
     try { anchor = await v176kMeasureAnchor(posterRef.current); } catch (_) {}
@@ -112,7 +113,7 @@ function LibraryCard({
     });
   }, [item, _v176ContentId, _v176HasProg, onRemove]);
 
-  /* V176B_PRESS_TIMING — fire menu via onPressIn/Out timing so the
+  /* V176B_PRESS_TIMING â€” fire menu via onPressIn/Out timing so the
      TV remote OK button works (Pressable.onLongPress is flaky). */
   const _v176bLpTimer = useRef<any>(null);
   const _v176bLpFired = useRef<boolean>(false);
@@ -138,7 +139,7 @@ function LibraryCard({
 
   return (
     <View style={{ width: cardWidth, marginRight: 16 }}>
-      {/* V176P_X_REMOVED — X overlay removed; use long-press menu. */}
+      {/* V176P_X_REMOVED â€” X overlay removed; use long-press menu. */}
       {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
         ref={posterRef}
@@ -150,10 +151,10 @@ function LibraryCard({
         onFocus={() => { try { _v173RegLP(_v176OpenMenu); } catch (_) {} handleFocus(); }}
         onBlur={() => { try { _v173RegLP(null); } catch (_) {} setIsFocused(false); onCardBlur?.(); }}
         android_ripple={null}
-        /* V176P_X_REMOVED — nextFocusUp target gone. */
+        /* V176P_X_REMOVED â€” nextFocusUp target gone. */
         style={[
           styles.posterContainer,
-          /* V176P_X_REMOVED — no more X row to overlap. */
+          /* V176P_X_REMOVED â€” no more X row to overlap. */
           { height: cardHeight },
           isFocused && styles.posterFocused,
         ]}
@@ -167,7 +168,7 @@ function LibraryCard({
           />
         </View>
 
-        {/* V176_LONGPRESS_MENU — gold check overlay when watched. */}
+        {/* V176_LONGPRESS_MENU â€” gold check overlay when watched. */}
         {_v176IsWatched && (
           <View style={styles.v176WatchedBadge} pointerEvents="none">
             <Ionicons name="checkmark" size={14} color="#B8A05C" />
@@ -330,11 +331,9 @@ export default function LibraryScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* V176K_POPOVER_MOUNTED — Stremio-style menu host for this screen. */}
+      {/* V176K_POPOVER_MOUNTED â€” Stremio-style menu host for this screen. */}
       <V176kPopover />
-      <View style={[styles.header, isTV && styles.headerTV]}>
-        <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Library</Text>
-      </View>
+      <PrivastreamPageHeader title="Library" />
 
       <View style={[styles.filterContainer, isTV && styles.filterContainerTV]}>
         <FilterButton type="movies" label="Movies" />
@@ -375,7 +374,7 @@ export default function LibraryScreen() {
 }
 
 const styles = StyleSheet.create({
-  /* V176_LONGPRESS_MENU — mirror EpisodeCard's gold checkmark badge. */
+  /* V176_LONGPRESS_MENU â€” mirror EpisodeCard's gold checkmark badge. */
   v176WatchedBadge: {
     position: 'absolute',
     top: 6,
@@ -543,3 +542,4 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 });
+

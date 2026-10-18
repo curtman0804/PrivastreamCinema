@@ -24630,7 +24630,7 @@ async def get_live_tv_epg(
     _w121zod33_lock_ttl = 300
 
     _w121zod33_cache_key = (
-        "privastream:w121zod33:epg:v1:"
+        "privastream:w121zlive121:epg:v2:"
         + str(current_user.id)
         + ":"
         + raw_date
@@ -28239,6 +28239,220 @@ async def get_live_tv_epg(
         )
 
     # ================== /V788G PLUTO NATIVE EPG ==================
+
+    # ================== W121ZLIVE121 COMPACT DEVICE EPG ==================
+    #
+    # The full provider-native EPG is useful while building/enriching the
+    # guide on the backend, but Android TV does not need the complete addon
+    # metadata graph in the HTTP response.
+    #
+    # A low-memory Fire TV process was runtime-proven to die while OkHttp /
+    # React Native converted the large EPG response body to a String.
+    #
+    # Preserve every field consumed by the current Live guide/player while
+    # removing unused metadata before JSON serialization and Redis storage.
+    # This changes payload representation only; channel membership, schedule
+    # construction, provenance, stream resolution and tuning are untouched.
+    _w121zlive121_compact_providers = []
+
+    for _w121zlive121_provider in providers:
+        if not isinstance(
+            _w121zlive121_provider,
+            dict,
+        ):
+            continue
+
+        _w121zlive121_channels = []
+
+        for _w121zlive121_channel in (
+            _w121zlive121_provider.get(
+                "channels"
+            )
+            or []
+        ):
+            if not isinstance(
+                _w121zlive121_channel,
+                dict,
+            ):
+                continue
+
+            _w121zlive121_programs = []
+
+            for _w121zlive121_program in (
+                _w121zlive121_channel.get(
+                    "programs"
+                )
+                or []
+            ):
+                if not isinstance(
+                    _w121zlive121_program,
+                    dict,
+                ):
+                    continue
+
+                _w121zlive121_overview = (
+                    _w121zlive121_program.get(
+                        "overview"
+                    )
+                )
+
+                if not isinstance(
+                    _w121zlive121_overview,
+                    str,
+                ):
+                    _w121zlive121_overview = ""
+
+                _w121zlive121_thumbnail = (
+                    _w121zlive121_program.get(
+                        "thumbnail"
+                    )
+                )
+
+                if not isinstance(
+                    _w121zlive121_thumbnail,
+                    str,
+                ):
+                    _w121zlive121_thumbnail = ""
+
+                _w121zlive121_programs.append({
+                    "id": str(
+                        _w121zlive121_program.get(
+                            "id"
+                        )
+                        or ""
+                    ),
+                    "title": str(
+                        _w121zlive121_program.get(
+                            "title"
+                        )
+                        or "Programming"
+                    ),
+                    "startTime": str(
+                        _w121zlive121_program.get(
+                            "startTime"
+                        )
+                        or ""
+                    ),
+                    "endTime": str(
+                        _w121zlive121_program.get(
+                            "endTime"
+                        )
+                        or ""
+                    ),
+                    "overview":
+                        _w121zlive121_overview,
+                    "thumbnail":
+                        _w121zlive121_thumbnail,
+                })
+
+            _w121zlive121_channels.append({
+                "id": str(
+                    _w121zlive121_channel.get(
+                        "id"
+                    )
+                    or ""
+                ),
+                "type": "tv",
+                "name": str(
+                    _w121zlive121_channel.get(
+                        "name"
+                    )
+                    or
+                    _w121zlive121_channel.get(
+                        "id"
+                    )
+                    or ""
+                ),
+                "logo": (
+                    _w121zlive121_channel.get(
+                        "logo"
+                    )
+                    if isinstance(
+                        _w121zlive121_channel.get(
+                            "logo"
+                        ),
+                        str,
+                    )
+                    else ""
+                ),
+                "programs":
+                    _w121zlive121_programs,
+            })
+
+        _w121zlive121_compact_providers.append({
+            "addonId": str(
+                _w121zlive121_provider.get(
+                    "addonId"
+                )
+                or ""
+            ),
+            "addonName": str(
+                _w121zlive121_provider.get(
+                    "addonName"
+                )
+                or ""
+            ),
+            "catalogId": str(
+                _w121zlive121_provider.get(
+                    "catalogId"
+                )
+                or ""
+            ),
+            "catalogName": str(
+                _w121zlive121_provider.get(
+                    "catalogName"
+                )
+                or ""
+            ),
+            "channels":
+                _w121zlive121_channels,
+            "error":
+                _w121zlive121_provider.get(
+                    "error"
+                ),
+            "truncated": bool(
+                _w121zlive121_provider.get(
+                    "truncated",
+                    False,
+                )
+            ),
+        })
+
+    providers = (
+        _w121zlive121_compact_providers
+    )
+
+    logger.info(
+        "W121ZLIVE121_EPG_COMPACT "
+        "providers=%s channels=%s programs=%s",
+        len(providers),
+        sum(
+            len(
+                provider.get(
+                    "channels"
+                )
+                or []
+            )
+            for provider in providers
+        ),
+        sum(
+            len(
+                channel.get(
+                    "programs"
+                )
+                or []
+            )
+            for provider in providers
+            for channel in (
+                provider.get(
+                    "channels"
+                )
+                or []
+            )
+        ),
+    )
+
+    # ================= /W121ZLIVE121 COMPACT DEVICE EPG =================
 
     channel_count = sum(
         len(provider["channels"])

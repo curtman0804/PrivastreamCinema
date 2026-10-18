@@ -6,7 +6,7 @@ import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ensurePrivastreamTunnel } from '../../src/native/privastreamTunnelGate';
 
-// V261_TAB_FOCUS_CHAIN ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â module-level map of route.name -> native tag.
+// V261_TAB_FOCUS_CHAIN ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â module-level map of route.name -> native tag.
 // Populated as each tab button mounts.  Used to wire every tab's
 // nextFocusLeft / nextFocusRight to its adjacent sibling so D-pad LEFT/RIGHT
 // stays inside the tab bar instead of jumping into the content posters.
@@ -142,7 +142,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         // PATCH_V14B_FREEZE_ON_BLUR_TABS
-        // PATCH_V40_NO_FREEZE ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â keep Discover mounted; back returns instantly.
+        // PATCH_V40_NO_FREEZE ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â keep Discover mounted; back returns instantly.
         freezeOnBlur: false,
         lazy: true,
         headerShown: false,
@@ -165,7 +165,7 @@ export default function TabsLayout() {
           isTV && styles.tabBarItemTV,
         ],
         tabBarButton: (props: any) => {
-          // V261_TAB_FOCUS_CHAIN ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â every tab button now explicitly wires
+          // V261_TAB_FOCUS_CHAIN ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â every tab button now explicitly wires
           // nextFocusLeft / nextFocusRight to its adjacent tab's tag so the
           // D-pad never escapes the tab bar horizontally.  The first tab
           // traps LEFT to itself; the last tab traps RIGHT to itself.
@@ -280,7 +280,7 @@ export default function TabsLayout() {
             };
           }, [myName]);
 
-          // Ladder of retries ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â mount, layout, plus delayed attempts.
+          // Ladder of retries ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â mount, layout, plus delayed attempts.
           useEffect(() => {
             if (!myName) return;
             const timers = [0, 80, 250, 600, 1500].map((ms) => setTimeout(grabTag, ms));
@@ -314,7 +314,7 @@ export default function TabsLayout() {
               {...props}
               {...trap}
               focusable={true}
-              /* v238 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â cold-boot focus lands on the Discover tab button.
+              /* v238 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â cold-boot focus lands on the Discover tab button.
                  Without this, no element claimed initial TV focus and the
                  selector ring was invisible until the user pressed a key. */
               hasTVPreferredFocus={isFirst}
@@ -468,18 +468,18 @@ const styles = StyleSheet.create({
   },
   tabBarTV: {
     // V788T8X_THIN_ALWAYS_VISIBLE_TRAY
-    paddingHorizontal: 28,
+    paddingHorizontal: 8,
     borderTopWidth: 1,
     borderTopColor: '#333333',
     zIndex: 100,
     elevation: 20,
   },
   tabBarLabel: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '600',
   },
   tabBarLabelTV: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   tabBarItem: {
@@ -487,8 +487,8 @@ const styles = StyleSheet.create({
   },
   tabBarItemTV: {
     paddingVertical: 2,
-    paddingHorizontal: 18,
-    marginHorizontal: 8,
+    paddingHorizontal: 6,
+    marginHorizontal: 2,
     borderRadius: 0,
   },
   tabItemFocused: {
@@ -498,10 +498,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#B8A05C',
     borderRadius: 0,
     backgroundColor: 'transparent',
-    paddingHorizontal: 10,
+    paddingHorizontal: 4,
     paddingTop: 0,
     paddingBottom: 2,
-    marginHorizontal: -10,
+    marginHorizontal: -4,
     marginVertical: 0,
   },
   iconFocused: {

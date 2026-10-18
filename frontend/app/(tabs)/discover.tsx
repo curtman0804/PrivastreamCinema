@@ -1,5 +1,6 @@
+﻿import { PrivastreamPageHeader } from '../../src/components/PrivastreamPageHeader';
 // v212 loading isolation
-// v241 ├óΓé¼ΓÇ¥ useDeferredValue: deprioritise flatRows mapping to keep JS thread free
+// v241 â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ useDeferredValue: deprioritise flatRows mapping to keep JS thread free
 import React, { useEffect, useCallback, useState, useMemo, useRef, startTransition, useDeferredValue } from 'react';
 import {
   View,
@@ -21,7 +22,7 @@ import {
   DeviceEventEmitter,
   useTVEventHandler,
 } from 'react-native';
-// PATCH_V145_LAYOUTANIM_IMPORT ├óΓé¼ΓÇ¥ enable LayoutAnimation on Android once at module load
+// PATCH_V145_LAYOUTANIM_IMPORT â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ enable LayoutAnimation on Android once at module load
 if (Platform.OS === 'android' && UIManager && (UIManager as any).setLayoutAnimationEnabledExperimental) {
   try { (UIManager as any).setLayoutAnimationEnabledExperimental(true); } catch (_) {}
 }
@@ -34,7 +35,7 @@ import { getMetaCache, setMetaCache } from '../../src/store/contentStore';
 import { FlashList } from '@shopify/flash-list'; // PATCH_V54_VIRTUALIZE
 import { ServiceRow } from '../../src/components/ServiceRow';
 import { ContentItem, api, WatchProgress } from '../../src/api/client';
-/* V176_LONGPRESS_MENU ├óΓé¼ΓÇ¥ extend the ContentCard import with the
+/* V176_LONGPRESS_MENU â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ extend the ContentCard import with the
    watched/progress helpers + unified menu opener. */
 import {
   getCardWidth,
@@ -49,7 +50,7 @@ import {
   v176HasProgress as _v176HasProgress,
   v176SubscribeProgress as _v176SubscribeProgress,
   v176ShowLongPressMenu as _v176ShowLongPressMenu,
-  /* V176E_TV_LONGPRESS ├óΓé¼ΓÇ¥ register this CW card's menu handler with v173. */
+  /* V176E_TV_LONGPRESS â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ register this CW card's menu handler with v173. */
   v173RegisterLongPress as _v173RegLP,
   /* V176K_POPOVER */ V176kPopoverHost, v176kMeasureAnchor,
   /* V365_CW_INSTANT_CLEAR */
@@ -60,7 +61,7 @@ import {
 } from '../../src/components/ContentCard';
 import { colors } from '../../src/styles/colors';
 import { Image as RNImage } from 'react-native';
-// PATCH_V144_CACHE_IMPORT ├óΓé¼ΓÇ¥ disk-backed snapshot for instant cold-start paint
+// PATCH_V144_CACHE_IMPORT â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ disk-backed snapshot for instant cold-start paint
 import AsyncStorage from '../../src/utils/mmkvStorage';
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
@@ -72,7 +73,7 @@ const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 // reverted "Awesomeness Awaits" splash), we paint two rows of
 // logo-only placeholder cards.  Same visual language as the no-poster
 // fallback elsewhere, so the screen immediately has STRUCTURE even
-// before live data arrives.  No copy, no spinners ├óΓé¼ΓÇ¥ just the layout
+// before live data arrives.  No copy, no spinners â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ just the layout
 // the user will see once posters load.
 // ============================================================
 function LogoSkeleton() {
@@ -132,15 +133,15 @@ function LogoSkeleton() {
 // Read the cached Discover snapshot from AsyncStorage as soon as this
 // module is imported (i.e., at app boot, BEFORE the Discover screen
 // mounts).  The previous code did the read in a useEffect, which fires
-// AFTER the first render and delays the cached-paint by ~50├óΓé¼ΓÇ£300 ms on
+// AFTER the first render and delays the cached-paint by ~50â”œÃ³Î“Ã©Â¼Î“Ã‡Â£300 ms on
 // Firestick.  Now the read is in-flight while the JS bundle is still
-// initialising ├óΓé¼ΓÇ¥ by the time Discover's first useEffect runs, the
+// initialising â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ by the time Discover's first useEffect runs, the
 // result is usually already resolved.
 //
 // We also kick off `expo-image.prefetch(...)` on the top ~24 posters
 // from the cached snapshot at module load, so by the time ContentCards
 // mount their <Image>, the bytes are already in expo-image's
-// memory-disk cache ├óΓÇáΓÇÖ near-instant paint.
+// memory-disk cache â”œÃ³Î“Ã‡Ã¡Î“Ã‡Ã– near-instant paint.
 // ============================================================
 // ============================================================
 // V706C2Q3_PARENTAL_SAFE_BOOT_CACHE
@@ -367,7 +368,7 @@ const _v271BootSnapshotPromise: Promise<_V271Snapshot> = (async () => {
       cw: !_v706c2q3BootParentalModeEnabled && c ? (() => { try { return JSON.parse(c); } catch (_) { return null; } })() : null,
     };
     // Kick off poster prefetch on top ~24 posters from the cached
-    // snapshot.  Fire-and-forget ├óΓé¼ΓÇ¥ expo-image dedupes URLs internally.
+    // snapshot.  Fire-and-forget â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ expo-image dedupes URLs internally.
     try {
       const urls: string[] = [];
       const services = (snap.discover as any)?.services || {};
@@ -416,7 +417,7 @@ function LazyMount({ delay, children, placeholder }: { delay: number; children: 
   return <>{children}</>;
 }
 
-// V181_DISCOVER_THROTTLE ├óΓé¼ΓÇ¥ module-scope timestamp survives unmount/remount.
+// V181_DISCOVER_THROTTLE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ module-scope timestamp survives unmount/remount.
 // Initial value = 0 means "never fetched", so the FIRST mount always fetches.
 let _v181_lastDiscoverFetch: number = 0;
 
@@ -551,11 +552,11 @@ export default function DiscoverScreen() {
     }
   });
   
-  // CRITICAL: Use zustand SELECTORS ├óΓé¼ΓÇ¥ only re-render when these specific fields change.
+  // CRITICAL: Use zustand SELECTORS â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ only re-render when these specific fields change.
   // Without selectors, the Discover page re-renders when ANY store field changes
   // (e.g., when Details page loads streams), causing hundreds of poster images
   // to re-render and blocking the JS thread for 3+ seconds.
-  // PATCH_V245_OWNERSHIP ├óΓé¼ΓÇ¥ useDiscoverData() returns null when the data's
+  // PATCH_V245_OWNERSHIP â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ useDiscoverData() returns null when the data's
   // owner UID doesn't match the currently-logged-in JWT user.  This prevents
   // stale posters from a previous user (test) bleeding into the new user
   // (choyt) session during the first render after a warm logout/login.
@@ -566,15 +567,15 @@ export default function DiscoverScreen() {
   const addons = useContentStore(s => s.addons);
   const [refreshing, setRefreshing] = useState(false);
   const [continueWatching, setContinueWatching] = useState<WatchProgress[]>([]);
-  // V274_CW_INSTANT_REMOVE ├óΓé¼ΓÇ¥ hard hide gate for the CW row.  Set true
+  // V274_CW_INSTANT_REMOVE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ hard hide gate for the CW row.  Set true
   // when the user clears the LAST CW item; bypasses useDeferredValue
   // lag on flatRows so the row disappears in the very same frame as
   // the button press.  Cleared automatically when new CW data arrives.
   const [cwForceHidden, setCwForceHidden] = useState(false);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
-  // PATCH_V144_CACHE_STATE ├óΓé¼ΓÇ¥ snapshots loaded from AsyncStorage on cold mount
+  // PATCH_V144_CACHE_STATE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ snapshots loaded from AsyncStorage on cold mount
   const [cachedDiscover, setCachedDiscover] = useState<any>(null);
-  // V199_TRUE_WIPE ├óΓé¼ΓÇ¥ when the store nukes discover caches, drop the local v144 snapshot too
+  // V199_TRUE_WIPE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ when the store nukes discover caches, drop the local v144 snapshot too
   const discoverNukeStamp = useContentStore((s: any) => (s as any).discoverNukeStamp);
   useEffect(() => {
     if (discoverNukeStamp) {
@@ -813,16 +814,16 @@ export default function DiscoverScreen() {
             _v204Filtered
           )
         );
-      // V274_CW_INSTANT_REMOVE ├óΓé¼ΓÇ¥ fresh CW data arrived; if it has items,
+      // V274_CW_INSTANT_REMOVE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ fresh CW data arrived; if it has items,
       // the force-hidden gate is no longer needed (user added something
       // new, or backend returned content they haven't seen locally).
       if (_v204Next.length > 0 && cwForceHidden) {
         setCwForceHidden(false);
       }
-      // v212 loading isolation ├óΓé¼ΓÇ¥ defer the CW re-render so D-pad focus events
+      // v212 loading isolation â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ defer the CW re-render so D-pad focus events
       // arriving in the same tick are NOT blocked by reconciliation.
       startTransition(() => {
-        // V204_SKIP_IDENTICAL ├óΓé¼ΓÇ¥ unchanged CW => keep previous array reference
+        // V204_SKIP_IDENTICAL â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ unchanged CW => keep previous array reference
         setContinueWatching(prev => {
           try { if (JSON.stringify(prev) === JSON.stringify(_v204Next)) return prev; } catch (_) {}
           return _v204Next;
@@ -841,13 +842,13 @@ export default function DiscoverScreen() {
     } catch (err) {
       console.log('[Discover] Error fetching continue watching:', err);
     } finally {
-      // v212 loading isolation ├óΓé¼ΓÇ¥ same: loader flag is non-urgent
+      // v212 loading isolation â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ same: loader flag is non-urgent
       startTransition(() => { setIsLoadingProgress(false); });
     }
   }, []);
 
   useEffect(() => {
-    // v211 cold-boot ├óΓé¼ΓÇ¥ paint Discover from AsyncStorage cache (hydrated in
+    // v211 cold-boot â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ paint Discover from AsyncStorage cache (hydrated in
     // the next useEffect) FIRST.  The three network fetches go through
     // InteractionManager so they don't compete with row mount work for the
     // JS thread on the first ~500 ms after mount.
@@ -868,13 +869,13 @@ export default function DiscoverScreen() {
     return () => { try { (_v211H as any).cancel && (_v211H as any).cancel(); } catch (_) {} };
   }, []);
 
-  // v213 bottom + prefetch ├óΓé¼ΓÇ¥ warm expo-image's cache with the first ~24
+  // v213 bottom + prefetch â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ warm expo-image's cache with the first ~24
   // discover posters so they paint instantly as they enter the viewport.
   // Deferred via InteractionManager so the prefetch network burst can't
   // compete with the first paint frame.
-  // V271_COLD_BOOT_ACCELERATOR ├óΓé¼ΓÇ¥ also fires on cachedDiscover so we
+  // V271_COLD_BOOT_ACCELERATOR â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ also fires on cachedDiscover so we
   // warm cache from the disk snapshot before live data arrives.
-  // V276_HOLD_SPINNER_TILL_POSTERS ├óΓé¼ΓÇ¥ also flip postersReady AFTER the
+  // V276_HOLD_SPINNER_TILL_POSTERS â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ also flip postersReady AFTER the
   // top-row prefetch resolves so the spinner stays up until the visible
   // posters are actually in expo-image's disk/memory cache.  Hard cap
   // at 4s so we never get stuck if a poster URL is dead.
@@ -898,13 +899,13 @@ export default function DiscoverScreen() {
       }
     } catch (_) {}
     if (urls.length === 0) {
-      // No posters to prefetch ├óΓé¼ΓÇ¥ flip ready immediately.
+      // No posters to prefetch â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ flip ready immediately.
       setPostersReady(true);
       return;
     }
     _v213PrefetchDone.current = true;
 
-    // V276 ├óΓé¼ΓÇ¥ hard 4s cap so the spinner can never get stuck if a CDN
+    // V276 â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ hard 4s cap so the spinner can never get stuck if a CDN
     // is slow or a URL is dead.
     const _capTimer = setTimeout(() => setPostersReady(true), 4000);
 
@@ -923,7 +924,7 @@ export default function DiscoverScreen() {
             setPostersReady(true);
           });
         } else {
-          // Fallback: legacy expo-image returned void ├óΓÇáΓÇÖ assume ready next tick.
+          // Fallback: legacy expo-image returned void â”œÃ³Î“Ã‡Ã¡Î“Ã‡Ã– assume ready next tick.
           setTimeout(() => {
             clearTimeout(_capTimer);
             setPostersReady(true);
@@ -940,8 +941,8 @@ export default function DiscoverScreen() {
     };
   }, [discoverData, cachedDiscover]);
 
-  // PATCH_V144_CACHE_HYDRATE ├óΓé¼ΓÇ¥ load disk snapshot on cold start for instant paint.
-  // V271_COLD_BOOT_ACCELERATOR ├óΓé¼ΓÇ¥ the AsyncStorage read was kicked off at module
+  // PATCH_V144_CACHE_HYDRATE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ load disk snapshot on cold start for instant paint.
+  // V271_COLD_BOOT_ACCELERATOR â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ the AsyncStorage read was kicked off at module
   // load (above), so the promise is usually already resolved by the time this
   // effect runs.  We also drop the `startTransition` wrapper so the cached
   // paint is treated as URGENT (it's the only thing on screen, no other state
@@ -969,10 +970,10 @@ export default function DiscoverScreen() {
     })();
   }, []);
 
-  // PATCH_V144_CACHE_PERSIST ├óΓé¼ΓÇ¥ snapshot store data to disk on every update
+  // PATCH_V144_CACHE_PERSIST â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ snapshot store data to disk on every update
   useEffect(() => {
     if (!discoverData?.services) return;
-    // V204_DEFER_PERSIST ├óΓé¼ΓÇ¥ big JSON.stringify + disk write off the critical frame
+    // V204_DEFER_PERSIST â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ big JSON.stringify + disk write off the critical frame
     const h = InteractionManager.runAfterInteractions(() => {
       try {
         AsyncStorage.setItem('@ps_discover_v1', JSON.stringify(discoverData)).catch(() => {});
@@ -987,7 +988,7 @@ export default function DiscoverScreen() {
     } catch (_) {}
   }, [continueWatching]);
 
-  /* V176_LONGPRESS_MENU ├óΓé¼ΓÇ¥ keep the in-memory progress registry in sync
+  /* V176_LONGPRESS_MENU â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ keep the in-memory progress registry in sync
      with the live CW list (and the disk-cached fallback) so the unified
      long-press menu shows "Clear Progress" for items that are in CW. */
   useEffect(() => {
@@ -1000,12 +1001,12 @@ export default function DiscoverScreen() {
     _v176RegisterProgress(ids);
   }, [continueWatching, cachedCW]);
 
-  // V167_RELEASE_PREWARM ├óΓé¼ΓÇ¥ fire ONE bulk /api/movie/release_status POST
+  // V167_RELEASE_PREWARM â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ fire ONE bulk /api/movie/release_status POST
   // as soon as we know which movies are on screen.  By the time row
   // ContentCards mount and subscribe, the cache is already hot and the
   // IN CINEMA badge paints on the same frame as the poster.  Skips ids
   // that are already cached or in-flight (so back-nav is a no-op).
-  // V305_PREWARM_DEFER_BUILD_TAG ├óΓé¼ΓÇ¥ defer the bulk /release_status POST by
+  // V305_PREWARM_DEFER_BUILD_TAG â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ defer the bulk /release_status POST by
   // 350ms after deps change so that on back-from-details, the discover
   // focus animation lands first and the selector stays responsive.
   // Without this, returning from details fires the prewarm immediately;
@@ -1055,10 +1056,10 @@ export default function DiscoverScreen() {
     return () => clearTimeout(_v305_timer);
   }, [discoverData, cachedDiscover, continueWatching, cachedCW]);
 
-  // PATCH_V47_FOCUS_THROTTLE + V181_DISCOVER_THROTTLE ├óΓé¼ΓÇ¥ same throttle but
+  // PATCH_V47_FOCUS_THROTTLE + V181_DISCOVER_THROTTLE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ same throttle but
   // backed by a module-scope timestamp (see top of file) so the cooldown
   // survives unmount/remount.  Previously the useRef was component-scoped
-  // ├óΓÇáΓÇÖ every back-nav reset the clock ├óΓÇáΓÇÖ every back-nav re-fetched ├óΓÇáΓÇÖ 1-3 s
+  // â”œÃ³Î“Ã‡Ã¡Î“Ã‡Ã– every back-nav reset the clock â”œÃ³Î“Ã‡Ã¡Î“Ã‡Ã– every back-nav re-fetched â”œÃ³Î“Ã‡Ã¡Î“Ã‡Ã– 1-3 s
   // JS-thread freeze on the D-pad.  Module scope = real persistence.
   const lastDiscoverFetchTime = { get current(){ return _v181_lastDiscoverFetch; }, set current(v: number){ _v181_lastDiscoverFetch = v; } };
   // V343_NAV_BACK_DIAG - stamp the moment discover regains focus so we can
@@ -1179,7 +1180,7 @@ export default function DiscoverScreen() {
   );
 
   // Check if there's any content to display
-  // PATCH_V144_CACHE_HASCONTENT ├óΓé¼ΓÇ¥ prefer live data, fall back to cached snapshot
+  // PATCH_V144_CACHE_HASCONTENT â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ prefer live data, fall back to cached snapshot
   const hasContent = useMemo(() => {
     const services = discoverData?.services || cachedDiscover?.services;
     if (!services) return false;
@@ -1201,10 +1202,10 @@ export default function DiscoverScreen() {
   }, [fetchContinueWatching]);
 
   // Handle section focus - scroll parent to show category title
-  // v211 discover clean ├óΓé¼ΓÇ¥ throttled focus + top-third framing
+  // v211 discover clean â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ throttled focus + top-third framing
   const _v211FocusCooldown = useRef<number>(0);
   const _v211PendingFrame = useRef<number | null>(null);
-  // V278_CW_SNAPBACK ├óΓé¼ΓÇ¥ millisecond timestamp until which the ScrollView's
+  // V278_CW_SNAPBACK â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ millisecond timestamp until which the ScrollView's
   // onScroll handler will actively snap any y>0 scroll back to 0.  Engaged
   // whenever the CW section receives focus.  500ms is enough to cover
   // Android TV's `requestRectangleOnScreen` animation cycle.
@@ -1243,12 +1244,12 @@ export default function DiscoverScreen() {
     }
   }, []);
   // Row sync: keep all rows scrolled to the same horizontal offset
-  // (No longer needed ├óΓé¼ΓÇ¥ removed carousel anchor scrolling)
+  // (No longer needed â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ removed carousel anchor scrolling)
 
   // Item width for snap scrolling
   const itemWidth = POSTER_WIDTH + 16;
 
-  // PATCH_V47_FOCUS_DEBOUNCE ├óΓé¼ΓÇ¥ debounce 350ms so rapid D-pad scrolling does NOT spam getMeta.
+  // PATCH_V47_FOCUS_DEBOUNCE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ debounce 350ms so rapid D-pad scrolling does NOT spam getMeta.
   // Previously: 50 cards scrolled = 50 HTTP requests. Now: prefetch only fires
   // if the user actually pauses on a poster for >350ms.
   const prefetchingRef = useRef<Set<string>>(new Set());
@@ -1282,7 +1283,7 @@ export default function DiscoverScreen() {
     }, 350);
   }, []);
 
-  // PATCH_V54_VIRTUALIZE ├óΓé¼ΓÇ¥ progressive: 6 services first, expand after 700ms.
+  // PATCH_V54_VIRTUALIZE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ progressive: 6 services first, expand after 700ms.
  const [maxRowsV54, setMaxRowsV54] = useState(6); // PATCH_V54_FLATROWS
 
 useEffect(() => {
@@ -1294,7 +1295,7 @@ useEffect(() => {
 const flatRowsV54 = useMemo(() => {
   const rows: any[] = [];
 
-  // PATCH_V144_CACHE_FLATROWS ├óΓé¼ΓÇ¥ prefer live data, fall back to cached snapshot
+  // PATCH_V144_CACHE_FLATROWS â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ prefer live data, fall back to cached snapshot
   const services = discoverData?.services || cachedDiscover?.services;
   if (!services || typeof services !== 'object') {
     return rows;
@@ -1366,10 +1367,10 @@ const flatRowsV54 = useMemo(() => {
   }
 
   return rows.slice(0, 1 + maxRowsV54);
-  // PATCH_V144_CACHE_DEPS ├óΓé¼ΓÇ¥ re-evaluate when cached fallback hydrates
+  // PATCH_V144_CACHE_DEPS â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ re-evaluate when cached fallback hydrates
 }, [discoverData?.services, cachedDiscover?.services, continueWatching, cachedCW, maxRowsV54]);
 
-// PATCH_V241_DEFER_FLATROWS ├óΓé¼ΓÇ¥ deprioritise the heavy row-mapping render so the
+// PATCH_V241_DEFER_FLATROWS â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ deprioritise the heavy row-mapping render so the
 // JS thread stays free for navigation taps/D-pad on low-CPU devices like
 // Firestick.  React keeps the previous deferred value visible while the new
 // one is computed in the background.
@@ -1566,7 +1567,7 @@ const handleItemPress = useCallback((item: ContentItem) => {
   router.push({
     pathname: `/details/${item.type}/${encodeURIComponent(id)}`,
     params: {
-      // v238 ├óΓé¼ΓÇ¥ pass everything the details page needs to paint INSTANTLY
+      // v238 â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ pass everything the details page needs to paint INSTANTLY
       // so the user never sees a black screen + generic "Loading..." text.
       name: item.name || '',
       poster: item.poster || '',
@@ -1577,18 +1578,18 @@ const handleItemPress = useCallback((item: ContentItem) => {
 }, [router]);
 
   // Handle continue watching item press
-  // PATCH_V147_NO_STALE_URL ├óΓé¼ΓÇ¥ never trust a saved Premiumize URL/infoHash
+  // PATCH_V147_NO_STALE_URL â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ never trust a saved Premiumize URL/infoHash
   // from yesterday.  Always route through Details which does a fresh
   // /api/streams fetch + v141 sort + v146 audio penalty + autoPlay.
   const handleContinueWatchingPress = (item: WatchProgress) => {
     let targetId = item.content_id;
     let targetType = item.content_type;
     
-    // v238b ├óΓé¼ΓÇ¥ for series CW, navigate DIRECTLY to the episode page so
+    // v238b â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ for series CW, navigate DIRECTLY to the episode page so
     // /api/streams returns the episode's streams and autoplay fires.
     // Previously this code stripped ":1:1" and navigated to the series
-    // ROOT ├óΓé¼ΓÇ¥ but the series root has zero streams, so autoPlay never
-    // triggered.  Result was "click CW series item ├óΓÇáΓÇÖ no playback".
+    // ROOT â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ but the series root has zero streams, so autoPlay never
+    // triggered.  Result was "click CW series item â”œÃ³Î“Ã‡Ã¡Î“Ã‡Ã– no playback".
     //
     // We still expose series_id (if present) but build the URL with the
     // full episode-qualified content_id.
@@ -1604,7 +1605,7 @@ const handleItemPress = useCallback((item: ContentItem) => {
         targetId = item.series_id;
       }
     }
-    // If content_id is already in tt12345:1:1 form, leave it ├óΓé¼ΓÇ¥ that's
+    // If content_id is already in tt12345:1:1 form, leave it â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ that's
     // exactly the episode-page URL the details screen expects.
     
     // W121ZOD118F_CW_ROUTE_CANONICAL_POSTER
@@ -1644,7 +1645,7 @@ const handleItemPress = useCallback((item: ContentItem) => {
           ).trim();
 
     const encodedId = encodeURIComponent(targetId);
-    // PATCH_V147_AUTOPLAY ├óΓé¼ΓÇ¥ let details fire its built-in autoPlay path so
+    // PATCH_V147_AUTOPLAY â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ let details fire its built-in autoPlay path so
     // the user lands directly on playback after a fresh stream fetch.
     router.push({
       pathname: `/details/${targetType}/${encodedId}`,
@@ -1653,7 +1654,7 @@ const handleItemPress = useCallback((item: ContentItem) => {
         poster: _w121zod118fRoutePoster,
         resumeEpisodeId: item.content_type === 'series' ? item.content_id : '',
         resumePosition: String(item.progress || 0),
-        // v238b ├óΓé¼ΓÇ¥ was `item.season !== undefined` which let `null` slip
+        // v238b â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ was `item.season !== undefined` which let `null` slip
         // through, then String(null) became the literal string "null"
         // and details showed "Episode null".  Use loose != to catch both.
         resumeSeason: (item.season != null) ? String(item.season) : '',
@@ -1666,10 +1667,10 @@ const handleItemPress = useCallback((item: ContentItem) => {
   // Handle removing item from continue watching
 
   const handleRemoveFromContinueWatching = async (item: WatchProgress) => {
-    // V275_CW_INSTANT_REMOVE_FIX ├óΓé¼ΓÇ¥ was using stale closure values
+    // V275_CW_INSTANT_REMOVE_FIX â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ was using stale closure values
     // of continueWatching/cachedCW captured by the memoized
     // renderContinueWatchingItem (dep array [isTV] never invalidated).
-    // The check evaluated 0===0 && 0===0 ├óΓÇáΓÇÖ true ├óΓÇáΓÇÖ ALL rows hidden after
+    // The check evaluated 0===0 && 0===0 â”œÃ³Î“Ã‡Ã¡Î“Ã‡Ã– true â”œÃ³Î“Ã‡Ã¡Î“Ã‡Ã– ALL rows hidden after
     // removing just 1.  Now: use functional updaters so the next-state
     // values are computed from the LATEST state, and only flip the
     // force-hidden gate once we've confirmed both lists are actually
@@ -1753,10 +1754,10 @@ const renderContinueWatchingItem = useCallback(
 );
 
 // Show loading only on initial load
-// PATCH_V144_CACHE_SPINNER ├óΓé¼ΓÇ¥ skip the spinner entirely if we have a cached snapshot
-// V275_REVERT_SKELETON ├óΓé¼ΓÇ¥ user feedback: the LogoSkeleton looked off (layout
+// PATCH_V144_CACHE_SPINNER â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ skip the spinner entirely if we have a cached snapshot
+// V275_REVERT_SKELETON â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ user feedback: the LogoSkeleton looked off (layout
 // didn't match real Discover).  Going back to a bare ActivityIndicator.
-// V276_HOLD_SPINNER_TILL_POSTERS ├óΓé¼ΓÇ¥ also keep spinner up while the top-row
+// V276_HOLD_SPINNER_TILL_POSTERS â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ also keep spinner up while the top-row
 // posters are still warming the expo-image cache, so the play interface
 // never appears with blank cards.  Cached-data boots skip this check
 // (since posters are usually already on disk from a previous session).
@@ -1767,7 +1768,7 @@ if (
 ) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* V176K_POPOVER_MOUNTED ├óΓé¼ΓÇ¥ Stremio-style menu host for this screen. */}
+      {/* V176K_POPOVER_MOUNTED â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ Stremio-style menu host for this screen. */}
       <V176kPopoverHost />
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -1775,7 +1776,7 @@ if (
     </SafeAreaView>
   );
 }
-// V276_HOLD_SPINNER_TILL_POSTERS ├óΓé¼ΓÇ¥ even after fresh data arrives, hold
+// V276_HOLD_SPINNER_TILL_POSTERS â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ even after fresh data arrives, hold
 // the spinner one more pass if the prefetch hasn't resolved yet AND we
 // don't have a cached snapshot to paint from.
 if (discoverData && !cachedDiscover && !postersReady) {
@@ -1797,21 +1798,11 @@ return (
     <V176kPopoverHost />
 
     {/* Welcome Screen - No Addons and No Continue Watching */}
-    {/* PATCH_V144_CACHE_WELCOME ├óΓé¼ΓÇ¥ also consider cached CW so we don't flash "No Addons" */}
+    {/* PATCH_V144_CACHE_WELCOME â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ also consider cached CW so we don't flash "No Addons" */}
     {!hasContent && continueWatching.length === 0 && cachedCW.length === 0 && !isLoadingDiscover ? (
       <View style={{ flex: 1 }}>
         {/* Logo Header - always visible */}
-        <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
-          <Image
-            source={require('../../assets/images/logo_header.png')}
-            style={[styles.logoImage, isTV && styles.logoImageTV]}
-            contentFit="contain"
-          />
-
-          <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
-            Privastream Cinema
-          </Text>
-        </View>
+        <PrivastreamPageHeader title="On Demand" />
 
         <View style={styles.welcomeContainer}>
           <Ionicons
@@ -1834,17 +1825,7 @@ return (
     ) : (
       <View style={{ flex: 1 }}>
         {/* Fixed Logo Header */}
-        <View style={[styles.logoHeader, isTV && styles.logoHeaderTV]}>
-          <Image
-            source={require('../../assets/images/logo_header.png')}
-            style={[styles.logoImage, isTV && styles.logoImageTV]}
-            contentFit="contain"
-          />
-
-          <Text style={[styles.logoText, isTV && styles.logoTextTV]}>
-            Privastream Cinema
-          </Text>
-        </View>
+        <PrivastreamPageHeader title="On Demand" />
 
         {/* Scrollable Content */}
         <ScrollView
@@ -1853,18 +1834,18 @@ return (
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
-          // V316e_KEEP_CW_FOCUSABLE ├óΓé¼ΓÇ¥ was true; flipped to false so the
+          // V316e_KEEP_CW_FOCUSABLE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ was true; flipped to false so the
           // Continue-Watching row stays in Android's focusable view tree
           // when scrolled offscreen.  Required so nextFocusUp on row-0
           // ContentCards can resolve to the CW poster's native tag.
           removeClippedSubviews={false}
-          // v213 bottom + prefetch ├óΓé¼ΓÇ¥ stop the over-scroll past the last row.
+          // v213 bottom + prefetch â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ stop the over-scroll past the last row.
           // Without these the ScrollView happily flies into empty space below
           // the bottom row, which also confuses Android-TV focus search.
           contentContainerStyle={styles._v213ScrollPad}
           overScrollMode="never"
           bounces={false}
-          // V278_CW_SNAPBACK ├óΓé¼ΓÇ¥ Android TV's `requestRectangleOnScreen`
+          // V278_CW_SNAPBACK â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ Android TV's `requestRectangleOnScreen`
           // animates the scroll over multiple frames AFTER our manual
           // scrollTo(0) resolves.  So even with multi-retry from v277,
           // the system can drag the scroll position back to e.g. y=80
@@ -1878,10 +1859,10 @@ return (
             _v371OnScrollY(y);
             // NATIVE_FOCUS_OWNER: no JS snap-back; Android owns vertical scrolling.
 
-            // V316_CW_SHORT_SCROLL_RESCUE ├óΓé¼ΓÇ¥ when the Android TV focus engine
+            // V316_CW_SHORT_SCROLL_RESCUE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ when the Android TV focus engine
             // partially scrolls the CW row into view but doesn't deliver
             // onFocus to a specific poster, scroll settles below y=150 and
-            // the selector stays stuck on Popular Movies ├óΓé¼ΓÇ¥ forcing the user
+            // the selector stays stuck on Popular Movies â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ forcing the user
             // to press UP twice.  Detect this by waiting 250ms after the
             // last onScroll event, then if y is in the CW range (>0 and
             // <150) and the lock isn't already engaged and CW isn't the
@@ -1921,14 +1902,14 @@ return (
             />
           }
         >
-          {/* PATCH_V241_USE_DEFERRED ├óΓé¼ΓÇ¥ render from deferredFlatRows so heavy
+          {/* PATCH_V241_USE_DEFERRED â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ render from deferredFlatRows so heavy
               row map is non-blocking */}
           {/* V535_NO_STRAY_TARGET - keep this invisible 1x1 non-focusable.
               Continue Watching and content posters are real native focus targets,
               so Android/Fire TV remains the single owner of D-pad focus. */}
           {isTV ? (<View accessibilityLabel="V536" focusable={false} style={{ width: 1, height: 1 }} />) : null}
           {deferredFlatRows.map((item: any) => {
-            // V274_CW_INSTANT_REMOVE ├óΓé¼ΓÇ¥ bypass useDeferredValue lag: when
+            // V274_CW_INSTANT_REMOVE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ bypass useDeferredValue lag: when
             // the user just cleared the last CW item, hide the row in
             // the SAME frame as the press.
             if (item.kind === 'cw' && cwForceHidden) return null;
@@ -1946,7 +1927,7 @@ return (
                     sectionPositions.current[item.key] = e.nativeEvent.layout.y;
                   }}
                 >
-                  {/* V280_NON_FOCUSABLE ├óΓé¼ΓÇ¥ explicitly mark the CW header
+                  {/* V280_NON_FOCUSABLE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ explicitly mark the CW header
                       View as non-focusable so Android TV's focus search
                       can't accidentally land here on the first UP press. */}
                   <View
@@ -1969,7 +1950,7 @@ return (
                   </View>
 
                   <FlatList
-                    /* PATCH_V144_CACHE_CWDATA ├óΓé¼ΓÇ¥ fall back to cached CW for cold-start paint */
+                    /* PATCH_V144_CACHE_CWDATA â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ fall back to cached CW for cold-start paint */
                     ref={cwListRef}
                     data={(continueWatching && continueWatching.length > 0) ? continueWatching : cachedCW}
                     renderItem={renderContinueWatchingItem}
@@ -2020,7 +2001,7 @@ return (
                   title={item.title}
                   serviceName={item.serviceName}
                   contentType={item.contentType}
-                  /* v249 ├óΓé¼ΓÇ¥ bump cap from 15 ├óΓÇáΓÇÖ 100 posters per row so each
+                  /* v249 â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ bump cap from 15 â”œÃ³Î“Ã‡Ã¡Î“Ã‡Ã– 100 posters per row so each
                      row feels Cinemeta-like.  ServiceRow's fetchMore still
                      kicks in beyond 100 if backend has more items.  Cold
                      boot adds ~85 ContentCards per row but React.memo on
@@ -2103,7 +2084,7 @@ function ContinueWatchingItem({
   const [xFocused, setXFocused] = useState(false);
   const percentWatched = item.percent_watched || 0;
 
-  /* V176_LONGPRESS_MENU ├óΓé¼ΓÇ¥ derive watched + progress per CW card. */
+  /* V176_LONGPRESS_MENU â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ derive watched + progress per CW card. */
   const _v176ContentId = String((item as any).content_id || (item as any).imdb_id || (item as any).id || '');
   const [, _v176Bump] = useState(0);
   useEffect(() => _v172SubscribeWatched(() => _v176Bump((x) => (x + 1) & 0xff)), []);
@@ -2111,7 +2092,7 @@ function ContinueWatchingItem({
   const _v176IsWatchedCW = _v172IsWatched(_v176ContentId);
 
   const _v176OpenMenu = useCallback(async () => {
-    /* V176K_POPOVER_MOUNTED ├óΓé¼ΓÇ¥ measure poster + emit via v176 helper. */
+    /* V176K_POPOVER_MOUNTED â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ measure poster + emit via v176 helper. */
     let anchor: any = null;
     try { anchor = await v176kMeasureAnchor(posterRef.current); } catch (_) {}
     _v176ShowLongPressMenu({
@@ -2131,7 +2112,7 @@ function ContinueWatchingItem({
     });
   }, [item, _v176ContentId, onRemove]);
 
-  /* V176B_PRESS_TIMING ├óΓé¼ΓÇ¥ TV remote OK long-press detection. */
+  /* V176B_PRESS_TIMING â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ TV remote OK long-press detection. */
   const _v176bLpTimer = useRef<any>(null);
   const _v176bLpFired = useRef<boolean>(false);
   const _v176bPressIn = useCallback(() => {
@@ -2154,7 +2135,7 @@ function ContinueWatchingItem({
   }, [onPress]);
 
 
-  // V166_POSTER_SUB ├óΓé¼ΓÇ¥ subscribe to the canonical poster URL so this card
+  // V166_POSTER_SUB â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ subscribe to the canonical poster URL so this card
   // re-renders the moment an addon-row ContentCard registers the proper
   // poster for the same content_id.  Initial value uses the synchronous
   // lookup so the first paint already gets whatever is in the registry.
@@ -2312,7 +2293,7 @@ function ContinueWatchingItem({
     (item as any).poster,
   ]);
 
-  // V280_FIRST_CW_TAG ├óΓé¼ΓÇ¥ shared module-level reference to the first CW
+  // V280_FIRST_CW_TAG â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ shared module-level reference to the first CW
   // poster's native tag.  Set by the FIRST ContinueWatchingItem (index 0)
   // after mount.  Used as nextFocusUp on first-row ContentCards so UP
   // from any non-CW row routes directly to a CW poster.
@@ -2324,13 +2305,13 @@ function ContinueWatchingItem({
 
   useEffect(() => {
     // Get native node handles after mount for nextFocusUp/Down wiring
-    // findNodeHandle is not supported on web ├óΓé¼ΓÇ¥ skip entirely
+    // findNodeHandle is not supported on web â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ skip entirely
     if (Platform.OS === 'web') return;
     const pTag = posterRef.current ? findNodeHandle(posterRef.current) : null;
     const xTag = xButtonRef.current ? findNodeHandle(xButtonRef.current) : null;
     if (pTag) setPosterTag(pTag);
     if (xTag) setXButtonTag(xTag);
-    // V280_FIRST_CW_TAG / V316c_FOCUS_UP ├óΓé¼ΓÇ¥ broadcast first-mounted CW
+    // V280_FIRST_CW_TAG / V316c_FOCUS_UP â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ broadcast first-mounted CW
     // item's tag.  Emit a DeviceEventEmitter event so the Discover
     // screen re-renders and feeds the tag to row-0 ContentCards via
     // nextFocusUp.  On unmount, release the slot and broadcast null
@@ -2380,7 +2361,7 @@ function ContinueWatchingItem({
   
   return (
     <View style={[styles.continueItem, { width: posterWidth }]}>
-      {/* V176P_X_REMOVED ├óΓé¼ΓÇ¥ X overlay removed; use long-press menu. */}
+      {/* V176P_X_REMOVED â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ X overlay removed; use long-press menu. */}
       {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
         ref={posterRef}
@@ -2410,19 +2391,19 @@ function ContinueWatchingItem({
           setIsFocused(false);
         }}
         android_ripple={null}
-        /* V176P_X_REMOVED ├óΓé¼ΓÇ¥ nextFocusUp target gone. */
+        /* V176P_X_REMOVED â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ nextFocusUp target gone. */
         style={[
           styles.continueImageWrapper,
-          /* V176P_X_REMOVED ├óΓé¼ΓÇ¥ no more X row to overlap. */
+          /* V176P_X_REMOVED â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ no more X row to overlap. */
           isFocused && styles.continueImageWrapperFocused,
         ]}
       >
         <View style={[styles.continueImageContainer, { height: posterHeight }]}>
-          {/* V160_CW_USES_REGISTRY ├óΓé¼ΓÇ¥ pull the canonical poster URL from
+          {/* V160_CW_USES_REGISTRY â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ pull the canonical poster URL from
               the registry so Continue Watching matches the addon-row
               poster for the same content.  Falls back to item.poster
               then item.backdrop when no registry entry exists yet. */}
-          {/* V166_POSTER_SUB ├óΓé¼ΓÇ¥ read the subscribed canonical URL */}
+          {/* V166_POSTER_SUB â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ read the subscribed canonical URL */}
           {(_v166Poster || item.backdrop) ? (
             <Image
               source={{ uri: _v166Poster || item.backdrop || '' }}
@@ -2449,7 +2430,7 @@ function ContinueWatchingItem({
             <View style={[styles.progressBar, { width: `${Math.min(percentWatched, 100)}%` }]} />
           </View>
 
-          {/* V176_LONGPRESS_MENU ├óΓé¼ΓÇ¥ gold check overlay when watched. */}
+          {/* V176_LONGPRESS_MENU â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ gold check overlay when watched. */}
           {_v176IsWatchedCW && (
             <View style={styles.v176CwWatchedBadge} pointerEvents="none">
               <Ionicons name="checkmark" size={14} color="#B8A05C" />
@@ -2526,7 +2507,7 @@ function ContinueWatchingItem({
 }
 
 const styles = StyleSheet.create({
-  /* V176_LONGPRESS_MENU ├óΓé¼ΓÇ¥ mirror EpisodeCard's gold checkmark for CW. */
+  /* V176_LONGPRESS_MENU â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ mirror EpisodeCard's gold checkmark for CW. */
   v176CwWatchedBadge: {
     position: 'absolute',
     top: 6,
@@ -2552,13 +2533,13 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'visible',
   },
-  // v213 ├óΓé¼ΓÇ¥ bounded bottom padding so the last row doesn't sit flush against
+  // v213 â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ bounded bottom padding so the last row doesn't sit flush against
   // the system nav, but you also can't scroll into a blank void below it.
   _v213ScrollPad: {
     paddingBottom: 24,
   },
   bottomPadding: {
-    // v238 ├óΓé¼ΓÇ¥ reduced from 100 to 16 so user can't scroll into a large
+    // v238 â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ reduced from 100 to 16 so user can't scroll into a large
     // empty void past the last row.  The _v213ScrollPad above already
     // adds 24px of comfortable bottom margin.
     height: 16,
@@ -2770,4 +2751,5 @@ const styles = StyleSheet.create({
     marginLeft: 14,
   },
 });
+
 

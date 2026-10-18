@@ -1,8 +1,9 @@
+﻿import { PrivastreamPageHeader } from '../../src/components/PrivastreamPageHeader';
 // ============================================================
-// V285_PROFILE — STREAMLINED PREMIUMIZE
+// V285_PROFILE â€” STREAMLINED PREMIUMIZE
 // ============================================================
 // Replaces v284.  Drops the redundant "Get Premiumize API Key"
-// and "Sign up for Premiumize" menu items — those are now both
+// and "Sign up for Premiumize" menu items â€” those are now both
 // inside the modal in PrivacySettingsBlock.  Result: the entire
 // streaming section is one self-contained card.
 //
@@ -67,9 +68,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={[styles.header, isTV && styles.headerTV]}>
-        <Text style={[styles.headerTitle, isTV && styles.headerTitleTV]}>Settings</Text>
-      </View>
+      <PrivastreamPageHeader title="Settings" />
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Section */}
@@ -99,7 +98,7 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* V285 — streamlined Streaming section: single card, single CTA. */}
+        {/* V285 â€” streamlined Streaming section: single card, single CTA. */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>STREAMING</Text>
           <PrivacySettingsBlock />
@@ -272,3 +271,4 @@ const styles = StyleSheet.create({
   },
   bottomPadding: { height: 40 },
 });
+
