@@ -29,6 +29,7 @@ import Constants from 'expo-constants';
 import { getStoredDevicePlaybackProfile } from '../../../src/native/devicePlaybackCapabilities';
 import { useContentStore, getMetaCache, setMetaCache, hydrateMetaFromDisk } from '../../../src/store/contentStore';
 import { v311Perf } from '../../../src/utils/v311_perf'; // V311_PERF_PROFILER
+import { repairDisplayText } from '../../../src/utils/displayText';
 
 // v238 cache buster â€” append &_t=<ts> to ANY URL handed to the player so
 // Firestick's aggressive media cache can't replay a stale wrong-content
@@ -421,7 +422,7 @@ const ChipButton = React.memo(function ChipButton({ label, onPress, hasTVPreferr
       onPress={onPress}
       hasTVPreferredFocus={hasTVPreferredFocus}
     >
-      <Text style={[styles.chipText, isFocused && styles.chipTextFocused]}>{label}</Text>
+      <Text style={[styles.chipText, isFocused && styles.chipTextFocused]}>{repairDisplayText(label)}</Text>
     </Pressable>
   );
 });
@@ -3821,7 +3822,7 @@ const EpisodeCard = React.memo(function EpisodeCard({
       </View>
       <View style={styles.episodeInfo}>
         <Text style={styles.episodeTitle} numberOfLines={2}>
-          {v643bEpisodePosterTitle(episode)}
+          {repairDisplayText(v643bEpisodePosterTitle(episode))}
         </Text>
       </View>
     </Pressable>
@@ -10206,12 +10207,12 @@ const nextEpisodeData = nextEpisode ? {
                 contentFit="contain"
               />
             ) : (
-              <Text style={styles.title}>{displayName}</Text>
+              <Text style={styles.title}>{repairDisplayText(displayName)}</Text>
             )}
             
             {isEpisodePage && currentEpisode && (
               <Text style={styles.episodeSubtitle}>
-                S{episodeSeason} E{episodeNumber} - {currentEpisode.name || `Episode ${episodeNumber}`}
+                S{episodeSeason} E{episodeNumber} - {repairDisplayText(currentEpisode.name || `Episode ${episodeNumber}`)}
               </Text>
             )}
           </View>
@@ -10243,11 +10244,11 @@ const nextEpisodeData = nextEpisode ? {
           {/* Description - on episode pages show episode overview instead of series description */}
           {isEpisodePage && currentEpisode?.overview ? (
             <Text style={styles.fixedDescription} numberOfLines={4}>
-              {currentEpisode.overview}
+              {repairDisplayText(currentEpisode.overview)}
             </Text>
           ) : content?.description ? (
             <Text style={styles.fixedDescription} numberOfLines={3}>
-              {content.description}
+              {repairDisplayText(content.description)}
             </Text>
           ) : null}
 
@@ -10895,13 +10896,13 @@ const nextEpisodeData = nextEpisode ? {
                     (tag: string, i: number) => (
                       <ChipButton
                         key={`genre-${i}`}
-                        label={tag}
+                        label={repairDisplayText(tag)}
                         hasTVPreferredFocus={false}
                         onPress={() =>
                           router.push({
                             pathname: '/(tabs)/search',
                             params: {
-                              q: tag,
+                              q: repairDisplayText(tag),
                               mode: isAdultDetail
                                 ? 'auto'
                                 : 'genre',
@@ -10921,7 +10922,7 @@ const nextEpisodeData = nextEpisode ? {
               <Text style={styles.chipLabel}>Director</Text>
               <View style={styles.chipRow}>
                 {content.director.slice(0, 3).map((d: string, i: number) => (
-                  <ChipButton key={`dir-${i}`} label={d} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: d, mode: 'director' } })} />
+                  <ChipButton key={`dir-${i}`} label={repairDisplayText(d)} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: repairDisplayText(d), mode: 'director' } })} />
                 ))}
               </View>
             </View>
@@ -10933,7 +10934,7 @@ const nextEpisodeData = nextEpisode ? {
               <Text style={styles.chipLabel}>Cast</Text>
               <View style={styles.chipRow}>
                 {content.cast.slice(0, 6).map((c: string, i: number) => (
-                  <ChipButton key={`cast-${i}`} label={c} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: c, mode: 'cast' } })} />
+                  <ChipButton key={`cast-${i}`} label={repairDisplayText(c)} onPress={() => router.push({ pathname: '/(tabs)/search', params: { q: repairDisplayText(c), mode: 'cast' } })} />
                 ))}
               </View>
             </View>

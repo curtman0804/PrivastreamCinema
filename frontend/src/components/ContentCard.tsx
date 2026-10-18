@@ -33,6 +33,7 @@ let _v170PrefetchInflight = 0;
 const _V170_PREFETCH_CAP = 2;
 import { colors, posterShapes } from '../styles/colors';
 import Constants from 'expo-constants';
+import { repairDisplayText } from '../utils/displayText';
 
 /* V176_LONGPRESS_MENU â€” v172 referenced AsyncStorage but forgot to import it,
    so hydration silently failed and gold check never appeared.  Restored here. */
@@ -1247,7 +1248,7 @@ export const V176kPopover: React.FC = () => {
           onStartShouldSetResponder={() => true}
         >
           {payload.title ? (
-            <Text numberOfLines={1} style={v176kStyles.title}>{payload.title}</Text>
+            <Text numberOfLines={1} style={v176kStyles.title}>{repairDisplayText(payload.title)}</Text>
           ) : null}
           {payload.actions.map((a, i) => (
             <V176kRow key={a.id} action={a} isFirst={i === 0} onSelect={runAction} />
@@ -1301,7 +1302,7 @@ const V176kRow: React.FC<{ action: V176kAction; isFirst: boolean; onSelect: (a: 
           action.destructive && !focused && v176kStyles.rowLabelDestructive,
         ]}
       >
-        {action.label}
+        {repairDisplayText(action.label)}
       </Text>
     </Pressable>
   );
@@ -2620,7 +2621,7 @@ const ContentCardComponent: React.FC<ContentCardProps> = ({
               ]}
               numberOfLines={2}
             >
-              {item.name || item.title}
+              {repairDisplayText(item.name || item.title)}
             </Text>
           </View>
         )}

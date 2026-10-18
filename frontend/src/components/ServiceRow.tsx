@@ -41,6 +41,7 @@ import apiClient, { api } from '../api/client';
 import { useContentStore } from '../store/contentStore';
 import { getMetaCache, setMetaCache } from '../store/contentStore'; // PATCH_V250_VIEWPORT_PREFETCH
 import { colors } from '../styles/colors';
+import { repairDisplayText } from '../utils/displayText';
 
 const ITEM_GAP = 16;
 const TV_PADDING_LEFT = 48;
@@ -1345,7 +1346,7 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
                 isTV && styles.titleTV,
               ]}
             >
-              {title || serviceName || 'Content'}
+              {repairDisplayText(title || serviceName || 'Content')}
             </Text>
           </View>
 

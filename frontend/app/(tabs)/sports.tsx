@@ -1,4 +1,4 @@
-﻿import { PrivastreamPageHeader } from '../../src/components/PrivastreamPageHeader';
+import { PrivastreamPageHeader } from '../../src/components/PrivastreamPageHeader';
 import React, {
   useCallback,
   useEffect,
@@ -29,6 +29,7 @@ import {
 } from '../../src/api/client';
 
 import { colors } from '../../src/styles/colors';
+import { repairDisplayText } from '../../src/utils/displayText';
 
 // W121ZSPORTS134M_ROUTE_MISC_REAL_LOGOS_TAB_LABEL
 // Real production Sports UI.  Keeps installed-addon catalog/meta/stream
@@ -143,7 +144,7 @@ const formatReleaseInfoForDevice = (value: string): string => {
       hour: 'numeric',
       minute: '2-digit',
     });
-    return `${day} Ã‚Â· ${time}`;
+    return `${day} · ${time}`;
   } catch (_) {
     return date.toLocaleString();
   }
@@ -438,7 +439,7 @@ function SportChip({
       </View>
 
       <Text numberOfLines={1} style={styles.sportChipText}>
-        {preset.label}
+        {repairDisplayText(preset.label)}
       </Text>
     </Pressable>
   );
@@ -499,19 +500,19 @@ function EventCard({
             numberOfLines={2}
             style={[styles.eventName, isTV && styles.eventNameTV]}
           >
-            {event.name}
+            {repairDisplayText(event.name)}
           </Text>
 
           {!!event.releaseInfo && (
             <Text numberOfLines={2} style={styles.releaseInfo}>
-              {event.releaseInfo}
+              {repairDisplayText(event.releaseInfo)}
             </Text>
           )}
         </View>
 
         {event.genres.length ? (
           <Text numberOfLines={1} style={styles.provider}>
-            {event.genres.filter((genre) => !/^sports$/i.test(genre)).join(' Ã¢â‚¬Â¢ ')}
+            {event.genres.filter((genre) => !/^sports$/i.test(genre)).map(repairDisplayText).join(' • ')}
           </Text>
         ) : null}
       </View>
@@ -814,7 +815,7 @@ export default function SportsScreen() {
         {loadingAddons ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.status}>Loading live sportsÃ¢â‚¬Â¦</Text>
+            <Text style={styles.status}>Loading live sports…</Text>
           </View>
         ) : !hasSportAddon ? (
           <View style={styles.center}>
@@ -835,12 +836,12 @@ export default function SportsScreen() {
         ) : loadingCatalog ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.status}>Loading {selectedPreset?.label || 'sports'}Ã¢â‚¬Â¦</Text>
+            <Text style={styles.status}>Loading {repairDisplayText(selectedPreset?.label || 'sports')}…</Text>
           </View>
         ) : events.length === 0 ? (
           <View style={styles.center}>
             <Text style={styles.emptyTitle}>No Events Available</Text>
-            {!!errorText && <Text style={styles.errorText}>{errorText}</Text>}
+            {!!errorText && <Text style={styles.errorText}>{repairDisplayText(errorText)}</Text>}
           </View>
         ) : (
           <FlatList
