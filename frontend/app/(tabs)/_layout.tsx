@@ -10,7 +10,7 @@ import { ensurePrivastreamTunnel } from '../../src/native/privastreamTunnelGate'
 // Populated as each tab button mounts.  Used to wire every tab's
 // nextFocusLeft / nextFocusRight to its adjacent sibling so D-pad LEFT/RIGHT
 // stays inside the tab bar instead of jumping into the content posters.
-const _v261TabOrder: string[] = ['livetv', 'discover', 'search', 'library', 'addons', 'profile'];
+const _v261TabOrder: string[] = ['livetv', 'sports', 'discover', 'search', 'library', 'addons', 'profile'];
 const _v261Tags: Record<string, number> = {};
 const _v261Listeners: Array<() => void> = [];
 function _v261Register(name: string, tag: number) {
@@ -367,6 +367,19 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* W121ZSPORTS133C_SPORTS_TAB */}
+      <Tabs.Screen
+        name="sports"
+        options={{
+          title: 'Sports',
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={focused && isTV ? styles.iconFocused : undefined}>
+              <Ionicons name="trophy" size={isTV ? 28 : size} color={color} />
+            </View>
+          ),
+        }}
+      />
+      {/* /W121ZSPORTS133C_SPORTS_TAB */}
       <Tabs.Screen
         name="discover"
         options={{

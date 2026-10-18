@@ -45,7 +45,7 @@ const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
 
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage, { getItemSyncFast } from '../../../src/utils/mmkvStorage';
-import { premiumizeCacheCheck, isPremiumizeConfigured, premiumizeDirectDL, premiumizeMediaProbe, premiumizeSeekReadinessProbe } from '../../../src/services/premiumizeClient';
+import { premiumizeCacheCheck, isPremiumizeConfigured, premiumizeDirectDL, premiumizeMediaProbe, premiumizeSeekReadinessProbe, premiumizeStartupDeliverySample } from '../../../src/services/premiumizeClient';
 /* V176C_EPISODE_MENU_IMPORT â€” Stremio-style menu helpers for episode posters. */
 import {
   v172IsWatched as _v176cV172IsWatched,
@@ -3250,6 +3250,56 @@ function _v503PickReliableAutoStream(streams: Stream[], usePlaybackHealth: boole
     pool = _v769NonFailedPool;
   }
 
+  // W121ZOD125_DEGRADED_LAST_RESORT
+  //
+  // A source that THIS physical device has already observed rebuffering is
+  // not allowed to win automatic preparation while any non-degraded clean
+  // candidate remains. If every surviving source is degraded, retain the
+  // pool so OD can still make progress instead of manufacturing no media.
+  const _w121zod125NonDegradedPool =
+    usePlaybackHealth
+      ? pool.filter((s: any) => {
+          const hash = String(
+            s?.infoHash || s?.info_hash || ''
+          )
+            .trim()
+            .toLowerCase();
+
+          const health =
+            hash ? _v769SeekHealth[hash] : null;
+
+          const policy =
+            String(health?.playbackPolicy || '');
+
+          return !(
+            policy ===
+              _W121ZOD106G_PLAYBACK_HEALTH_POLICY &&
+            health?.playback === 'degraded'
+          );
+        })
+      : pool;
+
+  const _w121zod125UsingNonDegraded =
+    usePlaybackHealth &&
+    _w121zod125NonDegradedPool.length > 0;
+
+  if (_w121zod125UsingNonDegraded) {
+    pool = _w121zod125NonDegradedPool;
+  }
+
+  if (usePlaybackHealth) {
+    try {
+      console.log(
+        '[W121ZOD125 DEGRADED LAST RESORT]',
+        'eligible=' + String(pool.length),
+        'nonDegraded=' +
+          String(_w121zod125NonDegradedPool.length),
+        'usingNonDegraded=' +
+          String(_w121zod125UsingNonDegraded)
+      );
+    } catch (_) {}
+  }
+
   // W121ZOD117A_PROVIDER_SEED_RANK
   //
   // Title/language/device/audio/SDR walls have already executed.
@@ -5078,17 +5128,18 @@ export default function DetailsScreen() {
     _w121zod111ePreparedEntryForUi
       .readiness?.ok === true;
 
-  const _w121zod111eHoldPlay =
-    _w121zod111eAutoPlayGateApplies &&
-    !_w121zod111eUsefulPrepReady;
-
-  // W121ZOD115N2_PHONE_CLICK_PARITY
-  // The user explicitly accepts Preparing Media before Play. Release Play
-  // only after broad cache discovery is ready (or the fail-open max wait),
-  // so clicking Play does not begin a slow candidate-discovery cycle.
+  // W121ZOD135_RESTORE_NORMAL_PLAY_BUTTON
+  //
+  // Preparing Media no longer gates the primary action. Movies return to the
+  // normal user-driven Play flow: stream discovery may continue, but once
+  // streams exist the Play button is available immediately.
+  const _w121zod111eHoldPlay = false;
+  // W121ZOD136_LIGHTWEIGHT_PREPARING_PLAYBACK
+  // Movie UI only: show progress while ordinary stream discovery is active.
+  // This never waits for directDL, media probes, range/readiness checks, or
+  // background prepared-winner authority. W135 movie Play remains authoritative.
   const _w121zod111eShowPreparingUi =
-    _v667EffectiveStreamLoading ||
-    _w121zod111eHoldPlay;
+    type === 'movie' && _v667EffectiveStreamLoading;
   // PRE-WARM: When streams are loaded, silently pre-start the top ENGLISH torrent
   // This saves 5-10 seconds of metadata download when user taps play
   const prewarmedRef = useRef<string | null>(null);
@@ -5185,6 +5236,19 @@ export default function DetailsScreen() {
     }, [_w121zod110yPrepContextKey])
   );
   useEffect(() => {
+    // W121ZOD135_MOVIE_NO_BACKGROUND_PREP_AUTHORITY
+    //
+    // Restore the pre-Preparing-Media movie behavior. Movie playback is
+    // user-driven from the Play button; background directDL/media/readiness
+    // preparation must not choose or gate the movie before the user presses Play.
+    if (type === 'movie') {
+      return;
+    }
+
+    // W121ZOD134J_AUTHORITATIVE_PREP_ONLY
+    // Wait until this title's stream discovery is authoritative before starting
+    // device/media preparation. Progressive stream updates may still paint UI,
+    // but they must not churn preparation candidates while providers are landing.
     if (streams && streams.length > 0 && !isLoadingStreams) {
       // W121ZOD118H1_KEEP_FIRST_READY_WINNER
       // A late cache-map update must not throw away a source that has already
@@ -5400,10 +5464,129 @@ export default function DetailsScreen() {
           }
         );
 
+      // W121ZOD134R_STABLE_1080_AUTHORITY
+      // Product rule:
+      //   1. proven playback-pass 1080p SDR
+      //   2. remaining clean 1080p SDR
+      //   3. remaining clean 720p SDR
+      //   4. legacy/cache fallback only after those pools are exhausted
+      //
+      // Do NOT let a cached 4K/720 source outrank an available clean 1080p.
+      const _w121zod134rHashOf =
+        (candidate: any): string =>
+          String(
+            candidate?.infoHash ||
+            candidate?.info_hash ||
+            ''
+          )
+            .trim()
+            .toLowerCase();
+
+      const _w121zod134rRemainingClean =
+        _w121zod118h1CleanBasePool.filter(
+          (candidate: any) => {
+            const hash =
+              _w121zod134rHashOf(candidate);
+
+            return (
+              !!hash &&
+              !_w121zod117PrepRejectedRef.current.has(hash)
+            );
+          }
+        );
+
+      const _w121zod134rRemaining1080Sdr =
+        _w121zod134rRemainingClean.filter(
+          (candidate: any) => {
+            const info: any =
+              parseStreamInfo(candidate);
+
+            return (
+              info?.quality === '1080p' &&
+              info?.isHDR !== true
+            );
+          }
+        );
+
+      const _w121zod134rRemaining720Sdr =
+        _w121zod134rRemainingClean.filter(
+          (candidate: any) => {
+            const info: any =
+              parseStreamInfo(candidate);
+
+            return (
+              info?.quality === '720p' &&
+              info?.isHDR !== true
+            );
+          }
+        );
+
+      const _w121zod134rHealthMap =
+        _v769GetSeekHealthMap();
+
+      const _w121zod134rProven1080 =
+        _w121zod134rRemaining1080Sdr.filter(
+          (candidate: any) => {
+            const hash =
+              _w121zod134rHashOf(candidate);
+
+            const health: any =
+              _w121zod134rHealthMap[hash] ||
+              {};
+
+            return (
+              health?.playback === 'pass' &&
+              !_w121zod106gPlaybackBadForSelection(
+                health
+              )
+            );
+          }
+        );
+
+      // W121ZOD134R2_RANKED_1080_AUTHORITY
+      //
+      // A short historical playback pass is useful telemetry, but it is not
+      // enough to monopolize selection. W121ZOD134P proved a source can pass
+      // the 120s persistence threshold and still die later after its delivery
+      // buffer drains.
+      //
+      // Therefore every remaining clean SDR 1080p candidate stays in the
+      // authority pool. The existing V503 ranking chooses the best compact /
+      // compatible / reliable 1080p. The R exact-route delivery gate then tests
+      // the precise URL Player would receive, re-resolving that SAME source
+      // once before advancing. 720p remains inaccessible until 1080p exhausts.
       const _w121zod110tAuthorityPool =
-        _w121zod118h2CachedRemaining.length > 0
-          ? _w121zod118h2CachedRemaining
-          : _w121zod118h1CleanBasePool;
+        _w121zod134rRemaining1080Sdr.length > 0
+          ? _w121zod134rRemaining1080Sdr
+          : _w121zod134rRemaining720Sdr.length > 0
+            ? _w121zod134rRemaining720Sdr
+            : _w121zod118h2CachedRemaining.length > 0
+              ? _w121zod118h2CachedRemaining
+              : _w121zod118h1CleanBasePool;
+
+      console.log(
+        '[W121ZOD134R 1080 AUTHORITY]',
+        'proven1080=' +
+          String(
+            _w121zod134rProven1080.length
+          ),
+        'remaining1080=' +
+          String(
+            _w121zod134rRemaining1080Sdr.length
+          ),
+        'remaining720=' +
+          String(
+            _w121zod134rRemaining720Sdr.length
+          ),
+        'authority=' +
+          (
+            _w121zod134rRemaining1080Sdr.length > 0
+              ? 'RANKED_1080_SDR'
+              : _w121zod134rRemaining720Sdr.length > 0
+                ? '720_SDR_AFTER_1080_EXHAUSTION'
+                : 'LEGACY_LAST_RESORT'
+          )
+      );
 
       const _w121zod117PrepPool =
         _w121zod110tAuthorityPool.filter(
@@ -5441,10 +5624,56 @@ export default function DetailsScreen() {
           'cached=' + String(_w121zod110tCachedPool.length),
           'rejected=' + String(_w121zod117PrepRejectedRef.current.size),
           'elapsedMs=' + String(_w121zod118h1PrepElapsedMs),
-          'action=wait-for-current-streams-or-next-queue-update'
+          'action=bounded-active-recheck'
         );
 
+        // W121ZOD127_BOUNDED_EMPTY_POOL_RECHECK
+        //
+        // H3 previously returned here forever. Nothing was guaranteed to
+        // change streams/cache/retry state after the final candidate was
+        // rejected, leaving Preparing Media permanently stuck.
+        //
+        // Keep checking while stream discovery / an already-started
+        // Premiumize transfer may still change availability, but never
+        // leave the user in an infinite Preparing Media state.
+        const _w121zod127WaitBudgetMs = 60000;
+
+        if (
+          !isLoadingStreams &&
+          _w121zod118h1PrepElapsedMs >=
+            _w121zod127WaitBudgetMs
+        ) {
+          console.warn(
+            '[W121ZOD127 PREP EXHAUSTED]',
+            'streams=' +
+              String(Array.isArray(streams) ? streams.length : 0),
+            'clean=' +
+              String(_w121zod118h1CleanBasePool.length),
+            'rejected=' +
+              String(_w121zod117PrepRejectedRef.current.size),
+            'elapsedMs=' +
+              String(_w121zod118h1PrepElapsedMs),
+            'action=stop-bounded-preparation'
+          );
+
+          _w121zod118dSetPrepExhausted(true);
+          return;
+        }
+
         _w121zod118dSetPrepExhausted(false);
+
+        setTimeout(() => {
+          if (
+            !_w121zod118DetailsPrepActiveRef.current
+          ) {
+            return;
+          }
+
+          _w121zod117SetPrepRetryTick(
+            (tick) => tick + 1
+          );
+        }, 2500);
+
         return;
       }
 
@@ -5458,12 +5687,250 @@ export default function DetailsScreen() {
         );
       }
 
+      // W121ZOD134F_FAST_SUSTAINABLE_RESCUE
+      //
+      // Give normal quality-first selection one real preparation attempt.
+      // After one rejected candidate, flawless delivery outranks resolution:
+      // immediately try the smallest clean SDR 720p source rather than
+      // spending a minute testing a long chain of higher-bitrate 1080p files.
+      const _w121zod134fUseRescueLane =
+        _w121zod117PrepRejectedRef.current.size >= 1;
+
+      const _w121zod134fSizeBytes =
+        (candidate: any): number => {
+          try {
+            const info: any =
+              parseStreamInfo(candidate);
+
+            const text =
+              String(info?.size || '').trim();
+
+            const sizeMatch =
+              text.match(
+                /([\d]+(?:[.,][\d]+)?)\s*(TB|TiB|GB|GiB|MB|MiB)/i
+              );
+
+            if (!sizeMatch) {
+              return Number.POSITIVE_INFINITY;
+            }
+
+            const amount =
+              Number(
+                sizeMatch[1].replace(',', '.')
+              );
+
+            const unit =
+              sizeMatch[2].toUpperCase();
+
+            const multiplier =
+              unit.startsWith('T')
+                ? Math.pow(1024, 4)
+                : unit.startsWith('G')
+                  ? Math.pow(1024, 3)
+                  : Math.pow(1024, 2);
+
+            const bytes =
+              amount * multiplier;
+
+            return (
+              Number.isFinite(bytes) &&
+              bytes > 0
+            )
+              ? bytes
+              : Number.POSITIVE_INFINITY;
+          } catch (_) {
+            return Number.POSITIVE_INFINITY;
+          }
+        };
+
+      // W121ZOD134M_COMPACT_RESCUE_AUTHORITY
+      // Keep a compact SDR 720p lane ready on every title. The normal
+      // device-aware source still gets first consideration, but if its
+      // measured delivery cannot sustain its own bitrate we immediately
+      // move to this lane instead of walking more 1080p candidates.
+      const _w121zod134mCompact720Pool =
+        _w121zod117PrepPool
+          .filter(
+            (candidate: any) => {
+              const info: any =
+                parseStreamInfo(candidate);
+
+              return (
+                info?.quality === '720p' &&
+                info?.isHDR !== true
+              );
+            }
+          )
+          .sort(
+            (a: any, b: any) =>
+              _w121zod134fSizeBytes(a) -
+              _w121zod134fSizeBytes(b)
+          );
+
+      // W121ZOD134R_EXHAUST_1080_BEFORE_720
+      // M2 previously allowed one rejection to enter the compact 720p rescue
+      // lane. That violates the product requirement. Stay in the 1080p pool
+      // until every clean 1080p SDR candidate has actually been exhausted.
+      const _w121zod134fRescuePool =
+        (
+          _w121zod134fUseRescueLane &&
+          _w121zod134rRemaining1080Sdr.length === 0
+        )
+          ? _w121zod134mCompact720Pool
+          : [];
+
+      const _w121zod134fSelectionPool =
+        _w121zod134fRescuePool.length > 0
+          ? _w121zod134fRescuePool
+          : _w121zod117PrepPool;
+
+      if (
+        _w121zod134fRescuePool.length > 0
+      ) {
+        console.warn(
+          '[W121ZOD134F SUSTAINABLE RESCUE]',
+          'rejected=' +
+            String(
+              _w121zod117PrepRejectedRef.current.size
+            ),
+          'rescue=' +
+            String(
+              _w121zod134fRescuePool.length
+            ),
+          'action=prefer-compact-720p-sdr'
+        );
+      }
+
+      // W121ZOD134S_MOVIE_TPB_1080_MOST_SEEDERS
+      //
+      // Movie automatic Play authority:
+      //   1. clean/title-correct/device-safe SDR 1080p
+      //   2. The Pirate Bay / TPB source
+      //   3. highest reported seeder count wins
+      //
+      // Do not let V503 release/history/size scoring outrank seeders inside
+      // this movie-only TPB 1080p lane. Series and manual stream cards retain
+      // their existing behavior.
+      const _w121zod134sMovieTpb1080Pool =
+        type === 'movie'
+          ? _w121zod134fSelectionPool
+              .filter((candidate: any) => {
+                const info: any =
+                  parseStreamInfo(candidate);
+
+                const sourceText = (
+                  String(candidate?.provider || '') + ' ' +
+                  String(candidate?.addon || '') + ' ' +
+                  String(candidate?.name || '') + ' ' +
+                  String(candidate?.title || '') + ' ' +
+                  String(candidate?.filename || '') + ' ' +
+                  String(info?.source || '')
+                ).toUpperCase();
+
+                return (
+                  info?.quality === '1080p' &&
+                  info?.isHDR !== true &&
+                  (
+                    /\bTHEPIRATEBAY\b/.test(sourceText) ||
+                    /\bTPB\+?\b/.test(sourceText) ||
+                    /PIRATE\s*BAY/.test(sourceText)
+                  )
+                );
+              })
+              .sort((a: any, b: any) => {
+                const seeders = (candidate: any): number => {
+                  const info: any =
+                    parseStreamInfo(candidate);
+
+                  const raw =
+                    candidate?.seeders ??
+                    candidate?.seeds ??
+                    candidate?.seed ??
+                    info?.seeders ??
+                    0;
+
+                  const value =
+                    typeof raw === 'number'
+                      ? raw
+                      : parseInt(String(raw), 10);
+
+                  return Number.isFinite(value)
+                    ? value
+                    : 0;
+                };
+
+                return seeders(b) - seeders(a);
+              })
+          : [];
+
+      const _w121zod134sTopTpbSeeders =
+        _w121zod134sMovieTpb1080Pool.length > 0
+          ? (() => {
+              const candidate: any =
+                _w121zod134sMovieTpb1080Pool[0];
+
+              const info: any =
+                parseStreamInfo(candidate);
+
+              const raw =
+                candidate?.seeders ??
+                candidate?.seeds ??
+                candidate?.seed ??
+                info?.seeders ??
+                0;
+
+              const value =
+                typeof raw === 'number'
+                  ? raw
+                  : parseInt(String(raw), 10);
+
+              return Number.isFinite(value)
+                ? value
+                : 0;
+            })()
+          : 0;
+
+      if (
+        type === 'movie' &&
+        _w121zod134sMovieTpb1080Pool.length > 0
+      ) {
+        console.log(
+          '[W121ZOD134S MOVIE AUTHORITY]',
+          'policy=TPB_1080_MOST_SEEDERS',
+          'candidates=' +
+            String(
+              _w121zod134sMovieTpb1080Pool.length
+            ),
+          'seeders=' +
+            String(
+              _w121zod134sTopTpbSeeders
+            ),
+          'hash=' +
+            String(
+              _w121zod134sMovieTpb1080Pool[0]
+                ?.infoHash ||
+              (_w121zod134sMovieTpb1080Pool[0] as any)
+                ?.info_hash ||
+              ''
+            ).slice(0, 12)
+        );
+      }
+
       const topStream =
-        _v503PickReliableAutoStream(
-          _w121zod117PrepPool,
-          type === 'movie' || type === 'series'
-        ) ||
-        _w121zod117PrepPool[0];
+        _w121zod134fRescuePool.length > 0
+          ? _w121zod134fSelectionPool[0]
+          : (
+              type === 'movie' &&
+              _w121zod134sMovieTpb1080Pool.length > 0
+                ? _w121zod134sMovieTpb1080Pool[0]
+                : (
+                    _v503PickReliableAutoStream(
+                      _w121zod134fSelectionPool,
+                      type === 'movie' || type === 'series'
+                    ) ||
+                    _w121zod134fSelectionPool[0]
+                  )
+            );
 
       const _w121zod118h1TopHash = String(
         topStream?.infoHash ||
@@ -5481,16 +5948,50 @@ export default function DetailsScreen() {
           _w121zod118h1TopHash
         );
 
-      const _w121zod118h1SecondStream =
-        _w121zod118h1SecondPool.length > 0
+      // W121ZOD134R_1080_HEDGE_FIRST
+      // Prewarm a second clean 1080p SDR candidate first. 720p remains the
+      // rescue only after the 1080p pool is gone.
+      const _w121zod134rSecond1080Pool =
+        _w121zod134rRemaining1080Sdr.filter(
+          (candidate: any) =>
+            _w121zod134rHashOf(candidate) !==
+            _w121zod118h1TopHash
+        );
+
+      const _w121zod134rSecond1080 =
+        _w121zod134rSecond1080Pool.length > 0
           ? (
               _v503PickReliableAutoStream(
-                _w121zod118h1SecondPool,
-                type === 'movie' || type === 'series'
+                _w121zod134rSecond1080Pool,
+                type === 'movie' ||
+                  type === 'series'
               ) ||
-              _w121zod118h1SecondPool[0]
+              _w121zod134rSecond1080Pool[0]
             )
           : null;
+
+      const _w121zod134mCompactHedge =
+        _w121zod134mCompact720Pool.find(
+          (candidate: any) =>
+            _w121zod134rHashOf(candidate) !==
+            _w121zod118h1TopHash
+        ) || null;
+
+      const _w121zod118h1SecondStream =
+        _w121zod134rSecond1080 ||
+        _w121zod134mCompactHedge ||
+        (
+          _w121zod118h1SecondPool.length > 0
+            ? (
+                _v503PickReliableAutoStream(
+                  _w121zod118h1SecondPool,
+                  type === 'movie' ||
+                    type === 'series'
+                ) ||
+                _w121zod118h1SecondPool[0]
+              )
+            : null
+        );
 
       try {
         console.log(
@@ -5759,8 +6260,8 @@ export default function DetailsScreen() {
                 const _w121zod110yContent =
                   await premiumizeDirectDL(
                     _w121zod110yMagnet,
-                    3000
-                  ); // W121ZOD118H1_BOUNDED_DIRECTDL
+                    8000
+                  ); // W121ZOD134J_DEVICE_PREP_DIRECTDL_BUDGET
 
                 if (!_w121zod110yStillCurrent()) return;
 
@@ -5791,13 +6292,18 @@ export default function DetailsScreen() {
                 const _w121zod110yVideoExt =
                   /\.(mkv|mp4|avi|mov|m4v|ts|m2ts|webm)$/i;
 
+                // W121ZOD124_PATH_FIRST_PM_PACK_SELECTION
+                // A valid Premiumize pack item may expose an exact media path
+                // before it exposes a client-side link. The authenticated
+                // media-probe endpoint re-resolves this exact path and returns
+                // the usable HTTPS link, so do not discard path-only media.
                 let _w121zod110yVideos =
                   _w121zod110yContent.filter(
                     (candidate: any) =>
                       candidate &&
-                      candidate.link &&
                       _w121zod110yVideoExt.test(
                         candidate.path ||
+                        candidate.name ||
                         candidate.link ||
                         ''
                       )
@@ -5808,9 +6314,23 @@ export default function DetailsScreen() {
                     (candidate: any) =>
                       !_v672IsSampleLikeMedia(
                         candidate.path ||
+                        candidate.name ||
                         candidate.link
                       )
                   );
+
+                const _w121zod124LinkBackedVideoCount =
+                  _w121zod110yVideos.filter(
+                    (candidate: any) =>
+                      !!String(candidate?.link || '').trim()
+                  ).length;
+
+                console.log(
+                  '[W121ZOD124 PATH-FIRST PACK]',
+                  'hash=' + _w121zod110yHash.slice(0, 12),
+                  'videoFiles=' + String(_w121zod110yVideos.length),
+                  'withLink=' + String(_w121zod124LinkBackedVideoCount)
+                );
 
                 const _w121zod110yIdParts =
                   ((id as string) || '').split(':');
@@ -5949,8 +6469,15 @@ export default function DetailsScreen() {
                         )
                       : false;
 
+                const _w121zod110ySelectedPath =
+                  String(
+                    _w121zod110yFile?.path ||
+                    _w121zod110yFile?.name ||
+                    ''
+                  ).trim();
+
                 if (
-                  !_w121zod110yFile?.link ||
+                  !_w121zod110ySelectedPath ||
                   !_w121zod110yIdentityOk
                 ) {
                   _w121zod110yEntry.finished = true;
@@ -5960,17 +6487,18 @@ export default function DetailsScreen() {
                     'stage=file-identity',
                     'hash=' +
                       _w121zod110yHash.slice(0, 12),
-                    'ok=false'
+                    'ok=false',
+                    'pathFound=' + String(!!_w121zod110ySelectedPath),
+                    'linkPresent=' + String(
+                      !!String(_w121zod110yFile?.link || '').trim()
+                    )
                   );
 
                   return;
                 }
 
                 const _w121zod110yMediaPath =
-                  String(
-                    _w121zod110yFile.path ||
-                    ''
-                  ).trim();
+                  _w121zod110ySelectedPath;
 
                 if (!_w121zod110yMediaPath) {
                   _w121zod110yEntry.finished = true;
@@ -5980,12 +6508,28 @@ export default function DetailsScreen() {
                 _w121zod110yEntry.mediaPath =
                   _w121zod110yMediaPath;
 
+                // W121ZOD134M_PARALLEL_DELIVERY_SAMPLE
+                // Start one tiny native Range sample from the exact direct-DL
+                // URL in parallel with the device/media probe.
+                const _w121zod134mDirectLink =
+                  String(
+                    _w121zod110yFile?.link ||
+                    ''
+                  ).trim();
+
+                // W121ZOD134R_EXACT_PLAYBACK_ROUTE_ONLY
+                // The media-probe endpoint performs a fresh Premiumize resolve.
+                // Do not benchmark an older DirectDL URL in parallel and then
+                // use that measurement to judge a different URL handed to Player.
+                const _w121zod134mDeliveryPromise =
+                  null;
+
                 const _w121zod110yProbe =
                   await premiumizeMediaProbe(
                     _w121zod110yMagnet,
                     _w121zod110yMediaPath,
-                    3000
-                  ); // W121ZOD118H1_BOUNDED_MEDIA_PROBE
+                    5000
+                  ); // W121ZOD134J_DEVICE_MEDIA_PROBE_BUDGET
 
                 if (!_w121zod110yStillCurrent()) return;
 
@@ -6028,47 +6572,278 @@ export default function DetailsScreen() {
                   (tick) => tick + 1
                 );
 
-                // W121ZOD118H1_KNOWN_GOOD_FAST_LANE
-                // A hash already proven sustainable WITH FF and RW on this
-                // physical device does not need another network benchmark.
-                const _w121zod118h1Health =
-                  _v769GetSeekHealthMap()[
-                    _w121zod110yHash
-                  ];
+                // W121ZOD134R_SAME_SOURCE_ROUTE_RETRY
+                // A torrent/source and one temporary Premiumize CDN route are
+                // not the same thing. Test the exact URL that Player would get.
+                // If that route is weak, freshly resolve the SAME source once
+                // before rejecting the hash and advancing to the next 1080p.
+                let _w121zod134rProbeAuthority: any =
+                  _w121zod110yProbe;
 
-                const _w121zod118h1KnownGood =
-                  _w121zod118h1Health?.playbackPolicy ===
-                    _W121ZOD106G_PLAYBACK_HEALTH_POLICY &&
-                  _w121zod118h1Health?.playback === 'pass' &&
-                  (
-                    _w121zod118h1Health?.playbackPassReason ===
-                      'natural-eof' ||
-                    _w121zod118h1Health?.playbackPassReason ===
-                      'sustained-120s'
-                  ) &&
-                  _w121zod118h1Health?.ff === 'pass' &&
-                  _w121zod118h1Health?.rw === 'pass';
-
-                const _w121zod110yReadiness =
-                  _w121zod118h1KnownGood
-                    ? {
-                        ok: true,
-                        reason: 'device-known-good',
-                        mediaMbps: 0,
-                        sampleMbps: [],
-                        minMbps: 0,
-                        minRatio: 99,
-                        sampleBytes: 0,
-                        fileSizeBytes: Number(
-                          _w121zod110yProbe.size || 0
-                        ),
-                      }
-                    : await premiumizeSeekReadinessProbe(
-                        _w121zod110yProbe.link,
-                        _w121zod110yProbe.format?.bit_rate,
-                        _w121zod110yProbe.format?.duration,
-                        _w121zod110yProbe.size
+                const _w121zod134rMeasureDelivery =
+                  async (
+                    probe: any,
+                    attempt: string
+                  ) => {
+                    const delivery =
+                      await premiumizeStartupDeliverySample(
+                        String(
+                          probe?.link ||
+                          ''
+                        ).trim(),
+                        probe?.size ||
+                          0
                       );
+
+                    let mediaBitRateBps =
+                      Number(
+                        probe?.format?.bit_rate ||
+                        0
+                      );
+
+                    const durationSeconds =
+                      Number(
+                        probe?.format?.duration ||
+                        0
+                      );
+
+                    const fileSizeBytes =
+                      Number(
+                        probe?.size ||
+                        0
+                      );
+
+                    if (
+                      (
+                        !Number.isFinite(
+                          mediaBitRateBps
+                        ) ||
+                        mediaBitRateBps <= 0
+                      ) &&
+                      Number.isFinite(
+                        fileSizeBytes
+                      ) &&
+                      fileSizeBytes > 0 &&
+                      Number.isFinite(
+                        durationSeconds
+                      ) &&
+                      durationSeconds > 0
+                    ) {
+                      mediaBitRateBps =
+                        (
+                          fileSizeBytes *
+                          8
+                        ) /
+                        durationSeconds;
+                    }
+
+                    const mediaMbps =
+                      mediaBitRateBps > 0
+                        ? (
+                            mediaBitRateBps /
+                            1000000
+                          )
+                        : 0;
+
+                    const sampleMbps =
+                      Number(
+                        delivery?.sampleMbps ||
+                        0
+                      );
+
+                    const ratio =
+                      mediaMbps > 0
+                        ? (
+                            sampleMbps /
+                            mediaMbps
+                          )
+                        : 0;
+
+                    const ok =
+                      delivery?.ok === true &&
+                      mediaMbps > 0 &&
+                      ratio >= 1.25;
+
+                    console.log(
+                      '[W121ZOD134R SAME SOURCE ROUTE]',
+                      'hash=' +
+                        _w121zod110yHash.slice(
+                          0,
+                          12
+                        ),
+                      'attempt=' + attempt,
+                      'mediaMbps=' +
+                        mediaMbps.toFixed(2),
+                      'sampleMbps=' +
+                        sampleMbps.toFixed(2),
+                      'ratio=' +
+                        ratio.toFixed(2),
+                      'sampleMs=' +
+                        String(
+                          delivery?.elapsedMs ||
+                          0
+                        ),
+                      'ok=' +
+                        String(ok)
+                    );
+
+                    return {
+                      delivery,
+                      mediaMbps,
+                      sampleMbps,
+                      ratio,
+                      fileSizeBytes,
+                      ok,
+                    };
+                  };
+
+                let _w121zod134rMeasured =
+                  await _w121zod134rMeasureDelivery(
+                    _w121zod134rProbeAuthority,
+                    'initial'
+                  );
+
+                if (
+                  !_w121zod134rMeasured.ok &&
+                  _w121zod110yStillCurrent()
+                ) {
+                  console.log(
+                    '[W121ZOD134R SAME SOURCE RERESOLVE]',
+                    'hash=' +
+                      _w121zod110yHash.slice(
+                        0,
+                        12
+                      ),
+                    'action=fresh-premiumize-route'
+                  );
+
+                  try {
+                    // W121ZOD134R2C_BOUNDED_FRESH_ROUTE
+                    // R2B's initial authenticated media probe is already capped
+                    // at 5s. Keep SAME-source fresh-route recovery, but do not
+                    // inherit premiumizeMediaProbe's 45s default timeout.
+                    const _w121zod134rFreshProbe =
+                      await premiumizeMediaProbe(
+                        _w121zod110yMagnet,
+                        _w121zod110yMediaPath,
+                        5000
+                      );
+
+                    if (!_w121zod110yStillCurrent()) {
+                      return;
+                    }
+
+                    const _w121zod134rFreshDecision =
+                      _w121zod108e1ActualAudioDecision(
+                        _w121zod134rFreshProbe
+                      );
+
+                    if (
+                      _w121zod134rFreshDecision.ok
+                    ) {
+                      const _w121zod134rFreshMeasured =
+                        await _w121zod134rMeasureDelivery(
+                          _w121zod134rFreshProbe,
+                          'fresh'
+                        );
+
+                      _w121zod134rMeasured =
+                        _w121zod134rFreshMeasured;
+
+                      if (
+                        _w121zod134rFreshMeasured.ok
+                      ) {
+                        _w121zod134rProbeAuthority =
+                          _w121zod134rFreshProbe;
+
+                        // Critical: Player must receive the SAME fresh URL
+                        // that actually passed the delivery measurement.
+                        _w121zod110yEntry.probe =
+                          _w121zod134rFreshProbe;
+
+                        _w121zod110yEntry.probeAtMs =
+                          Date.now();
+
+                        console.log(
+                          '[W121ZOD134R SAME SOURCE RECOVERED]',
+                          'hash=' +
+                            _w121zod110yHash.slice(
+                              0,
+                              12
+                            ),
+                          'ratio=' +
+                            _w121zod134rFreshMeasured
+                              .ratio
+                              .toFixed(2)
+                        );
+                      }
+                    }
+                  } catch (
+                    _w121zod134rFreshError
+                  ) {
+                    console.warn(
+                      '[W121ZOD134R SAME SOURCE RERESOLVE]',
+                      'hash=' +
+                        _w121zod110yHash.slice(
+                          0,
+                          12
+                        ),
+                      'error=' +
+                        String(
+                          (
+                            _w121zod134rFreshError as any
+                          )?.message ||
+                          _w121zod134rFreshError ||
+                          ''
+                        )
+                    );
+                  }
+                }
+
+                const _w121zod110yReadiness = {
+                  ok:
+                    _w121zod134rMeasured.ok,
+
+                  reason:
+                    _w121zod134rMeasured.ok
+                      ? 'device-and-delivery-compatible'
+                      : (
+                          _w121zod134rMeasured
+                            .delivery?.ok === true
+                            ? 'startup-delivery-low-headroom-after-reresolve'
+                            : (
+                                _w121zod134rMeasured
+                                  .delivery?.reason ||
+                                'startup-delivery-sample-error-after-reresolve'
+                              )
+                        ),
+
+                  mediaMbps:
+                    _w121zod134rMeasured
+                      .mediaMbps,
+
+                  sampleMbps: [
+                    _w121zod134rMeasured
+                      .sampleMbps
+                  ],
+
+                  minMbps:
+                    _w121zod134rMeasured
+                      .sampleMbps,
+
+                  minRatio:
+                    _w121zod134rMeasured
+                      .ratio,
+
+                  sampleBytes:
+                    _w121zod134rMeasured
+                      .delivery?.sampleBytes ||
+                    0,
+
+                  fileSizeBytes:
+                    _w121zod134rMeasured
+                      .fileSizeBytes,
+                };
 
                 if (!_w121zod110yStillCurrent()) return;
 
@@ -6112,14 +6887,33 @@ export default function DetailsScreen() {
                 );
               } catch (_w121zod110yError) {
                 if (_w121zod110yStillCurrent()) {
-                  _w121zod110yEntry.error =
+                  const _w121zod127Error =
                     String(
                       (_w121zod110yError as any)?.message ||
                       _w121zod110yError ||
                       ''
                     );
 
+                  const _w121zod127PrepElapsedMs =
+                    Date.now() -
+                    _w121zod118h1PrepStartedAtRef.current;
+
+                  const _w121zod127QueuePending =
+                    _w121zod127Error
+                      .toLowerCase()
+                      .includes(
+                        'unsupported link for direct download'
+                      ) &&
+                    _w121zod127PrepElapsedMs < 60000;
+
+                  _w121zod110yEntry.error =
+                    _w121zod127Error;
+
                   _w121zod110yEntry.finished = true;
+
+                  // Dynamic field is intentional: entry is already any.
+                  _w121zod110yEntry.queuePending =
+                    _w121zod127QueuePending;
 
                   console.log(
                     '[W121ZOD110Y PREP STAGE]',
@@ -6129,6 +6923,17 @@ export default function DetailsScreen() {
                     'error=' +
                       _w121zod110yEntry.error
                   );
+
+                  if (_w121zod127QueuePending) {
+                    console.log(
+                      '[W121ZOD127 QUEUE PENDING]',
+                      'hash=' +
+                        _w121zod110yHash.slice(0, 12),
+                      'elapsedMs=' +
+                        String(_w121zod127PrepElapsedMs),
+                      'action=recheck-directdl-after-queue-progress'
+                    );
+                  }
                 }
               } finally {
                 _w121zod110yEntry.running = false;
@@ -6151,9 +6956,43 @@ export default function DetailsScreen() {
                       )
                     );
 
-                  _w121zod117RejectPreparedCandidate(
-                    reason
-                  );
+                  const _w121zod127QueuePending =
+                    _w121zod110yEntry
+                      .queuePending === true;
+
+                  if (_w121zod127QueuePending) {
+                    _w121zod110yEntry.queuePending =
+                      false;
+
+                    // Remove only the temporary prep record. Do NOT put this
+                    // hash in PrepRejectedRef; its queue may become ready.
+                    _w121zod110yPrepCacheRef.current.delete(
+                      _w121zod110yPrepKey
+                    );
+
+                    console.log(
+                      '[W121ZOD127 QUEUE RECHECK]',
+                      'hash=' +
+                        _w121zod110yHash.slice(0, 12),
+                      'delayMs=2500'
+                    );
+
+                    setTimeout(() => {
+                      if (
+                        !_w121zod118DetailsPrepActiveRef.current
+                      ) {
+                        return;
+                      }
+
+                      _w121zod117SetPrepRetryTick(
+                        (tick) => tick + 1
+                      );
+                    }, 2500);
+                  } else {
+                    _w121zod117RejectPreparedCandidate(
+                      reason
+                    );
+                  }
                 }
               }
             })();
@@ -6356,12 +7195,223 @@ export default function DetailsScreen() {
           : '',
       };
 
+      // W121ZOD134C_PREPARED_RECOVERY_POOL
+      // The exact prepared direct URL remains primary. Build only a small,
+      // synchronous recovery pool from the freshest current Details streams.
+      // No fallback is resolved here, so normal Play receives no added network delay.
+      const _w121zod134cFallbackSeen =
+        new Set<string>([hash]);
+
+      const _w121zod134cFallbackHealthMap =
+        _v769GetSeekHealthMap();
+
+      const _w121zod134cSeedCount =
+        (candidate: any): number => {
+          try {
+            const raw =
+              candidate?.seeders ??
+              candidate?.seed ??
+              candidate?.seeds ??
+              0;
+
+            const parsed =
+              typeof raw === 'number'
+                ? raw
+                : parseInt(String(raw), 10);
+
+            return Number.isFinite(parsed)
+              ? parsed
+              : 0;
+          } catch (_) {
+            return 0;
+          }
+        };
+
+      const _w121zod134cFallbackCandidates =
+        (Array.isArray(streams) ? streams : [])
+          .filter((candidate: any) => {
+            if (_v672IsSampleLikeStream(candidate)) {
+              return false;
+            }
+
+            if (_w121zod108e1IsStrictForeignStream(candidate)) {
+              return false;
+            }
+
+            const candidateHash =
+              String(
+                candidate?.infoHash ||
+                candidate?.info_hash ||
+                ''
+              )
+                .trim()
+                .toLowerCase();
+
+            if (!/^[a-f0-9]{40}$/.test(candidateHash)) {
+              return false;
+            }
+
+            if (_w121zod134cFallbackSeen.has(candidateHash)) {
+              return false;
+            }
+
+            if (
+              _w121zod117PrepRejectedRef.current.has(
+                candidateHash
+              )
+            ) {
+              return false;
+            }
+
+            const health =
+              _w121zod134cFallbackHealthMap[
+                candidateHash
+              ];
+
+            if (
+              health?.ff === 'fail' ||
+              health?.rw === 'fail' ||
+              _w121zod106gPlaybackBadForSelection(
+                health
+              )
+            ) {
+              return false;
+            }
+
+            const candidateIdentity =
+              String(
+                candidate?.filename ||
+                candidate?.title ||
+                candidate?.name ||
+                ''
+              ).trim();
+
+            if (
+              type === 'movie' &&
+              identityTitle &&
+              !_v747MovieIdentityMatches(
+                id,
+                content,
+                candidate,
+                identityTitle,
+                identityYear,
+                candidateIdentity
+              )
+            ) {
+              return false;
+            }
+
+            if (
+              type === 'series' &&
+              isEpisodePage &&
+              identityTitle &&
+              !_v745EpisodeIdentityMatches(
+                identityTitle,
+                episodeSeason,
+                episodeNumber,
+                candidateIdentity
+              )
+            ) {
+              return false;
+            }
+
+            _w121zod134cFallbackSeen.add(
+              candidateHash
+            );
+
+            return true;
+          });
+
+      // Prefer the hedge already warmed during Preparing Media.
+      const _w121zod134cWarmFallback =
+        _w121zod134cFallbackCandidates.find(
+          (candidate: any) => {
+            const candidateHash =
+              String(
+                candidate?.infoHash ||
+                candidate?.info_hash ||
+                ''
+              )
+                .trim()
+                .toLowerCase();
+
+            return _w121zod118h1HedgeWarmRef.current.has(
+              candidateHash
+            );
+          }
+        ) || null;
+
+      const _w121zod134cPolicyFallback =
+        _v503PickReliableAutoStream(
+          _w121zod134cFallbackCandidates,
+          type === 'movie' || type === 'series'
+        ) ||
+        _w121zod134cFallbackCandidates[0] ||
+        null;
+
+      const _w121zod134cFirstFallback =
+        _w121zod134cWarmFallback ||
+        _w121zod134cPolicyFallback;
+
+      const _w121zod134cFirstFallbackHash =
+        String(
+          _w121zod134cFirstFallback?.infoHash ||
+          (_w121zod134cFirstFallback as any)
+            ?.info_hash ||
+          ''
+        )
+          .trim()
+          .toLowerCase();
+
+      const _w121zod134cFallbackTorrents = [
+        ...(
+          _w121zod134cFirstFallback
+            ? [_w121zod134cFirstFallback]
+            : []
+        ),
+        ..._w121zod134cFallbackCandidates
+          .filter(
+            (candidate: any) =>
+              String(
+                candidate?.infoHash ||
+                candidate?.info_hash ||
+                ''
+              )
+                .trim()
+                .toLowerCase() !==
+              _w121zod134cFirstFallbackHash
+          )
+          .sort(
+            (a: any, b: any) =>
+              _w121zod134cSeedCount(b) -
+              _w121zod134cSeedCount(a)
+          ),
+      ]
+        .slice(0, 3)
+        .map((candidate: any) => ({
+          infoHash:
+            candidate.infoHash ||
+            candidate.info_hash,
+          fileIdx: candidate.fileIdx,
+          filename: candidate.filename || '',
+          sources: candidate.sources || [],
+          name: candidate.name || '',
+          title: candidate.title || '',
+        }));
+
       console.log(
         '[W121ZOD118H1 DIRECT PREPARED HANDOFF]',
         'hash=' + hash.slice(0, 12),
-        'fallbackTorrents=0',
+        'fallbackTorrents=' +
+          String(
+            _w121zod134cFallbackTorrents.length
+          ),
         'fallbackStreams=0',
-        'readiness=' + String(entry?.readiness?.reason || 'ok')
+        'readiness=' +
+          String(
+            entry?.readiness?.reason ||
+            'ok'
+          )
       );
 
       router.push({
@@ -6377,7 +7427,10 @@ export default function DetailsScreen() {
           identityYear,
           filename: mediaPath,
           fallbackStreams: '[]',
-          fallbackTorrents: '',
+          fallbackTorrents:
+            JSON.stringify(
+              _w121zod134cFallbackTorrents
+            ),
           backdrop: overlayUri,
           ...overlayPass,
           poster: content?.poster || nextPosterParam || '',
@@ -9216,7 +10269,7 @@ const nextEpisodeData = nextEpisode ? {
                       color="#B8A05C"
                     />
                     <Text style={styles.preparingMediaText}>
-                      Preparing Media...
+                      Preparing Playback...
                     </Text>
                   </View>
                 ) : !_v667EffectiveStreamLoading &&
@@ -9286,22 +10339,166 @@ const nextEpisodeData = nextEpisode ? {
                                   ?.stream
                               : null;
 
-                          picked =
-                            _w121zod118PreparedWinner ||
-                            _v503PickReliableAutoStream(
-                              list,
-                              type === 'movie' ||
-                                type === 'series'
-                            ) ||
-                            (
-                              list.find(
-                                (s: any) =>
-                                  _v356Playable(s)
-                              ) ||
-                              null
-                            );
+                          // W121ZOD135_MOVIE_BUTTON_TPB_1080_MOST_SEEDERS
+                          //
+                          // Movie normal Play is deliberately simple:
+                          // correct-title clean TPB 1080p SDR, highest seeders first.
+                          // No background prepared winner is allowed to override the
+                          // user's movie Play press.
+                          const _w121zod135MovieTpb1080Pool =
+                            type === 'movie'
+                              ? list
+                                  .filter((candidate: any) => {
+                                    if (!candidate) return false;
+                                    if (_v672IsSampleLikeStream(candidate)) {
+                                      return false;
+                                    }
+                                    if (_w121zod108e1IsStrictForeignStream(candidate)) {
+                                      return false;
+                                    }
 
-                          if (_w121zod118PreparedWinner) {
+                                    const info: any =
+                                      parseStreamInfo(candidate);
+
+                                    if (
+                                      info?.quality !== '1080p' ||
+                                      info?.isHDR === true
+                                    ) {
+                                      return false;
+                                    }
+
+                                    const sourceText = (
+                                      String(candidate?.provider || '') + ' ' +
+                                      String(candidate?.addon || '') + ' ' +
+                                      String(candidate?.name || '') + ' ' +
+                                      String(candidate?.title || '') + ' ' +
+                                      String(candidate?.filename || '') + ' ' +
+                                      String(info?.source || '')
+                                    ).toUpperCase();
+
+                                    if (
+                                      !(
+                                        /\bTHEPIRATEBAY\b/.test(sourceText) ||
+                                        /\bTPB\+?\b/.test(sourceText) ||
+                                        /PIRATE\s*BAY/.test(sourceText)
+                                      )
+                                    ) {
+                                      return false;
+                                    }
+
+                                    const requestedTitle = String(
+                                      (content as any)?.name ||
+                                      (content as any)?.title ||
+                                      (paramName as any) ||
+                                      ''
+                                    ).trim();
+
+                                    const requestedYear =
+                                      (content as any)?.releaseInfo ||
+                                      (content as any)?.year ||
+                                      (content as any)?.releaseYear ||
+                                      '';
+
+                                    const identity = String(
+                                      candidate?.filename ||
+                                      candidate?.title ||
+                                      candidate?.name ||
+                                      ''
+                                    ).trim();
+
+                                    return (
+                                      !!requestedTitle &&
+                                      !!identity &&
+                                      _v747MovieIdentityMatches(
+                                        id,
+                                        content,
+                                        candidate,
+                                        requestedTitle,
+                                        requestedYear,
+                                        identity
+                                      )
+                                    );
+                                  })
+                                  .sort((a: any, b: any) => {
+                                    const seeders = (candidate: any): number => {
+                                      const info: any =
+                                        parseStreamInfo(candidate);
+
+                                      const raw =
+                                        candidate?.seeders ??
+                                        candidate?.seeds ??
+                                        candidate?.seed ??
+                                        info?.seeders ??
+                                        0;
+
+                                      const value =
+                                        typeof raw === 'number'
+                                          ? raw
+                                          : parseInt(String(raw), 10);
+
+                                      return Number.isFinite(value)
+                                        ? value
+                                        : 0;
+                                    };
+
+                                    return seeders(b) - seeders(a);
+                                  })
+                              : [];
+
+                          const _w121zod135MovieWinner =
+                            _w121zod135MovieTpb1080Pool[0] ||
+                            null;
+
+                          if (_w121zod135MovieWinner) {
+                            const _w121zod135Info: any =
+                              parseStreamInfo(_w121zod135MovieWinner);
+
+                            const _w121zod135RawSeeders =
+                              _w121zod135MovieWinner?.seeders ??
+                              _w121zod135MovieWinner?.seeds ??
+                              _w121zod135MovieWinner?.seed ??
+                              _w121zod135Info?.seeders ??
+                              0;
+
+                            console.log(
+                              '[W121ZOD135 MOVIE PLAY]',
+                              'policy=TPB_1080_MOST_SEEDERS',
+                              'seeders=' + String(_w121zod135RawSeeders),
+                              'hash=' +
+                                String(
+                                  _w121zod135MovieWinner?.infoHash ||
+                                  (_w121zod135MovieWinner as any)?.info_hash ||
+                                  ''
+                                ).slice(0, 12)
+                            );
+                          }
+
+                          picked =
+                            (
+                              type === 'movie' &&
+                              _w121zod135MovieWinner
+                            )
+                              ? _w121zod135MovieWinner
+                              : (
+                                  _w121zod118PreparedWinner ||
+                                  _v503PickReliableAutoStream(
+                                    list,
+                                    type === 'movie' ||
+                                      type === 'series'
+                                  ) ||
+                                  (
+                                    list.find(
+                                      (s: any) =>
+                                        _v356Playable(s)
+                                    ) ||
+                                    null
+                                  )
+                                );
+
+                          if (
+                            type !== 'movie' &&
+                            _w121zod118PreparedWinner
+                          ) {
                             console.log(
                               '[W121ZOD118A PLAY PREPARED WINNER]',
                               'hash=' +

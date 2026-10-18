@@ -6384,11 +6384,10 @@ export default function PlayerScreen() {
                 v104j27OnDemandBufferSinceRef.current;
 
               if (
-                // W121ZOD115M1_NO_TIMER_REBUFFER_FAILOVER
-                // A transient OD rebuffer is not enough evidence to destroy a
-                // healthy direct source. Native/source errors still retain the
-                // existing explicit recovery path.
-                false &&
+                // W121ZOD134C_SUSTAINED_REBUFFER_RECOVERY
+                // Preparing Media is the primary quality gate. If OD still
+                // stalls continuously for 1.5s, use the existing V769 seamless
+                // position-preserving fallback instead of repeated buffering.
                 _v104j27StalledMs >= 1500 &&
                 !v104j27PlaybackFailoverRef.current
               ) {

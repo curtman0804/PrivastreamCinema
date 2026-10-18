@@ -176,6 +176,29 @@ apiClient.interceptors.response.use(
       await AsyncStorage.removeItem('user');
     }
     
+    // W121ZLIVE122R2_CANCELLED_REQUESTS_NEVER_RETRY
+    //
+    // AbortController cancellation is intentional lifecycle cleanup,
+    // not a network/server failure. Axios cancellation commonly has
+    // status=0, which the generic retry policy below otherwise treats
+    // as retryable. Never resurrect a cancelled Live EPG/inventory
+    // request after Live has lost focus.
+    const isCancelledRequest =
+      axios.isCancel(error) ||
+      error?.code === 'ERR_CANCELED' ||
+      error?.name === 'CanceledError' ||
+      error?.config?.signal?.aborted === true;
+
+    if (isCancelledRequest) {
+      console.log(
+        '[W121ZLIVE122R2 API CANCEL]',
+        'no-retry',
+        error?.config?.url || ''
+      );
+
+      return Promise.reject(error);
+    }
+
     // Auto-retry on server errors (502, 503, 520, etc.)
     const config = error.config;
     if (!config || config.__retryCount >= 3) {
@@ -710,7 +733,10 @@ export const api = {
       return _v706c2eFilterDiscover(data);
     },
     // V784I_ADDON_EPG_CLIENT
-    getLiveTvEpg: async (date: string): Promise<any> => {
+    getLiveTvEpg: async (
+      date: string,
+      signal?: any
+    ): Promise<any> => {
       const parentalModeEnabled = await getParentalModeEnabled();
 
       // V788T15V-R5: preserve the device-local EPG calendar day.
@@ -731,6 +757,7 @@ export const api = {
             tz: timeZone,
           },
           timeout: 240000,
+          signal,
         }
       );
 
@@ -744,7 +771,8 @@ export const api = {
     getLiveTvInventoryPage: async (
       sourceIndex: number = 0,
       skip: number = 0,
-      limit: number = 100
+      limit: number = 100,
+      signal?: any
     ): Promise<any> => {
       const parentalModeEnabled = await getParentalModeEnabled();
 
@@ -760,6 +788,7 @@ export const api = {
 
           // Background only. It does not block the initial guide.
           timeout: 150000,
+          signal,
         }
       );
 
@@ -1568,6 +1597,41 @@ export const api = {
       }
     },
     
+    // W121ZSPORTS133C_GENERIC_SPORT_API
+    getCatalog: async (
+      addonId: string,
+      type: string,
+      catalogId: string,
+    ): Promise<{ metas: any[] }> => {
+      const response = await apiClient.get(
+        `/api/addons/${encodeURIComponent(addonId)}/catalog/${encodeURIComponent(type)}/${encodeURIComponent(catalogId)}`
+      );
+
+      return {
+        metas: Array.isArray(response.data?.metas)
+          ? response.data.metas
+          : [],
+      };
+    },
+
+    getMeta: async (
+      addonId: string,
+      type: string,
+      id: string,
+    ): Promise<{ meta: any | null }> => {
+      const response = await apiClient.get(
+        `/api/addons/${encodeURIComponent(addonId)}/meta/${encodeURIComponent(type)}/${encodeURIComponent(id)}`
+      );
+
+      return {
+        meta:
+          response.data?.meta &&
+          typeof response.data.meta === 'object'
+            ? response.data.meta
+            : null,
+      };
+    },
+    // /W121ZSPORTS133C_GENERIC_SPORT_API
     install: async (manifestUrl: string): Promise<Addon> => {
       const response = await apiClient.post('/api/addons/install', { manifestUrl });
       return response.data;

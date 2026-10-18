@@ -333,6 +333,116 @@ const v789gLanguageBucket = (
   return null;
 };
 
+// W121ZSPORTS128I_CURRENT_LIVE_EVENT_SPORTS
+//
+// Dedicated Sports channels remain controlled by their existing channel
+// genre/category metadata. EPG promotion is intentionally restricted to
+// audited community.usa-tv-next channels and the program airing RIGHT NOW.
+//
+// This prevents FAST sitcom/kids/drama/movie channels from entering Sports
+// because of future guide text while still allowing a general US network to
+// appear temporarily when it is actually carrying a sporting event.
+const W121ZSPORTS128I_USA_TV_ADDON_ID =
+  'community.usa-tv-next';
+
+const W121ZSPORTS128I_TITLE_PATTERN =
+  /\b(?:nfl|nba|wnba|mlb|nhl|mls|ncaa|ncaaf|ncaab|ufc|mma|pga|lpga|atp|wta|nascar|indycar|motogp|formula\s*1|f1|fifa|uefa|premier\s+league|champions\s+league|europa\s+league|la\s+liga|bundesliga|serie\s+a|ligue\s+1|college\s+football|college\s+basketball|super\s+bowl|world\s+series|stanley\s+cup|march\s+madness|wwe|aew|premier\s+boxing\s+champions|top\s+rank\s+boxing)\b/i;
+
+const W121ZSPORTS128I_GENRE_PATTERN =
+  /\b(?:sports?|football|basketball|baseball|hockey|soccer|tennis|golf|boxing|wrestling|rugby|cricket|lacrosse|volleyball|motorsports?|motor\s+racing|auto\s+racing|mma)\b/i;
+
+const W121ZSPORTS128I_TEAM_PATTERN =
+  /\b(?:cardinals|falcons|ravens|bills|panthers|bears|bengals|browns|cowboys|broncos|lions|packers|texans|colts|jaguars|chiefs|raiders|chargers|rams|dolphins|vikings|patriots|saints|giants|jets|eagles|steelers|49ers|seahawks|buccaneers|titans|commanders|hawks|celtics|nets|hornets|bulls|cavaliers|mavericks|nuggets|pistons|warriors|rockets|pacers|clippers|lakers|grizzlies|heat|bucks|timberwolves|pelicans|knicks|thunder|magic|76ers|suns|trail\s+blazers|kings|spurs|raptors|jazz|wizards|ducks|bruins|sabres|flames|hurricanes|blackhawks|avalanche|blue\s+jackets|stars|red\s+wings|oilers|canadiens|predators|devils|islanders|rangers|senators|flyers|penguins|sharks|kraken|blues|lightning|maple\s+leafs|canucks|golden\s+knights|capitals|diamondbacks|braves|orioles|red\s+sox|cubs|white\s+sox|reds|guardians|rockies|tigers|astros|royals|angels|dodgers|marlins|brewers|twins|mets|yankees|athletics|phillies|pirates|padres|mariners|rays|blue\s+jays|nationals|atlanta\s+united|austin\s+fc|cf\s+montreal|charlotte\s+fc|chicago\s+fire|colorado\s+rapids|columbus\s+crew|dc\s+united|fc\s+cincinnati|fc\s+dallas|houston\s+dynamo|inter\s+miami|la\s+galaxy|lafc|minnesota\s+united|nashville\s+sc|new\s+england\s+revolution|new\s+york\s+city\s+fc|nycfc|new\s+york\s+red\s+bulls|orlando\s+city|philadelphia\s+union|portland\s+timbers|real\s+salt\s+lake|san\s+diego\s+fc|san\s+jose\s+earthquakes|seattle\s+sounders|sporting\s+kansas\s+city|st\s+louis\s+city\s+sc|toronto\s+fc|vancouver\s+whitecaps)\b/i;
+
+const w121zSports128iHasCurrentLiveEvent = (
+  channel: GuideChannel
+) => {
+  if (
+    String(channel.addonId || '').trim() !==
+      W121ZSPORTS128I_USA_TV_ADDON_ID
+  ) {
+    return false;
+  }
+
+  const now = Date.now();
+
+  const programs =
+    Array.isArray(channel.programs)
+      ? channel.programs
+      : [];
+
+  return programs.some((program: any) => {
+    const startMs =
+      new Date(
+        String(program?.startTime || '')
+      ).getTime();
+
+    const endMs =
+      new Date(
+        String(program?.endTime || '')
+      ).getTime();
+
+    // CURRENT program only. Future guide events do not promote a channel.
+    if (
+      !Number.isFinite(startMs) ||
+      !Number.isFinite(endMs) ||
+      startMs > now ||
+      now >= endMs
+    ) {
+      return false;
+    }
+
+    const rawTitle =
+      String(program?.title || '').trim();
+
+    const rawGenres =
+      Array.isArray(program?.genres)
+        ? program.genres
+            .map((value: any) =>
+              String(value || '').trim()
+            )
+            .filter(Boolean)
+        : [];
+
+    const titleText =
+      v789gNormalize(rawTitle);
+
+    const genreText =
+      v789gNormalize(
+        rawGenres.join(' ')
+      );
+
+    if (
+      W121ZSPORTS128I_TITLE_PATTERN.test(
+        titleText
+      ) ||
+      W121ZSPORTS128I_GENRE_PATTERN.test(
+        genreText
+      )
+    ) {
+      return true;
+    }
+
+    const matchupParts =
+      rawTitle.split(
+        /\s+(?:@|vs\.?|versus|at)\s+/i
+      );
+
+    if (matchupParts.length !== 2) {
+      return false;
+    }
+
+    return (
+      W121ZSPORTS128I_TEAM_PATTERN.test(
+        matchupParts[0]
+      ) &&
+      W121ZSPORTS128I_TEAM_PATTERN.test(
+        matchupParts[1]
+      )
+    );
+  });
+};
+
 const v789gMatchesCategory = (
   channel: GuideChannel,
   category: V789gCategoryKey,
@@ -487,7 +597,8 @@ const v789gMatchesCategory = (
   if (category === 'sports') {
     return (
       hasGenre('sports') ||
-      hasCategory('sports')
+      hasCategory('sports') ||
+      w121zSports128iHasCurrentLiveEvent(channel)
     );
   }
 
@@ -777,6 +888,15 @@ useEffect(() => {
 const v788pStationLongPressRef =
   useRef<(() => void) | null>(null);
 
+// W121ZLIVE123_SCREEN_FOCUS_OWNER
+//
+// Live TV remains mounted underneath other routes/tabs. Native/JS TV
+// handlers must only own remote input while Live itself owns navigation
+// focus. Without this guard, a hidden Live station can consume an OD
+// long-press and mutate the Live favorites library.
+const w121zlive123ScreenFocusedRef =
+  useRef(false);
+
 const v788pToggleFavoriteRef =
   useRef<
     (
@@ -812,6 +932,13 @@ const v788pClearStationLongPress =
 
 // V788P5D_NAV_DIAG
 useTVEventHandler((event: any) => {
+  // W121ZLIVE123_SCREEN_FOCUS_OWNER
+  // The tab stays mounted when OD/player owns the screen. Hidden Live
+  // must not interpret those remote keys as guide/category/favorite input.
+  if (!w121zlive123ScreenFocusedRef.current) {
+    return;
+  }
+
   const type =
     String(
       event?.eventType || ''
@@ -1146,6 +1273,14 @@ useTVEventHandler((event: any) => {
 const v788qPreferredFocusArmedRef =
   useRef(true);
   const loadGenerationRef = useRef(0); // V784L_LIVE_TV_FOCUS_REFRESH
+
+  // W121ZLIVE122_LIVE_FOCUS_OWNED_CANCEL
+  //
+  // A mounted Live tab must not retain ownership of expensive guide
+  // HTTP/inventory work after Live loses focus. The already-painted
+  // guide is preserved; only unfinished background work is cancelled.
+  const w121zlive122GuideAbortRef =
+    useRef<any>(null);
   const v788t10gRefreshResultRef = useRef<GuideChannel[] | null>(null);
 
   // V785A_LIVE_GUIDE_PERSIST
@@ -1575,6 +1710,17 @@ const timelineStart = floorHalfHour(now);
       ? v788t8xFavoriteOverrides
       : null;
 
+  // W121ZSPORTS128I_CURRENT_EVENT_CLOCK
+  //
+  // The existing guide clock ticks every 30 seconds. Only make that clock a
+  // filtering dependency while Sports is selected so general-network event
+  // membership enters/exits automatically at program boundaries without
+  // rebuilding every other Live TV category.
+  const w121zSports128iClockToken =
+    v789gCategory === 'sports'
+      ? now
+      : 0;
+
   const v789gVisibleChannels =
     useMemo(
       () =>
@@ -1588,6 +1734,7 @@ const timelineStart = floorHalfHour(now);
         v789gCategory,
         v788t8xIsFavorite,
         v788y24lFavoritesStructureToken,
+        w121zSports128iClockToken,
       ]
     );
 
@@ -1928,6 +2075,15 @@ const timelineStart = floorHalfHour(now);
 
     const generation = ++loadGenerationRef.current;
 
+    const w121zlive122Controller =
+      new AbortController();
+
+    w121zlive122GuideAbortRef.current =
+      w121zlive122Controller;
+
+    const w121zlive122Signal =
+      w121zlive122Controller.signal;
+
     // Only show the full guide loader when we truly have no guide yet.
     if (!silent && !guideLoadedRef.current) {
       setLoading(true);
@@ -1997,13 +2153,30 @@ const timelineStart = floorHalfHour(now);
                   await api.content.getLiveTvInventoryPage(
                     sourceIndex,
                     skip,
-                    400
+                    400,
+                    w121zlive122Signal
                   );
 
                 lastPageError = null;
                 break;
               } catch (error) {
                 lastPageError = error;
+
+                if (
+                  w121zlive122Signal.aborted ||
+                  generation !==
+                    loadGenerationRef.current
+                ) {
+                  console.log(
+                    '[W121ZLIVE122 LIVE LOAD CANCEL]',
+                    'stage=inventory-page',
+                    'generation=' + generation,
+                    'source=' + sourceIndex,
+                    'skip=' + skip
+                  );
+
+                  throw error;
+                }
 
                 console.warn(
                   '[V788T12K LIVE INVENTORY] page retry',
@@ -2196,7 +2369,10 @@ const timelineStart = floorHalfHour(now);
         epgResult,
         inventoryResult,
       ] = await Promise.allSettled([
-        api.content.getLiveTvEpg(date),
+        api.content.getLiveTvEpg(
+          date,
+          w121zlive122Signal
+        ),
         v788t12kInventoryPromise,
       ]);
 
@@ -2637,9 +2813,15 @@ const timelineStart = floorHalfHour(now);
         setChannels([]);
       }
     } finally {
-      guideLoadInFlightRef.current = false;
+      if (
+        w121zlive122GuideAbortRef.current ===
+        w121zlive122Controller
+      ) {
+        w121zlive122GuideAbortRef.current = null;
+      }
 
       if (generation === loadGenerationRef.current) {
+        guideLoadInFlightRef.current = false;
         setLoading(false);
       }
     }
@@ -2676,6 +2858,14 @@ const timelineStart = floorHalfHour(now);
 
   useFocusEffect(
     useCallback(() => {
+      // W121ZLIVE123_SCREEN_FOCUS_OWNER
+      w121zlive123ScreenFocusedRef.current = true;
+
+      console.log(
+        '[W121ZLIVE123 LIVE INPUT OWNER]',
+        'active=true'
+      );
+
       // V785L6B_LIVE_GUIDE_FOCUS_RETURN
       try {
         const {
@@ -2975,11 +3165,73 @@ const timelineStart = floorHalfHour(now);
         );
       }
 
-      // IMPORTANT:
-      // Do not invalidate the guide merely because /player took focus.
-      // The Live TV screen stays underneath the player.
-      return undefined;
-    }, [loadGuide, fetchLibrary])
+      // W121ZLIVE122_LIVE_FOCUS_OWNED_CANCEL
+      //
+      // Preserve the already-painted guide across /player and tab
+      // navigation, but release ownership of unfinished background
+      // EPG/inventory work immediately when Live loses focus.
+      return () => {
+        // W121ZLIVE123_SCREEN_FOCUS_OWNER
+        //
+        // Release remote ownership BEFORE any asynchronous cancellation
+        // cleanup. Also unregister the station long-press getter so an OD
+        // hold cannot call back into the hidden Live station.
+        w121zlive123ScreenFocusedRef.current = false;
+
+        v788pClearStationLongPress();
+
+        v788t8cFocusAreaRef.current = 'none';
+        v788t8cFocusedRowRef.current = null;
+        v788t8cFirstLeftRef.current = 0;
+        v788t8cRawLeftRef.current = 0;
+
+        console.log(
+          '[W121ZLIVE123 LIVE INPUT OWNER]',
+          'active=false',
+          'longPressCleared=true'
+        );
+
+        const w121zlive122Controller =
+          w121zlive122GuideAbortRef.current;
+
+        const w121zlive122CancelledGeneration =
+          loadGenerationRef.current;
+
+        loadGenerationRef.current += 1;
+
+        guideLoadInFlightRef.current = false;
+
+        if (
+          w121zlive122Controller &&
+          !w121zlive122Controller.signal?.aborted
+        ) {
+          w121zlive122Controller.abort();
+        }
+
+        if (
+          w121zlive122GuideAbortRef.current ===
+          w121zlive122Controller
+        ) {
+          w121zlive122GuideAbortRef.current = null;
+        }
+
+        console.log(
+          '[W121ZLIVE122 LIVE BLUR CANCEL]',
+          'generation=' +
+            w121zlive122CancelledGeneration,
+          'aborted=' +
+            String(
+              Boolean(w121zlive122Controller)
+            ),
+          'guidePreserved=' +
+            String(guideLoadedRef.current)
+        );
+      };
+    }, [
+      loadGuide,
+      fetchLibrary,
+      v788pClearStationLongPress,
+    ])
   );
 
   const openChannel = useCallback(async (channel: GuideChannel) => {

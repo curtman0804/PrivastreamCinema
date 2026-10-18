@@ -343,6 +343,115 @@ async function _w121zod108gRangeSample(
     );
   }
 }
+
+// W121ZOD134M_FAST_STARTUP_DELIVERY_SAMPLE
+// One small native HTTP Range read on the actual playback device. This runs
+// concurrently with the exact media probe so it does not add serial wait to
+// Preparing Media. It is intentionally a viability sample, not a full seek
+// benchmark; Player runtime failover remains the final delivery authority.
+export type PremiumizeStartupDeliverySampleResult = {
+  ok: boolean;
+  reason: string;
+  sampleMbps: number;
+  sampleBytes: number;
+  fileSizeBytes: number;
+  elapsedMs: number;
+};
+
+export async function premiumizeStartupDeliverySample(
+  link: string,
+  fileSize: string | number | null | undefined
+): Promise<PremiumizeStartupDeliverySampleResult> {
+  const url = String(link || '').trim();
+  const fileSizeBytes = Number(fileSize || 0);
+  const sampleBytes = 256 * 1024;
+
+  const empty = (
+    reason: string
+  ): PremiumizeStartupDeliverySampleResult => ({
+    ok: false,
+    reason,
+    sampleMbps: 0,
+    sampleBytes,
+    fileSizeBytes:
+      Number.isFinite(fileSizeBytes)
+        ? fileSizeBytes
+        : 0,
+    elapsedMs: 0,
+  });
+
+  if (
+    !url.toLowerCase().startsWith('https://')
+  ) {
+    return empty(
+      'startup-delivery-url-invalid'
+    );
+  }
+
+  if (
+    !Number.isFinite(fileSizeBytes) ||
+    fileSizeBytes <= sampleBytes
+  ) {
+    return empty(
+      'startup-delivery-size-invalid'
+    );
+  }
+
+  const maxStart =
+    Math.max(
+      0,
+      Math.floor(
+        fileSizeBytes -
+        sampleBytes -
+        1
+      )
+    );
+
+  const startByte =
+    Math.floor(
+      maxStart * 0.35
+    );
+
+  try {
+    const sample =
+      await _w121zod108gRangeSample(
+        url,
+        startByte,
+        sampleBytes,
+        2500
+      );
+
+    return {
+      ok: true,
+      reason:
+        'startup-delivery-sampled',
+      sampleMbps: sample.mbps,
+      sampleBytes,
+      fileSizeBytes,
+      elapsedMs: sample.elapsedMs,
+    };
+  } catch (error) {
+    const message =
+      String(
+        (error as any)?.message ||
+        error ||
+        ''
+      );
+
+    return {
+      ...empty(
+        message === 'TIMEOUT'
+          ? 'startup-delivery-timeout'
+          : message ===
+              'RANGE_UNSUPPORTED'
+            ? 'startup-delivery-range-unsupported'
+            : message === 'SHORT_READ'
+              ? 'startup-delivery-short-read'
+              : 'startup-delivery-sample-error'
+      ),
+    };
+  }
+}
 // W121ZOD108G_DEVICE_DELIVERY_PROBE
 // Measure the exact Premiumize HTTPS media URL on the playback
 // device after codec compatibility passes and before player mount.
@@ -670,12 +779,14 @@ export async function premiumizeSeekReadinessProbe(
   const halfMiB =
     512 * 1024;
 
-  const twoMiB =
-    2 * 1024 * 1024;
+  const oneMiB =
+    1024 * 1024;
 
-  // Roughly one second of media, bounded to 512 KiB-2 MiB.
-  // This is large enough to reject a weak CDN range read without turning
-  // Play into the old multi-second-per-region benchmark loop.
+  // W121ZOD134F_FAST_SUSTAINABLE_READINESS
+  //
+  // Preparing Media must discriminate quickly, not benchmark megabytes per
+  // candidate. Test two separated 512 KiB-1 MiB regions and require useful
+  // delivery headroom over the actual media bitrate.
   let sampleBytes =
     Math.round(mediaBitRateBps / 8);
 
@@ -683,7 +794,7 @@ export async function premiumizeSeekReadinessProbe(
     Math.max(
       halfMiB,
       Math.min(
-        twoMiB,
+        oneMiB,
         sampleBytes
       )
     );
@@ -735,33 +846,33 @@ export async function premiumizeSeekReadinessProbe(
         )
     );
 
-  // W121ZOD108H4AL_BOUNDED_SAME_MEDIA_CONFIRMATION
+  // W121ZOD125_SUSTAINABLE_WINNER_GATE
+  // W121ZOD134F_FAST_SUSTAINABLE_READINESS
   //
-  // Preserve the exact H4D random-access safety contract:
-  //   - same 35% and 70% regions
-  //   - same sampleBytes
-  //   - same 3000 ms per-range timeout
-  //   - every accepted measured region must still be >= 1.5x media bitrate
-  //
-  // H4AJ proved a cold CDN path can transiently report low headroom and then
-  // immediately become healthy for the exact same resolved media object.
-  //
-  // Optimization:
-  //   1. First round stops as soon as a measured region is already below
-  //      1.5x because that round can no longer pass.
-  //   2. A low-headroom result gets ONE confirmation round against the SAME
-  //      media URL before we abandon it and resolve/downshift another torrent.
-  //   3. Errors, timeouts and unsupported Range behavior remain fail-closed.
-  //
-  // The confirmation is not a weaker threshold: BOTH normal H4D regions must
-  // pass the same >= 1.5x floor before the source is accepted.
+  // Both separated Range reads must sustain at least 1.25x the actual media
+  // bitrate. That gives real playback headroom without R4's unrealistic 2.0x
+  // requirement. Player buffering plus R4 runtime fallback remain active.
+  const _w121zod125ProbeBytes =
+    sampleBytes;
 
-  type _W121ZOD108H4ALRound = {
+  const _w121zod134fProbeTimeoutMs =
+    Math.max(
+      2500,
+      Math.min(
+        4500,
+        Math.ceil(
+          (_w121zod125ProbeBytes * 8 * 1000) /
+            (mediaBitRateBps * 1.05)
+        )
+      )
+    );
+
+  type _W121ZOD125Round = {
     sampleMbps: number[];
     errorReason: string;
   };
 
-  const _w121zod108h4alErrorReason = (
+  const _w121zod125ErrorReason = (
     error: any
   ): string => {
     const message =
@@ -780,22 +891,7 @@ export async function premiumizeSeekReadinessProbe(
           : 'seek-readiness-sample-error';
   };
 
-  // W121ZOD118D_FAST_DEVICE_READINESS
-  //
-  // Codec/resolution/audio suitability is already owned by the persisted
-  // device profile + exact-media probe. Readiness therefore needs only a
-  // short device-side random-access delivery sanity check, not repeated
-  // multi-round CDN benchmarking.
-  //
-  // Cap the sample at 256 KiB so a bad candidate is rejected quickly.
-  const _w121zod118dFastSampleBytes =
-    Math.min(
-      sampleBytes,
-      256 * 1024
-    );
-  const _w121zod108h4alRunRound = async (
-    stopOnLowHeadroom: boolean
-  ): Promise<_W121ZOD108H4ALRound> => {
+  const _w121zod125RunRound = async (): Promise<_W121ZOD125Round> => {
     const roundMbps: number[] = [];
 
     try {
@@ -804,23 +900,22 @@ export async function premiumizeSeekReadinessProbe(
           await _w121zod108gRangeSample(
             url,
             start,
-            _w121zod118dFastSampleBytes,
-            1800
+            _w121zod125ProbeBytes,
+            _w121zod134fProbeTimeoutMs
           );
 
-        if (sample.bytes < _w121zod118dFastSampleBytes) {
+        if (sample.bytes < _w121zod125ProbeBytes) {
           throw new Error('SHORT_READ');
         }
 
         roundMbps.push(sample.mbps);
 
-        // One native random-access sample is sufficient here:
-        // the stored device profile already handled hardware compatibility,
-        // and the exact media probe already validated the selected file.
-        return {
-          sampleMbps: roundMbps,
-          errorReason: '',
-        };
+        if (
+          mediaMbps <= 0 ||
+          (sample.mbps / mediaMbps) < 1.25
+        ) {
+          break;
+        }
       }
 
       return {
@@ -831,155 +926,71 @@ export async function premiumizeSeekReadinessProbe(
       return {
         sampleMbps: roundMbps,
         errorReason:
-          _w121zod108h4alErrorReason(error),
+          _w121zod125ErrorReason(error),
       };
     }
   };
 
-  const _w121zod108h4alResult = (
-    values: number[]
-  ): PremiumizeSeekReadinessResult => {
-    const complete =
-      values.length >= 1;
+  const round =
+    await _w121zod125RunRound();
 
-    const minMbps =
-      values.length > 0
-        ? Math.min(...values)
-        : 0;
-
-    const minRatio =
-      mediaMbps > 0
-        ? minMbps / mediaMbps
-        : 0;
-
-    // W121ZOD118H1_ADAPTIVE_FAST_READINESS
-    // This is a 256 KiB random-access sanity check, not a long benchmark.
-    // Low/normal bitrate media only needs to demonstrate real-time delivery;
-    // higher bitrate files retain additional headroom.
-    const requiredRatio =
-      mediaMbps > 12
-        ? 1.25
-        : mediaMbps > 6
-          ? 1.15
-          : 1.0;
-
-    const ok =
-      complete &&
-      minRatio >= requiredRatio;
-
+  if (round.errorReason) {
     return {
-      ok,
-      reason:
-        !complete
-          ? 'seek-readiness-incomplete'
-          : ok
-            ? 'seek-readiness-ok'
-            : 'seek-readiness-low-headroom',
+      ...empty(round.errorReason),
       mediaMbps,
-      sampleMbps: values,
-      minMbps,
-      minRatio,
-      sampleBytes,
-      fileSizeBytes,
-    };
-  };
-
-  const firstRound =
-    await _w121zod108h4alRunRound(true);
-
-  if (firstRound.errorReason) {
-    return {
-      ...empty(firstRound.errorReason),
-      mediaMbps,
-      sampleMbps: firstRound.sampleMbps,
-      sampleBytes,
+      sampleMbps: round.sampleMbps,
+      sampleBytes: _w121zod125ProbeBytes,
       fileSizeBytes,
     };
   }
 
-  const firstResult =
-    _w121zod108h4alResult(
-      firstRound.sampleMbps
-    );
+  const complete =
+    round.sampleMbps.length === starts.length;
 
-  // W121ZOD118D_NO_CONFIRMATION_ROUND
-  // Pass or reject immediately. The next ranked device-safe candidate is
-  // cheaper than spending another full confirmation round on this URL.
-  return firstResult;
+  const minMbps =
+    round.sampleMbps.length > 0
+      ? Math.min(...round.sampleMbps)
+      : 0;
 
-  const firstWasLowHeadroom =
-    firstRound.sampleMbps.length > 0 &&
-    firstRound.sampleMbps.some(
-      value =>
-        (value / mediaMbps) < 1.5
-    );
+  const minRatio =
+    mediaMbps > 0
+      ? minMbps / mediaMbps
+      : 0;
 
-  if (!firstWasLowHeadroom) {
-    return firstResult;
-  }
-
-  // A very short handoff gives the just-used CDN connection/path a chance
-  // to settle without introducing another torrent resolution cycle.
-  await new Promise<void>(
-    resolve => setTimeout(resolve, 150)
-  );
-
-  const confirmationRound =
-    await _w121zod108h4alRunRound(false);
-
-  if (confirmationRound.errorReason) {
-    try {
-      console.log(
-        '[W121ZOD108H4AL READINESS CONFIRM]',
-        'first=' +
-          firstRound.sampleMbps
-            .map(v => v.toFixed(2))
-            .join(','),
-        'confirmError=' +
-          confirmationRound.errorReason
-      );
-    } catch (_) {}
-
-    return {
-      ...empty(
-        confirmationRound.errorReason
-      ),
-      mediaMbps,
-      sampleMbps:
-        confirmationRound.sampleMbps,
-      sampleBytes,
-      fileSizeBytes,
-    };
-  }
-
-  const confirmationResult =
-    _w121zod108h4alResult(
-      confirmationRound.sampleMbps
-    );
+  const ok =
+    complete &&
+    minRatio >= 1.25;
 
   try {
     console.log(
-      '[W121ZOD108H4AL READINESS CONFIRM]',
-      'first=' +
-        firstRound.sampleMbps
+      '[W121ZOD125 SUSTAINABLE WINNER GATE]',
+      'mediaMbps=' + mediaMbps.toFixed(2),
+      'samples=' +
+        round.sampleMbps
           .map(v => v.toFixed(2))
           .join(','),
-      'confirm=' +
-        confirmationRound.sampleMbps
-          .map(v => v.toFixed(2))
-          .join(','),
-      'firstMinRatio=' +
-        firstResult.minRatio.toFixed(2),
-      'confirmMinRatio=' +
-        confirmationResult.minRatio.toFixed(2),
-      'ok=' +
-        String(confirmationResult.ok)
+      'minRatio=' + minRatio.toFixed(2),
+      'complete=' + String(complete),
+      'ok=' + String(ok)
     );
   } catch (_) {}
 
-  return confirmationResult;
+  return {
+    ok,
+    reason:
+      !complete
+        ? 'seek-readiness-incomplete'
+        : ok
+          ? 'seek-readiness-ok'
+          : 'seek-readiness-low-headroom',
+    mediaMbps,
+    sampleMbps: round.sampleMbps,
+    minMbps,
+    minRatio,
+    sampleBytes: _w121zod125ProbeBytes,
+    fileSizeBytes,
+  };
 }
-
 // ============================================================
 // V751_PREMIUMIZE_QUEUE_FALLBACK
 //
@@ -1522,8 +1533,16 @@ function _pickBestFile(content: any[], opts: { season?: number; episode?: number
 
   const videoExt = /\.(mkv|mp4|avi|mov|m4v|ts|m2ts|webm)$/i;
 
+  // W121ZOD124_PATH_FIRST_PM_PACK_SELECTION
+  // Keep exact path-only media entries. If link is absent,
+  // resolveMagnet will re-resolve this exact path through
+  // premiumizeMediaProbe instead of throwing the candidate away.
   const videos = content.filter(
-    c => c && c.link && videoExt.test(c.path || c.link)
+    c =>
+      c &&
+      videoExt.test(
+        c.path || c.name || c.link || ''
+      )
   );
 
   const cleanVideos = videos.filter(
@@ -1719,16 +1738,37 @@ export async function resolveMagnet(opts: {
       );
   }
   const best = _pickBestFile(content, opts);
-  if (!best?.link) throw new Error('PM_NO_LINK');
+  if (!best) throw new Error('PM_NO_MEDIA_FILE');
+
+  const bestPath =
+    String(best.path || best.name || '').trim();
+
+  let finalUrl =
+    String(best.link || '').trim();
+
+  if (!finalUrl && bestPath) {
+    const probe =
+      await premiumizeMediaProbe(magnet, bestPath);
+
+    finalUrl = String(probe?.link || '').trim();
+
+    console.log(
+      '[W121ZOD124 PM PATH RESOLVE]',
+      infoHash.slice(0, 8),
+      'file=' + _mediaBasename(bestPath),
+      'link=' + String(!!finalUrl)
+    );
+  }
+
+  if (!finalUrl) throw new Error('PM_NO_LINK');
 
   console.log(
     '[V671 PM FILE PICK]',
     infoHash.slice(0, 8),
-    'file=' + _mediaBasename(best.path || best.link),
+    'file=' + _mediaBasename(bestPath || finalUrl),
     'size=' + String(best.size || 0)
   );
 
-  const finalUrl = String(best.link);
   await _writeCache(infoHash, { finalUrl, expiresAt: Date.now() + TTL_MS }, opts.season, opts.episode);
   onProgress?.('ready');
   return finalUrl;

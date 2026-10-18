@@ -16,7 +16,7 @@ import {
   type AudioTrack,
   type VideoSource,
 } from 'expo-video';
-import { getStoredDevicePlaybackProfile } from '../native/devicePlaybackCapabilities';
+import { getDevicePlaybackCapabilities, getStoredDevicePlaybackProfile } from '../native/devicePlaybackCapabilities';
 import AsyncStorage, { setItemDurable } from '../utils/mmkvStorage';
 
 // V616A_EXPO_VIDEO_COMPAT

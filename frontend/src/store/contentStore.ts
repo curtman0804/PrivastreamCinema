@@ -821,8 +821,10 @@ export const useContentStore = create<ContentState>((set, get) => ({
       let _v241PendingStreams: any[] | null = null;
       const _v241PaintNow = (s: any[]) => {
         _v241LastPaintTs = Date.now();
-        try { setStreamsCache(cacheKey, s); } catch (_) {}
-        _setIf({ streams: s, isLoadingStreams: false });
+        // W121ZOD134C_PROGRESSIVE_NOT_AUTHORITATIVE
+        // Partial provider results may feed Details immediately, but they are
+        // not a final cache snapshot and discovery is still in progress.
+        _setIf({ streams: s, isLoadingStreams: true, error: null });
         allStreams = s;
       };
       const _v194_onProgress = (partialStreams: any[]) => {

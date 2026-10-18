@@ -17879,6 +17879,319 @@ def _v788t16ah_filter_usa_tv_epg_safe_streams(
 
 
 # ================= /V788T16AH USA TV EPG-SAFE STREAM IDENTITY =================
+# ================= W121ZSPORTS133C_GENERIC_ADDON_METADATA =================
+
+def _w121z133c_resource_declared(
+    manifest: dict,
+    resource_name: str,
+    content_type: str,
+) -> bool:
+    wanted_resource = str(resource_name or "").strip().lower()
+    wanted_type = str(content_type or "").strip().lower()
+
+    for resource in manifest.get("resources", []) or []:
+        if isinstance(resource, str):
+            if resource.strip().lower() == wanted_resource:
+                return True
+            continue
+
+        if not isinstance(resource, dict):
+            continue
+
+        name = str(
+            resource.get("name") or ""
+        ).strip().lower()
+
+        if name != wanted_resource:
+            continue
+
+        types = {
+            str(value or "").strip().lower()
+            for value in (resource.get("types") or [])
+        }
+
+        if not types or wanted_type in types:
+            return True
+
+    return False
+
+
+def _w121z133c_type_declared(
+    manifest: dict,
+    content_type: str,
+) -> bool:
+    wanted = str(
+        content_type or ""
+    ).strip().lower()
+
+    return wanted in {
+        str(value or "").strip().lower()
+        for value in (manifest.get("types") or [])
+    }
+
+
+def _w121z133c_catalog_declared(
+    manifest: dict,
+    content_type: str,
+    catalog_id: str,
+) -> bool:
+    wanted_type = str(
+        content_type or ""
+    ).strip().lower()
+
+    wanted_id = str(
+        catalog_id or ""
+    ).strip()
+
+    for catalog in manifest.get("catalogs", []) or []:
+        if not isinstance(catalog, dict):
+            continue
+
+        if (
+            str(catalog.get("type") or "").strip().lower()
+            == wanted_type
+            and
+            str(catalog.get("id") or "").strip()
+            == wanted_id
+        ):
+            return True
+
+    return False
+
+
+def _w121z133c_quote_segment(
+    value: str,
+) -> str:
+    quote = __import__(
+        "urllib.parse",
+        fromlist=["quote"],
+    ).quote
+
+    return quote(
+        str(value or ""),
+        safe="",
+    )
+
+
+@api_router.get(
+    "/addons/{addon_id}/catalog/{content_type}/{catalog_id}"
+)
+async def get_installed_addon_catalog(
+    addon_id: str,
+    content_type: str,
+    catalog_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    addon = await db.addons.find_one({
+        "userId": current_user.id,
+        "$or": [
+            {"id": addon_id},
+            {"manifest.id": addon_id},
+        ],
+    })
+
+    if not addon:
+        raise HTTPException(
+            status_code=404,
+            detail="Addon not found",
+        )
+
+    manifest = addon.get("manifest") or {}
+
+    if not _w121z133c_type_declared(
+        manifest,
+        content_type,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Content type is not declared by addon",
+        )
+
+    if not _w121z133c_resource_declared(
+        manifest,
+        "catalog",
+        content_type,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Catalog resource is not declared by addon",
+        )
+
+    if not _w121z133c_catalog_declared(
+        manifest,
+        content_type,
+        catalog_id,
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Catalog is not declared by addon",
+        )
+
+    base_url = get_base_url(
+        addon["manifestUrl"]
+    )
+
+    catalog_url = (
+        f"{base_url}/catalog/"
+        f"{_w121z133c_quote_segment(content_type)}/"
+        f"{_w121z133c_quote_segment(catalog_id)}.json"
+    )
+
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=False,
+            timeout=15.0,
+            trust_env=False,
+        ) as client:
+
+            response = await _v726_safe_addon_get(
+                client,
+                catalog_url,
+                timeout=15.0,
+            )
+
+            if response.status_code != 200:
+                return {"metas": []}
+
+            payload = response.json()
+
+            if not isinstance(payload, dict):
+                return {"metas": []}
+
+            metas = payload.get("metas")
+
+            if not isinstance(metas, list):
+                return {"metas": []}
+
+            return {"metas": metas}
+
+    except ValueError as exc:
+        logger.warning(
+            "W121ZSPORTS133C catalog egress blocked addon=%s reason=%s",
+            addon_id,
+            str(exc),
+        )
+
+        raise HTTPException(
+            status_code=400,
+            detail="Addon catalog destination is not permitted",
+        )
+
+    except Exception as exc:
+        logger.warning(
+            "W121ZSPORTS133C catalog fetch failed addon=%s error=%s",
+            addon_id,
+            type(exc).__name__,
+        )
+
+        return {"metas": []}
+
+
+@api_router.get(
+    "/addons/{addon_id}/meta/{content_type}/{content_id:path}"
+)
+async def get_installed_addon_meta(
+    addon_id: str,
+    content_type: str,
+    content_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    addon = await db.addons.find_one({
+        "userId": current_user.id,
+        "$or": [
+            {"id": addon_id},
+            {"manifest.id": addon_id},
+        ],
+    })
+
+    if not addon:
+        raise HTTPException(
+            status_code=404,
+            detail="Addon not found",
+        )
+
+    manifest = addon.get("manifest") or {}
+
+    if not _w121z133c_type_declared(
+        manifest,
+        content_type,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Content type is not declared by addon",
+        )
+
+    if not _w121z133c_resource_declared(
+        manifest,
+        "meta",
+        content_type,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Meta resource is not declared by addon",
+        )
+
+    base_url = get_base_url(
+        addon["manifestUrl"]
+    )
+
+    meta_url = (
+        f"{base_url}/meta/"
+        f"{_w121z133c_quote_segment(content_type)}/"
+        f"{_w121z133c_quote_segment(content_id)}.json"
+    )
+
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=False,
+            timeout=15.0,
+            trust_env=False,
+        ) as client:
+
+            response = await _v726_safe_addon_get(
+                client,
+                meta_url,
+                timeout=15.0,
+            )
+
+            if response.status_code != 200:
+                return {"meta": None}
+
+            payload = response.json()
+
+            if not isinstance(payload, dict):
+                return {"meta": None}
+
+            meta = payload.get("meta")
+
+            if not isinstance(meta, dict):
+                return {"meta": None}
+
+            return {"meta": meta}
+
+    except ValueError as exc:
+        logger.warning(
+            "W121ZSPORTS133C meta egress blocked addon=%s reason=%s",
+            addon_id,
+            str(exc),
+        )
+
+        raise HTTPException(
+            status_code=400,
+            detail="Addon meta destination is not permitted",
+        )
+
+    except Exception as exc:
+        logger.warning(
+            "W121ZSPORTS133C meta fetch failed addon=%s error=%s",
+            addon_id,
+            type(exc).__name__,
+        )
+
+        return {"meta": None}
+
+
+# ================= /W121ZSPORTS133C_GENERIC_ADDON_METADATA =================
 @api_router.get("/addons/{addon_id}/stream/{content_type}/{content_id}")
 async def get_addon_streams(
     addon_id: str,
