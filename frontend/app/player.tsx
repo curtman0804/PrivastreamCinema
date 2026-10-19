@@ -3734,6 +3734,260 @@ export default function PlayerScreen() {
   const [duration, setDuration] = useState(0);
   const [isEnded, setIsEnded] = useState(false);
   const videoRef = useRef<ExpoVideoCompatHandle>(null);
+
+  // W121ZLIVE140D_NATIVE_CC_PICKER
+  // Live TV captions come directly from the native Media3/expo-video subtitle
+  // tracks embedded in the tuned stream. OD keeps its existing external subtitle
+  // picker and auto-translation behavior unchanged.
+  const [showLiveCcPicker, setShowLiveCcPicker] = useState(false);
+  const [liveCcTracks, setLiveCcTracks] = useState<any[]>([]);
+  const [liveCcScanning, setLiveCcScanning] = useState(false);
+  const [selectedLiveCcTrackKey, setSelectedLiveCcTrackKey] =
+    useState<string>('off');
+  const w121zlive140dCcListRef = useRef<FlatList<any>>(null);
+  const w121zlive140dCcScanSeqRef = useRef(0);
+  const w121zlive140dCcPreferenceRef = useRef<any>(null);
+
+  const w121zlive140dCcTrackKey = useCallback(
+    (track: any, index: number = -1): string => {
+      if (!track) return 'off';
+
+      const id = String(track?.id ?? '').trim();
+      if (id) return 'id:' + id;
+
+      const language = String(track?.language ?? '').trim().toLowerCase();
+      const label = String(track?.label ?? '').trim().toLowerCase();
+
+      if (language || label) {
+        return 'meta:' + language + '|' + label;
+      }
+
+      return 'index:' + String(index);
+    },
+    []
+  );
+
+  const w121zlive140dCcTrackLabel = useCallback(
+    (track: any, index: number): string => {
+      const language = String(track?.language ?? '').trim();
+      const label = String(track?.label ?? '').trim();
+
+      if (
+        label &&
+        language &&
+        !label.toLowerCase().includes(language.toLowerCase())
+      ) {
+        return label + ' (' + language.toUpperCase() + ')';
+      }
+
+      if (label) return label;
+      if (language) return language.toUpperCase();
+
+      return 'Caption Track ' + String(index + 1);
+    },
+    []
+  );
+
+  const w121zlive140dDescribeCcTrack = useCallback((track: any) => ({
+    id: String(track?.id ?? '').trim(),
+    language: String(track?.language ?? '').trim().toLowerCase(),
+    label: String(track?.label ?? '').trim().toLowerCase(),
+  }), []);
+
+  const w121zlive140dFindPreferredCcTrack = useCallback(
+    (tracks: any[], preference: any): any | null => {
+      if (!preference || preference === 'off') return null;
+
+      const prefId = String(preference?.id || '').trim();
+      const prefLanguage = String(preference?.language || '').trim().toLowerCase();
+      const prefLabel = String(preference?.label || '').trim().toLowerCase();
+
+      if (prefId) {
+        const exactId = tracks.find(
+          (track: any) => String(track?.id ?? '').trim() === prefId
+        );
+        if (exactId) return exactId;
+      }
+
+      if (prefLanguage && prefLabel) {
+        const exactMeta = tracks.find((track: any) =>
+          String(track?.language ?? '').trim().toLowerCase() === prefLanguage &&
+          String(track?.label ?? '').trim().toLowerCase() === prefLabel
+        );
+        if (exactMeta) return exactMeta;
+      }
+
+      if (prefLanguage) {
+        const languageMatch = tracks.find((track: any) =>
+          String(track?.language ?? '').trim().toLowerCase() === prefLanguage
+        );
+        if (languageMatch) return languageMatch;
+      }
+
+      if (prefLabel) {
+        const labelMatch = tracks.find((track: any) =>
+          String(track?.label ?? '').trim().toLowerCase() === prefLabel
+        );
+        if (labelMatch) return labelMatch;
+      }
+
+      return null;
+    },
+    []
+  );
+
+  const w121zlive140dRefreshCcPicker = useCallback(async () => {
+    const seq = ++w121zlive140dCcScanSeqRef.current;
+    setLiveCcScanning(true);
+
+    let tracks: any[] = [];
+    let selected: any = null;
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      if (seq !== w121zlive140dCcScanSeqRef.current) return;
+
+      try {
+        tracks = videoRef.current?.getAvailableSubtitleTracks?.() || [];
+        selected = videoRef.current?.getSelectedSubtitleTrack?.() || null;
+      } catch (_) {
+        tracks = [];
+        selected = null;
+      }
+
+      if (tracks.length > 0) break;
+      await new Promise<void>(resolve => setTimeout(resolve, 250));
+    }
+
+    if (seq !== w121zlive140dCcScanSeqRef.current) return;
+
+    setLiveCcTracks(tracks);
+
+    if (selected) {
+      let selectedIndex = tracks.indexOf(selected);
+      if (selectedIndex < 0) {
+        selectedIndex = tracks.findIndex(
+          (track: any) =>
+            w121zlive140dCcTrackKey(track) ===
+            w121zlive140dCcTrackKey(selected)
+        );
+      }
+      setSelectedLiveCcTrackKey(
+        w121zlive140dCcTrackKey(selected, selectedIndex)
+      );
+    } else {
+      setSelectedLiveCcTrackKey('off');
+    }
+
+    setLiveCcScanning(false);
+
+    console.log(
+      '[W121ZLIVE140D CC PICKER] tracks=' +
+        String(tracks.length) +
+        ' selected=' +
+        (selected ? w121zlive140dCcTrackKey(selected) : 'off')
+    );
+  }, [w121zlive140dCcTrackKey]);
+
+  const w121zlive140dOpenCcPicker = useCallback(() => {
+    if (isLive !== 'true') {
+      setShowSubtitlePicker(true);
+      return;
+    }
+
+    setShowLiveCcPicker(true);
+    void w121zlive140dRefreshCcPicker();
+  }, [isLive, w121zlive140dRefreshCcPicker]);
+
+  // Keep a user's explicit Live TV caption choice while channel surfing in
+  // this player session. Match the same native track ID first, then language/
+  // label. If the next station does not provide that choice, leave captions Off.
+  useEffect(() => {
+    if (isLive !== 'true' || !streamUrl) return;
+
+    const preference = w121zlive140dCcPreferenceRef.current;
+    if (preference === null) return;
+
+    let cancelled = false;
+
+    const applyPreference = async () => {
+      for (let attempt = 0; attempt < 20; attempt++) {
+        if (cancelled) return;
+
+        await new Promise<void>(resolve =>
+          setTimeout(resolve, attempt === 0 ? 500 : 300)
+        );
+
+        if (cancelled) return;
+
+        const player = videoRef.current;
+        if (!player) continue;
+
+        let tracks: any[] = [];
+        let audioCount = 0;
+
+        try {
+          tracks = player.getAvailableSubtitleTracks?.() || [];
+          audioCount = (player.getAvailableAudioTracks?.() || []).length;
+        } catch (_) {}
+
+        if (preference === 'off') {
+          if (tracks.length > 0 || audioCount > 0 || attempt >= 5) {
+            try { player.selectSubtitleTrack?.(null); } catch (_) {}
+            setSelectedLiveCcTrackKey('off');
+            console.log('[W121ZLIVE140D CC SURF] reapplied Off');
+            return;
+          }
+          continue;
+        }
+
+        if (tracks.length === 0) continue;
+
+        const match =
+          w121zlive140dFindPreferredCcTrack(tracks, preference);
+
+        if (match) {
+          try {
+            player.selectSubtitleTrack?.(match);
+            const matchIndex = tracks.indexOf(match);
+            setSelectedLiveCcTrackKey(
+              w121zlive140dCcTrackKey(match, matchIndex)
+            );
+            console.log(
+              '[W121ZLIVE140D CC SURF] reapplied ' +
+                w121zlive140dCcTrackLabel(match, matchIndex)
+            );
+          } catch (error) {
+            console.log('[W121ZLIVE140D CC SURF] reapply failed', error);
+          }
+          return;
+        }
+
+        try { player.selectSubtitleTrack?.(null); } catch (_) {}
+        setSelectedLiveCcTrackKey('off');
+        console.log('[W121ZLIVE140D CC SURF] preferred track unavailable; Off');
+        return;
+      }
+
+      if (!cancelled) {
+        try { videoRef.current?.selectSubtitleTrack?.(null); } catch (_) {}
+        setSelectedLiveCcTrackKey('off');
+        console.log('[W121ZLIVE140D CC SURF] no caption tracks reported; Off');
+      }
+    };
+
+    void applyPreference();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isLive,
+    streamUrl,
+    w121zlive140dCcTrackKey,
+    w121zlive140dCcTrackLabel,
+    w121zlive140dFindPreferredCcTrack,
+  ]);
+
   // V616B_AUDIO_PICKER
   // Embedded audio tracks exposed by the V616A expo-video wrapper.
   const [showAudioPicker, setShowAudioPicker] = useState(false);
@@ -9368,7 +9622,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
 
                 <TouchableOpacity 
                   style={styles.controlButton} /* V411_UI - no active ring */
-                  onPress={() => setShowSubtitlePicker(true)}
+                  onPress={w121zlive140dOpenCcPicker}
                 >
                   <Ionicons name="chatbubble-ellipses-outline" size={24} color={'#FFFFFF'} /* V411_UI - no gold indicator */ />
                 </TouchableOpacity>
@@ -10065,7 +10319,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                     <TVFocusButton 
                       style={styles.controlButton} /* V411_UI - no active ring */
                       focusedStyle={styles.controlButtonFocused}
-                      onPress={() => setShowSubtitlePicker(true)}
+                      onPress={w121zlive140dOpenCcPicker}
                     >
                       <Ionicons name="chatbubble-ellipses-outline" size={24} color={'#FFFFFF'} /* V411_UI - no gold indicator */ />
                     </TVFocusButton>
@@ -10292,6 +10546,170 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                   try {
                     v604SubtitleListRef.current?.scrollToOffset({
                       offset: Math.max(0, info.averageItemLength * info.index),
+                      animated: true,
+                    });
+                  } catch (_) {}
+                }}
+                style={styles.subtitleList}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* W121ZLIVE140D_NATIVE_CC_PICKER */}
+      <Modal
+        visible={showLiveCcPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLiveCcPicker(false)}
+      >
+        <View style={styles.subtitleModalOverlay}>
+          <View style={styles.subtitleModal}>
+            <View style={styles.subtitleModalHeader}>
+              <Text style={styles.subtitleModalTitle}>
+                Closed Captions
+              </Text>
+
+              <TVFocusButton
+                onPress={() => setShowLiveCcPicker(false)}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 2,
+                  borderColor: 'transparent',
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                }}
+                focusedStyle={{
+                  borderColor: '#B8A05C',
+                  backgroundColor: 'rgba(184,160,92,0.25)',
+                  transform: [{ scale: 1.10 }],
+                }}
+              >
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color="#FFFFFF"
+                />
+              </TVFocusButton>
+            </View>
+
+            {liveCcScanning ? (
+              <View style={styles.noSubtitlesContainer}>
+                <ActivityIndicator size="large" color="#B8A05C" />
+                <Text style={styles.noSubtitlesText}>
+                  Checking this channel for captions...
+                </Text>
+              </View>
+            ) : liveCcTracks.length === 0 ? (
+              <View style={styles.noSubtitlesContainer}>
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={48}
+                  color="#666"
+                />
+                <Text style={styles.noSubtitlesText}>
+                  No captions available
+                </Text>
+                <Text style={styles.noSubtitlesHint}>
+                  This station is not reporting a selectable native caption track.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                ref={w121zlive140dCcListRef}
+                data={[{ __w121zlive140dOff: true }, ...liveCcTracks]}
+                keyExtractor={(item, index) =>
+                  item?.__w121zlive140dOff
+                    ? 'off'
+                    : w121zlive140dCcTrackKey(item, index - 1)
+                }
+                renderItem={({ item, index }) => {
+                  const isOff = !!item?.__w121zlive140dOff;
+                  const trackIndex = index - 1;
+                  const key = isOff
+                    ? 'off'
+                    : w121zlive140dCcTrackKey(item, trackIndex);
+                  const selected = key === selectedLiveCcTrackKey;
+
+                  return (
+                    <TVFocusButton
+                      hasTVPreferredFocus={selected}
+                      style={[
+                        styles.subtitleItem,
+                        selected && styles.subtitleItemActive,
+                      ]}
+                      focusedStyle={styles.subtitleItemFocused}
+                      onFocus={() => {
+                        requestAnimationFrame(() => {
+                          try {
+                            w121zlive140dCcListRef.current?.scrollToIndex({
+                              index,
+                              animated: true,
+                              viewPosition: 0.4,
+                            });
+                          } catch (_) {}
+                        });
+                      }}
+                      onPress={() => {
+                        try {
+                          if (isOff) {
+                            videoRef.current?.selectSubtitleTrack?.(null);
+                            w121zlive140dCcPreferenceRef.current = 'off';
+                            setSelectedLiveCcTrackKey('off');
+                            console.log('[W121ZLIVE140D CC SELECT] Off');
+                          } else {
+                            videoRef.current?.selectSubtitleTrack?.(item);
+                            w121zlive140dCcPreferenceRef.current =
+                              w121zlive140dDescribeCcTrack(item);
+                            setSelectedLiveCcTrackKey(key);
+                            console.log(
+                              '[W121ZLIVE140D CC SELECT] ' +
+                                w121zlive140dCcTrackLabel(item, trackIndex)
+                            );
+                          }
+                        } catch (error) {
+                          console.log('[W121ZLIVE140D CC SELECT] failed', error);
+                        }
+
+                        setShowLiveCcPicker(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.subtitleItemText,
+                          selected && styles.subtitleItemTextActive,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {isOff
+                          ? 'Off'
+                          : w121zlive140dCcTrackLabel(item, trackIndex)}
+                      </Text>
+
+                      {selected && (
+                        <Ionicons
+                          name="checkmark"
+                          size={20}
+                          color="#B8A05C"
+                        />
+                      )}
+                    </TVFocusButton>
+                  );
+                }}
+                removeClippedSubviews={false}
+                ListFooterComponent={<View style={{ height: 160 }} />}
+                contentContainerStyle={{ paddingBottom: 16 }}
+                onScrollToIndexFailed={(info) => {
+                  try {
+                    w121zlive140dCcListRef.current?.scrollToOffset({
+                      offset: Math.max(
+                        0,
+                        info.averageItemLength * info.index
+                      ),
                       animated: true,
                     });
                   } catch (_) {}

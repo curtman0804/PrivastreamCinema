@@ -67,6 +67,9 @@ export type ExpoVideoCompatHandle = {
   // Read-only subtitle introspection only. Existing subtitle selection is untouched.
   getAvailableSubtitleTracks: () => SubtitleTrack[];
   getSelectedSubtitleTrack: () => SubtitleTrack | null;
+  // W121ZLIVE140D_NATIVE_CC_SELECT
+  // Live TV uses this to select one of Media3's already-exposed native caption tracks.
+  selectSubtitleTrack: (track: SubtitleTrack | null) => void;
   selectAudioTrack: (track: AudioTrack | null) => void;
 };
 
@@ -624,6 +627,13 @@ export const ExpoVideoCompat = forwardRef<
         } catch (_) {
           return null;
         }
+      },
+
+      // W121ZLIVE140D_NATIVE_CC_SELECT
+      // Only assign tracks already reported by this exact native player/source.
+      // null is the explicit Off selection. OD subtitle behavior remains untouched.
+      selectSubtitleTrack: (track: SubtitleTrack | null) => {
+        player.subtitleTrack = track;
       },
 
       // V789S25W108C3_INPLACE_SOURCE_RELOAD
