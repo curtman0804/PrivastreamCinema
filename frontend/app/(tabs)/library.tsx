@@ -1,4 +1,4 @@
-﻿import { PrivastreamPageHeader } from '../../src/components/PrivastreamPageHeader';
+import { PrivastreamPageHeader } from '../../src/components/PrivastreamPageHeader';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
@@ -39,6 +39,8 @@ import {
 
 const NO_POSTER_IMAGE = require('../../assets/images/no-poster.png');
 
+// W121ZLIB139D_GTV_DISCOVER_ROW_SNAP
+// Six fixed columns + Discover-style edge traps + row-by-row vertical anchor scrolling.
 type FilterType = 'movies' | 'series' | 'channels'; // V784F TV Channels restored
 
 // Library card â€” EXACT same X-button pattern as ContinueWatchingCard in discover.tsx
@@ -47,16 +49,24 @@ function LibraryCard({
   cardWidth,
   cardHeight,
   isTV,
+  isFirstInRow,
+  isLastInRow,
+  tvGridGap,
   onPress,
   onRemove,
+  onCardFocus,
   onCardBlur,
 }: {
   item: ContentItem;
   cardWidth: number;
   cardHeight: number;
   isTV: boolean;
+  isFirstInRow?: boolean;
+  isLastInRow?: boolean;
+  tvGridGap?: number;
   onPress: () => void;
   onRemove: () => void;
+  onCardFocus?: () => void;
   onCardBlur?: () => void;
 }) {
   const [isFocused, setIsFocused] = useState(false);
@@ -138,17 +148,49 @@ function LibraryCard({
 
 
   return (
-    <View style={{ width: cardWidth, marginRight: 16 }}>
+    <View
+      style={{
+        width: cardWidth,
+        // W121ZLIB139C_FIXED_COLUMN_TRACKS
+        // Never redistribute a short final row. Every poster uses the same
+        // fixed column width + gap as the full six-poster rows.
+        marginRight: isTV
+          ? (isLastInRow ? 0 : (tvGridGap || 0))
+          : 16,
+        marginBottom: isTV ? 22 : 0,
+      }}
+    >
       {/* V176P_X_REMOVED â€” X overlay removed; use long-press menu. */}
       {/* Main poster - pulled up fully to overlap X button row, so X appears inside poster corner */}
       <Pressable
         ref={posterRef}
+        focusable={true}
+        // W121ZLIB139C_DISCOVER_EDGE_TRAPS
+        // Match Discover: the first/last poster in each row self-loop on
+        // LEFT/RIGHT so Android TV cannot escape into the tab/tray controls.
+        nextFocusLeft={
+          isTV && isFirstInRow && posterTag
+            ? posterTag
+            : undefined
+        }
+        nextFocusRight={
+          isTV && isLastInRow && posterTag
+            ? posterTag
+            : undefined
+        }
         onPress={_v176bOnPress}
         onPressIn={_v176bPressIn}
         onPressOut={_v176bPressOut}
         onLongPress={_v176OpenMenu}
         delayLongPress={500}
-        onFocus={() => { try { _v173RegLP(_v176OpenMenu); } catch (_) {} handleFocus(); }}
+        onFocus={() => {
+          try { _v173RegLP(_v176OpenMenu); } catch (_) {}
+          handleFocus();
+          // W121ZLIB139D_ROW_SNAP_ON_FOCUS
+          // When D-pad focus enters another grid row, tell the parent to
+          // move that entire row into the same viewport anchor position.
+          try { onCardFocus?.(); } catch (_) {}
+        }}
         onBlur={() => { try { _v173RegLP(null); } catch (_) {} setIsFocused(false); onCardBlur?.(); }}
         android_ripple={null}
         /* V176P_X_REMOVED â€” nextFocusUp target gone. */
@@ -206,17 +248,64 @@ export default function LibraryScreen() {
   const removeFromLibrary = useContentStore(s => s.removeFromLibrary);
   const [filter, setFilter] = useState<FilterType>('movies');
   const [refreshing, setRefreshing] = useState(false);
+  // W121ZLIB139E_LAST_ROW_ANCHOR_SPACE
+  // Track the actual FlatList viewport so the content gets enough trailing
+  // space for even the final grid row to move into the same top row anchor.
+  const [tvGridViewportHeight, setTvGridViewportHeight] = useState(0);
 
-  const cardWidth = getCardWidth(width, isTV, 'medium');
+  // W121ZLIB139C_GTV_DISCOVER_STYLE_GRID
+  // TV/streaming-device Library is a vertical six-column poster grid.
+  // Phone layout is intentionally left on the existing horizontal behavior for now.
+  const TV_GRID_COLUMNS = 6;
+  const TV_GRID_SIDE_PADDING = 48;
+  const TV_GRID_GAP = 18;
+  const tvGridCardWidth = Math.floor(
+    (
+      width -
+      (TV_GRID_SIDE_PADDING * 2) -
+      (TV_GRID_GAP * (TV_GRID_COLUMNS - 1))
+    ) / TV_GRID_COLUMNS
+  );
+  const cardWidth = isTV
+    ? Math.max(120, tvGridCardWidth)
+    : getCardWidth(width, false, 'medium');
   const cardHeight = cardWidth * 1.5;
   const itemTotalWidth = cardWidth + 16;
-  const paddingLeft = isTV ? 48 : 16;
+  const paddingLeft = isTV ? TV_GRID_SIDE_PADDING : 16;
+
+  // W121ZLIB139D_ROW_SNAP_GEOMETRY
+  // One TV grid row = poster + title block + fixed bottom gap.  Scrolling
+  // by this exact pitch makes the newly focused row occupy the previous
+  // row's viewport position instead of merely exposing one poster.
+  const TV_GRID_TITLE_HEIGHT = 38;
+  const TV_GRID_ROW_BOTTOM_GAP = 22;
+  const TV_GRID_CONTENT_TOP_PADDING = 8;
+  const TV_GRID_CONTENT_BOTTOM_PADDING = 40;
+  const tvGridRowPitch = cardHeight + TV_GRID_TITLE_HEIGHT + TV_GRID_ROW_BOTTOM_GAP;
+
+  // W121ZLIB139E_LAST_ROW_ANCHOR_SPACE
+  // Without this footer, a short Library can hit maxScrollY before a lower
+  // row reaches the top anchor. The 139D diagnostic proved row 1 requested
+  // y=254 but the list physically stopped at y=75. Give the list exactly
+  // enough trailing space for the last row to occupy the top grid position.
+  const tvGridFooterHeight = isTV && tvGridViewportHeight > 0
+    ? Math.max(
+        0,
+        Math.ceil(
+          tvGridViewportHeight -
+          tvGridRowPitch -
+          TV_GRID_CONTENT_TOP_PADDING -
+          TV_GRID_CONTENT_BOTTOM_PADDING
+        )
+      )
+    : 0;
 
   // Track horizontal nav for scroll behavior
   const isNavigatingRef = useRef(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const TV_SCROLL_ANCHOR = 4;
+  const lastFocusedTvRowRef = useRef(-1);
 
   useEffect(() => {
     fetchLibrary();
@@ -267,12 +356,48 @@ export default function LibraryScreen() {
       clearTimeout(blurTimerRef.current);
       blurTimerRef.current = null;
     }
-    if (isTV && flatListRef.current && isNavigatingRef.current) {
+
+    if (isTV) {
+      // W121ZLIB139D_DISCOVER_STYLE_ROW_SNAP
+      // Horizontal focus remains native.  Vertical row changes explicitly
+      // scroll by one complete six-poster row so the destination row moves
+      // into the same top anchor occupied by the row we just left.
+      const rowIndex = Math.floor(index / TV_GRID_COLUMNS);
+      if (
+        flatListRef.current &&
+        rowIndex !== lastFocusedTvRowRef.current
+      ) {
+        const targetOffset = Math.max(0, rowIndex * tvGridRowPitch);
+        flatListRef.current.scrollToOffset({
+          offset: targetOffset,
+          animated: true,
+        });
+        lastFocusedTvRowRef.current = rowIndex;
+      }
+      isNavigatingRef.current = false;
+      return;
+    }
+
+    if (flatListRef.current && isNavigatingRef.current) {
       const targetOffset = Math.max(0, (index - TV_SCROLL_ANCHOR) * itemTotalWidth);
       flatListRef.current.scrollToOffset({ offset: targetOffset, animated: true });
     }
     isNavigatingRef.current = true;
-  }, [itemTotalWidth, isTV]);
+  }, [itemTotalWidth, isTV, tvGridRowPitch]);
+
+  useEffect(() => {
+    // W121ZLIB139D_FILTER_ROW_RESET
+    // A filter change starts the new grid from row zero and resets the
+    // row anchor so the first D-pad move is deterministic.
+    lastFocusedTvRowRef.current = -1;
+    if (isTV && flatListRef.current) {
+      requestAnimationFrame(() => {
+        try {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+        } catch (_) {}
+      });
+    }
+  }, [filter, isTV]);
 
   const handleCardBlur = useCallback(() => {
     blurTimerRef.current = setTimeout(() => {
@@ -286,17 +411,47 @@ export default function LibraryScreen() {
     index,
   }), [itemTotalWidth, paddingLeft]);
 
-  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => (
-    <LibraryCard
-      item={item}
-      onPress={() => { handleCardFocus(index); handleItemPress(item); }}
-      onRemove={() => handleRemoveItem(item)}
-      cardWidth={cardWidth}
-      cardHeight={cardHeight}
-      isTV={isTV}
-      onCardBlur={handleCardBlur}
-    />
-  ), [handleItemPress, handleRemoveItem, cardWidth, cardHeight, isTV, handleCardBlur, handleCardFocus]);
+  const getTvItemLayout = useCallback((_data: any, index: number) => ({
+    length: tvGridRowPitch,
+    offset: Math.floor(index / TV_GRID_COLUMNS) * tvGridRowPitch,
+    index,
+  }), [tvGridRowPitch]);
+
+  const renderItem = useCallback(({ item, index }: { item: ContentItem; index: number }) => {
+    const tvColumnIndex = index % TV_GRID_COLUMNS;
+    const isFirstInRow = isTV && tvColumnIndex === 0;
+    const isLastInRow =
+      isTV &&
+      (
+        tvColumnIndex === (TV_GRID_COLUMNS - 1) ||
+        index === (filteredContent.length - 1)
+      );
+
+    return (
+      <LibraryCard
+        item={item}
+        onPress={() => handleItemPress(item)}
+        onRemove={() => handleRemoveItem(item)}
+        onCardFocus={() => handleCardFocus(index)}
+        cardWidth={cardWidth}
+        cardHeight={cardHeight}
+        isTV={isTV}
+        isFirstInRow={isFirstInRow}
+        isLastInRow={isLastInRow}
+        tvGridGap={TV_GRID_GAP}
+        onCardBlur={handleCardBlur}
+      />
+    );
+  }, [
+    handleItemPress,
+    handleRemoveItem,
+    cardWidth,
+    cardHeight,
+    isTV,
+    handleCardBlur,
+    handleCardFocus,
+    filteredContent.length,
+  ]);
 
   const FilterButton = ({ type, label }: { type: FilterType; label: string }) => {
     const isActive = filter === type;
@@ -347,18 +502,44 @@ export default function LibraryScreen() {
         </View>
       ) : (
         <FlatList
+          key={isTV ? 'w121zlib139d-tv-grid-6-row-snap' : 'library-phone-horizontal'}
           ref={flatListRef}
-          horizontal
+          horizontal={!isTV}
+          numColumns={isTV ? TV_GRID_COLUMNS : undefined}
           data={filteredContent}
           renderItem={renderItem}
           keyExtractor={(item) => item.imdb_id || item.id || item.name || ''}
-          getItemLayout={getItemLayout}
+          getItemLayout={isTV ? getTvItemLayout : getItemLayout}
           showsHorizontalScrollIndicator={false}
+          showsVerticalScrollIndicator={false}
+          // W121ZLIB139E_VIEWPORT_MEASURE
+          // Measure the real TV grid viewport; footer geometry above uses this
+          // instead of guessing from the physical screen or header height.
+          onLayout={(e) => {
+            if (!isTV) return;
+            const nextHeight = Math.round(e.nativeEvent?.layout?.height || 0);
+            if (nextHeight > 0 && nextHeight !== tvGridViewportHeight) {
+              setTvGridViewportHeight(nextHeight);
+            }
+          }}
+          ListFooterComponent={
+            isTV && tvGridFooterHeight > 0
+              ? <View style={{ height: tvGridFooterHeight }} focusable={false} />
+              : null
+          }
+          columnWrapperStyle={
+            isTV
+              ? [
+                  styles.tvGridRow,
+                  { width: width - (TV_GRID_SIDE_PADDING * 2) },
+                ]
+              : undefined
+          }
           contentContainerStyle={[styles.listContent, isTV && styles.listContentTV]}
-          initialNumToRender={10}
-          maxToRenderPerBatch={8}
+          initialNumToRender={isTV ? 12 : 10}
+          maxToRenderPerBatch={isTV ? 12 : 8}
           windowSize={5}
-          removeClippedSubviews={true}
+          removeClippedSubviews={!isTV}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -478,7 +659,15 @@ const styles = StyleSheet.create({
   },
   listContentTV: {
     paddingLeft: 48,
-    paddingRight: 128,
+    paddingRight: 48,
+    paddingTop: 8,
+    paddingBottom: 40,
+  },
+  // W121ZLIB139C_GTV_DISCOVER_STYLE_GRID
+  // Native Android/Fire TV spatial focus owns LEFT/RIGHT/UP/DOWN, matching Home.
+  tvGridRow: {
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
   },
   // X button row - sits above poster, right-aligned (matches discover.tsx)
   xButtonRow: {
