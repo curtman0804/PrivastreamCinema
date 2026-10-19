@@ -9960,6 +9960,86 @@ const nextEpisodeData = nextEpisode ? {
     });
   };
 
+  // W121ZOD138A_WATCH_TRAILER
+  // Cinemeta metadata already exposes trailerStreams. Route trailer playback
+  // to Privastream's dedicated in-app trailer surface; OD playback remains untouched.
+  const _w121zod138aTrailer = useMemo(() => {
+    if (isEpisodePage) return null;
+    if (type !== 'movie' && type !== 'series') return null;
+
+    const candidates = Array.isArray(content?.trailerStreams)
+      ? content.trailerStreams
+      : [];
+
+    return candidates.find((entry: any) =>
+      /^[A-Za-z0-9_-]{11}$/.test(String(entry?.ytId || '').trim())
+    ) || null;
+  }, [content?.trailerStreams, type, isEpisodePage]);
+
+  const _w121zod138aWatchTrailer = useCallback(() => {
+    const ytId = String(_w121zod138aTrailer?.ytId || '').trim();
+    if (!/^[A-Za-z0-9_-]{11}$/.test(ytId)) return;
+
+    const trailerTitle = String(
+      _w121zod138aTrailer?.title ||
+      content?.name ||
+      paramName ||
+      'Trailer'
+    ).trim();
+
+    const returnType = String(type || '').trim();
+    const returnId = String(id || '').trim();
+    if (!returnType || !returnId) return;
+
+    console.log(
+      '[W121ZOD138F TRAILER ROUTE REPLACE]',
+      'type=' + returnType,
+      'id=' + returnId,
+      'ytId=' + ytId
+    );
+
+    // Replace (do not push) so the heavy Details tree and poster textures are
+    // unmounted before the Firestick creates Chromium/WebView video surfaces.
+    router.replace({
+      pathname: '/trailer' as any,
+      params: {
+        ytId,
+        title: trailerTitle,
+        returnType,
+        returnId,
+        returnName: String(content?.name || paramName || ''),
+        returnPoster: String(content?.poster || paramPoster || ''),
+        returnBackground: String(content?.background || paramBackground || ''),
+        returnLogo: String((content as any)?.logo || paramLogo || ''),
+        returnSelectedSeason: String(paramSelectedSeason || ''),
+        returnSelectedEpisode: String(paramSelectedEpisode || ''),
+        returnResumeEpisodeId: String(resumeEpisodeId || ''),
+        returnResumePosition: String(resumePosition || ''),
+        returnResumeSeason: String(resumeSeason || ''),
+        returnResumeEpisode: String(resumeEpisode || ''),
+      },
+    } as any);
+  }, [
+    _w121zod138aTrailer,
+    type,
+    id,
+    content?.name,
+    content?.poster,
+    content?.background,
+    (content as any)?.logo,
+    paramName,
+    paramPoster,
+    paramBackground,
+    paramLogo,
+    paramSelectedSeason,
+    paramSelectedEpisode,
+    resumeEpisodeId,
+    resumePosition,
+    resumeSeason,
+    resumeEpisode,
+    router,
+  ]);
+
   const toggleLibrary = async () => {
     if (!content) return;
     try {
@@ -10715,8 +10795,25 @@ const nextEpisodeData = nextEpisode ? {
                 ) : null}
               </>
             )}
+            {!!_w121zod138aTrailer && (
+              <FocusableButton
+                hasTVPreferredFocus={type === 'series' && !isEpisodePage && !_w121zod138aTrailer}
+                style={styles.libraryButton}
+                focusedStyle={styles.libraryButtonFocused}
+                onPress={_w121zod138aWatchTrailer}
+              >
+                <Ionicons
+                  name="play-circle-outline"
+                  size={20}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.libraryButtonText}>
+                  Watch Trailer
+                </Text>
+              </FocusableButton>
+            )}
             <FocusableButton 
-              hasTVPreferredFocus={type === 'series' && !isEpisodePage}
+              hasTVPreferredFocus={type === 'series' && !isEpisodePage && !_w121zod138aTrailer}
               style={styles.libraryButton}
               focusedStyle={styles.libraryButtonFocused}
               onPress={toggleLibrary}
