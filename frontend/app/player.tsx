@@ -3268,6 +3268,13 @@ export default function PlayerScreen() {
   // Subtitles state
   const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
   const [selectedSubtitle, setSelectedSubtitle] = useState<string | null>(null);
+  // W121ZOD137D_AUTO_FORCED_NATIVE_GUARD - manual CC is authoritative.
+  const _v137dSelectedSubtitleRef = useRef<string | null>(null);
+  useEffect(() => { _v137dSelectedSubtitleRef.current = selectedSubtitle; }, [selectedSubtitle]);
+  // W121ZOD137F_MANUAL_CC_OWNERSHIP - any explicit picker choice owns CC for this playback.
+  // This includes Off: once the user touches the picker, the invisible auto layer must stay off.
+  const _v137fManualCcOverrideRef = useRef<boolean>(false);
+  useEffect(() => { _v137fManualCcOverrideRef.current = false; }, [contentType, contentId]);
   /* V416_CC_MASK - build stamp + CC-region mask flag */
   const [_v416Stamp, _setV416Stamp] = useState(true);
   useEffect(() => {
@@ -3344,13 +3351,28 @@ export default function PlayerScreen() {
   useEffect(() => {
     if (_v478AutoCues.length === 0) { _setV478AutoCueText(''); return; }
     const _v485_tick = () => {
+      if (_v137fManualCcOverrideRef.current) {
+        _setV478AutoCueText('');
+        return;
+      }
       const posMs = (positionRef && positionRef.current) ? positionRef.current : position;
       const posSec = posMs / 1000;
       const offSec = (subtitleOffset || 0) / 1000;
       const adj = posSec - offSec;
       const c = _v478AutoCues.find(x => adj >= x.start && adj <= x.end);
       try { (globalThis as any).__v484_setHud && (globalThis as any).__v484_setHud('tick', 't=' + adj.toFixed(1) + 's cue=' + (c ? c.text.slice(0,50) : 'NONE at ' + adj.toFixed(1) + 's')); } catch(_) {}
-      _setV478AutoCueText(c?.text || '');
+      // W121ZOD137D_AUTO_FORCED_NATIVE_GUARD
+      // Clean markup ONLY in the invisible automatic forced-sub layer.
+      // Manual CC parsing/rendering remains unchanged.
+      let _v137dAutoText = String(c?.text || '');
+      _v137dAutoText = _v137dAutoText
+        .replace(/<br\s*\/?\s*>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\{\/?[a-z]+\}/gi, '')
+        .replace(/\{\\an\d+\}/gi, '')
+        .replace(/^\s*[\[(]\s*(?:speaks?|speaking|in)\s+[a-z][a-z .'-]*[\])][:]?\s*/i, '')
+        .trim();
+      _setV478AutoCueText(_v137dAutoText);
     };
     _v485_tick();
     const id = setInterval(_v485_tick, 400);
@@ -3377,6 +3399,9 @@ export default function PlayerScreen() {
   }, [position, _v478AutoCues, subtitleOffset]);
   const [currentSubtitleText, setCurrentSubtitleText] = useState<string>('');
   const _v478DisplayedCue = currentSubtitleText || _v478AutoCueText;
+  // W121ZOD137H_SHANG_CHI_AUTO_SUB_STYLE - style only the app-generated auto layer.
+  // Manual CC keeps its existing appearance. Source-authored/burned subtitles remain untouched.
+  const _v137hAutoTranslationVisible = !currentSubtitleText && !!_v478AutoCueText;
   const [subtitleOffset, setSubtitleOffset] = useState<number>(0);
   /* v457/v458 ASPECT-RATIO TOGGLE - cycles FIT / FILL / STRETCH. */
   const [v457AspectMode, v457SetAspectMode] = useState<'contain' | 'cover' | 'stretch'>('contain');
@@ -8110,14 +8135,162 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
           } catch(_) {}
           const _v482Forced = _v482All.find((s: any) => _v482IsEnglish(s) && _v482IsForced(s))
                           || _v482All.find((s: any) => _v482IsForced(s));  // any-lang forced fallback
-          if (_v482Forced && _v482Forced.url) {
+          if (_v482Forced && _v482Forced.url && !_v137fManualCcOverrideRef.current) {
             try { (globalThis as any).__v478_setAutoSub && (globalThis as any).__v478_setAutoSub(_v482Forced.url); } catch (_) {}
             try { (globalThis as any).__v483_setHud && (globalThis as any).__v483_setHud('tracks=' + _v482All.length + ' FORCED=' + String(_v482Forced.filename || _v482Forced.url).slice(-60)); } catch(_) {} 
           console.log('[v482] auto-CC FORCED sub loaded:', String(_v482Forced.filename || _v482Forced.url).slice(0, 100));
           } else {
             try { (globalThis as any).__v478_setAutoSub && (globalThis as any).__v478_setAutoSub(null); } catch (_) {}
             try { (globalThis as any).__v483_setHud && (globalThis as any).__v483_setHud('tracks=' + _v482All.length + ' FORCED=NONE (Stremio addon does not expose forced flag)'); } catch(_) {} 
-            console.log('[v482] no FORCED sub track found - auto-CC skipped (foreign scenes will not be translated)');
+            // W121ZOD137D_AUTO_FORCED_NATIVE_GUARD
+            // Preserve every existing manual subtitle path. This fallback is private to
+            // the invisible auto-translation layer. First give Media3 time to load the
+            // actual source. If Media3 already selected an embedded subtitle track,
+            // trust it (the proven Shang-Chi behavior) and DO NOT overlay a second copy.
+            // Otherwise query raw OpenSubtitles metadata for an English Forced /
+            // foreign-parts track that our one-per-language picker response cannot expose.
+            console.log('[W121ZOD137D AUTO-FORCED] backend list has no forced track; waiting for native subtitle state');
+            try {
+              const _v137dSleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+              let _v137dNativeSelected: any = null;
+              let _v137dNativeAvailable: any[] = [];
+              let _v137dAudioReady = false;
+
+              for (let _v137dTry = 0; _v137dTry < 16; _v137dTry++) {
+                if (_v137dSelectedSubtitleRef.current || _v137fManualCcOverrideRef.current) break;
+                try {
+                  _v137dNativeSelected = videoRef.current?.getSelectedSubtitleTrack?.() || null;
+                  _v137dNativeAvailable = videoRef.current?.getAvailableSubtitleTracks?.() || [];
+                  _v137dAudioReady = (videoRef.current?.getAvailableAudioTracks?.() || []).length > 0;
+                } catch (_) {}
+
+                if (_v137dNativeSelected) break;
+
+                if (_v137dAudioReady || _v137dNativeAvailable.length > 0) {
+                  // Native sourceLoad has happened. Give Media3 one more moment to apply
+                  // its default/forced subtitle selection before deciding on overlay.
+                  await _v137dSleep(1200);
+                  try {
+                    _v137dNativeSelected = videoRef.current?.getSelectedSubtitleTrack?.() || null;
+                    _v137dNativeAvailable = videoRef.current?.getAvailableSubtitleTracks?.() || [];
+                  } catch (_) {}
+                  break;
+                }
+
+                await _v137dSleep(500);
+              }
+
+              console.log(
+                '[W121ZOD137D NATIVE SUBTITLE STATE]',
+                'selected=' + JSON.stringify(_v137dNativeSelected),
+                'available=' + JSON.stringify(_v137dNativeAvailable)
+              );
+
+              if (_v137dSelectedSubtitleRef.current || _v137fManualCcOverrideRef.current) {
+                console.log('[W121ZOD137F MANUAL-CC] manual CC owns subtitle output; external auto layer skipped');
+              } else if (_v137dNativeSelected) {
+                console.log('[W121ZOD137D AUTO-FORCED] native subtitle already active; external auto layer skipped');
+              } else if (_v137dNativeAvailable.length === 0) {
+                // W121ZOD137E_SOURCE_AUTHORED_FIRST
+                // Shang-Chi proves that a source can already contain the intended
+                // foreign-dialogue English translation even when Media3 exposes no
+                // selectable subtitle track. In that case, adding our external forced
+                // file creates a duplicate. Treat the media source as authoritative.
+                console.log('[W121ZOD137E SOURCE-AUTHORED] no native subtitle tracks exposed; external forced overlay skipped');
+              } else {
+                const _v137dId = String(cId || '').split('?')[0];
+                const _v137dType = String(cType || 'movie');
+                const _v137dRawUrl = 'https://opensubtitles-v3.strem.io/subtitles/' + _v137dType + '/' + _v137dId + '.json';
+                const _v137dResp = await fetch(_v137dRawUrl);
+                if (!_v137dResp.ok) throw new Error('HTTP ' + _v137dResp.status);
+                const _v137dJson: any = await _v137dResp.json();
+                const _v137dRaw = Array.isArray(_v137dJson?.subtitles) ? _v137dJson.subtitles : [];
+
+                const _v137dIsEnglish = (s: any) => {
+                  const l = String(s?.lang || s?.language || '').trim().toLowerCase();
+                  return l === 'eng' || l === 'en' || l === 'english' || l.startsWith('en-');
+                };
+                const _v137dForcedBlob = (s: any) => [
+                  s?.subtitleFileName,
+                  s?.movieReleaseName,
+                  s?.releaseGroup,
+                  s?.filename,
+                  s?.title,
+                  s?.name,
+                  s?.label,
+                  s?.SubFileName,
+                ].map((x: any) => String(x || '').toLowerCase()).join(' | ');
+                const _v137dIsForced = (s: any) =>
+                  /(?:^|[^a-z0-9])(forced|foreign[._\-\s]*parts?[._\-\s]*only|foreign[._\-\s]*only|forced[._\-\s]*narrative)(?:[^a-z0-9]|$)/i.test(_v137dForcedBlob(s));
+
+                const _v137dForcedEnglish = _v137dRaw.filter(
+                  (s: any) => _v137dIsEnglish(s) && _v137dIsForced(s) && !!s?.url
+                );
+
+                if (_v137dForcedEnglish.length > 0 && !_v137dSelectedSubtitleRef.current && !_v137fManualCcOverrideRef.current) {
+                  const _v137dHint = [
+                    (typeof filename === 'string' ? filename : ''),
+                    (typeof title === 'string' ? title : ''),
+                    (typeof streamUrl === 'string' ? streamUrl : ''),
+                  ].join(' ').toUpperCase();
+
+                  const _v137dNorm = (v: any) =>
+                    String(v || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ');
+
+                  const _v137dScore = (s: any) => {
+                    const blob = _v137dNorm([
+                      s?.subtitleFileName,
+                      s?.movieReleaseName,
+                      s?.releaseGroup,
+                    ].join(' '));
+                    let score = 0;
+
+                    const groupTokens = _v137dNorm(s?.releaseGroup)
+                      .split(/\s+/)
+                      .filter((t: string) => t.length >= 3 && !['FORCED', 'FOREIGN', 'PARTS', 'ONLY', 'SDH', 'HI'].includes(t));
+                    for (const t of groupTokens) {
+                      if (_v137dHint.includes(t)) score += 100;
+                    }
+
+                    const markers = [
+                      'AMZN', 'DSNP', 'NETFLIX', 'NF', 'WEB DL', 'WEBDL', 'WEBRIP',
+                      'BLURAY', '2160P', '1080P', '720P', 'X265', 'HEVC', 'H265',
+                      'X264', 'H264', 'AVC', 'YTS', 'PAHE'
+                    ];
+                    for (const m of markers) {
+                      if (_v137dHint.includes(m) && blob.includes(m)) score += 20;
+                    }
+                    return score;
+                  };
+
+                  let _v137dBest = _v137dForcedEnglish[0];
+                  let _v137dBestScore = _v137dScore(_v137dBest);
+                  for (const s of _v137dForcedEnglish.slice(1)) {
+                    const sc = _v137dScore(s);
+                    if (sc > _v137dBestScore) {
+                      _v137dBest = s;
+                      _v137dBestScore = sc;
+                    }
+                  }
+
+                  try {
+                    (globalThis as any).__v478_setAutoSub &&
+                      (globalThis as any).__v478_setAutoSub(_v137dBest.url);
+                  } catch (_) {}
+
+                  console.log(
+                    '[W121ZOD137D AUTO-FORCED] external forced loaded',
+                    'id=' + String(_v137dBest?.id || ''),
+                    'score=' + _v137dBestScore,
+                    'file=' + String(_v137dBest?.subtitleFileName || _v137dBest?.movieReleaseName || '').slice(-100)
+                  );
+                } else if (_v137dForcedEnglish.length === 0) {
+                  console.log('[W121ZOD137D AUTO-FORCED] no raw English forced track; auto layer remains off');
+                }
+              }
+            } catch (_v137dErr) {
+              console.log('[W121ZOD137D AUTO-FORCED] lookup/native guard failed; auto layer remains off:', String(_v137dErr));
+            }
           }
         } catch (_e) { console.log('[v482] forced-detect error:', String(_e)); }
         /* V407_SUB_AUTOMATCH - pick the sub whose release descriptor best
@@ -8185,7 +8358,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
               if ((s as any).foreign_parts_only === true) return true;
               return _v411_isForced((s as any).filename);
             });
-            if (_v411_forced && !selectedSubtitle) {
+            if (_v411_forced && !selectedSubtitle && !_v137fManualCcOverrideRef.current) {
               console.log('[V478f] forced sub -> auto-CC layer:', (_v411_forced as any).filename || _v411_forced.url);
               try { (globalThis as any).__v478_setAutoSub && (globalThis as any).__v478_setAutoSub(_v411_forced.url); } catch (_) {}
               setV408AutoActive(false);
@@ -9156,8 +9329,8 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
             />
             {/* Subtitle Overlay for Web */}
             {_v478DisplayedCue && (
-              <View style={styles.subtitleContainer}>
-                <Text style={styles.subtitleText}>{_v478DisplayedCue}</Text>
+              <View style={[styles.subtitleContainer, _v137hAutoTranslationVisible && styles.autoTranslationContainer]}>
+                <Text style={[styles.subtitleText, _v137hAutoTranslationVisible && styles.autoTranslationText]}>{_v478DisplayedCue}</Text>
               </View>
             )}
             {/* Web Controls Overlay - fades in/out */}
@@ -9710,8 +9883,8 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
             
             {/* Subtitle Overlay */}
             {_v478DisplayedCue && (
-              <View style={styles.subtitleContainer} pointerEvents="none">
-                <Text style={styles.subtitleText}>{_v478DisplayedCue}</Text>
+              <View style={[styles.subtitleContainer, _v137hAutoTranslationVisible && styles.autoTranslationContainer]} pointerEvents="none">
+                <Text style={[styles.subtitleText, _v137hAutoTranslationVisible && styles.autoTranslationText]}>{_v478DisplayedCue}</Text>
               </View>
             )}
 
@@ -10087,8 +10260,16 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                       });
                     }}
                     onPress={() => {
+                      // W121ZOD137F_MANUAL_CC_OWNERSHIP
+                      // Any explicit picker choice, including Off, suppresses the invisible
+                      // auto-translation layer until this content/player session resets.
+                      _v137fManualCcOverrideRef.current = true;
+                      try { (globalThis as any).__v478_setAutoSub && (globalThis as any).__v478_setAutoSub(null); } catch (_) {}
+                      _setV478AutoCues([]);
+                      _setV478AutoCueText('');
                       setSelectedSubtitle(item.lang === 'off' ? null : item.url);
                       setV408AutoActive(false); /* V408 - user is now in control */
+                      console.log('[W121ZOD137F MANUAL-CC] picker choice=' + (item.lang === 'off' ? 'OFF' : String(item.lang || 'unknown')));
                       setShowSubtitlePicker(false);
                     }}
                   >
@@ -10622,6 +10803,21 @@ const styles = StyleSheet.create({
     textShadowColor: '#000',
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 4,
+  },
+  // W121ZOD137H_SHANG_CHI_AUTO_SUB_STYLE
+  // Screenshot-measured match for source-authored Shang-Chi translations:
+  // slightly larger regular-weight sans-serif, lighter outline/shadow, and
+  // positioned at the bottom of the active picture instead of the letterbox bar.
+  autoTranslationContainer: {
+    bottom: 68,
+  },
+  autoTranslationText: {
+    fontFamily: 'sans-serif',
+    fontSize: 22,
+    fontWeight: '400',
+    textShadowColor: 'rgba(0,0,0,0.95)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   // Controls overlay
   webControlsOverlay: {

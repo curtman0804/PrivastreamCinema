@@ -14,6 +14,7 @@ import {
   VideoView,
   useVideoPlayer,
   type AudioTrack,
+  type SubtitleTrack,
   type VideoSource,
 } from 'expo-video';
 import { getDevicePlaybackCapabilities, getStoredDevicePlaybackProfile } from '../native/devicePlaybackCapabilities';
@@ -62,6 +63,10 @@ export type ExpoVideoCompatHandle = {
 
   getAvailableAudioTracks: () => AudioTrack[];
   getSelectedAudioTrack: () => AudioTrack | null;
+  // W121ZOD137D_AUTO_FORCED_NATIVE_GUARD
+  // Read-only subtitle introspection only. Existing subtitle selection is untouched.
+  getAvailableSubtitleTracks: () => SubtitleTrack[];
+  getSelectedSubtitleTrack: () => SubtitleTrack | null;
   selectAudioTrack: (track: AudioTrack | null) => void;
 };
 
@@ -598,6 +603,24 @@ export const ExpoVideoCompat = forwardRef<
       getSelectedAudioTrack: () => {
         try {
           return player.audioTrack || null;
+        } catch (_) {
+          return null;
+        }
+      },
+
+      // W121ZOD137D_AUTO_FORCED_NATIVE_GUARD
+      // Read-only native subtitle state. Never selects, clears, or changes a track.
+      getAvailableSubtitleTracks: () => {
+        try {
+          return [...(player.availableSubtitleTracks || [])];
+        } catch (_) {
+          return [];
+        }
+      },
+
+      getSelectedSubtitleTrack: () => {
+        try {
+          return player.subtitleTrack || null;
         } catch (_) {
           return null;
         }
