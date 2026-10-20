@@ -3517,6 +3517,26 @@ const StreamCard = React.memo(function StreamCardInner({
 }) {
   const [isFocused, setIsFocused] = useState(false);
   const { quality, size, language, isForeign, isCommentary, languages } = parseStreamInfo(stream) as any;
+  // W121ZLANG144S: lightweight, card-only Indian language distinctions.
+  // Existing filename flags remain unchanged. No stream search or playback change.
+  const v144sFlags = useMemo(() => {
+    const base: string[] = Array.isArray(languages) && languages.length > 0
+      ? languages : [language];
+    const text = String(stream.title || '') + ' ' + String(stream.name || '');
+    const normalized = ' ' + text.toUpperCase().replace(/[^A-Z0-9]+/g, ' ') + ' ';
+    const indian = [
+      ['HINDI', 'HI'],
+      ['TAMIL', 'TA'],
+      ['TELUGU', 'TE'],
+    ].filter(([word]) => normalized.includes(' ' + word + ' '))
+     .map(([, code]) => code);
+
+    return base.flatMap((flag: string) =>
+      flag === '\u{1F1EE}\u{1F1F3}' && indian.length > 0
+        ? indian.map(code => ({ flag, code }))
+        : [{ flag, code: '' }]
+    );
+  }, [stream, languages, language]);
   // V301/V302: source + seeders intentionally NOT destructured â€” they used
   // to surface provider names (e.g. "Torrentio") and seed counts which leak
   // torrent terminology to end users.  parseStreamInfo still computes them
@@ -3564,10 +3584,10 @@ const StreamCard = React.memo(function StreamCardInner({
       {/* v472c BOTTOM row: language flag pills */}
       <View style={styles.streamCardFooter}>
         <View style={styles.v472cFlagRow}>
-          {(Array.isArray(languages) && languages.length > 0 ? languages : [language]).map(function(f, i) {
+          {v144sFlags.map(function(entry, i) {
             return (
               <View key={i} style={[styles.langBadge, isForeign ? styles.langBadgeForeign : styles.langBadgeEnglish]}>
-                <Text style={styles.langBadgeText}>{f}</Text>
+                <Text style={styles.langBadgeText}>{entry.flag}{entry.code ? " " + entry.code : ""}</Text>
               </View>
             );
           })}
