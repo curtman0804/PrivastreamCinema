@@ -199,17 +199,38 @@ const NFL_FRANCHISE_ALIASES: string[][] = [
 const normalizeMatchText = (value: string): string =>
   ` ${String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
 
+// W121ZSPORTS140F_STRONG_NFL_IDENTITY
+// Bare mascots such as Panthers, Raiders, Cardinals, Eagles, Bears, etc. are
+// shared by many college teams. They are never enough by themselves to make an
+// American-football event NFL. Accept explicit NFL metadata, or require two
+// full NFL franchise identities in the event title.
 const isNflEvent = (event: SportEvent): boolean => {
-  const sourceText = `${event.id} ${event.description}`;
+  const sourceText = `${event.name} ${event.id} ${event.description} ${event.genres.join(' ')}`;
+
+  // Provider event IDs commonly mark college football as CFB/NCAAF. Make that
+  // authoritative before evaluating any shared mascot names.
+  if (/\b(?:ncaa|ncaaf|cfb|college\s+football)\b/i.test(sourceText)) return false;
+
   if (/\bnfl\b/i.test(sourceText)) return true;
 
   const haystack = normalizeMatchText(event.name);
-  let franchiseMatches = 0;
+  let strongFranchiseMatches = 0;
 
   for (const aliases of NFL_FRANCHISE_ALIASES) {
-    if (aliases.some((alias) => haystack.includes(` ${alias} `))) {
-      franchiseMatches += 1;
-      if (franchiseMatches >= 2) return true;
+    const nickname = String(aliases[0] || '').trim().toLowerCase();
+    if (!nickname) continue;
+
+    // Keep only aliases that contain the franchise nickname itself. This
+    // preserves "Carolina Panthers" / "Las Vegas Raiders" while excluding
+    // bare "Panthers" / "Raiders" and location-only shortcuts.
+    const strongAliases = aliases
+      .slice(1)
+      .map((alias) => String(alias || '').trim().toLowerCase())
+      .filter((alias) => alias && alias.includes(nickname));
+
+    if (strongAliases.some((alias) => haystack.includes(` ${alias} `))) {
+      strongFranchiseMatches += 1;
+      if (strongFranchiseMatches >= 2) return true;
     }
   }
 
