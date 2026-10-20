@@ -9960,6 +9960,100 @@ const nextEpisodeData = nextEpisode ? {
     });
   };
 
+  // W121ZTRAILER141H_OFFICIAL_IFRAME_FALLBACK
+  // Keep the in-app trailer route isolated from normal OD playback.
+  // Use every valid Cinemeta YouTube trailer ID so the official IFrame API can
+  // automatically fall back when one trailer is blocked/unavailable for embedding.
+  const _w121zTrailerCandidates = useMemo(() => {
+    if (isEpisodePage) return [] as any[];
+    if (type !== 'movie' && type !== 'series') return [] as any[];
+
+    const raw = Array.isArray(content?.trailerStreams)
+      ? content.trailerStreams
+      : [];
+
+    const seen = new Set<string>();
+    return raw.filter((entry: any) => {
+      const ytId = String(entry?.ytId || '').trim();
+      if (!/^[A-Za-z0-9_-]{11}$/.test(ytId)) return false;
+      if (seen.has(ytId)) return false;
+      seen.add(ytId);
+      return true;
+    });
+  }, [content?.trailerStreams, type, isEpisodePage]);
+
+  const _w121zTrailer = _w121zTrailerCandidates[0] || null;
+
+  const _w121zWatchTrailer = useCallback(() => {
+    const ids = _w121zTrailerCandidates
+      .map((entry: any) => String(entry?.ytId || '').trim())
+      .filter((value: string) => /^[A-Za-z0-9_-]{11}$/.test(value));
+
+    if (!ids.length) return;
+
+    const trailerTitle = String(
+      _w121zTrailer?.title ||
+      content?.name ||
+      paramName ||
+      'Trailer'
+    ).trim();
+
+    const returnType = String(type || '').trim();
+    const returnId = String(id || '').trim();
+    if (!returnType || !returnId) return;
+
+    console.log(
+      '[W121ZTRAILER141H WATCH TRAILER]',
+      'type=' + returnType,
+      'id=' + returnId,
+      'candidateCount=' + String(ids.length),
+      'firstYtId=' + ids[0]
+    );
+
+    // Match the proven 138F/138H memory behavior: unmount the heavy Details tree
+    // while the trailer surface is active, then rebuild the same Details route.
+    router.replace({
+      pathname: '/trailer' as any,
+      params: {
+        ytId: ids[0],
+        ytIds: JSON.stringify(ids),
+        title: trailerTitle,
+        returnType,
+        returnId,
+        returnName: String(content?.name || paramName || ''),
+        returnPoster: String(content?.poster || paramPoster || ''),
+        returnBackground: String(content?.background || paramBackground || ''),
+        returnLogo: String((content as any)?.logo || paramLogo || ''),
+        returnSelectedSeason: String(paramSelectedSeason || ''),
+        returnSelectedEpisode: String(paramSelectedEpisode || ''),
+        returnResumeEpisodeId: String(resumeEpisodeId || ''),
+        returnResumePosition: String(resumePosition || ''),
+        returnResumeSeason: String(resumeSeason || ''),
+        returnResumeEpisode: String(resumeEpisode || ''),
+      },
+    } as any);
+  }, [
+    _w121zTrailerCandidates,
+    _w121zTrailer,
+    type,
+    id,
+    content?.name,
+    content?.poster,
+    content?.background,
+    (content as any)?.logo,
+    paramName,
+    paramPoster,
+    paramBackground,
+    paramLogo,
+    paramSelectedSeason,
+    paramSelectedEpisode,
+    resumeEpisodeId,
+    resumePosition,
+    resumeSeason,
+    resumeEpisode,
+    router,
+  ]);
+
   const toggleLibrary = async () => {
     if (!content) return;
     try {
@@ -10715,8 +10809,25 @@ const nextEpisodeData = nextEpisode ? {
                 ) : null}
               </>
             )}
+            {!!_w121zTrailer && (
+              <FocusableButton
+                hasTVPreferredFocus={type === 'series' && !isEpisodePage}
+                style={styles.libraryButton}
+                focusedStyle={styles.libraryButtonFocused}
+                onPress={_w121zWatchTrailer}
+              >
+                <Ionicons
+                  name="play-circle-outline"
+                  size={20}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.libraryButtonText}>
+                  Watch Trailer
+                </Text>
+              </FocusableButton>
+            )}
             <FocusableButton 
-              hasTVPreferredFocus={type === 'series' && !isEpisodePage}
+              hasTVPreferredFocus={type === 'series' && !isEpisodePage && !_w121zTrailer}
               style={styles.libraryButton}
               focusedStyle={styles.libraryButtonFocused}
               onPress={toggleLibrary}
