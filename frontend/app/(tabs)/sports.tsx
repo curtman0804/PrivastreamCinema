@@ -58,6 +58,7 @@ type SportEvent = {
   releaseInfoRaw: string;
   description: string;
   poster: string;
+  artworkCandidates: string[];
   genres: string[];
   addonDbId: string;
   addonName: string;
@@ -102,7 +103,20 @@ const stringArray = (value: any): string[] =>
     ? value.map((item) => String(item || '').trim()).filter(Boolean)
     : [];
 
-const UTC_RELEASE_RE = /^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s*[^0-9A-Za-z]?\s*(\d{1,2}):(\d{2})\s+UTC$/i;
+// W121ZSPORTS140J_ARTWORK_CASCADE
+const uniqueArtworkUrls = (values: string[]): string[] =>
+  Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean)));
+
+const deriveCleanBackgroundFromUtcPoster = (value: string): string => {
+  const raw = String(value || '').trim();
+  if (!raw || !/\/posters\//i.test(raw) || !/_UTC(?=\.webp)/i.test(raw)) return '';
+
+  return raw
+    .replace(/\/posters\//i, '/backgrounds/')
+    .replace(/_UTC(?=\.webp)/i, '');
+};
+
+const UTC_RELEASE_RE = /^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s*[^0-9A-Za-z]*\s*(\d{1,2}):(\d{2})\s+UTC$/i;
 const UTC_MONTHS: Record<string, number> = {
   jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
   jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
@@ -278,6 +292,25 @@ const isNbaEvent = (event: SportEvent): boolean =>
 const isBaseballEvent = (event: SportEvent): boolean =>
   eventFromCatalog(event, 'sports_baseball') || hasEventText(event, /\bbaseball\b|\bmlb\b/i) || countTeamTerms(event, MLB_TEAM_TERMS) >= 2;
 
+const fallbackArtworkForEvent = (event: SportEvent): string => {
+  if (eventFromCatalog(event, 'sports_american_football')) {
+    const presetId = isNflEvent(event) ? 'nfl' : 'ncaa-fb';
+    return SPORT_PRESETS.find((preset) => preset.id === presetId)?.logoUrl || '';
+  }
+
+  if (eventFromCatalog(event, 'sports_basketball')) {
+    const presetId = isNbaEvent(event) ? 'nba' : 'ncaa-bb';
+    return SPORT_PRESETS.find((preset) => preset.id === presetId)?.logoUrl || '';
+  }
+
+  const sourceCatalogIds = new Set(event.sources.map((source) => source.catalogId));
+  return SPORT_PRESETS.find((preset) =>
+    preset.id !== 'now' &&
+    !!preset.logoUrl &&
+    preset.catalogIds.some((catalogId) => sourceCatalogIds.has(catalogId))
+  )?.logoUrl || '';
+};
+
 const filterEventsForPreset = (items: SportEvent[], presetId?: string): SportEvent[] => {
   if (presetId === 'now') return items.filter(isNowPlayingMatch);
   if (presetId === 'nfl') return items.filter((event) =>
@@ -326,7 +359,11 @@ const mergeSportEvents = (items: SportEvent[]): SportEvent[] => {
       }
     }
 
-    if (!existing.poster && event.poster) existing.poster = event.poster;
+    existing.artworkCandidates = uniqueArtworkUrls([
+      ...existing.artworkCandidates,
+      ...event.artworkCandidates,
+    ]);
+    existing.poster = existing.artworkCandidates[0] || existing.poster || event.poster;
     if (!existing.description && event.description) existing.description = event.description;
     existing.genres = Array.from(new Set([...existing.genres, ...event.genres]));
   }
@@ -388,14 +425,37 @@ const normalizeEvent = (
   if (!id) return null;
 
   const releaseInfoRaw = String(raw.releaseInfo || raw.year || '').trim();
+  const rawName = String(raw.name || raw.title || id).trim();
+  const name = /^nfl\s+vs\s+redzone$/i.test(rawName) ? 'NFL RedZone' : rawName;
 
-  return {
+  // W121ZSPORTS140J_ARTWORK_CASCADE
+  // Use provider background art first when it is trustworthy. If an event only
+  // exposes a _UTC poster, try the provider's matching clean background path.
+  // Known live_cfb artwork currently resolves to a valid-but-placeholder
+  // "Under Maintenance" image, so that family skips provider art and falls
+  // through to league artwork instead. The local Privastream icon remains the
+  // final no-network/no-art fallback in EventCard.
+  const backgroundArtwork = String(raw.background || '').trim();
+  const providerPoster = String(raw.poster || raw.logo || '').trim();
+  const placeholderProneCfb =
+    /^streamed:live_cfb_/i.test(id) ||
+    /\/backgrounds\/live_cfb_/i.test(backgroundArtwork);
+  const cleanBackgroundArtwork = placeholderProneCfb ? '' : backgroundArtwork;
+  const derivedBackgroundArtwork = placeholderProneCfb
+    ? ''
+    : deriveCleanBackgroundFromUtcPoster(providerPoster);
+  const cleanProviderPoster = /(?:^|[_/])utc(?:[_.?]|$)/i.test(providerPoster)
+    ? ''
+    : providerPoster;
+
+  const event: SportEvent = {
     id,
-    name: String(raw.name || raw.title || id).trim(),
+    name,
     releaseInfo: formatReleaseInfoForDevice(releaseInfoRaw),
     releaseInfoRaw,
     description: String(raw.description || '').trim(),
-    poster: String(raw.background || raw.poster || raw.logo || '').trim(),
+    poster: '',
+    artworkCandidates: [],
     genres: stringArray(raw.genres),
     addonDbId: catalog.addonDbId,
     addonName: catalog.addonName,
@@ -406,6 +466,16 @@ const normalizeEvent = (
       eventId: id,
     }],
   };
+
+  event.artworkCandidates = uniqueArtworkUrls([
+    cleanBackgroundArtwork,
+    derivedBackgroundArtwork,
+    cleanProviderPoster,
+    fallbackArtworkForEvent(event),
+  ]);
+  event.poster = event.artworkCandidates[0] || '';
+
+  return event;
 };
 
 function SportChip({
@@ -478,6 +548,13 @@ function EventCard({
   onPress: () => void;
 }) {
   const [focused, setFocused] = useState(false);
+  const [artworkIndex, setArtworkIndex] = useState(0);
+  const artworkKey = event.artworkCandidates.join('|');
+  const currentArtwork = event.artworkCandidates[artworkIndex] || '';
+
+  useEffect(() => {
+    setArtworkIndex(0);
+  }, [event.id, artworkKey]);
 
   return (
     <Pressable
@@ -492,11 +569,12 @@ function EventCard({
       ]}
     >
       <View style={[styles.artworkWrap, isTV && styles.artworkWrapTV]}>
-        {event.poster ? (
+        {currentArtwork ? (
           <Image
-            source={{ uri: event.poster }}
+            source={{ uri: currentArtwork }}
             style={styles.artwork}
             contentFit="contain"
+            onError={() => setArtworkIndex((previous) => previous + 1)}
           />
         ) : (
           <View style={styles.artworkFallback}>
@@ -505,6 +583,9 @@ function EventCard({
               style={styles.artworkFallbackLogo}
               contentFit="contain"
             />
+            <Text numberOfLines={2} style={styles.artworkFallbackText}>
+              {repairDisplayText(event.name)}
+            </Text>
           </View>
         )}
 
@@ -657,12 +738,48 @@ export default function SportsScreen() {
       try {
         const results = await Promise.allSettled(
           selectedCatalogs.map(async (catalog) => {
-            const result = await api.addons.getCatalog(
-              catalog.addonDbId,
-              'sport',
-              catalog.catalogId
-            );
-            return (result?.metas || [])
+            // W121ZSPORTS140I_PROVIDER_PAGINATION
+            // Stremio catalog paging uses skip=N. Pull successive pages until
+            // the provider returns empty/repeated content, with hard caps so a
+            // broken provider cannot create an unbounded request loop.
+            const rawItems: any[] = [];
+            const seenPageSignatures = new Set<string>();
+            const seenIds = new Set<string>();
+            let skip = 0;
+
+            for (let page = 0; page < 10 && rawItems.length < 200; page += 1) {
+              const result = await api.addons.getCatalog(
+                catalog.addonDbId,
+                'sport',
+                catalog.catalogId,
+                skip
+              );
+
+              const metas = Array.isArray(result?.metas) ? result.metas : [];
+              if (metas.length === 0) break;
+
+              const signature = metas
+                .map((raw: any) => String(raw?.id || raw?.name || ''))
+                .join('|');
+              if (seenPageSignatures.has(signature)) break;
+              seenPageSignatures.add(signature);
+
+              let freshCount = 0;
+              for (const raw of metas) {
+                const rawId = String(raw?.id || '').trim();
+                const dedupeKey = rawId || String(raw?.name || '') + '|' + String(raw?.releaseInfo || '');
+                if (!dedupeKey || seenIds.has(dedupeKey)) continue;
+                seenIds.add(dedupeKey);
+                rawItems.push(raw);
+                freshCount += 1;
+                if (rawItems.length >= 200) break;
+              }
+
+              if (freshCount === 0 || rawItems.length >= 200) break;
+              skip += metas.length;
+            }
+
+            return rawItems
               .map((raw: any) => normalizeEvent(raw, catalog))
               .filter((event: SportEvent | null): event is SportEvent => !!event);
           })
@@ -1056,9 +1173,19 @@ const styles = StyleSheet.create({
   },
 
   artworkFallbackLogo: {
-    width: 88,
-    height: 58,
+    width: 72,
+    height: 46,
     opacity: 0.8,
+  },
+
+  artworkFallbackText: {
+    marginTop: 6,
+    maxWidth: '88%',
+    color: '#d8d8d8',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 
   liveBadge: {

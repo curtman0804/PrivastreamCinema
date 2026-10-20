@@ -1602,9 +1602,13 @@ export const api = {
       addonId: string,
       type: string,
       catalogId: string,
+      skip: number = 0,
     ): Promise<{ metas: any[] }> => {
+      // W121ZSPORTS140I_CATALOG_SKIP
+      const safeSkip = Math.max(0, Math.floor(Number(skip) || 0));
+      const query = safeSkip > 0 ? '?skip=' + String(safeSkip) : '';
       const response = await apiClient.get(
-        `/api/addons/${encodeURIComponent(addonId)}/catalog/${encodeURIComponent(type)}/${encodeURIComponent(catalogId)}`
+        `/api/addons/${encodeURIComponent(addonId)}/catalog/${encodeURIComponent(type)}/${encodeURIComponent(catalogId)}${query}`
       );
 
       return {

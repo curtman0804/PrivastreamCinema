@@ -17980,6 +17980,7 @@ async def get_installed_addon_catalog(
     addon_id: str,
     content_type: str,
     catalog_id: str,
+    skip: int = 0,
     current_user: User = Depends(get_current_user),
 ):
     addon = await db.addons.find_one({
@@ -18027,14 +18028,26 @@ async def get_installed_addon_catalog(
             detail="Catalog is not declared by addon",
         )
 
+    # W121ZSPORTS140I_CATALOG_SKIP
+    if skip < 0 or skip > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="Catalog skip is out of range",
+        )
+
     base_url = get_base_url(
         addon["manifestUrl"]
     )
 
-    catalog_url = (
+    catalog_base = (
         f"{base_url}/catalog/"
         f"{_w121z133c_quote_segment(content_type)}/"
-        f"{_w121z133c_quote_segment(catalog_id)}.json"
+        f"{_w121z133c_quote_segment(catalog_id)}"
+    )
+    catalog_url = (
+        f"{catalog_base}/skip={skip}.json"
+        if skip > 0
+        else f"{catalog_base}.json"
     )
 
     try:
