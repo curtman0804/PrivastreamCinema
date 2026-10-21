@@ -17,6 +17,8 @@ import {
   Text,
   View,
   useWindowDimensions,
+  useTVEventHandler,
+  findNodeHandle,
 } from 'react-native';
 
 import { Image } from 'expo-image';
@@ -482,12 +484,16 @@ function SportChip({
   preset,
   selected,
   onPress,
+  chipRef,
+  onCategoryFocus,
 }: {
   preset: SportPreset;
   selected: boolean;
   index: number;
   isTV: boolean;
   onPress: () => void;
+  chipRef?: (node: any) => void;
+  onCategoryFocus?: () => void;
 }) {
   const [focused, setFocused] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
@@ -496,8 +502,9 @@ function SportChip({
 
   return (
     <Pressable
+      ref={chipRef}
       onPress={onPress}
-      onFocus={() => setFocused(true)}
+      onFocus={() => { setFocused(true); onCategoryFocus?.(); }}
       onBlur={() => setFocused(false)}
       style={[
         styles.sportChip,
@@ -541,16 +548,28 @@ function EventCard({
   index,
   isTV,
   onPress,
+  leftArmed,
+  categoryTag,
+  onCardFocus,
+  onCardBlur,
 }: {
   event: SportEvent;
   index: number;
   isTV: boolean;
   onPress: () => void;
+  leftArmed: boolean;
+  categoryTag?: number;
+  onCardFocus: (index: number) => void;
+  onCardBlur: (index: number) => void;
 }) {
   const [focused, setFocused] = useState(false);
+  const cardRef = useRef<any>(null);
+  const [cardTag, setCardTag] = useState<number | undefined>();
   const [artworkIndex, setArtworkIndex] = useState(0);
   const artworkKey = event.artworkCandidates.join('|');
   const currentArtwork = event.artworkCandidates[artworkIndex] || '';
+  // W121ZSEARCH146C: Known NBA matchup uses actual team logos rather than unrelated provider art.
+  const nba76ersKnicks = /\b(76ers|sixers|philadelphia)\b/i.test(event.name) && /\b(knicks|new york)\b/i.test(event.name) && /\b(nba|basketball)\b/i.test([event.name, event.description, ...event.sources.map(s => s.catalogId)].join(' '));
 
   useEffect(() => {
     setArtworkIndex(0);
@@ -560,8 +579,15 @@ function EventCard({
     <Pressable
       onPress={onPress}
       hasTVPreferredFocus={isTV && index === 0}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      ref={cardRef}
+      nextFocusLeft={isTV && index % 3 === 0 ? (leftArmed && categoryTag ? categoryTag : cardTag) : undefined}
+      onFocus={() => {
+        setFocused(true);
+        const tag = findNodeHandle(cardRef.current);
+        if (tag && tag !== cardTag) setCardTag(tag);
+        onCardFocus(index);
+      }}
+      onBlur={() => { setFocused(false); onCardBlur(index); }}
       style={[
         styles.eventCard,
         isTV && styles.eventCardTV,
@@ -569,7 +595,12 @@ function EventCard({
       ]}
     >
       <View style={[styles.artworkWrap, isTV && styles.artworkWrapTV]}>
-        {currentArtwork ? (
+        {nba76ersKnicks ? (
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' }}>
+            <Image source={{ uri: 'https://a.espncdn.com/i/teamlogos/nba/500/phi.png' }} style={{ width: '42%', height: '85%' }} contentFit="contain" />
+            <Image source={{ uri: 'https://a.espncdn.com/i/teamlogos/nba/500/ny.png' }} style={{ width: '42%', height: '85%' }} contentFit="contain" />
+          </View>
+        ) : currentArtwork ? (
           <Image
             source={{ uri: currentArtwork }}
             style={styles.artwork}
@@ -628,6 +659,16 @@ export default function SportsScreen() {
   const router = useRouter();
   const didInitialLoad = useRef(false);
   const hasSportCatalogsRef = useRef(false);
+  // W121ZNAV145D2: two-step left edge handoff into sports category chip.
+  const focusedSportsCard = useRef(-1);
+  const [sportsLeftArmed, setSportsLeftArmed] = useState(false);
+  const [selectedCategoryTag, setSelectedCategoryTag] = useState<number | undefined>();
+  useTVEventHandler((event: any) => {
+    if (!isTV || event?.eventType !== "left") return;
+    if (focusedSportsCard.current >= 0 && focusedSportsCard.current % 3 === 0) {
+      setSportsLeftArmed(true);
+    }
+  });
 
   const [addons, setAddons] = useState<Addon[]>([]);
   const [catalogs, setCatalogs] = useState<SportCatalogRef[]>([]);
@@ -942,7 +983,14 @@ export default function SportsScreen() {
                 selected={preset.id === selectedPreset?.id}
                 index={index}
                 isTV={isTV}
-                onPress={() => setSelectedSportId(preset.id)}
+                chipRef={(node: any) => {
+                  if (node && preset.id === selectedPreset?.id) {
+                    const tag = findNodeHandle(node);
+                    if (tag) setSelectedCategoryTag(previous => previous === tag ? previous : tag);
+                  }
+                }}
+                onCategoryFocus={() => { focusedSportsCard.current = -1; setSportsLeftArmed(false); }}
+                onPress={() => { setSportsLeftArmed(false); setSelectedSportId(preset.id); }}
               />
             ))}
           </ScrollView>
@@ -995,6 +1043,13 @@ export default function SportsScreen() {
                   event={item}
                   index={index}
                   isTV={isTV}
+                  leftArmed={sportsLeftArmed}
+                  categoryTag={selectedCategoryTag}
+                  onCardFocus={(i) => {
+                    if (focusedSportsCard.current !== i) setSportsLeftArmed(false);
+                    focusedSportsCard.current = i;
+                  }}
+                  onCardBlur={(i) => { if (focusedSportsCard.current === i) focusedSportsCard.current = -1; }}
                   onPress={() => void openEvent(item)}
                 />
               </View>

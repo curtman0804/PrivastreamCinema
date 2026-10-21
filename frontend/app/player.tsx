@@ -547,6 +547,8 @@ export default function PlayerScreen() {
     infoHash, 
     directUrl, 
     isLive,
+    liveGuideLaunch,
+    liveSingleCover,
     contentType,
     contentId,
     addonId,
@@ -581,6 +583,8 @@ export default function PlayerScreen() {
     infoHash?: string;
     directUrl?: string;
     isLive?: string;
+    liveGuideLaunch?: string;
+    liveSingleCover?: string;
     contentType?: string;
     contentId?: string;
     addonId?: string;
@@ -2170,6 +2174,15 @@ export default function PlayerScreen() {
   _v785lIsLiveRef.current =
     isLive === 'true';
 
+  // W121ZLIVE148F: late guide DPAD keys can be delivered after /player
+  // mounts. Ignore only this short initial entry window, only for Live
+  // navigation from the guide. Existing player Up/Down surfing is untouched
+  // after the handoff; OD and direct player launches never arm this guard.
+  const w121z148fEntryGateRef = useRef({
+    armed: isLive === 'true' && liveGuideLaunch === '148F',
+    startedAt: Date.now(),
+  });
+
   const _v785lSurfBusyRef =
     useRef(false);
 
@@ -2683,6 +2696,17 @@ export default function PlayerScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRebuffering, setIsRebuffering] = useState(false); // Shows spinner during seek/rebuffer
   const [error, setError] = useState<string | null>(null);
+  // W121ZLIVE148H: Live-only visual cover ownership. Never changes media,
+  // source selection, buffering decisions or on-demand loading.
+  useEffect(() => {
+    if (isLive === 'true' && liveSingleCover === '148H' && error) {
+      DeviceEventEmitter.emit('W121ZLIVE148H_PLAYER_COVER_END', {
+        addonId: String(addonId || ''),
+        contentId: String(contentId || ''), reason: 'player-error',
+      });
+    }
+  }, [isLive, liveSingleCover, error, addonId, contentId]);
+
   const [loadingStatus, setLoadingStatus] = useState('');
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
@@ -3637,6 +3661,21 @@ export default function PlayerScreen() {
     return () => { try { if (_sub && _sub.disable) _sub.disable(); } catch (_) {} };
   }, [_v402Swap]);
   const _v401RawParams = useLocalSearchParams() as any;
+  // W121ZOD148J: optional visual-only Details -> player cover identity.
+  const _w121zOD148JCoverKey = String(_v401RawParams?.odCoverKey || '');
+  useEffect(() => {
+    if (isLive === 'true' || !_w121zOD148JCoverKey || !error) return;
+    DeviceEventEmitter.emit('W121ZOD148J_PLAYER_COVER_END', {
+      key: _w121zOD148JCoverKey, reason: 'player-error',
+    });
+  }, [isLive, error, _w121zOD148JCoverKey]);
+  useEffect(() => {
+    if (!_w121zOD148JCoverKey) return;
+    const sub = DeviceEventEmitter.addListener('W121ZOD148J_COVER_BACK', (e: any) => {
+      if (e?.key === _w121zOD148JCoverKey) _v389SmartBack();
+    });
+    return () => sub.remove();
+  }, [_w121zOD148JCoverKey, _v389SmartBack]);
   const _v401Title = String((_v401RawParams && (_v401RawParams.streamTitle || _v401RawParams.title || _v401RawParams.name || _v401RawParams.contentTitle)) || '');
   const _v401UrlSrc = String((typeof streamUrl === 'string' ? streamUrl : '') || (_v401RawParams && (_v401RawParams.url || _v401RawParams.streamUrl)) || '');
   const _v401IsForeign = (() => {
@@ -6123,6 +6162,26 @@ export default function PlayerScreen() {
         // V506: lock synchronously BEFORE another ExoPlayer callback can enter.
         playbackStartedRef.current = true;
         console.log('[PLAYER] Playback started successfully!');
+        if (isLive !== 'true' && _w121zOD148JCoverKey) {
+          const readyKey = _w121zOD148JCoverKey;
+          // Keep one unchanged root loader until the original player starts.
+          setTimeout(() => DeviceEventEmitter.emit('W121ZOD148J_PLAYER_COVER_END', {
+            key: readyKey, reason: 'playback-started',
+          }), 450);
+        }
+        // W121ZLIVE148H: Reveal only once playback is really underway.
+        // The guide's full-Activity loader stays over this player until now.
+        if (isLive === 'true' && liveSingleCover === '148H') {
+          const revealAddon = String(addonId || '');
+          const revealContent = String(contentId || '');
+          setTimeout(() => {
+            DeviceEventEmitter.emit('W121ZLIVE148H_PLAYER_COVER_END', {
+              addonId: revealAddon, contentId: revealContent,
+              reason: 'playback-started',
+            });
+          }, 450);
+        }
+
         setPlaybackStarted(true);
 
         // V788T9F_PLUTO_AUDIO_RESTORE
@@ -7913,6 +7972,14 @@ switch (evt.eventType) {
         case 'up':
           // V785L5_LIVE_CHANNEL_SURF
           if (_v785lIsLiveRef.current && !_v395CtrlRef.current) {
+            const gate = w121z148fEntryGateRef.current;
+            if (gate.armed) {
+              if (Date.now() - gate.startedAt < 1500) {
+                console.log('[W121ZLIVE148F GUIDE KEY IGNORED]', 'up');
+                break;
+              }
+              gate.armed = false;
+            }
             _v785lSurfRef.current?.(-1);
             break;
           }
@@ -7920,6 +7987,14 @@ switch (evt.eventType) {
         case 'down':
           // V785L5_LIVE_CHANNEL_SURF
           if (_v785lIsLiveRef.current && !_v395CtrlRef.current) {
+            const gate = w121z148fEntryGateRef.current;
+            if (gate.armed) {
+              if (Date.now() - gate.startedAt < 1500) {
+                console.log('[W121ZLIVE148F GUIDE KEY IGNORED]', 'down');
+                break;
+              }
+              gate.armed = false;
+            }
             _v785lSurfRef.current?.(1);
             break;
           }

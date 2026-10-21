@@ -7,6 +7,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Platform, View } from 'react-native';
+import W121ZLIVE148IRootCover from '../src/components/W121ZLIVE148IRootCover';
 import OTAUpdater from '../src/components/OTAUpdater'; // PATCH_V252_OTA
 import { useAuthStore } from '../src/store/authStore';
 import { ensurePrivastreamTunnel } from '../src/native/privastreamTunnelGate';
@@ -143,6 +144,8 @@ export default function RootLayout() {
             against https://api.privastreamsolutions.com/api/expo-updates/manifest
             and reloads the JS bundle if a newer one is available. */}
         <OTAUpdater />
+        {/* W121ZLIVE148I: persistent across tabs and /player Stack navigation. */}
+        <W121ZLIVE148IRootCover />
         {(!_w121zod117DeviceProfileReady || _v742BlockAuthenticatedUi) ? (
           <View style={{ flex: 1, backgroundColor: '#0c0c0c' }} />
         ) : (

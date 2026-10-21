@@ -160,20 +160,26 @@ const v789gMetadataId = (
       ''
   ).trim();
 
+// W121ZLIVE147B: Respect array and string-shaped category metadata from
+// any installed TV addon. Never infer category from channel name alone.
+const w121z147Tokens = (...values: any[]): string[] =>
+  values
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .filter((value) => typeof value === 'string')
+    .flatMap((value: string) => value.split(/[;,|]/))
+    .map(v789gNormalize)
+    .filter(Boolean);
+
 const v789gGenres = (
   channel: GuideChannel
 ) => {
-  const item: any =
-    channel.item as any;
-
-  return [
+  const item: any = channel.item as any;
+  return w121z147Tokens(
     item?.genre,
-    ...(Array.isArray(item?.genres)
-      ? item.genres
-      : []),
-  ]
-    .map(v789gNormalize)
-    .filter(Boolean);
+    item?.genres,
+    item?.behaviorHints?.genre,
+    item?.behaviorHints?.genres
+  );
 };
 
 const v789gPlutoMeta = (
@@ -194,35 +200,36 @@ const v789gPlutoMeta = (
   );
 };
 
-const v789gRegions = (
-  channel: GuideChannel
-) =>
-  (
-    Array.isArray(
-      v789gPlutoMeta(channel)
-        ?.regions
-    )
-      ? v789gPlutoMeta(channel)
-          .regions
-      : []
-  )
-    .map(v789gNormalize)
-    .filter(Boolean);
+const v789gRegions = (channel: GuideChannel): string[] => {
+  const item: any = channel.item as any;
+  const curated = v789gPlutoMeta(channel)?.regions;
+  // Preserve audited Pluto language/region rules exactly.
+  if (Array.isArray(curated) && curated.length > 0) {
+    return w121z147Tokens(curated);
+  }
+  return Array.from(new Set(w121z147Tokens(
+    item?.region,
+    item?.regions,
+    item?.country,
+    item?.countries,
+    item?.behaviorHints?.regions
+  )));
+};
 
-const v789gCategories = (
-  channel: GuideChannel
-) =>
-  (
-    Array.isArray(
-      v789gPlutoMeta(channel)
-        ?.categories
-    )
-      ? v789gPlutoMeta(channel)
-          .categories
-      : []
-  )
-    .map(v789gNormalize)
-    .filter(Boolean);
+const v789gCategories = (channel: GuideChannel): string[] => {
+  const item: any = channel.item as any;
+  const curated = v789gPlutoMeta(channel)?.categories;
+  // Do not dilute manually audited Pluto categories with provider strings.
+  if (Array.isArray(curated) && curated.length > 0) {
+    return w121z147Tokens(curated);
+  }
+  return Array.from(new Set(w121z147Tokens(
+    item?.category,
+    item?.categories,
+    item?.behaviorHints?.category,
+    item?.behaviorHints?.categories
+  )));
+};
 
 const v789gAllRegionsWithin = (
   regions: string[],
@@ -687,20 +694,154 @@ const v789gMatchesCategory = (
   );
 };
 
+// W121ZLIVE147C_SHADOW_DEDUP_SAFE
+// Only de-duplicate *visible* TV stations. The authoritative inventory,
+// installed addons, source identities, stream resolver, favorites and channel
+// surfing remain unchanged. This first pass removes an unscheduled duplicate
+// ONLY when another installed addon has an EXACT display-name match and a
+// real provider EPG. Never guess that two differently named feeds are equal.
+const w121z147cNameKey = (channel: GuideChannel): string =>
+  v789gNormalize(channel.name).replace(/[^a-z0-9]+/g, ' ').trim();
+
+let w121z147cLastSnapshot = '';
+const w121z147cGuideDedupe = (
+  channels: GuideChannel[],
+  isFavorite: (id: string) => boolean
+): GuideChannel[] => {
+  const byName = new Map<string, GuideChannel[]>();
+  for (const channel of channels) {
+    const name = w121z147cNameKey(channel);
+    if (name.length < 5) continue;
+    const group = byName.get(name) || [];
+    group.push(channel);
+    byName.set(name, group);
+  }
+
+  const shadowedKeys = new Set<string>();
+  let favoriteGroupsPreserved = 0;
+  for (const group of byName.values()) {
+    if (group.length < 2) continue;
+    const providers = new Set(group.map((channel) => String(channel.addonId || '')));
+    if (providers.size < 2 || !providers.has('com.stremtv.us')) continue;
+
+    // Do not hide or migrate existing favorites. Favorited duplicate rows stay
+    // visible until a separately verified source-migration design is proven.
+    if (group.some((channel) => {
+      const id = v789gFavoriteId(channel);
+      return !!id && isFavorite(id);
+    })) {
+      favoriteGroupsPreserved += 1;
+      continue;
+    }
+
+    // A provider with an EPG is the authoritative displayed guide row.
+    // Unscheduled copies are shadowed, but TWO scheduled rows remain visible
+    // because their broadcasts or regions could actually be different.
+    const scheduled = group.filter((channel) =>
+      Array.isArray(channel.programs) && channel.programs.length > 0
+    );
+    if (!scheduled.length) continue;
+    for (const channel of group) {
+      if (!channel.programs?.length &&
+          scheduled.some((source) => source.addonId !== channel.addonId)) {
+        shadowedKeys.add(channel.key);
+      }
+    }
+  }
+
+  const digest = `${channels.length}:${shadowedKeys.size}:${favoriteGroupsPreserved}`;
+  if (channels.length > 0 && digest !== w121z147cLastSnapshot) {
+    w121z147cLastSnapshot = digest;
+    console.log(
+      '[W121ZLIVE147C VISIBLE GUIDE]',
+      `inventoryRows=${channels.length}`,
+      `hiddenUnscheduledDuplicates=${shadowedKeys.size}`,
+      `visibleRows=${channels.length - shadowedKeys.size}`,
+      `favoriteGroupsPreserved=${favoriteGroupsPreserved}`
+    );
+  }
+
+  return shadowedKeys.size
+    ? channels.filter((channel) => !shadowedKeys.has(channel.key))
+    : channels;
+};
+
+// W121ZLIVE147D_CONFIRMED_BAD_NUMBERED_NEWS_FEEDS
+// Reported by device test: ABC News Live numbered copies 1..10 loop on loading.
+// Suppress only these exact display names, never the working unnumbered
+// ABC News Live station. This is display-only: addon inventory and favorites
+// records remain intact and recoverable.
+const w121z147dConfirmedDead = (channel: GuideChannel): boolean => {
+  const name = v789gNormalize(channel.name)
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+  return /^abc news live (?:0?[1-9]|10|1 10)$/.test(name);
+};
+
+// W121ZLIVE148C: exact add-on/channel quarantine from the full 148B source scan.
+// 34 repeated HTTP 404 sources, plus user-verified BET (Cable) loading loop.
+// This is a VISIBLE GUIDE FILTER ONLY: do not delete provider inventory,
+// streams, saved favorite identities, or replace any player's source.
+const w121z148cStremTvQuarantine = new Set<string>([
+  "stremtv-us:30ALionelNation.us",
+  "stremtv-us:30ALoomeredTV.us",
+  "stremtv-us:ABCNewsLive1.us",
+  "stremtv-us:ABCNewsLive10.us",
+  "stremtv-us:ABCNewsLive2.us",
+  "stremtv-us:ABCNewsLive3.us",
+  "stremtv-us:ABCNewsLive4.us",
+  "stremtv-us:ABCNewsLive5.us",
+  "stremtv-us:ABCNewsLive6.us",
+  "stremtv-us:ABCNewsLive7.us",
+  "stremtv-us:ABCNewsLive8.us",
+  "stremtv-us:ABCNewsLive9.us",
+  "stremtv-us:AlFadyTV.us",
+  "stremtv-us:CBSNewsBayArea.us",
+  "stremtv-us:CBSNewsBoston.us",
+  "stremtv-us:CBSNewsChicago.us",
+  "stremtv-us:CBSNewsColorado.us",
+  "stremtv-us:CBSNewsDetroit.us",
+  "stremtv-us:CBSNewsLosAngeles.us",
+  "stremtv-us:CBSNewsMinnesota.us",
+  "stremtv-us:CBSNewsNewYork.us",
+  "stremtv-us:CBSNewsPittsburgh.us",
+  "stremtv-us:MCPSSTV.us",
+  "stremtv-us:NewsmaxSpanish.us",
+  "stremtv-us:PixLTV.us",
+  "stremtv-us:RTHTV1.us",
+  "stremtv-us:RTHTV2Gospel.us",
+  "stremtv-us:TVSFilmNoirNetwork.us",
+  "stremtv-us:VisionLatinaNetwork.us",
+  "stremtv-us:W14DKD141.us",
+  "stremtv-us:YoutooAmerica.us",
+  "stremtv-us:m3u-us-BET__Cable_",
+  "stremtv-us:m3u-us-FX",
+  "stremtv-us:m3u-us-STARZ",
+  "stremtv-us:m3u-us-Showtime",
+]);
+const w121z148cIsQuarantined = (channel: GuideChannel): boolean => {
+  if (String(channel.addonId || '').trim() !== 'com.stremtv.us') return false;
+  const id = String(channel.item?.id || channel.item?.imdb_id || '').trim();
+  return w121z148cStremTvQuarantine.has(id);
+};
+
 const v789gFilterChannels = (
   channels: GuideChannel[],
   category: V789gCategoryKey,
   isFavorite: (
     id: string
   ) => boolean
-) =>
-  channels.filter((channel) =>
-    v789gMatchesCategory(
-      channel,
-      category,
-      isFavorite
-    )
+) => {
+  // Remove only explicitly reported dead guide rows, including Favorites.
+  // Do not delete a saved favorite or mutate the owner stream inventory.
+  const eligible = channels.filter((channel) => !w121z148cIsQuarantined(channel));
+  // Never de-duplicate Favorites; surviving saved identities stay reachable.
+  const source = category === 'favorites'
+    ? eligible
+    : w121z147cGuideDedupe(eligible, isFavorite);
+  return source.filter((channel) =>
+    v789gMatchesCategory(channel, category, isFavorite)
   );
+};
 const localDateKey = (d: Date) => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -721,6 +862,53 @@ export default function LiveTVScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
   const timelineRef = useRef<ScrollView>(null);
+  // W121ZLIVE148F: one native Select -> one frozen add-on/channel launch.
+  // Native guide focus may continue to move while the stream resolver runs.
+  const w121z148fLaunchRef = useRef<string | null>(null);
+  const [w121z148fOpening, setW121z148fOpening] = useState('');
+  // W121ZLIVE148G: visually match the existing player loading experience.
+  const [w121z148gOpeningLogo, setW121z148gOpeningLogo] = useState('');
+  // W121ZLIVE148I: the loader is now owned by app/_layout.tsx,
+  // not this guide screen. A screen-owned Modal is torn down during
+  // Stack navigation, which exposed a frame of the EPG between loaders.
+  const w121z148hAttemptSeqRef = useRef(0);
+  // Keep one native loading cover across navigation. The player signals
+  // when real playback begins, or if it needs to show an error. No second
+  // player loader is exposed during the normal launch.
+  const w121z148hRouteActiveRef = useRef(false);
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(
+      'W121ZLIVE148I_COVER_BACK', (event: any) => {
+        const key = String(event?.addonId || '') + ':' + String(event?.contentId || '');
+        if (w121z148fLaunchRef.current !== key) return;
+        // Cancel any still-pending stream resolution before hiding cover.
+        ++w121z148hAttemptSeqRef.current;
+        w121z148fLaunchRef.current = null;
+        setW121z148fOpening('');
+        setW121z148gOpeningLogo('');
+        const wasInPlayer = w121z148hRouteActiveRef.current;
+        w121z148hRouteActiveRef.current = false;
+        if (wasInPlayer) router.back();
+        console.log('[W121ZLIVE148I BACK CANCEL]', 'channel=' + key);
+      }
+    );
+    return () => sub.remove();
+  }, [router]);
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(
+      'W121ZLIVE148H_PLAYER_COVER_END', (event: any) => {
+        const key = String(event?.addonId || '') + ':' + String(event?.contentId || '');
+        if (!w121z148hRouteActiveRef.current ||
+            w121z148fLaunchRef.current !== key) return;
+        console.log('[W121ZLIVE148H SINGLE LOADER REVEAL]',
+          'channel=' + key, 'reason=' + String(event?.reason || ''));
+        setW121z148fOpening('');
+        setW121z148gOpeningLogo('');
+      }
+    );
+    return () => sub.remove();
+  }, []);
+
 
   // V788T6B_PINNED_GUIDE_HEADER
   const timelineHeaderRef =
@@ -2382,10 +2570,15 @@ const timelineStart = floorHalfHour(now);
         'inventory=' + inventoryResult.status
       );
 
-      const epgById = new Map<string, any>();
+      // W121ZLIVE147B: EPG channel IDs are not globally unique. Scope every
+      // schedule/logo to the *owning addon*; do not cross-wire programs to a
+      // similarly named or identically numbered station in another addon.
+      const epgByIdentity = new Map<string, any>();
 
       if (epgResult.status === 'fulfilled') {
         for (const provider of epgResult.value?.providers || []) {
+          const providerAddonId = String(provider?.addonId || '').trim();
+          if (!providerAddonId) continue;
           for (const channel of provider?.channels || []) {
             const id = String(channel?.id || '').trim();
             if (!id) continue;
@@ -2393,10 +2586,14 @@ const timelineStart = floorHalfHour(now);
             const enriched = {
               ...channel,
               sourceName: provider?.addonName || provider?.catalogName || '',
-              addonId: String(provider?.addonId || ''),
+              addonId: providerAddonId,
             };
-
-            epgById.set(id, enriched);
+            const epgIdentity = `${providerAddonId}:${id}`;
+            const prior = epgByIdentity.get(epgIdentity);
+            if (!prior || (Array.isArray(enriched.programs) &&
+              enriched.programs.length > (prior.programs?.length || 0))) {
+              epgByIdentity.set(epgIdentity, enriched);
+            }
           }
         }
       } else {
@@ -2699,7 +2896,7 @@ const timelineStart = floorHalfHour(now);
           enrichmentByIdentity.get(identity);
 
         const epg =
-          epgById.get(id);
+          epgByIdentity.get(identity);
 
         const stationLogo =
           String(
@@ -2765,6 +2962,22 @@ const timelineStart = floorHalfHour(now);
           playableByIdentity.values()
         );
 
+      // W121ZLIVE147D: log the precise owner identities of the reported
+      // numbered dead channels; no additional channel is suppressed.
+      const abcRows = completedChannels.filter((ch) =>
+        /^abc news live(?:\b|$)/i.test(v789gNormalize(ch.name))
+      );
+      console.log('[W121ZLIVE147D ABC INVENTORY]',
+        'candidates=' + abcRows.length,
+        'blocked=' + abcRows.filter(w121z147dConfirmedDead).length);
+      for (const ch of abcRows.slice(0, 35)) {
+        console.log('[W121ZLIVE147D ABC ROW]',
+          'name=' + ch.name,
+          'addon=' + String(ch.addonId || ''),
+          'id=' + String(ch.item.id || ''),
+          'blocked=' + w121z147dConfirmedDead(ch));
+      }
+
       completedChannels.sort(
         (a, b) =>
           String(a.name || '').localeCompare(
@@ -2775,6 +2988,80 @@ const timelineStart = floorHalfHour(now);
               numeric: true,
             }
           )
+      );
+
+      // W121ZLIVE147B: collect cross-addon duplicate candidates WITHOUT
+      // removing stations or changing their playback/favorite identities.
+      // Names alone are NOT proof: local/East/West/HD feeds must stay separate.
+      const shadowGroups = new Map<string, GuideChannel[]>();
+      for (const entry of completedChannels) {
+        const nameKey = v789gNormalize(entry.name)
+          .replace(/[^a-z0-9]+/g, ' ').trim();
+        if (!nameKey || nameKey.length < 4) continue;
+        const members = shadowGroups.get(nameKey) || [];
+        members.push(entry);
+        shadowGroups.set(nameKey, members);
+      }
+      let duplicateCandidateGroups = 0;
+      let candidateRowsLogged = 0;
+      for (const [nameKey, members] of shadowGroups) {
+        if (new Set(members.map((member) => member.addonId)).size < 2) {
+          continue;
+        }
+        duplicateCandidateGroups += 1;
+        if (candidateRowsLogged >= 100) continue;
+        for (const member of members.slice(0, 5)) {
+          const meta: any = member.item as any;
+          const tvgId = String(
+            meta?.tvgId || meta?.tvg_id ||
+            meta?.behaviorHints?.tvgId || meta?.epgId || ''
+          ).trim();
+          console.log(
+            '[W121ZLIVE147B DUPLICATE CANDIDATE]',
+            `name=${nameKey}`,
+            `addon=${String(member.addonId || '')}`,
+            `id=${String(member.item.id || '')}`,
+            `tvgId=${tvgId}`,
+            `programs=${member.programs.length}`
+          );
+          candidateRowsLogged += 1;
+        }
+      }
+      const withPrograms = completedChannels.filter(
+        (member) => member.programs.length > 0
+      ).length;
+      const withLogo = completedChannels.filter(
+        (member) => !!String(member.logo || '').trim()
+      ).length;
+      console.log(
+        '[W121ZLIVE147B GUIDE SNAPSHOT]',
+        `channels=${completedChannels.length}`,
+        `epgEntries=${epgByIdentity.size}`,
+        `withPrograms=${withPrograms}`,
+        `withLogo=${withLogo}`,
+        `crossAddonNameGroups=${duplicateCandidateGroups}`,
+        'merged=0',
+        'playbackUnchanged=true'
+      );
+
+      // W121ZLIVE147C: runtime evidence for conservative, EPG-backed
+      // duplicate cleanup (final count can be lower when Favorites are saved).
+      const scheduledShadowNames = new Set<string>();
+      for (const group of shadowGroups.values()) {
+        const addOns = new Set(group.map((entry) => entry.addonId));
+        if (addOns.size < 2 || !addOns.has('com.stremtv.us')) continue;
+        if (!group.some((entry) => entry.programs.length > 0)) continue;
+        if (group.some((entry) => entry.programs.length === 0)) {
+          scheduledShadowNames.add(v789gNormalize(group[0].name));
+        }
+      }
+      console.log(
+        '[W121ZLIVE147C SAFE DEDUPE]',
+        `inventoryRows=${completedChannels.length}`,
+        `epgBackedCandidateGroups=${scheduledShadowNames.size}`,
+        'favoritesPreserved=true',
+        'differentScheduledFeedsPreserved=true',
+        'sourceInventoryUnchanged=true'
       );
 
       v788t10gRefreshResultRef.current =
@@ -2860,6 +3147,12 @@ const timelineStart = floorHalfHour(now);
     useCallback(() => {
       // W121ZLIVE123_SCREEN_FOCUS_OWNER
       w121zlive123ScreenFocusedRef.current = true;
+      // On genuine return from /player, allow the next single selection.
+      w121z148fLaunchRef.current = null;
+      w121z148hRouteActiveRef.current = false;
+      DeviceEventEmitter.emit('W121ZLIVE148I_COVER_CLEAR', { reason: 'guide-focus' });
+      setW121z148fOpening('');
+      setW121z148gOpeningLogo('');
 
       console.log(
         '[W121ZLIVE123 LIVE INPUT OWNER]',
@@ -3250,6 +3543,36 @@ const timelineStart = floorHalfHour(now);
       return;
     }
 
+    // W121ZLIVE148F: atomically freeze the first native Select identity.
+    // Do not allow another native press to race a pending getStreams request.
+    if (w121z148fLaunchRef.current) {
+      console.log('[W121ZLIVE148F DUPLICATE SELECT IGNORED]',
+        'pending=' + w121z148fLaunchRef.current,
+        'requested=' + addonId + ':' + id);
+      return;
+    }
+    w121z148fLaunchRef.current = addonId + ':' + id;
+    w121z148hRouteActiveRef.current = false;
+    const w121z148hAttempt = ++w121z148hAttemptSeqRef.current;
+    setW121z148fOpening(String(channel.name || id));
+    setW121z148gOpeningLogo(String(channel.logo || ''));
+    DeviceEventEmitter.emit('W121ZLIVE148I_COVER_BEGIN', {
+      addonId, contentId: id,
+      title: String(channel.name || id), logo: String(channel.logo || ''),
+    });
+    console.log('[W121ZLIVE148I ROOT COVER BEGIN]', 'channel=' + addonId + ':' + id);
+    console.log('[W121ZLIVE148G FULLSCREEN LOADING]', 'addon=' + addonId, 'id=' + id);
+    let w121z148fNavigated = false;
+    console.log('[W121ZLIVE148F SELECT LOCKED]',
+      'addon=' + addonId, 'id=' + id);
+
+    // W121ZLIVE147D owner identity for a user-confirmed silent channel.
+    // Diagnostic only: stream selection and native player remain unchanged.
+    console.log('[W121ZLIVE147D CHANNEL LAUNCH]',
+      'name=' + String(channel.name || ''),
+      'addon=' + addonId,
+      'id=' + id);
+
     try {
       // V784N_DIRECT_OWNER_PLAYBACK
       // Resolve ONLY through the addon that supplied this channel.
@@ -3258,6 +3581,12 @@ const timelineStart = floorHalfHour(now);
         'tv',
         id
       );
+      // A Back action while the full-screen load is pending invalidates
+      // that request. A stale result can never open a player afterward.
+      if (w121z148hAttempt !== w121z148hAttemptSeqRef.current) {
+        console.log('[W121ZLIVE148H CANCELED RESOLVE]', id);
+        return;
+      }
       const streams = Array.isArray(result?.streams)
         ? result.streams
         : [];
@@ -3357,12 +3686,15 @@ const timelineStart = floorHalfHour(now);
         );
       }
 
+      w121z148hRouteActiveRef.current = true;
       router.push({
         pathname: '/player',
         params: {
           directUrl: primary._liveUrl,
           title: channel.name,
           isLive: 'true',
+          liveGuideLaunch: '148F',
+          liveSingleCover: '148H',
           contentType: 'tv',
           contentId: id,
           addonId: addonId,
@@ -3372,6 +3704,17 @@ const timelineStart = floorHalfHour(now);
           fallbackStreams: JSON.stringify(fallbacks),
         },
       } as any);
+      w121z148fNavigated = true;
+      // Absolute safety exit for an unresponsive player/status callback.
+      // Normal source playback uses the explicit PLAYER_COVER_END event.
+      setTimeout(() => {
+        if (w121z148hAttemptSeqRef.current === w121z148hAttempt &&
+            w121z148hRouteActiveRef.current) {
+          console.warn('[W121ZLIVE148H LOADER SAFETY EXIT]');
+          setW121z148fOpening('');
+          setW121z148gOpeningLogo('');
+        }
+      }, 45000);
 
     } catch (error) {
       console.warn(
@@ -3379,6 +3722,17 @@ const timelineStart = floorHalfHour(now);
         id,
         error
       );
+    } finally {
+      // On errors/no streams, permit another click. After navigation leave
+      // it locked until Live TV regains focus (prevent stacked /player routes).
+      if (!w121z148fNavigated && w121z148hAttempt === w121z148hAttemptSeqRef.current) {
+        w121z148fLaunchRef.current = null;
+        DeviceEventEmitter.emit('W121ZLIVE148I_COVER_CLEAR', {
+          addonId, contentId: id, reason: 'resolve-failed-or-no-stream',
+        });
+        setW121z148fOpening('');
+        setW121z148gOpeningLogo('');
+      }
     }
   }, [router, v789gVisibleChannels]);
 
@@ -4759,6 +5113,9 @@ const timelineStart = floorHalfHour(now);
           });
         }}
         onItemFocus={(event: any) => {
+          // 148G: keep focus bookkeeping frozen during an accepted launch.
+          // The native guide remains mounted for exact focus restoration.
+          if (w121z148fLaunchRef.current) return;
           const index = Number(
             event?.nativeEvent?.index
           );
@@ -4946,6 +5303,8 @@ const timelineStart = floorHalfHour(now);
           }
         }}
       />
+      {/* W121ZLIVE148I: full-screen cover is mounted at the app root;
+          no screen-owned Modal can flash the EPG on route transition. */}
     </View>
   );
 }

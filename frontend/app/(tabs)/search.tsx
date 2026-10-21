@@ -1,4 +1,4 @@
-﻿import { PrivastreamPageHeader } from '../../src/components/PrivastreamPageHeader';
+import { PrivastreamPageHeader } from '../../src/components/PrivastreamPageHeader';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
@@ -278,7 +278,7 @@ export default function SearchScreen() {
 
       <SearchBar onSearch={handleSearch} initialValue={currentQuery} />
 
-      {isLoadingSearch || isPreparingBadges ? (
+      {isLoadingSearch ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#B8A05C" />
           <Text style={styles.loadingText}>Searching...</Text>

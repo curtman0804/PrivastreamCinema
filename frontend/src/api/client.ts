@@ -922,7 +922,7 @@ export const api = {
 
         return {
           ...item,
-          poster: `https://images.metahub.space/poster/small/${baseId}/img`,
+          poster: /^https?:\/\//i.test(String(item.poster || "").trim()) ? item.poster : `https://images.metahub.space/poster/small/${baseId}/img`,
         };
       };
 

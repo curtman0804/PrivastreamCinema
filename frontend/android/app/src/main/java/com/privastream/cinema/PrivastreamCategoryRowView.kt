@@ -263,11 +263,14 @@ class PrivastreamCategoryRowView(
             value.coerceAtLeast(0)
     }
 
+    // W121ZNAV145E2: preferredFocusIndex is an entry/fallback hint, not
+    // an instruction to override Android's already-focused category.
     fun setPreferredFocusIndex(value: Int) {
+        if (preferredFocusIndex == value) return
         preferredFocusIndex = value
 
         recycler.post {
-            if (active) {
+            if (active && currentAdapterFocus() !in 0 until rowAdapter.itemCount) {
                 requestPreferredFocus()
             }
         }

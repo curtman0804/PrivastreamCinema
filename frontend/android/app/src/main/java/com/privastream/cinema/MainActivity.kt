@@ -526,7 +526,7 @@ class MainActivity : ReactActivity() {
       // V643B_SINGLE_SOUND_OWNER
       if (v643bTvEnabled) {
         v643bMuteTree(window.decorView)
-        v643bPlayClick()
+        // W121ZNAV145H SOUND-ONLY TEST: let platform handle OK sound; keep Select dispatch
       }
 
       try {

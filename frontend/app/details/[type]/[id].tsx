@@ -10,6 +10,7 @@ import {
   Pressable,
   TouchableOpacity,
   ActivityIndicator,
+  DeviceEventEmitter,
   Dimensions,
   Linking,
   FlatList,
@@ -4301,6 +4302,37 @@ export default function DetailsScreen() {
   // Loading -> Details -> Loading -> Player.
   // v121j-overlay-removed
 
+  // W121ZOD148J: OD visual handoff only. Stream picking/preflight stays intact.
+  const _w121zOD148JCoverKey = `${String(type || '')}:${String(id || '')}`;
+  const _w121zOD148JAbortedRef = useRef(false);
+  const _w121zOD148JBegin = () => {
+    if (type === 'tv') return; // Live-specific routes keep their existing cover.
+    DeviceEventEmitter.emit('W121ZOD148J_COVER_BEGIN', {
+      key: _w121zOD148JCoverKey,
+      title: String(content?.name || nextTitleParam || paramName || 'On Demand'),
+      logo: String(content?.logo || ''),
+      backdrop: String(paramPoster || content?.background || nextBackdropParam || content?.poster || ''),
+    });
+  };
+  const _w121zOD148JCancel = () => {
+    DeviceEventEmitter.emit('W121ZOD148J_PREP_CANCEL', { key: _w121zOD148JCoverKey });
+    setIsPlayLoading(false);
+  };
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('W121ZOD148J_COVER_BACK', (e: any) => {
+      if (String(e?.key || '') !== _w121zOD148JCoverKey) return;
+      _w121zOD148JAbortedRef.current = true;
+      setIsPlayLoading(false);
+    });
+    return () => sub.remove();
+  }, [_w121zOD148JCoverKey]);
+  // Continue Watching / next-episode autoplay uses the same root cover.
+  useEffect(() => {
+    if (autoPlayParam !== 'true') return;
+    _w121zOD148JAbortedRef.current = false;
+    _w121zOD148JBegin();
+  }, [autoPlayParam, _w121zOD148JCoverKey]);
+
   const isEpisodePage = type === 'series' && id?.includes(':') && !id?.startsWith('porn') && !id?.startsWith('http');
 
   /*
@@ -7435,9 +7467,10 @@ export default function DetailsScreen() {
           )
       );
 
-      router.push({
+      if (_w121zOD148JAbortedRef.current) return;      router.push({
         pathname: '/player',
         params: {
+          odCoverKey: _w121zOD148JCoverKey,
           directUrl,
           infoHash: hash,
           title: contentTitle,
@@ -7792,7 +7825,7 @@ export default function DetailsScreen() {
           'rejected=' + rejected.size
         );
 
-        setIsPlayLoading(false);
+        _w121zOD148JCancel();
 
         // W121ZOD118H3_NO_PLAYBACK_UNAVAILABLE
         // Exhausting one automatic selection pass is not permission to show
@@ -9073,14 +9106,37 @@ const nextEpisodeData = nextEpisode ? {
                             return;
                           }
 
-                          // W121ZOD108H4AY_INDETERMINATE_READINESS_ADVISORY_V300
-                          // A probe error is not proof that compatible media cannot play.
+                          // W121ZOD148L_INCOMPLETE_READINESS_GUARD
+                          // A verified 148K failure: advisory-only "reject" launched
+                          // the same incompletely-probed source, which then timed out.
+                          // Retry at most two identity-checked candidates on this one
+                          // exact outcome, retaining existing source fallback logic.
+                          if (
+                            _v108h4dReadiness.reason === 'seek-readiness-incomplete' &&
+                            _w121zod108e1Rejected.size < 2
+                          ) {
+                            console.warn(
+                              '[W121ZOD148L INCOMPLETE BLOCKED]',
+                              'path=V300',
+                              'hash=' + _v300_picked.hash.slice(0, 12),
+                              'reason=' + _v108h4dReadiness.reason,
+                              'action=next-compatible-candidate'
+                            );
+                            await _w121zod108e1TryNextAutoCandidate(
+                              _v300_picked.hash,
+                              _v108h4dReadiness.reason,
+                              streams || []
+                            );
+                            return;
+                          }
+
+                          // All other indeterminate probe errors remain advisory.
                           console.warn(
-                            '[W121ZOD118A READINESS REJECT]',
+                            '[W121ZOD118A READINESS ADVISORY]',
                             'path=V300',
                             'hash=' + _v300_picked.hash.slice(0, 12),
                             'reason=' + _v108h4dReadiness.reason,
-                            'action=next-compatible-candidate'
+                            'action=permit-with-runtime-fallback'
                           );
                         }
 
@@ -9163,9 +9219,10 @@ const nextEpisodeData = nextEpisode ? {
                       'urlFallbacks=' + String(_v353_fb_v300.length)
                     );
 
-                    router.push({
+                    if (_w121zOD148JAbortedRef.current) return;                    router.push({
                       pathname: '/player',
                       params: {
+                        odCoverKey: _w121zOD148JCoverKey,
                         directUrl: _v237_bustUrl(_v759V300PlaybackUrl),
                         infoHash: _v300_picked.hash,
                         title: contentTitle,
@@ -9539,9 +9596,10 @@ const nextEpisodeData = nextEpisode ? {
               'urlFallbacks=' + String(_v353_fb_v299.length)
             );
 
-            router.push({
+            if (_w121zOD148JAbortedRef.current) return;            router.push({
               pathname: '/player',
               params: {
+                odCoverKey: _w121zOD148JCoverKey,
                 directUrl: _v237_bustUrl(_v299_link),
                 infoHash: _v299_hash,
                 title: contentTitle,
@@ -9677,9 +9735,10 @@ const nextEpisodeData = nextEpisode ? {
         console.log('[MATCH v154 PLAY]', _v154Hits2 === 0 ? 'WARNING-NO-OVERLAP' : 'ok-overlap=' + _v154Hits2, '| requested=', _v154Req2.slice(0,60), '| picked=', _v154Pick2.slice(0,80), '| hash=', (stream.infoHash || '').slice(0,8), 'fileIdx=', (stream as any).fileIdx ?? null, '| url=', (streamUrl || '').slice(0,80));
       } catch (_) {}
       console.log('[DETAILS] Playing external URL in internal player:', streamUrl);
-      router.push({
+      if (_w121zOD148JAbortedRef.current) return;      router.push({
         pathname: '/player',
-        params: { 
+        params: {
+          odCoverKey: _w121zOD148JCoverKey, 
           // V727B2B3_REDTUBE_SIGNED_HANDOFF
           // Signed CDN URL stays byte-for-byte unchanged only when trusted.
           directUrl: _v727b2b3TrustedRedTube
@@ -9723,9 +9782,10 @@ const nextEpisodeData = nextEpisode ? {
         .map(s => s.directUrl || s.url)
         .filter(Boolean);
       
-      router.push({
+      if (_w121zOD148JAbortedRef.current) return;      router.push({
         pathname: '/player',
-        params: { 
+        params: {
+          odCoverKey: _w121zOD148JCoverKey, 
           directUrl: _v237_bustUrl(absoluteUrl),
           title: contentTitle,
           isLive: type === 'tv' ? 'true' : 'false',
@@ -9774,7 +9834,7 @@ const nextEpisodeData = nextEpisode ? {
           _v744PrimaryIdentity.slice(0, 140)
         );
 
-        setIsPlayLoading(false);
+        _w121zOD148JCancel();
 
         // W121ZOD118H1_NO_TECHNICAL_POPUP
         // Keep the identity guard, but do not expose internal diagnostics.
@@ -9850,9 +9910,10 @@ const nextEpisodeData = nextEpisode ? {
       const seasonNum = idParts.length >= 3 ? idParts[idParts.length - 2] : '';
       const episodeNum = idParts.length >= 3 ? idParts[idParts.length - 1] : '';
       
-      router.push({
+      if (_w121zOD148JAbortedRef.current) return;      router.push({
         pathname: '/player',
-        params: { 
+        params: {
+          odCoverKey: _w121zOD148JCoverKey, 
           infoHash: stream.infoHash,
           title: contentTitle,
           contentType: cType,
@@ -9953,9 +10014,10 @@ const nextEpisodeData = nextEpisode ? {
         allStreamUrls.push(...proxyFallbacks);
       }
       
-      router.push({
+      if (_w121zOD148JAbortedRef.current) return;      router.push({
         pathname: '/player',
-        params: { 
+        params: {
+          odCoverKey: _w121zOD148JCoverKey, 
           directUrl: _v735DirectHttps ? streamUrl : _v237_bustUrl(streamUrl),
           title: contentTitle,
           isLive: type === 'tv' ? 'true' : 'false',
@@ -10151,7 +10213,11 @@ const nextEpisodeData = nextEpisode ? {
 
   // Render stream item for FlatList
   const renderStreamItem = ({ item }: { item: Stream }) => (
-    <StreamCard stream={item} onPress={() => handleStreamSelect(item, true)} />
+    <StreamCard stream={item} onPress={() => {
+      _w121zOD148JAbortedRef.current = false;
+      _w121zOD148JBegin();
+      handleStreamSelect(item, true);
+    }} />
   );
 
   // Mark episode as unwatched (long-press)
@@ -10231,7 +10297,7 @@ const nextEpisodeData = nextEpisode ? {
           The overlay still fires for the autoPlayParam path (Continue
           Watching â†’ details â†’ auto-play to player), where the details
           overlay IS the entry point. */}
-      {(autoPlayParam === 'true' || isPlayLoading) && ( /* V384_PLAY_FEEDBACK - Play press shows the SAME overlay the player continues */
+      {(autoPlayParam === 'true' && !isPlayLoading) && ( /* W121ZOD148J: root owns Play's single loading screen */
         <View style={styles.autoPlayOverlay}>
           {/* Full-screen series backdrop (blurred). Priority: loaded content
               backdrop (the real series art) â†’ passed-in backdrop param â†’ poster. */}
@@ -10399,6 +10465,8 @@ const nextEpisodeData = nextEpisode ? {
                          uncached torrents).  This restores Euphoria, Hoppers
                          and other Real-Debrid cached content while keeping
                          the OnlyTarts torrent-server path working. */
+                      _w121zOD148JAbortedRef.current = false;
+                      _w121zOD148JBegin();
                       setIsPlayLoading(true);
                       // V290 â€” defer heavy work to next tick so React can
                       // paint the loading overlay BEFORE the JS thread is
@@ -10636,7 +10704,7 @@ const nextEpisodeData = nextEpisode ? {
 
                             // A prepared entry that cannot hand off exactly is
                             // not allowed to silently become another torrent.
-                            setIsPlayLoading(false);
+                            _w121zOD148JCancel();
                             return;
                           }
                         }
@@ -10796,7 +10864,7 @@ const nextEpisodeData = nextEpisode ? {
                                 picked = _v441_alt;
                               } else {
                                 console.log('[V441] no title-matching stream in top', list.length, '- aborting play. content=', String(_v441_reqT).slice(0,80));
-                                setIsPlayLoading(false);
+                                _w121zOD148JCancel();
                                 // W121ZOD118H1_NO_TECHNICAL_POPUP
                                 return;
                               }
@@ -10812,11 +10880,11 @@ const nextEpisodeData = nextEpisode ? {
                           _w121zod118DetailsPrepActiveRef.current = false;
 
                           handleStreamSelect(picked);                        } else {
-                          setIsPlayLoading(false);
+                          _w121zOD148JCancel();
                         }
                       } catch (e) {
                         console.log('[v241 PLAY] error:', e);
-                        setIsPlayLoading(false);
+                        _w121zOD148JCancel();
                       }
                       }, 0); // V290 â€” close setTimeout from above
                     }}

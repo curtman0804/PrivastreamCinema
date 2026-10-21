@@ -238,6 +238,39 @@ function LibraryCard({
   );
 }
 
+// W121ZNAV145C2: stable component identity prevents filter tabs from
+// remounting (and losing native TV focus) whenever Library rerenders.
+const LibraryFilterButton = React.memo(function LibraryFilterButton({
+  type, label, selected, onSelect,
+}: {
+  type: FilterType;
+  label: string;
+  selected: boolean;
+  onSelect: (type: FilterType) => void;
+}) {
+  const [btnFocused, setBtnFocused] = useState(false);
+  return (
+    <Pressable
+      onPress={() => onSelect(type)}
+      onFocus={() => setBtnFocused(true)}
+      onBlur={() => setBtnFocused(false)}
+      style={[
+        styles.filterButton,
+        btnFocused && styles.filterButtonFocused,
+        selected && styles.filterButtonActive,
+      ]}
+    >
+      <Text style={[
+        styles.filterText,
+        btnFocused && styles.filterTextFocused,
+        selected && styles.filterTextActive,
+      ]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+});
+
 export default function LibraryScreen() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
@@ -453,26 +486,6 @@ export default function LibraryScreen() {
     filteredContent.length,
   ]);
 
-  const FilterButton = ({ type, label }: { type: FilterType; label: string }) => {
-    const isActive = filter === type;
-    const [btnFocused, setBtnFocused] = useState(false);
-    return (
-      <Pressable
-        onPress={() => setFilter(type)}
-        onFocus={() => setBtnFocused(true)}
-        onBlur={() => setBtnFocused(false)}
-        style={[
-          styles.filterButton,
-          isActive && styles.filterButtonActive,
-          btnFocused && styles.filterButtonFocused,
-        ]}
-      >
-        <Text style={[styles.filterText, isActive && styles.filterTextActive, btnFocused && styles.filterTextFocused]}>
-          {label}
-        </Text>
-      </Pressable>
-    );
-  };
 
   if (isLoadingLibrary && !library) {
     return (
@@ -491,8 +504,8 @@ export default function LibraryScreen() {
       <PrivastreamPageHeader title="Library" />
 
       <View style={[styles.filterContainer, isTV && styles.filterContainerTV]}>
-        <FilterButton type="movies" label="Movies" />
-        <FilterButton type="series" label="Series" />
+        <LibraryFilterButton type="movies" label="Movies" selected={filter === 'movies'} onSelect={setFilter} />
+        <LibraryFilterButton type="series" label="Series" selected={filter === 'series'} onSelect={setFilter} />
       </View>
 
       {filteredContent.length === 0 ? (
