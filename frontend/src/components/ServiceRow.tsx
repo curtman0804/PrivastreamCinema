@@ -832,23 +832,14 @@ export const ServiceRow: React.FC<ServiceRowProps> = memo(
                   ? String(it.poster)
                   : null;
 
-              // V714D_CANONICAL_SEARCH_POSTERS
-              // If the supplied item already carries the Cinemeta/MetaHub
-              // canonical artwork, use it immediately. This prevents a stale
-              // persisted registry value from winning the first TV paint.
-              const suppliedIsCanonicalMetaHub =
-                !!suppliedPoster &&
-                /^https:\/\/images\.metahub\.space\/poster\//i.test(
-                  suppliedPoster
-                );
-
-              const canonicalPoster =
-                suppliedIsCanonicalMetaHub
-                  ? suppliedPoster
-                  : _v614GetPoster(
-                      posterId,
-                      suppliedPoster
-                    );
+              // W121ZPOST149A: native TV rows must use the same canonical
+              // registry as Continue Watching, Search, and Library. The prior
+              // MetaHub fast path bypassed that registry and could render a
+              // different poster for the same IMDb title on the same screen.
+              const canonicalPoster = _v614GetPoster(
+                posterId,
+                suppliedPoster
+              );
 
               return {
                 id: String(

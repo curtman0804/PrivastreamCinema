@@ -25,6 +25,9 @@ import { colors } from '../../src/styles/colors';
    long-press through the shared Alert. */
 import {
   getCardWidth,
+  v160GetPoster as _v149GetPoster,
+  v160RegisterPoster as _v149RegisterPoster,
+  v160SubscribePoster as _v149SubscribePoster,
   v172IsWatched as _v172IsWatched,
   v172SubscribeWatched as _v172SubscribeWatched,
   v176HasProgress as _v176HasProgress,
@@ -106,6 +109,29 @@ function LibraryCard({
   useEffect(() => _v176SubscribeProgress(() => _v176Bump((x) => (x + 1) & 0xff)), []);
   const _v176IsWatched = _v172IsWatched(_v176ContentId);
   const _v176HasProg = _v176HasProgress(_v176ContentId);
+
+  // W121ZPOST149A: use the same persisted, per-title poster identity as
+  // Continue Watching, Search, and Discover. Library previously used the
+  // historical `item.poster` URL directly and never subscribed to updates.
+  const _v149PosterId = String(
+    (item as any).imdb_id ||
+    (item as any).content_id ||
+    (item as any).id ||
+    ''
+  ).trim();
+  const _v149FallbackPoster = String(item.poster || '').trim();
+  const [, _v149PosterRevision] = useState(0);
+  useEffect(() => {
+    const unsubscribe = _v149SubscribePoster(
+      _v149PosterId,
+      () => _v149PosterRevision(x => (x + 1) & 0xffff)
+    );
+    if (_v149FallbackPoster) {
+      _v149RegisterPoster(_v149PosterId, _v149FallbackPoster);
+    }
+    return unsubscribe;
+  }, [_v149PosterId, _v149FallbackPoster]);
+  const _v149Poster = _v149GetPoster(_v149PosterId, _v149FallbackPoster);
 
   const _v176OpenMenu = useCallback(async () => {
     /* V176K_POPOVER_MOUNTED â€” measure the poster so the menu anchors
@@ -203,7 +229,7 @@ function LibraryCard({
       >
         <View style={styles.imageWrapper}>
           <Image
-            source={{ uri: item.poster }}
+            source={{ uri: _v149Poster }}
             style={styles.posterImage}
             contentFit="cover"
             cachePolicy="memory-disk"
@@ -217,7 +243,7 @@ function LibraryCard({
           </View>
         )}
 
-        {!item.poster && (
+        {!_v149Poster && (
           <View style={styles.placeholder}>
             <RNImage
               source={NO_POSTER_IMAGE}
