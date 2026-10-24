@@ -1,6 +1,6 @@
 export type LiveTvNavProgram = {
   id?: string;
-  title: string;
+  title?: string;
   startTime: string;
   endTime: string;
   overview?: string;

@@ -350,6 +350,10 @@ async function _v259EvictOldestStreams(keepNewest: number): Promise<void> {
       'discoverDataUid',
       'currentUserId',
       'libraryCache',
+      // W121ZEPG161U: keep the validated 2,676-channel display snapshot across app restarts.
+      'w121zepg161b:guide:v1',
+      // W121ZEPG161AO: preserve the validated near-term schedule cache on app startup.
+      'w121zepg161am:programs:v1',
       'v766m_eac3_bad_hashes_v1',
       'v766_eac3_decoder_broken',
       // V769V45_PRESERVE_SEEK_HEALTH

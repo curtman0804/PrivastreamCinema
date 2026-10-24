@@ -1333,6 +1333,141 @@ async function _v751ResolveQueuedContent(
   }
 }
 
+/*
+ * W121ZOD162W_PREP_QUEUE
+ * Bounded Premiumize queue resolution for Details preparation only.
+ * All returned files still require Details title/codec/readiness checks.
+ */
+export async function premiumizePrepareContent(
+  magnet: string,
+  infoHash: string,
+  directTimeoutMs: number = 8000,
+  queueWaitMs: number = 20000
+): Promise<any[]> {
+  try {
+    return await premiumizeDirectDL(magnet, directTimeoutMs);
+  } catch (error: any) {
+    const message = String(error?.message || error || '');
+    if (!message.toLowerCase().includes(
+      'unsupported link for direct download'
+    )) {
+      throw error;
+    }
+  }
+
+  const hash = String(infoHash || '').trim().toLowerCase();
+
+  if (!/^[a-f0-9]{40}$/.test(hash)) {
+    throw new Error('PM_PREP_INVALID_HASH');
+  }
+
+  const storageKey = _v751TransferStorageKey(hash);
+  let transferId = '';
+
+  try {
+    transferId = String(
+      (await AsyncStorage.getItem(storageKey)) || ''
+    ).trim();
+  } catch (_) {}
+
+  const createAndStore = async (): Promise<string> => {
+    const id = await _v751CreateTransfer(magnet);
+
+    try {
+      await AsyncStorage.setItem(storageKey, id);
+    } catch (_) {}
+
+    console.log(
+      '[W121ZOD162W PREP QUEUE] created',
+      hash.slice(0, 8)
+    );
+
+    return id;
+  };
+
+  if (!transferId) {
+    transferId = await createAndStore();
+  } else {
+    console.log(
+      '[W121ZOD162W PREP QUEUE] resume',
+      hash.slice(0, 8)
+    );
+  }
+
+  const deadline = Date.now() +
+    Math.max(2500, Math.min(30000, queueWaitMs));
+
+  let recreated = false;
+
+  while (Date.now() < deadline) {
+    let status: V751QueuedTransferStatus;
+
+    try {
+      status = await _v751TransferStatus(transferId);
+    } catch (error: any) {
+      const message = String(error?.message || error || '');
+
+      if (
+        !recreated &&
+        message.startsWith('PM_QUEUE_STATUS_HTTP_404')
+      ) {
+        recreated = true;
+
+        try {
+          await AsyncStorage.removeItem(storageKey);
+        } catch (_) {}
+
+        transferId = await createAndStore();
+        continue;
+      }
+
+      throw error;
+    }
+
+    const state = String(status.transfer_status || '');
+    const rawProgress = Number(status.progress);
+    const progress = Number.isFinite(rawProgress)
+      ? Math.max(0, Math.min(1, rawProgress))
+      : 0;
+
+    const files = Array.isArray(status.content)
+      ? status.content
+      : [];
+
+    console.log(
+      '[W121ZOD162W PREP QUEUE]',
+      hash.slice(0, 8),
+      'state=' + state,
+      'progress=' + Math.floor(progress * 100),
+      'files=' + files.length
+    );
+
+    if (state === 'error') {
+      try {
+        await AsyncStorage.removeItem(storageKey);
+      } catch (_) {}
+
+      throw new Error('PM_PREP_TRANSFER_ERROR');
+    }
+
+    if (
+      (state === 'finished' || state === 'seeding') &&
+      files.length > 0
+    ) {
+      return files;
+    }
+
+    const remaining = deadline - Date.now();
+
+    if (remaining > 0) {
+      await _v751Sleep(Math.min(2500, remaining));
+    }
+  }
+
+  // Retain the persisted transfer for possible later recovery.
+  // Never claim an unfinished transfer is playable.
+  throw new Error('PM_PREP_QUEUE_NOT_READY');
+}
 // ------------------------------------------------------------
 // FILE PICKER  (unchanged from v283)
 // ------------------------------------------------------------

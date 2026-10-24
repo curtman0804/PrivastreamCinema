@@ -19,10 +19,34 @@ import PrivastreamCategoryRow from '../../src/components/PrivastreamCategoryRow'
 import { useFocusEffect, useRouter } from 'expo-router';
 
 import { api, ContentItem } from '../../src/api/client';
+import W121zEpg161bStorage from '../../src/utils/mmkvStorage';
 import { useContentStore } from '../../src/store/contentStore';
 import {
   v176iRegisterGetter,
 } from '../../src/components/ContentCard';
+
+// W121ZEPG161B - conservative warm-start guide cache.
+// The authoritative live inventory and EPG refresh remain unchanged.
+const W161B_CACHE_KEY = 'w121zepg161b:guide:v1';
+// W121ZEPG161AM: separate, bounded schedule snapshot; channel cache remains compact.
+const W161AM_PROGRAM_KEY = 'w121zepg161am:programs:v1';
+const W161AM_PROGRAM_AGE_MS = 20 * 60 * 1000;
+const W161AM_PROGRAM_MAX_BYTES = 1500 * 1024;
+const W161B_MAX_AGE_MS = 60 * 60 * 1000;
+const W161B_MAX_ROWS = 4000;
+const W161D_MAX_CACHE_BYTES = 2 * 1024 * 1024;
+const w161bScope = (): string | null => {
+  const state = useContentStore.getState();
+  const uid = String(state.currentUserId || '').trim();
+  const addons = Array.isArray(state.addons) ? state.addons : [];
+  // Do not accept a partial addon inventory while authentication/addons load.
+  if (!uid || state.isLoadingAddons || addons.length === 0) return null;
+  const ids = addons.map((addon: any) =>
+    String(addon?.id || addon?.manifestUrl || addon?.url || '').trim()
+  );
+  if (ids.some((id) => !id)) return null;
+  return JSON.stringify([uid, ids.sort()]);
+};
 
 const SLOT_MS = 30 * 60 * 1000;
 const SLOT_WIDTH = 210;
@@ -1956,23 +1980,27 @@ const timelineStart = floorHalfHour(now);
   //
   // Favorites stays visible at index 0 even when empty so long-press can add the first station.
   // Other categories still require at least one playable row.
+  // W121ZEPG161AC: compute eligible and deduped channel inventory ONCE
+  // for the category menu, instead of redoing full-list work per category.
+  // The selected guide still uses the original v789gFilterChannels path.
   const v789gVisibleCategoryDefs =
-    useMemo(
-      () =>
-        V789G_CATEGORY_DEFS.filter(
-          (category) =>
-            category.key === 'favorites' ||
-            v789gFilterChannels(
-              channels,
-              category.key,
-              v788t8xIsFavorite
-            ).length > 0
-        ),
-      [
-        channels,
-        v788t8xIsFavorite,
-      ]
-    );
+    useMemo(() => {
+      const startedAt = Date.now();
+      const eligible = channels.filter(
+        (channel) => !w121z148cIsQuarantined(channel)
+      );
+      const source = w121z147cGuideDedupe(eligible, v788t8xIsFavorite);
+      const result = V789G_CATEGORY_DEFS.filter((category) =>
+        category.key === 'favorites' ||
+        source.some((channel) =>
+          v789gMatchesCategory(channel, category.key, v788t8xIsFavorite)
+        )
+      );
+      console.log('[W121ZEPG161AC CATEGORY MENU] channels=' + channels.length +
+        ' eligible=' + eligible.length + ' deduped=' + source.length +
+        ' categories=' + result.length + ' buildMs=' + (Date.now() - startedAt));
+      return result;
+    }, [channels, v788t8xIsFavorite]);
 
   // Native focus callbacks can outlive a render. Keep their category
   // index mapping tied to the same visible list the user actually sees.
@@ -2278,6 +2306,166 @@ const timelineStart = floorHalfHour(now);
     }
 
     try {
+      // W121ZEPG161B: rehydrate only a recent, complete snapshot from the
+      // identical account and installed-addon inventory. Never use a cache
+      // on an unknown account, incomplete addon state, or cancelled focus.
+      if (!guideLoadedRef.current && !silent) {
+        try {
+          const w161gCacheStart = Date.now();
+          const w161gState = useContentStore.getState();
+          const w161gUidReady = !!String(w161gState.currentUserId || '').trim();
+          const w161gAddons = Array.isArray(w161gState.addons) ? w161gState.addons : [];
+          // W121ZEPG161S-R2: During cold launch, wait briefly for account/addon
+          // scope readiness before deciding a valid display snapshot is unusable.
+          // Existing post-read scope recheck remains the authority.
+          let scope = w161bScope();
+          let w161sReadyRetries = 0;
+          while (!scope && w161sReadyRetries < 6 &&
+                 generation === loadGenerationRef.current &&
+                 !w121zlive122Signal.aborted && !guideLoadedRef.current) {
+            await new Promise<void>((resolve) => setTimeout(resolve, 200));
+            scope = w161bScope();
+            w161sReadyRetries++;
+          }
+          console.log('[W121ZEPG161S-R2 CACHE] scope readiness',
+            'ready=' + !!scope, 'retries=' + w161sReadyRetries);
+          console.log('[W121ZEPG161G CACHE] restore attempt',
+            'uidReady=' + w161gUidReady,
+            'addonsLoading=' + !!w161gState.isLoadingAddons,
+            'addonCount=' + w161gAddons.length,
+            'scopeReady=' + !!scope);
+          if (scope) {
+            const raw = await W121zEpg161bStorage.getItem(W161B_CACHE_KEY);
+            // Bound parsing work and memory before deserializing any cache payload.
+            const snapshot = raw && raw.length <= W161D_MAX_CACHE_BYTES
+              ? JSON.parse(raw) : null;
+            const rows = snapshot?.channels;
+            const valid = snapshot?.schema === 1 &&
+              snapshot?.scope === scope &&
+              snapshot?.compact === true &&
+              Number.isFinite(snapshot?.savedAt) &&
+              Date.now() - snapshot.savedAt >= 0 &&
+              Date.now() - snapshot.savedAt <= W161B_MAX_AGE_MS &&
+              Array.isArray(rows) && rows.length >= 1 &&
+              rows.length <= W161B_MAX_ROWS &&
+              rows.every((row: any) =>
+                // Some legitimate stations have no channel-level addonId.
+                // The snapshot's entire addon inventory is already scope-matched.
+                !!String(row?.key || '').trim() &&
+                !!String(row?.name || '').trim() &&
+                !!String(row?.item?.id || '').trim() &&
+                Array.isArray(row?.programs) && row.programs.length === 0);
+            // W121ZEPG161K: log the exact reason for a rejected cached guide.
+            // Diagnostics only: do not alter the admission predicate.
+            const w161kBadRows = Array.isArray(rows) ? rows.reduce((totals: any, row: any) => {
+              if (!String(row?.key || '').trim()) totals.key++;
+              if (!String(row?.name || '').trim()) totals.name++;
+              if (!String(row?.item?.id || '').trim()) totals.itemId++;
+              if (!Array.isArray(row?.programs) || row.programs.length !== 0) totals.programs++;
+              return totals;
+            }, { key: 0, name: 0, itemId: 0, programs: 0 }) : null;
+            const w161kGenerationOK = generation === loadGenerationRef.current;
+            const w161kAbortOK = !w121zlive122Signal.aborted;
+            // W121ZEPG161L: addon scope can change while async storage reads.
+            // Briefly allow it to settle, but NEVER accept a different account/addon scope.
+            let w161lScopeNow = w161bScope();
+            let w161lRetryCount = 0;
+            while (valid && w161lScopeNow !== scope && w161lRetryCount < 5 &&
+                   generation === loadGenerationRef.current &&
+                   !w121zlive122Signal.aborted && !guideLoadedRef.current) {
+              await new Promise<void>((resolve) => setTimeout(resolve, 200));
+              w161lScopeNow = w161bScope();
+              w161lRetryCount++;
+            }
+            const w161kScopeStable = scope === w161lScopeNow;
+            console.log('[W121ZEPG161L CACHE] scope recheck',
+              'sameScope=' + w161kScopeStable,
+              'retries=' + w161lRetryCount,
+              'currentReady=' + !!w161lScopeNow);
+            console.log('[W121ZEPG161K CACHE] decision',
+              'valid=' + valid,
+              'invalidRows=' + JSON.stringify(w161kBadRows),
+              'generationOK=' + w161kGenerationOK,
+              'signalOK=' + w161kAbortOK,
+              'scopeStable=' + w161kScopeStable,
+              'count=' + (Array.isArray(rows) ? rows.length : -1));
+            if (valid && w161kGenerationOK &&
+                w161kAbortOK && w161kScopeStable) {
+              // Cache is presentation-only; authoritative refresh continues.
+              // W121ZEPG161AM: paint cached current/upcoming programs with
+              // cached channels; never use a schedule from another addon scope.
+              let w161amRows = rows as GuideChannel[];
+              try {
+                const w161amRaw = await W121zEpg161bStorage.getItem(W161AM_PROGRAM_KEY);
+                if (w161amRaw && w161amRaw.length <= W161AM_PROGRAM_MAX_BYTES) {
+                  const w161amData = JSON.parse(w161amRaw);
+                  const w161amNow = Date.now();
+                  if (w161amData?.schema === 1 &&
+                      w161amData?.scope === scope &&
+                      Number.isFinite(w161amData?.savedAt) &&
+                      w161amNow >= w161amData.savedAt &&
+                      w161amNow - w161amData.savedAt <= W161AM_PROGRAM_AGE_MS &&
+                      Array.isArray(w161amData?.entries) &&
+                      w161amData.entries.length <= W161B_MAX_ROWS &&
+                      w161bScope() === scope &&
+                      generation === loadGenerationRef.current &&
+                      !w121zlive122Signal.aborted) {
+                    const w161amByKey = new Map<string, GuideProgram[]>();
+                    for (const entry of w161amData.entries) {
+                      if (typeof entry?.key !== 'string' ||
+                          !Array.isArray(entry?.programs) || entry.programs.length > 5) continue;
+                      const p = entry.programs.filter((x: any) =>
+                        typeof x?.title === 'string' && x.title.length <= 240 &&
+                        Number.isFinite(Date.parse(x?.startTime)) &&
+                        Number.isFinite(Date.parse(x?.endTime)) &&
+                        Date.parse(x.endTime) > w161amNow);
+                      if (p.length) w161amByKey.set(entry.key, p);
+                    }
+                    w161amRows = w161amRows.map((row) => ({
+                      ...row, programs: w161amByKey.get(row.key) || [],
+                    }));
+                    console.log('[W121ZEPG161AM EPG] cached schedules restored',
+                      'matched=' + w161amRows.filter((x) => x.programs.length > 0).length);
+                  }
+                }
+              } catch (w161amError) {
+                console.warn('[W121ZEPG161AM EPG] schedule restore skipped', w161amError);
+              }
+              setChannels(w161amRows);
+              guideLoadedRef.current = true;
+              setLoading(false);
+              console.log('[W121ZEPG161G CACHE] HIT rows=' + rows.length +
+                ' restoreMs=' + (Date.now() - w161gCacheStart));
+              // W121ZEPG161AI: The compact cache deliberately has programs: [].
+              // Show cached stations immediately, then recover current EPG data.
+              // Do not let a cache HIT indefinitely suppress authoritative EPG.
+              console.log('[W121ZEPG161AI EPG] cached stations displayed; authoritative refresh scheduled');
+              await new Promise<void>((resolve) => setTimeout(resolve, 1800));
+              if (generation !== loadGenerationRef.current || w121zlive122Signal.aborted) {
+                console.log('[W121ZEPG161AI EPG] background refresh cancelled');
+                return;
+              }
+              console.log('[W121ZEPG161AI EPG] authoritative inventory and EPG refresh starting');
+            } else {
+              console.log('[W121ZEPG161G CACHE] MISS',
+                'present=' + !!raw,
+                'bytes=' + (raw ? raw.length : 0),
+                'schemaOK=' + (snapshot?.schema === 1),
+                'scopeOK=' + (snapshot?.scope === scope),
+                'compactOK=' + (snapshot?.compact === true),
+                'ageMs=' + (Number.isFinite(snapshot?.savedAt) ? Date.now() - snapshot.savedAt : -1),
+                'rows=' + (Array.isArray(rows) ? rows.length : -1),
+                'restoreMs=' + (Date.now() - w161gCacheStart));
+            }
+          } else {
+            console.log('[W121ZEPG161G CACHE] SKIP scope-not-ready',
+              'restoreMs=' + (Date.now() - w161gCacheStart));
+          }
+        } catch (cacheError) {
+          console.warn('[W121ZEPG161B CACHE] read failed', cacheError);
+        }
+      }
+
       const date = localDateKey(new Date());
 
       // V788T12K_PARALLEL_EPG_INVENTORY
@@ -2870,6 +3058,18 @@ const timelineStart = floorHalfHour(now);
       const playableByIdentity =
         new Map<string, GuideChannel>();
 
+      // W121ZEPG151C - audited, exact 3ABN feed identities only.
+      const w151cStremTvLogoByChannel: Record<string, string> = {
+        'stremtv-us:DareToDreamNetwork.us': 'https://i.imgur.com/oNUpXA9.png',
+        'stremtv-us:3ABNEnglish.us': 'https://i.imgur.com/16DMxP4.png',
+        'stremtv-us:3ABNFrench.us': 'https://i.imgur.com/B5gsM7m.png',
+        'stremtv-us:3ABNInternational.us': 'https://i.imgur.com/IecOZHR.png',
+        'stremtv-us:3ABNKids.us': 'https://i.imgur.com/z3npqO1.png',
+        'stremtv-us:3ABNLatino.us': 'https://i.imgur.com/Ugb4AFo.png',
+        'stremtv-us:3ABNPraiseHimMusicNetwork.us': 'https://i.imgur.com/iBcqT8L.png',
+        'stremtv-us:3ABNProclaimNetwork.us': 'https://i.imgur.com/zUMUNhe.png',
+      };
+
       for (const raw of inventoryItems) {
         const id =
           String(
@@ -2898,13 +3098,26 @@ const timelineStart = floorHalfHour(now);
         const epg =
           epgByIdentity.get(identity);
 
-        const stationLogo =
-          String(
-            epg?.logo ||
-            (raw as any)?.logo ||
-            existing?.logo ||
-            ''
-          ).trim();
+        // W121ZEPG151C_STREMTV_LOGO_RECOVERY
+        // The channel inventory, streams and EPG identities remain unchanged.
+        // StremTV US supplies poster artwork but no dedicated `logo` property.
+        // Use an exact-identity known station logo where verified. Otherwise,
+        // reuse the channel's *own* supplied poster only when the provider and
+        // native EPG have not already supplied an explicit station logo.
+        const w151cFromStremTv = addonId === 'com.stremtv.us';
+        const w151cSuppliedPoster = String((raw as any)?.poster || '').trim();
+        const w151cProviderPosterLogo =
+          w151cFromStremTv && /^https?:\/\//i.test(w151cSuppliedPoster)
+            ? w151cSuppliedPoster : '';
+        const stationLogo = String(
+          epg?.logo ||
+          (raw as any)?.logo ||
+          existing?.logo ||
+          (w151cFromStremTv
+            ? (w151cStremTvLogoByChannel[id] || w151cProviderPosterLogo)
+            : '') ||
+          ''
+        ).trim();
 
         const name =
           String(
@@ -3086,6 +3299,80 @@ const timelineStart = floorHalfHour(now);
 
       guideLoadedRef.current = true;
       lastGuideLoadAtRef.current = Date.now();
+
+      // W121ZEPG161B: save only a complete authoritative inventory and
+      // only when account/addon identity is known. Cache failure is nonfatal.
+      if (completedChannels.length > 0 &&
+          completedChannels.length <= W161B_MAX_ROWS &&
+          generation === loadGenerationRef.current &&
+          !w121zlive122Signal.aborted) {
+        const scope = w161bScope();
+        if (scope) {
+          // Compact presentation snapshot: retain channel identity/playback item,
+          // but NEVER persist the full 8-hour guide schedule per station.
+          const compactChannels = completedChannels.map((channel) => ({
+            key: channel.key,
+            item: channel.item,
+            name: channel.name,
+            logo: channel.logo,
+            sourceName: channel.sourceName,
+            addonId: channel.addonId,
+            programs: [] as GuideProgram[],
+          }));
+          const record = JSON.stringify({
+            schema: 1, compact: true, scope, savedAt: Date.now(), channels: compactChannels,
+          });
+          if (record.length <= W161D_MAX_CACHE_BYTES) {
+            void W121zEpg161bStorage.setItem(W161B_CACHE_KEY, record)
+              .then(() => console.log('[W121ZEPG161G CACHE] SAVE rows=' + compactChannels.length +
+                ' bytes=' + record.length))
+              .catch((cacheError: unknown) =>
+                console.warn('[W121ZEPG161D CACHE] save failed', cacheError));
+          } else {
+            console.warn('[W121ZEPG161D CACHE] snapshot over size limit; skipped');
+          }
+        }
+      }
+
+      // W121ZEPG161AM: store only a small near-term schedule index.
+      // Non-blocking, scope-matched; failed writes cannot affect guide display.
+      if (completedChannels.length > 0 &&
+          completedChannels.length <= W161B_MAX_ROWS &&
+          generation === loadGenerationRef.current &&
+          !w121zlive122Signal.aborted) {
+        const w161amScope = w161bScope();
+        if (w161amScope) {
+          const w161amNow = Date.now();
+          const w161amHorizon = w161amNow + 3 * 60 * 60 * 1000;
+          const w161amEntries = completedChannels.map((channel) => ({
+            key: channel.key,
+            programs: (Array.isArray(channel.programs) ? channel.programs : [])
+              .filter((p) => {
+                const start = Date.parse(p.startTime);
+                const end = Date.parse(p.endTime);
+                return Number.isFinite(start) && Number.isFinite(end) &&
+                  end > w161amNow && start < w161amHorizon;
+              })
+              .slice(0, 5)
+              .map((p) => ({
+                title: String(p.title || '').slice(0, 240),
+                startTime: p.startTime, endTime: p.endTime,
+              })),
+          })).filter((entry) => entry.programs.length > 0);
+          const w161amRecord = JSON.stringify({
+            schema: 1, scope: w161amScope, savedAt: w161amNow,
+            entries: w161amEntries,
+          });
+          if (w161amRecord.length <= W161AM_PROGRAM_MAX_BYTES) {
+            void W121zEpg161bStorage.setItem(W161AM_PROGRAM_KEY, w161amRecord)
+              .then(() => console.log('[W121ZEPG161AM EPG] saved near-term schedules',
+                'channels=' + w161amEntries.length, 'bytes=' + w161amRecord.length))
+              .catch((e: unknown) => console.warn('[W121ZEPG161AM EPG] save skipped', e));
+          } else {
+            console.warn('[W121ZEPG161AM EPG] schedules exceeded size cap');
+          }
+        }
+      }
 
       console.log(
         '[V785A LIVE GUIDE] snapshot committed channels=' + next.length
@@ -3655,18 +3942,13 @@ const timelineStart = floorHalfHour(now);
             name: String(entry.name || ''),
             logo: String(entry.logo || ''),
             sourceName: String(entry.sourceName || ''),
-            programs: (
-              Array.isArray(entry.programs)
-                ? entry.programs
-                : []
-            ).map((program) => ({
-              id: String(program?.id || ''),
-              title: String(program?.title || ''),
-              startTime: String(program?.startTime || ''),
-              endTime: String(program?.endTime || ''),
-              overview: String(program?.overview || ''),
-              thumbnail: String(program?.thumbnail || ''),
-            })),
+            // W121ZLIVE152B: The guide already owns these EPG entries.
+            // Retain the same reference in LiveTvNav instead of rebuilding
+            // thousands of program objects each time a station is opened.
+            // No station identity, guide data, or program time is dropped.
+            programs: Array.isArray(entry.programs)
+              ? entry.programs
+              : [],
           })),
           id,
           addonId
@@ -4346,6 +4628,16 @@ const timelineStart = floorHalfHour(now);
    [v789gVisibleChannels, v788t8xIsFavorite]
  );
 
+ // W121ZEPG161Z: timing-only instrumentation; NO behavior change.
+ const w161zGuideReadyTimeRef = useRef<number>(0);
+ useEffect(() => {
+   if (!loading && channels.length > 0) {
+     w161zGuideReadyTimeRef.current = Date.now();
+     console.log('[W121ZEPG161Z GUIDE COMMIT] channels=' + channels.length +
+       ' visible=' + v789gVisibleChannels.length +
+       ' nativeItems=' + v788t8pGuideItems.length);
+   }
+ }, [loading, channels, v788t8pGuideItems, v789gVisibleChannels]);
  // W121ZPLAY10Y24X_STABLE_DIRECT_GUIDE_CACHE
  // Y24L intentionally keeps v788t8pGuideItems stable across favorite
  // state changes. Only reseed the mutable direct-guide cache when the
@@ -5274,6 +5566,8 @@ const timelineStart = floorHalfHour(now);
                 zone
             );
           }
+          console.log('[W121ZEPG161Z NATIVE READY] sinceCommitMs=' +
+            (w161zGuideReadyTimeRef.current ? Date.now() - w161zGuideReadyTimeRef.current : -1));
           console.log(
             '[V788T8P NATIVE GUIDE FOCUS] row=' +
               index +

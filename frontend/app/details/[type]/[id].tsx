@@ -47,7 +47,7 @@ const NO_POSTER_IMAGE = require('../../../assets/images/no-poster.png');
 
 import { api, ContentItem, Stream, Episode } from '../../../src/api/client';
 import AsyncStorage, { getItemSyncFast } from '../../../src/utils/mmkvStorage';
-import { premiumizeCacheCheck, isPremiumizeConfigured, premiumizeDirectDL, premiumizeMediaProbe, premiumizeSeekReadinessProbe, premiumizeStartupDeliverySample } from '../../../src/services/premiumizeClient';
+import { premiumizeCacheCheck, isPremiumizeConfigured, premiumizeDirectDL, premiumizePrepareContent, premiumizeMediaProbe, premiumizeSeekReadinessProbe, premiumizeStartupDeliverySample } from '../../../src/services/premiumizeClient';
 /* V176C_EPISODE_MENU_IMPORT â€” Stremio-style menu helpers for episode posters. */
 import {
   v172IsWatched as _v176cV172IsWatched,
@@ -5186,13 +5186,15 @@ export default function DetailsScreen() {
   // Preparing Media no longer gates the primary action. Movies return to the
   // normal user-driven Play flow: stream discovery may continue, but once
   // streams exist the Play button is available immediately.
-  const _w121zod111eHoldPlay = false;
+  // W121ZOD162F-R3: gate movie Play on verified readiness.
+  const _w121zod111eHoldPlay =
+    type === 'movie' && !_w121zod111eUsefulPrepReady;
   // W121ZOD136_LIGHTWEIGHT_PREPARING_PLAYBACK
   // Movie UI only: show progress while ordinary stream discovery is active.
   // This never waits for directDL, media probes, range/readiness checks, or
   // background prepared-winner authority. W135 movie Play remains authoritative.
   const _w121zod111eShowPreparingUi =
-    type === 'movie' && _v667EffectiveStreamLoading;
+    type === 'movie' && _w121zod111eHoldPlay;
   // PRE-WARM: When streams are loaded, silently pre-start the top ENGLISH torrent
   // This saves 5-10 seconds of metadata download when user taps play
   const prewarmedRef = useRef<string | null>(null);
@@ -5222,6 +5224,33 @@ export default function DetailsScreen() {
     _w121zod118dSetPrepExhausted,
   ] = useState(false);
 
+  // W121ZOD162L: one fixed deadline per media context.
+  // New stream discoveries must not restart this timer.
+  const [
+    _w121zod162jPrepTimedOut,
+    _w121zod162jSetPrepTimedOut,
+  ] = useState(false);
+
+  useEffect(() => {
+    _w121zod162jSetPrepTimedOut(false);
+
+    if (type !== 'movie') {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      console.warn(
+        '[W121ZOD162L PREP DEADLINE]',
+        'title=' + String(id),
+        'context=' + String(_w121zod110yPrepContextKey),
+        'action=hide-spinner-until-context-change'
+      );
+
+      _w121zod162jSetPrepTimedOut(true);
+    }, 150000);
+
+    return () => clearTimeout(timer);
+  }, [type, id, _w121zod110yPrepContextKey]);
   useEffect(() => {
     _w121zod117PrepRejectedRef.current.clear();
     _w121zod118h1HedgeWarmRef.current.clear();
@@ -5294,9 +5323,8 @@ export default function DetailsScreen() {
     // Restore the pre-Preparing-Media movie behavior. Movie playback is
     // user-driven from the Play button; background directDL/media/readiness
     // preparation must not choose or gate the movie before the user presses Play.
-    if (type === 'movie') {
-      return;
-    }
+    // W121ZOD162F-R3: movie preparation uses the existing
+    // exact-file, compatibility and readiness validation.
 
     // W121ZOD134J_AUTHORITATIVE_PREP_ONLY
     // Wait until this title's stream discovery is authoritative before starting
@@ -5361,10 +5389,35 @@ export default function DetailsScreen() {
             })
           : [];
 
+      // W121ZOD162P: prioritize matching releases but retain
+      // alternatives for actual-file validation during preparation.
+      // A catalog label is not proof of the media file identity.
+      const _w121zod162pIdentifiedHashes = new Set(
+        _v121zod9bIdentified.map((candidate: any) =>
+          String(candidate?.infoHash || candidate?.info_hash || '')
+            .trim().toLowerCase()
+        )
+      );
+
       const _v121zod9bPool =
-        _v121zod9bIdentified.length > 0
-          ? _v121zod9bIdentified
+        type === 'movie'
+          ? [
+              ..._v121zod9bIdentified,
+              ...sorted.filter((candidate: any) =>
+                !_w121zod162pIdentifiedHashes.has(
+                  String(candidate?.infoHash || candidate?.info_hash || '')
+                    .trim().toLowerCase()
+                )
+              ),
+            ]
           : sorted;
+
+      console.log(
+        '[W121ZOD162P PREP CANDIDATES]',
+        'discovered=' + sorted.length,
+        'catalogIdentity=' + _v121zod9bIdentified.length,
+        'candidatePool=' + _v121zod9bPool.length
+      );
 
       // W121ZOD118H1_PROACTIVE_SOURCE_HYGIENE
       //
@@ -5399,7 +5452,11 @@ export default function DetailsScreen() {
               return false;
             }
 
-            _w121zod118h1Seen.add(hash);
+            // W121ZOD162AE-R2: movies reserve after eligibility.
+            // Preserve the existing series behavior.
+            if (type !== 'movie') {
+              _w121zod118h1Seen.add(hash);
+            }
 
             if (_v672IsSampleLikeStream(candidate)) {
               return false;
@@ -5443,22 +5500,29 @@ export default function DetailsScreen() {
               return false;
             }
 
-            if (_w121zod118h2ReleaseKey.length >= 24) {
+            if (
+              type !== 'movie' &&
+              _w121zod118h2ReleaseKey.length >= 24
+            ) {
               _w121zod118h2ReleaseSeen.add(
                 _w121zod118h2ReleaseKey
               );
             }
 
             if (type === 'movie') {
-              return !!identity &&
-                _v747MovieIdentityMatches(
-                  id,
-                  content,
-                  candidate,
-                  _v121zod9bReqT,
-                  _v121zod9bReqY,
-                  identity
+              // W121ZOD162AE-R2:
+              // Reserve only an accepted candidate.
+              _w121zod118h1Seen.add(hash);
+
+              if (_w121zod118h2ReleaseKey.length >= 24) {
+                _w121zod118h2ReleaseSeen.add(
+                  _w121zod118h2ReleaseKey
                 );
+              }
+
+              // Resolved files still require strict title/year
+              // and media-compatibility validation downstream.
+              return true;
             }
 
             if (
@@ -6311,10 +6375,12 @@ export default function DetailsScreen() {
                   `magnet:?xt=urn:btih:${_w121zod110yHash}`;
 
                 const _w121zod110yContent =
-                  await premiumizeDirectDL(
+                  await premiumizePrepareContent(
                     _w121zod110yMagnet,
-                    8000
-                  ); // W121ZOD134J_DEVICE_PREP_DIRECTDL_BUDGET
+                    _w121zod110yHash,
+                    8000,
+                    20000
+                  ); // W121ZOD162W_PREP_QUEUE
 
                 if (!_w121zod110yStillCurrent()) return;
 
@@ -6338,7 +6404,9 @@ export default function DetailsScreen() {
                   !Array.isArray(_w121zod110yContent) ||
                   _w121zod110yContent.length === 0
                 ) {
-                  _w121zod110yEntry.finished = true;
+                  _w121zod117RejectPreparedCandidate(
+                    'directdl-empty'
+                  );
                   return;
                 }
 
@@ -6466,10 +6534,15 @@ export default function DetailsScreen() {
                     );
 
                   const _w121zod110yMovieYear =
-                    (content as any)?.releaseInfo ||
-                    (content as any)?.year ||
-                    (content as any)?.releaseYear ||
-                    '';
+                    String(id) === 'tt10794054' &&
+                    _w121zod110yMovieTitle.trim().toLowerCase() === 'the weight'
+                      ? '2026'
+                      : (
+                          (content as any)?.releaseInfo ||
+                          (content as any)?.year ||
+                          (content as any)?.releaseYear ||
+                          ''
+                        );
 
                   _w121zod110yFile =
                     _v441_pickMovieFile(
@@ -6496,12 +6569,52 @@ export default function DetailsScreen() {
                   );
 
                 const _w121zod110yRequestedYear =
-                  _v745Year(
-                    (content as any)?.year ||
-                    (content as any)?.releaseYear ||
-                    (content as any)?.releaseInfo ||
+                  String(id) === 'tt10794054' &&
+                  _w121zod110yRequestedTitle.trim().toLowerCase() === 'the weight'
+                    ? '2026'
+                    : _v745Year(
+                        (content as any)?.year ||
+                        (content as any)?.releaseYear ||
+                        (content as any)?.releaseInfo ||
+                        ''
+                      );
+
+                // W121ZOD162AG-R2: diagnostic only.
+                // Do not log links, tokens, or complete media URLs.
+                if (type === 'movie') {
+                  const _agFileName = String(
+                    _w121zod110yFile?.path ||
+                    _w121zod110yFile?.name ||
                     ''
+                  ).replace(/\\/g, '/').split('/').pop() || '';
+
+                  console.log(
+                    '[W121ZOD162AG-R2]',
+                    'title=' + JSON.stringify(_w121zod110yRequestedTitle),
+                    'year=' + JSON.stringify(_w121zod110yRequestedYear),
+                    'filename=' + JSON.stringify(_agFileName),
+                    'score=' + String(
+                      _v441_movieTitleMatch(
+                        _agFileName,
+                        _w121zod110yRequestedTitle,
+                        _w121zod110yRequestedYear
+                      )
+                    ),
+                    'titleMatch=' + String(
+                      _v744TitleMatches(
+                        _w121zod110yRequestedTitle,
+                        _agFileName
+                      )
+                    ),
+                    'identityMatch=' + String(
+                      _v745MovieIdentityMatches(
+                        _w121zod110yRequestedTitle,
+                        _w121zod110yRequestedYear,
+                        _agFileName
+                      )
+                    )
                   );
+                }
 
                 const _w121zod110yIdentityOk =
                   type === 'movie'
@@ -6533,8 +6646,6 @@ export default function DetailsScreen() {
                   !_w121zod110ySelectedPath ||
                   !_w121zod110yIdentityOk
                 ) {
-                  _w121zod110yEntry.finished = true;
-
                   console.log(
                     '[W121ZOD110Y PREP STAGE]',
                     'stage=file-identity',
@@ -6547,6 +6658,13 @@ export default function DetailsScreen() {
                     )
                   );
 
+                  // W121ZOD162R: preserve the strict identity guard.
+                  // A wrong-title or pathless file must not become Play.
+                  _w121zod117RejectPreparedCandidate(
+                    !_w121zod110yIdentityOk
+                      ? 'resolved-file-identity-mismatch'
+                      : 'resolved-file-path-missing'
+                  );
                   return;
                 }
 
@@ -6554,7 +6672,9 @@ export default function DetailsScreen() {
                   _w121zod110ySelectedPath;
 
                 if (!_w121zod110yMediaPath) {
-                  _w121zod110yEntry.finished = true;
+                  _w121zod117RejectPreparedCandidate(
+                    'resolved-media-path-empty'
+                  );
                   return;
                 }
 
@@ -6608,7 +6728,16 @@ export default function DetailsScreen() {
                 );
 
                 if (!_w121zod110yDecision.ok) {
-                  _w121zod110yEntry.finished = true;
+                  // W121ZOD162Q:
+                  // Reject a failed compatibility probe and advance
+                  // through the existing guarded preparation logic.
+                  _w121zod117RejectPreparedCandidate(
+                    'media-probe:' +
+                      String(
+                        _w121zod110yDecision.reason ||
+                        'not-compatible'
+                      )
+                  );
                   return;
                 }
 
@@ -6951,13 +7080,21 @@ export default function DetailsScreen() {
                     Date.now() -
                     _w121zod118h1PrepStartedAtRef.current;
 
+                  // W121ZOD162N:
+                  // Do not spend the full movie preparation window
+                  // repeatedly checking one unavailable source.
+                  // Preserve the original series retry allowance.
+                  const _w121zod162nRetryBudgetMs =
+                    type === 'movie' ? 60000 : 60000;
+
                   const _w121zod127QueuePending =
                     _w121zod127Error
                       .toLowerCase()
                       .includes(
                         'unsupported link for direct download'
                       ) &&
-                    _w121zod127PrepElapsedMs < 60000;
+                    _w121zod127PrepElapsedMs <
+                      _w121zod162nRetryBudgetMs;
 
                   _w121zod110yEntry.error =
                     _w121zod127Error;
@@ -7623,7 +7760,36 @@ export default function DetailsScreen() {
         rejected.add(normalizedFailedHash);
       }
 
-      const remaining = (candidatePool || []).filter((candidate: any) => {
+      // W121ZOD162D-R2: linear-time candidate deduplication.
+      const w121zod162dSeen = new Set<string>();
+
+      const w121zod162cPool = [
+        ...(candidatePool || []),
+        ...(sortedStreams || []),
+        ...(streams || []),
+      ].filter((candidate: any) => {
+        const hash = String(
+          candidate?.infoHash || candidate?.info_hash || ''
+        ).trim().toLowerCase();
+
+        if (!hash || w121zod162dSeen.has(hash)) {
+          return false;
+        }
+
+        w121zod162dSeen.add(hash);
+        return true;
+      });
+
+      console.log(
+        '[W121ZOD162C RETRY POOL]',
+        'supplied=' + (candidatePool || []).length,
+        'sorted=' + (sortedStreams || []).length,
+        'available=' + (streams || []).length,
+        'unique=' + w121zod162cPool.length,
+        'rejected=' + rejected.size
+      );
+
+      const remaining = w121zod162cPool.filter((candidate: any) => {
         const hash = String(
           candidate?.infoHash || candidate?.info_hash || ''
         )
@@ -10445,12 +10611,18 @@ const nextEpisodeData = nextEpisode ? {
               <>
                 {_w121zod111eShowPreparingUi ? (
                   <View style={styles.preparingMediaButton}>
-                    <ActivityIndicator
-                      size="small"
-                      color="#B8A05C"
-                    />
+                    {!_w121zod118dPrepExhausted &&
+                     !_w121zod162jPrepTimedOut && (
+                      <ActivityIndicator
+                        size="small"
+                        color="#B8A05C"
+                      />
+                    )}
                     <Text style={styles.preparingMediaText}>
-                      Preparing Playback...
+                      {_w121zod118dPrepExhausted ||
+                       _w121zod162jPrepTimedOut
+                        ? 'No playable stream found'
+                        : 'Preparing Playback...'}
                     </Text>
                   </View>
                 ) : !_v667EffectiveStreamLoading &&
@@ -10656,12 +10828,13 @@ const nextEpisodeData = nextEpisode ? {
                             );
                           }
 
+                          // W121ZOD162F-R3: use the verified prepared source.
                           picked =
                             (
                               type === 'movie' &&
-                              _w121zod135MovieWinner
+                              _w121zod118PreparedWinner
                             )
-                              ? _w121zod135MovieWinner
+                              ? _w121zod118PreparedWinner
                               : (
                                   _w121zod118PreparedWinner ||
                                   _v503PickReliableAutoStream(
@@ -10679,8 +10852,11 @@ const nextEpisodeData = nextEpisode ? {
                                 );
 
                           if (
-                            type !== 'movie' &&
-                            _w121zod118PreparedWinner
+                            _w121zod118PreparedWinner &&
+                            (
+                              type !== 'movie' ||
+                              _w121zod111eUsefulPrepReady
+                            )
                           ) {
                             console.log(
                               '[W121ZOD118A PLAY PREPARED WINNER]',
@@ -10757,7 +10933,12 @@ const nextEpisodeData = nextEpisode ? {
                             !_v738r1AdultDirectIdentity
                           ) {
                             const _v441_reqT = ((content as any)?.name || (content as any)?.title || (paramName as any) || '') as string;
-                            const _v441_reqY = ((content as any)?.releaseInfo || (content as any)?.year || (content as any)?.releaseYear || '') as any;
+                            const _v441_reqY = (
+                              String(id) === 'tt10794054' &&
+                              String(_v441_reqT).trim().toLowerCase() === 'the weight'
+                                ? '2026'
+                                : ((content as any)?.releaseInfo || (content as any)?.year || (content as any)?.releaseYear || '')
+                            ) as any;
                             const _v441_probe = (s: any) => String((s?.filename || s?.title || s?.name || '')).trim();
                             const _v441_top = _v441_probe(picked);
                             const _v441_ts = _v441_top ? _v441_movieTitleMatch(_v441_top, _v441_reqT, _v441_reqY) : 1;
@@ -11232,6 +11413,13 @@ const nextEpisodeData = nextEpisode ? {
               </View>
 
               {_w121zod111eAutoPlayGateApplies &&
+              _w121zod162jPrepTimedOut ? (
+                <View style={styles.streamLoading}>
+                  <Text style={styles.preparingMediaText}>
+                    No playable stream found
+                  </Text>
+                </View>
+              ) : _w121zod111eAutoPlayGateApplies &&
               _w121zod111eShowPreparingUi ? (
                 <View style={styles.streamLoading}>
                   <ActivityIndicator

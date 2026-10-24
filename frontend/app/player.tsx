@@ -1449,6 +1449,44 @@ export default function PlayerScreen() {
 
           return true;
         }
+        // W121ZEPG161BT: Recover an expired HLS live window using the
+        // already-mounted native player when possible.
+        if (reason === 'behind-live-window') {
+          const nativeHandle = videoRef.current;
+
+          if (
+            nativeHandle &&
+            typeof nativeHandle.reloadSourceAsync === 'function' &&
+            continuePollingRef.current &&
+            sequence === _v785LiveReconnectSequenceRef.current
+          ) {
+            try {
+              console.log(
+                '[W121ZEPG161BT LIVE EDGE] native reload begin'
+              );
+
+              await nativeHandle.reloadSourceAsync(nextUrl);
+
+              if (
+                !continuePollingRef.current ||
+                sequence !== _v785LiveReconnectSequenceRef.current
+              ) {
+                return false;
+              }
+
+              console.log(
+                '[W121ZEPG161BT LIVE EDGE] native reload complete'
+              );
+
+              return true;
+            } catch (nativeError) {
+              console.warn(
+                '[W121ZEPG161BT LIVE EDGE] native reload failed; using existing recovery',
+                nativeError
+              );
+            }
+          }
+        }
         // V785C_LIVE_RESTART_PLAYBACK_GATE
         //
         // The first Live TV source already set both playback-start guards.
@@ -3943,8 +3981,9 @@ export default function PlayerScreen() {
   useEffect(() => {
     if (isLive !== 'true' || !streamUrl) return;
 
-    const preference = w121zlive140dCcPreferenceRef.current;
-    if (preference === null) return;
+    // W121ZLIVE155A: live captions default Off unless explicitly selected.
+    // Do not touch the separate on-demand subtitle/forced-CC system.
+    const preference = w121zlive140dCcPreferenceRef.current ?? 'off';
 
     let cancelled = false;
 
@@ -9759,6 +9798,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                      (ExoPlayerLib/2.x) is what Stremio uses and PM accepts. */
                 }}
                 onDemandBufferGuard={false /* W121ZOD115M1_PHONE_BUFFERING */}
+                liveTvBufferGuard={isLive === 'true'}
                 style={[
                   styles.videoPlayer,
                   // v476b: enforce visible aspect change even on native-16:9 content
@@ -9884,10 +9924,45 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                       'commercial-authority=backend-status'
                     );
 
+                    // W121ZEPG161BH: A permanent unsupported audio decoder
+                    // error cannot be repaired by resolving the same channel.
+                    // Stop this recovery cycle. Do not affect On-Demand or
+                    // temporary HLS/network failures.
+                    const w161bhNativeError = String(
+                      typeof error === 'string'
+                        ? error
+                        : (error as any)?.message || error || ''
+                    );
+                    if (
+                      /NO_UNSUPPORTED_TYPE|audio\/mpeg-L2/i.test(w161bhNativeError)
+                    ) {
+                      console.warn(
+                        '[W121ZEPG161BH LIVE CODEC] permanent unsupported audio; reconnect skipped',
+                        w161bhNativeError.slice(0, 320)
+                      );
+                      setIsLoading(false);
+                      setIsRebuffering(false);
+                      setError('This live channel uses an audio format unsupported by this device. Try another channel.');
+                      videoRetryCountRef.current = 0;
+                      return;
+                    }
+
+                    // W121ZEPG161BT: Detect expired HLS live windows.
+                    const w161btBehindWindow =
+                      /BehindLiveWindowException/i.test(w161bhNativeError);
+
+                    if (w161btBehindWindow) {
+                      console.warn(
+                        '[W121ZEPG161BT LIVE EDGE] behind-live-window detected'
+                      );
+                    }
+
                     videoRetryCountRef.current = 0;
 
                     void _v785ReconnectLive(
-                      'native-source-error'
+                      w161btBehindWindow
+                        ? 'behind-live-window'
+                        : 'native-source-error'
                     );
 
                     return;

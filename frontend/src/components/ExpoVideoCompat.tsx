@@ -94,6 +94,8 @@ type ExpoVideoCompatProps = {
   // Ordinary on-demand playback may require a larger Media3 start/rebuffer
   // reserve on the Google TV Streamer. Live/commercial players leave this off.
   onDemandBufferGuard?: boolean;
+  // W121ZLIVE152D: bounded native buffering for main Live TV on kirkwood only.
+  liveTvBufferGuard?: boolean;
   // V789S25W121ZR_OPTIONAL_SURFACE_TYPE
   surfaceType?: 'surfaceView' | 'textureView';
   onPlaybackStatusUpdate?: (status: any) => void;
@@ -111,6 +113,8 @@ function contentFitFromResizeMode(
   return 'contain';
 }
 
+let w159aGlobalInstanceCounter = 0;
+
 export const ExpoVideoCompat = forwardRef<
   ExpoVideoCompatHandle,
   ExpoVideoCompatProps
@@ -124,6 +128,7 @@ export const ExpoVideoCompat = forwardRef<
     volume = 1,
     isMuted = false,
     onDemandBufferGuard = false,
+    liveTvBufferGuard = false,
     surfaceType = 'surfaceView',
     onPlaybackStatusUpdate,
     onError,
@@ -226,6 +231,19 @@ export const ExpoVideoCompat = forwardRef<
         'targetBuffer=default-50s',
         'scope=kirkwood-od'
       );
+    } else if (liveTvBufferGuard && isGoogleTvStreamer && !isLowMemoryTv) {
+      // W121ZLIVE152D_LIVE_MEDIA3_BOUNDED_BUFFER
+      // Scope: main Live TV player on kirkwood. Does not affect commercial
+      // player, other devices, or On Demand. Preserve duration/floor defaults.
+      p.bufferOptions = {
+        maxBufferBytes: 96 * 1024 * 1024,
+        prioritizeTimeOverSizeThreshold: false,
+      };
+      console.log(
+        '[W121ZLIVE152D LIVE BUFFER]',
+        'maxBufferBytes=100663296',
+        'scope=kirkwood-live-main-only'
+      );
     } else if (isLowMemoryTv) {
       p.bufferOptions = {
         maxBufferBytes: 64 * 1024 * 1024,
@@ -239,6 +257,67 @@ export const ExpoVideoCompat = forwardRef<
       );
     }
   });
+
+  // W121ZLIVE159A_LIFECYCLE_PROBE: diagnostic logs only; no behavior change.
+  const w159aInstanceRef = useRef<number>(0);
+  const w159aSeqRef = useRef(0);
+  if (w159aInstanceRef.current === 0) {
+    w159aInstanceRef.current = ++w159aGlobalInstanceCounter;
+    console.log('[W121ZLIVE159A]', 'mount-prepare', 'instance=' + w159aInstanceRef.current,
+      'scope=' + (liveTvBufferGuard ? 'live' : onDemandBufferGuard ? 'od' : 'other'));
+  }
+  useEffect(() => {
+    const instance = w159aInstanceRef.current;
+    console.log('[W121ZLIVE159A]', 'mounted', 'instance=' + instance);
+    return () => console.log('[W121ZLIVE159A]', 'unmounted', 'instance=' + instance);
+  }, []);
+  // W121ZEPG161BD: prevent queued Live TV native replacements after unmount.
+  // OD and other video instances intentionally keep their prior behavior.
+  const w161bdLiveMountedRef = useRef(true);
+  useEffect(() => {
+    if (!liveTvBufferGuard) return;
+    w161bdLiveMountedRef.current = true;
+    return () => { w161bdLiveMountedRef.current = false; };
+  }, [liveTvBufferGuard]);
+  // W121ZLIVE154C_SERIAL_NATIVE_REPLACE
+  // One native player must not receive overlapping replaceAsync requests.
+  // The tail is settled after failures so a rejected source cannot block
+  // subsequent recovery. This does not alter video selection or buffering.
+  const w154cReplaceTailRef = useRef<Promise<void>>(Promise.resolve());
+  const w154cReplaceSerial = useCallback(
+    (nextSource: VideoSource | null, isStale?: () => boolean): Promise<void> => {
+      const instance = w159aInstanceRef.current;
+      const seq = ++w159aSeqRef.current;
+      const queuedAt = Date.now();
+      console.log('[W121ZLIVE159A]', 'replace-queued', 'instance=' + instance,
+        'seq=' + seq, 'source=' + (nextSource ? 'media' : 'null'));
+      const operation = w154cReplaceTailRef.current.then(async () => {
+        if ((liveTvBufferGuard && !w161bdLiveMountedRef.current) || isStale?.()) {
+          console.log('[W121ZLIVE159A]', 'replace-skipped-stale', 'instance=' + instance, 'seq=' + seq);
+          return;
+        }
+        const startedAt = Date.now();
+        console.log('[W121ZLIVE159A]', 'replace-begin', 'instance=' + instance,
+          'seq=' + seq, 'queueMs=' + (startedAt - queuedAt));
+        try {
+          await player.replaceAsync(nextSource);
+          console.log('[W121ZLIVE159A]', 'replace-end', 'instance=' + instance,
+            'seq=' + seq, 'durationMs=' + (Date.now() - startedAt),
+            'staleAfter=' + String(Boolean(isStale?.())));
+        } catch (error) {
+          console.log('[W121ZLIVE159A]', 'replace-error', 'instance=' + instance,
+            'seq=' + seq, 'durationMs=' + (Date.now() - startedAt), String(error));
+          throw error;
+        }
+      });
+      w154cReplaceTailRef.current = operation.then(
+        () => undefined,
+        () => undefined
+      );
+      return operation;
+    },
+    [player, liveTvBufferGuard]
+  );
 
   const uri = String(source?.uri || '');
   const extensionHint =
@@ -858,7 +937,7 @@ export const ExpoVideoCompat = forwardRef<
           //
           // Replace only the media source owned by the already-mounted
           // native player.
-          await player.replaceAsync(nextSource);
+          await w154cReplaceSerial(nextSource);
 
           // The ordinary shouldPlay effect does not rerun for a same-URL
           // imperative reload, so reassert the current play intent here.
@@ -894,6 +973,7 @@ export const ExpoVideoCompat = forwardRef<
       shouldPlay,
       emitCompatStatus,
       v690ClearEndFallbackTimer,
+      w154cReplaceSerial,
     ]
   );
 
@@ -918,7 +998,7 @@ export const ExpoVideoCompat = forwardRef<
         v766Eac3DecoderBrokenRef.current = false;
 
         if (!uri) {
-          await player.replaceAsync(null);
+          await w154cReplaceSerial(null, () => cancelled);
           return;
         }
 
@@ -957,7 +1037,7 @@ export const ExpoVideoCompat = forwardRef<
           }
         }
 
-        await player.replaceAsync(nextSource);
+        await w154cReplaceSerial(nextSource, () => cancelled);
 
         if (cancelled) return;
 
@@ -997,6 +1077,7 @@ export const ExpoVideoCompat = forwardRef<
     extensionHint,
     sourceHeadersKey,
     emitCompatStatus,
+    w154cReplaceSerial,
   ]);
 
   useEffect(() => {
@@ -1409,6 +1490,18 @@ export const ExpoVideoCompat = forwardRef<
           error?.message || error || 'unknown'
         );
 
+        // W121ZEPG161BP-R2: detach only a terminal, unsupported Live TV audio source.
+        // A new source or unmounted player cancels this queued operation.
+        if (liveTvBufferGuard &&
+          (v766ErrorMessage.includes('no_unsupported_type') ||
+           v766ErrorMessage.includes('audio/mpeg-l2'))) {
+          console.log('[W121ZEPG161BP-R2] terminal-live-audio-detach');
+          void w154cReplaceSerial(null, () =>
+            !w161bdLiveMountedRef.current || player.status !== 'error'
+          ).catch((detachError) => {
+            console.log('[W121ZEPG161BP-R2] detach-failed', String(detachError));
+          });
+        }
         errorCallbackRef.current?.(
           error || new Error('expo-video playback error')
         );
