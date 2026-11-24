@@ -859,13 +859,15 @@ class PrivastreamCategoryRowView(
         val shouldMoveContent =
             when {
                 delta > 0 ->
-                    current >=
-                        stationaryRightEdgePosition
+                    !targetAttachedBeforeScroll ||
+                        current >=
+                            stationaryRightEdgePosition
 
                 delta < 0 ->
-                    firstVisible > 0 &&
-                        current <=
-                            stationaryLeftEdgePosition
+                    !targetAttachedBeforeScroll ||
+                        (firstVisible > 0 &&
+                            current <=
+                                stationaryLeftEdgePosition)
 
                 else ->
                     false

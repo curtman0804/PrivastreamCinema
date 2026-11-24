@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   ScrollView,
+  Linking,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -57,6 +58,17 @@ export default function AdminUsersScreen() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addBtnFocused, setAddBtnFocused] = useState(false);
+  // W121ZSPORTS179G: owner-scoped service connections within existing User Management.
+  const [serviceStatus, setServiceStatus] = useState<{premiumize_configured: boolean; sports_premium_installed: boolean} | null>(null);
+  const [serviceLoading, setServiceLoading] = useState(false);
+  const [serviceBusy, setServiceBusy] = useState(false);
+  const [serviceError, setServiceError] = useState('');
+  const [premiumizeDraft, setPremiumizeDraft] = useState('');
+  const [sportsDraft, setSportsDraft] = useState('');
+  const serviceTargetIdRef = useRef('');
+
+  // W121ZSPORTS179P: only the master admin can manage a selected user's paid services.
+  const canProvisionServices = currentUser?.username === 'choyt' && !!editingUser?.id;
 
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
@@ -95,21 +107,102 @@ export default function AdminUsersScreen() {
     setIsSubmitting(true);
     try {
       // Send trimmed data to ensure no whitespace issues
-      await api.admin.createUser({
+      const created = await api.admin.createUser({
         username: trimmedUsername,
         password: trimmedPassword,
         email: trimmedEmail || undefined,
         is_admin: formData.is_admin,
       });
-      Alert.alert('Success', 'User created successfully');
       setShowAddModal(false);
       setFormData({ username: '', password: '', email: '', is_admin: false });
       await fetchUsers();
+      // Continue directly to this customer's services. Administrator-issued
+      // Privastream password is never modified by the service workflow.
+      handleEditUser(created);
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to create user');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const fetchUserServices = async (userId: string) => {
+    serviceTargetIdRef.current = userId;
+    setServiceLoading(true);
+    setServiceError('');
+    setServiceStatus(null);
+    try {
+      const status = await api.admin.getUserServices(userId);
+      if (serviceTargetIdRef.current === userId) setServiceStatus(status);
+    } catch (_) {
+      if (serviceTargetIdRef.current === userId) setServiceError('Service provisioning is not yet available on the backend.');
+    } finally {
+      if (serviceTargetIdRef.current === userId) setServiceLoading(false);
+    }
+  };
+
+  const openProviderSetup = async (service: 'premiumize' | 'sports') => {
+    if (!editingUser || !canProvisionServices) return;
+    const url = service === 'premiumize'
+      ? 'https://www.premiumize.me/premium'
+      : 'https://fanfuelapp.com/highfly';
+    try {
+      await Linking.openURL(url);
+    } catch (_) {
+      // Android TV installations do not always contain a browser.
+      Alert.alert('Open on your phone or computer', url + '\nUse this customer\'s email address. Return here to connect their access.');
+    }
+  };
+
+  const openSportsConfiguration = async () => {
+    if (!editingUser || !canProvisionServices) return;
+    try {
+      await Linking.openURL('https://premium.highfly.to/configure');
+    } catch (_) {
+      Alert.alert('Open on your phone or computer', 'https://premium.highfly.to/configure');
+    }
+  };
+
+  const connectUserPremiumize = async () => {
+    if (!editingUser || !premiumizeDraft.trim() || serviceBusy) return;
+    setServiceBusy(true);
+    try {
+      await api.admin.connectPremiumize(editingUser.id, premiumizeDraft.trim());
+      setPremiumizeDraft('');
+      await fetchUserServices(editingUser.id);
+      Alert.alert('Premiumize', 'Account connected to this Privastream user.');
+    } catch (_) {
+      Alert.alert('Premiumize', 'Could not connect this account. Check the backend and credential.');
+    } finally { setServiceBusy(false); }
+  };
+
+  const connectUserPremiumSports = async () => {
+    if (!editingUser || !sportsDraft.trim() || serviceBusy) return;
+    const url = sportsDraft.trim();
+    // Local guard; backend independently verifies URL, host and manifest identity.
+    if (!/^https:\/\/premium\.highfly\.to\//i.test(url) || !/\/manifest\.json(?:\?|$)/i.test(url)) {
+      Alert.alert('Premium Sports', 'Paste the personal Premium addon manifest link from Highfly.');
+      return;
+    }
+    setServiceBusy(true);
+    try {
+      await api.admin.connectPremiumSports(editingUser.id, url);
+      setSportsDraft('');
+      await fetchUserServices(editingUser.id);
+      Alert.alert('Premium Sports', 'Premium addon connected to this Privastream user.');
+    } catch (_) {
+      Alert.alert('Premium Sports', 'Could not connect Premium. Existing addons were not removed.');
+    } finally { setServiceBusy(false); }
+  };
+
+  const closeEditUser = () => {
+    serviceTargetIdRef.current = '';
+    setPremiumizeDraft('');
+    setSportsDraft('');
+    setServiceStatus(null);
+    setServiceError('');
+    setShowEditModal(false);
+    setEditingUser(null);
   };
 
   const handleEditUser = (user: User) => {
@@ -120,7 +213,10 @@ export default function AdminUsersScreen() {
       password: '',
       is_admin: user.is_admin,
     });
+    setPremiumizeDraft('');
+    setSportsDraft('');
     setShowEditModal(true);
+    void fetchUserServices(user.id);
   };
 
   const handleSaveEdit = async () => {
@@ -149,8 +245,7 @@ export default function AdminUsersScreen() {
     try {
       await api.admin.updateUser(editingUser.id, updateData);
       Alert.alert('Success', 'User updated successfully');
-      setShowEditModal(false);
-      setEditingUser(null);
+      closeEditUser();
       await fetchUsers();
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to update user');
@@ -276,7 +371,7 @@ export default function AdminUsersScreen() {
       {/* Edit User Modal */}
       <UserFormModal
         visible={showEditModal}
-        onClose={() => { setShowEditModal(false); setEditingUser(null); }}
+        onClose={closeEditUser}
         title={`Edit ${editingUser?.username || 'User'}`}
         submitLabel="Save Changes"
         formData={editFormData}
@@ -287,6 +382,76 @@ export default function AdminUsersScreen() {
         showUsername={true}
         showPassword={true}
         passwordRequired={false}
+        servicePanel={
+          <View style={styles.servicePanel}>
+            <Text style={styles.servicePanelTitle}>Customer Services — {editingUser?.username || ''}</Text>
+            <Text style={styles.serviceHelp}>You issue the Privastream password. Each paid provider connection belongs to the selected customer. Purchases use the provider's official checkout.</Text>
+            {serviceLoading && <ActivityIndicator color={colors.primary} />}
+            {!!serviceError && <Text style={styles.serviceWarning}>{serviceError}</Text>}
+            {serviceStatus && (
+              <>
+                <Text style={styles.serviceLabel}>Premiumize: {serviceStatus.premiumize_configured ? 'Connected' : 'Not connected'}</Text>
+                {canProvisionServices && (
+                  <Pressable style={styles.serviceAction} onPress={() => void openProviderSetup('premiumize')} disabled={serviceBusy}>
+                    <Text style={styles.serviceActionText}>Get Premiumize — Official Checkout</Text>
+                  </Pressable>
+                )}
+                {canProvisionServices && !serviceStatus.premiumize_configured && (
+                  <>
+                    <Text style={styles.serviceHelp}>Purchase a separate account using this customer's email. Open its Account page and copy that customer's API key.</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Customer's Premiumize API key"
+                      placeholderTextColor="#888888"
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      value={premiumizeDraft}
+                      onChangeText={setPremiumizeDraft}
+                    />
+                    <Pressable style={styles.serviceAction} onPress={connectUserPremiumize} disabled={serviceBusy || !premiumizeDraft.trim()}>
+                      <Text style={styles.serviceActionText}>Verify & Connect Premiumize</Text>
+                    </Pressable>
+                  </>
+                )}
+                {serviceStatus.premiumize_configured && <Text style={styles.serviceHelp}>This user's existing Premiumize key is preserved.</Text>}
+                <Text style={styles.serviceLabel}>Premium Sports: {serviceStatus.sports_premium_installed ? 'Connected' : 'Not connected'}</Text>
+                {canProvisionServices && (
+                  <>
+                    <Pressable style={styles.serviceAction} onPress={() => void openProviderSetup('sports')} disabled={serviceBusy}>
+                      <Text style={styles.serviceActionText}>Get Premium Sports — Official Checkout</Text>
+                    </Pressable>
+                    <Pressable style={styles.serviceAction} onPress={() => void openSportsConfiguration()} disabled={serviceBusy}>
+                      <Text style={styles.serviceActionText}>Configure Purchased Sports Token</Text>
+                    </Pressable>
+                  </>
+                )}
+                {canProvisionServices && !serviceStatus.sports_premium_installed && (
+                  <>
+                    <Text style={styles.serviceHelp}>Use a separate subscription for this customer. In the Premium configurator leave sports unfiltered; copy the personalized manifest URL.</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Customer's Premium Sports manifest URL"
+                      placeholderTextColor="#888888"
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      value={sportsDraft}
+                      onChangeText={setSportsDraft}
+                    />
+                    <Pressable style={styles.serviceAction} onPress={connectUserPremiumSports} disabled={serviceBusy || !sportsDraft.trim()}>
+                      <Text style={styles.serviceActionText}>Verify & Connect Premium Sports</Text>
+                    </Pressable>
+                  </>
+                )}
+                {serviceStatus.sports_premium_installed && <Text style={styles.serviceHelp}>This user's Premium addon is preserved. No reconnection required.</Text>}
+                {!canProvisionServices && <Text style={styles.serviceWarning}>Only the master administrator can connect customer services.</Text>}
+                {canProvisionServices && <Text style={styles.serviceHelp}>Connection does not purchase a subscription or confirm ongoing billing. Never use another customer's key or token.</Text>}
+              </>
+            )}
+          </View>
+
+        }
       />
     </SafeAreaView>
   );
@@ -373,6 +538,7 @@ function UserFormModal({
   showUsername,
   showPassword,
   passwordRequired,
+  servicePanel,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -386,6 +552,7 @@ function UserFormModal({
   showUsername: boolean;
   showPassword: boolean;
   passwordRequired: boolean;
+  servicePanel?: React.ReactNode;
 }) {
   const [closeFocused, setCloseFocused] = useState(false);
   const [adminToggleFocused, setAdminToggleFocused] = useState(false);
@@ -499,6 +666,8 @@ function UserFormModal({
               <Text style={styles.adminToggleText}>Admin privileges</Text>
             </Pressable>
 
+            {servicePanel}
+
             <Pressable
               style={[
                 styles.submitButton,
@@ -524,6 +693,13 @@ function UserFormModal({
 }
 
 const styles = StyleSheet.create({
+  servicePanel: { borderTopWidth: 1, borderTopColor: '#555555', marginTop: 8, paddingTop: 16, marginBottom: 18, gap: 10 },
+  servicePanelTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
+  serviceLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  serviceHelp: { color: '#AAAAAA', fontSize: 12 },
+  serviceWarning: { color: '#FFBD59', fontSize: 13 },
+  serviceAction: { borderWidth: 2, borderColor: colors.primary, borderRadius: 8, padding: 12, marginBottom: 7 },
+  serviceActionText: { color: colors.primary, textAlign: 'center', fontSize: 14, fontWeight: '700' },
   container: {
     flex: 1,
     backgroundColor: colors.background,

@@ -794,6 +794,30 @@ export const api = {
 
       return response.data;
     },
+    // BU23JL: opt-in Nexo-only catalog sample. Ordinary inventory unchanged.
+    getBU23JLNexoInventoryPage: async (
+      sourceIndex: number = 0,
+      skip: number = 0,
+      limit: number = 12,
+      signal?: any
+    ): Promise<any> => {
+      const parentalModeEnabled = await getParentalModeEnabled();
+      const response = await apiClient.get(
+        '/api/content/live-tv/inventory-page',
+        {
+          params: {
+            source_index: sourceIndex,
+            skip,
+            limit: Math.min(12, Math.max(1, limit)),
+            adult: parentalModeEnabled ? 0 : 1,
+            nexo_only: 1,
+          },
+          timeout: 60000,
+          signal,
+        }
+      );
+      return response.data;
+    },
     isAllowedByParentalMode: async (
       type: string,
       id: string
@@ -1665,6 +1689,18 @@ export const api = {
     },
   },
   admin: {
+    connectPremiumize: async (userId: string, apiKey: string): Promise<{connected: boolean; already_connected: boolean}> => {
+      const response = await apiClient.post(`/api/admin/users/${encodeURIComponent(userId)}/services/premiumize`, { api_key: apiKey });
+      return response.data;
+    },
+    getUserServices: async (userId: string): Promise<{premiumize_configured: boolean; sports_premium_installed: boolean}> => {
+      const response = await apiClient.get(`/api/admin/users/${encodeURIComponent(userId)}/services`);
+      return response.data;
+    },
+    connectPremiumSports: async (userId: string, manifestUrl: string): Promise<{connected: boolean; already_connected: boolean}> => {
+      const response = await apiClient.post(`/api/admin/users/${encodeURIComponent(userId)}/services/sports-premium`, { manifest_url: manifestUrl });
+      return response.data;
+    },
     getUsers: async (): Promise<User[]> => {
       const response = await apiClient.get('/api/admin/users');
       return response.data;
@@ -1673,7 +1709,7 @@ export const api = {
       const response = await apiClient.post('/api/admin/users', userData);
       return response.data;
     },
-    updateUser: async (userId: string, userData: { username?: string; email?: string; password?: string; is_admin?: boolean }): Promise<User> => {
+    updateUser: async (userId: string, userData: { username?: string; email?: string; password?: string; is_admin?: boolean; premiumize_api_key?: string }): Promise<User> => {
       const response = await apiClient.put(`/api/admin/users/${userId}`, userData);
       return response.data;
     },

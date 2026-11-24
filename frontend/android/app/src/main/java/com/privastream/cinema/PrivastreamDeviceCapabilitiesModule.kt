@@ -453,6 +453,8 @@ class PrivastreamDeviceCapabilitiesModule(
                     MutableList<LiveTvProbeInput>
                 >()
 
+            // BU23IE: a fifth distinct URL cannot be ignored for terminal proof.
+            val truncatedKeys = hashSetOf<String>()
             val maxRows =
                 minOf(
                     candidates.size(),
@@ -561,6 +563,11 @@ class PrivastreamDeviceCapabilitiesModule(
                             headers
                         )
                     )
+                } else if (
+                    bucket.size >= 4 &&
+                    bucket.none { it.url == url }
+                ) {
+                    truncatedKeys.add(key)
                 }
 
                 if (grouped.size >= 256) {
@@ -593,6 +600,10 @@ class PrivastreamDeviceCapabilitiesModule(
                                         false,
                                         "no_candidate"
                                     )
+                                // BU23IE: every alternative URL must have a definitive
+                                // missing-resource response before this KEY is terminal.
+                                var allCandidatesGone = rows.isNotEmpty()
+                                var testedCandidates = 0
 
                                 for (
                                     candidate
@@ -607,6 +618,13 @@ class PrivastreamDeviceCapabilitiesModule(
 
                                     outcome =
                                         current
+                                    testedCandidates += 1
+                                    // A timeout, 429, 401/403, invalid body, or DNS
+                                    // failure is NOT proof that an add-on is down.
+                                    if (current.reason != "http_404" &&
+                                        current.reason != "http_410") {
+                                        allCandidatesGone = false
+                                    }
 
                                     if (
                                         current.playable
@@ -615,7 +633,13 @@ class PrivastreamDeviceCapabilitiesModule(
                                     }
                                 }
 
-                                key to outcome
+                                Triple(
+                                    key,
+                                    outcome,
+                                    !outcome.playable && allCandidatesGone &&
+                                        testedCandidates == rows.take(4).size &&
+                                        !truncatedKeys.contains(key)
+                                )
                             }
                         }
 
@@ -629,6 +653,9 @@ class PrivastreamDeviceCapabilitiesModule(
 
                     val failedKeys =
                         Arguments.createArray()
+                    // BU23IE: additive fields; legacy callers remain compatible.
+                    val terminalFailedKeys = Arguments.createArray()
+                    val inconclusiveKeys = Arguments.createArray()
 
                     val resultMap =
                         Arguments.createMap()
@@ -658,6 +685,10 @@ class PrivastreamDeviceCapabilitiesModule(
                             "reason",
                             outcome.reason
                         )
+                        detail.putBoolean(
+                            "terminalMissing",
+                            pair.third
+                        )
 
                         resultMap.putMap(
                             key,
@@ -675,6 +706,11 @@ class PrivastreamDeviceCapabilitiesModule(
                             failedKeys.pushString(
                                 key
                             )
+                            if (pair.third) {
+                                terminalFailedKeys.pushString(key)
+                            } else {
+                                inconclusiveKeys.pushString(key)
+                            }
                             failedCount += 1
                         }
                     }
@@ -695,6 +731,21 @@ class PrivastreamDeviceCapabilitiesModule(
                     result.putMap(
                         "results",
                         resultMap
+                    )
+                    result.putArray(
+                        "terminalFailedKeys",
+                        terminalFailedKeys
+                    )
+                    result.putArray(
+                        "inconclusiveKeys",
+                        inconclusiveKeys
+                    )
+                    // Truncated native batches cannot establish a complete
+                    // negative inventory for automatic guide hiding.
+                    result.putBoolean(
+                        "complete",
+                        candidates.size() < 512 && grouped.size < 256 &&
+                            truncatedKeys.isEmpty()
                     )
 
                     result.putInt(

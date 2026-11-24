@@ -1,0 +1,7 @@
+{
+  "expo_video_version": "3.0.16",
+  "files": {
+    "node_modules/expo-video/android/src/main/java/expo/modules/video/player/VideoPlayer.kt": "e207a21d140a43f56348da39be0da6991ac425c448e4bed348a613bec1d78de9",
+    "node_modules/expo-video/android/src/main/java/expo/modules/video/utils/DataSourceUtils.kt": "f39c78cd8d328b28f34069ab1a904689cd53f7a0ce430b1dc6cbd60bb6e81cb7"
+  }
+}

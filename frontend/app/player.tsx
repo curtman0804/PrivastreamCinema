@@ -37,7 +37,6 @@ import { api } from '../src/api/client';
 import { getMetaCache } from '../src/store/contentStore';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Updates from 'expo-updates';
-import { Asset } from 'expo-asset';
 import Constants from 'expo-constants';
 import { ResizeMode, AVPlaybackStatus } from 'expo-av';
 import {
@@ -46,6 +45,7 @@ import {
 } from '../src/components/ExpoVideoCompat';
 import { Modal, FlatList } from 'react-native';
 import AsyncStorage, { setItemDurable } from '../src/utils/mmkvStorage';
+import { reportLiveTerminalFailure } from '../src/liveChannelHealthBridge';
 
 // W121ZOD106G_PLAYBACK_HEALTH_POLICY
 const W121ZOD106G_PLAYBACK_HEALTH_POLICY = 'od106g-v1';
@@ -362,180 +362,11 @@ interface SubtitleCue {
   text: string;
 }
 
-// ================= V789S25W111 HARD COMMERCIAL HOLD =================
-//
-// During a Pluto HOLD there is intentionally no advancing clean program HLS
-// timeline for Media3 to consume. Do not keep a frozen live player alive under
-// the commercial screen. The main player is unmounted during HOLD and this
-// local, bundled animation becomes the only active video decoder.
-//
-// The exact asset is locked by the deployment script before build.
-const _v789s25w111CommercialBreakModule =
-  // W121ZPLAY10Y7B_SILENT_BREAK_MEDIA
-  require('../assets/Privastream_Break_60sec_smoothstart.mp4');
+// W121ZLIVE173L: commercial-video component removed; no local commercial video is mounted.
 
-function V789S25W111CommercialBreakOverlay({
-  onFirstFrameReady,
-}: {
-  onFirstFrameReady?: () => void;
-}) {
-  const [assetUri, setAssetUri] = useState('');
-  const [firstFrameReady, setFirstFrameReady] = useState(false);
-  const firstFrameReportedRef = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    // W121ZPLAY10Y3C_ANDROID_RAW_BREAK_RESOURCE
-    //
-    // The release APK already contains this MP4 as an Android raw resource.
-    // Do not ask expo-asset to download a bundled Android release resource.
-    if (Platform.OS === 'android') {
-      const resourceUri =
-        'android.resource://com.privastream.cinema/raw/assets_privastream_break_60sec_smoothstart';
-
-      setAssetUri(resourceUri);
-
-      console.log(
-        '[W121ZPLAY10Y3C BREAK VIDEO] android raw resource',
-        resourceUri
-      );
-
-      return () => {
-        cancelled = true;
-      };
-    }
-    const asset =
-      Asset.fromModule(
-        _v789s25w111CommercialBreakModule
-      );
-
-    const publishUri = () => {
-      if (cancelled) return;
-
-      const nextUri =
-        String(
-          asset.localUri ||
-          asset.uri ||
-          ''
-        ).trim();
-
-      if (nextUri) {
-        setAssetUri(nextUri);
-      }
-    };
-
-    publishUri();
-
-    asset.downloadAsync()
-      .then(() => {
-        publishUri();
-
-        console.log(
-          '[V789S25W115 BREAK VIDEO] local asset ready'
-        );
-      })
-      .catch((error) => {
-        console.warn(
-          '[V789S25W115 BREAK VIDEO] asset prepare failed',
-          error
-        );
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const reportFirstFrameReady = useCallback(() => {
-    if (firstFrameReportedRef.current) return;
-
-    firstFrameReportedRef.current = true;
-    setFirstFrameReady(true);
-
-    console.log(
-      '[V789S25W115 BREAK VIDEO READY]',
-      'action=cover-and-unmount-main-player'
-    );
-
-    onFirstFrameReady?.();
-  }, [onFirstFrameReady]);
-
-  // V789S25W116_BREAK_VIDEO_PLAYBACK_READY_FALLBACK
-  // Fire TV did not reliably deliver expo-av onReadyForDisplay for this local
-  // MP4. A loaded, actively-playing, non-buffering video whose playhead has
-  // moved off zero is sufficient proof that the local break clip is producing
-  // frames. Keep onReadyForDisplay as the fastest path and use this status
-  // callback as a deterministic fallback.
-  const reportBreakPlaybackHealth = useCallback(
-    (status: AVPlaybackStatus) => {
-      if (!status.isLoaded) return;
-
-      if (
-        status.isPlaying &&
-        !status.isBuffering &&
-        Number(status.positionMillis || 0) > 0
-      ) {
-        if (firstFrameReportedRef.current) return;
-
-        console.log(
-          '[V789S25W117 BREAK VIDEO PLAYBACK READY]',
-          'positionMs=' + String(status.positionMillis || 0)
-        );
-
-        reportFirstFrameReady();
-      }
-    },
-    [reportFirstFrameReady]
-  );
-
-  return (
-    <View
-      pointerEvents="none"
-      style={[
-        StyleSheet.absoluteFillObject,
-        {
-          // W121ZPLAY2_OPAQUE_BREAK_HANDOFF
-          // Never expose the live player while the commercial video is
-          // mounted but still waiting for its first decoded frame.
-          backgroundColor: '#000000',
-          zIndex: 10000,
-          elevation: 10000,
-        },
-      ]}
-    >
-      {assetUri ? (
-        <Video
-          source={{
-            uri: assetUri,
-            overrideFileExtensionAndroid: 'mp4',
-          }}
-          style={[
-            StyleSheet.absoluteFillObject,
-            { opacity: firstFrameReady ? 1 : 0 },
-          ]}
-          resizeMode={ResizeMode.COVER}
-          // V789S25W121ZR_COMMERCIAL_TEXTURE_VIEW
-          // Keep ordinary playback on the existing surface while the
-          // overlapping full-screen commercial layer uses TextureView.
-          surfaceType="textureView"
-          shouldPlay
-          isLooping
-          // W121ZPLAY10Y10A_NATURE_BREAK_AUDIO
-          // Approved nature ambience is muxed into the existing commercial MP4.
-          // Existing commercial player lifecycle remains unchanged.
-          volume={1.0}
-          isMuted={false}
-          progressUpdateIntervalMillis={100}
-          onPlaybackStatusUpdate={reportBreakPlaybackHealth}
-          onReadyForDisplay={reportFirstFrameReady}
-        />
-      ) : null}
-    </View>
-  );
-}
-
-// ================= /V789S25W111 HARD COMMERCIAL HOLD =================
+// W121ZLIVE173L: deliberately retired; no commercial video/hold/cover is permitted.
+const W121ZLIVE173L_ENABLE_COMMERCIAL_OVERLAY = false;
 
 export default function PlayerScreen() {
   // Keep screen awake during playback
@@ -840,14 +671,11 @@ export default function PlayerScreen() {
     useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const _v789s25w74cSetProvisionalEntryCover =
-    useCallback((active: boolean) => {
-      _v789s25w74cProvisionalEntryCoverRef.current = active;
-
-      if (!active) {
-        _v789s25w74cProvisionalEntryReadyRef.current = false;
-      }
-
-      _v789s25w74cSetProvisionalEntryCoverState(active);
+    useCallback((_active: boolean) => {
+      // W121ZLIVE173L: retired commercial cover must never mask source errors.
+      _v789s25w74cProvisionalEntryCoverRef.current = false;
+      _v789s25w74cProvisionalEntryReadyRef.current = false;
+      _v789s25w74cSetProvisionalEntryCoverState(false);
     }, []);
 
   const _v789s25w74cClearProvisionalEntryCover =
@@ -1014,13 +842,10 @@ export default function PlayerScreen() {
 
   const _v789s25w111SetCommercialPhase =
     useCallback(
-      (phase: 'off' | 'arming' | 'hold' | 'resuming') => {
-        _v789s25w111CommercialPhaseRef.current =
-          phase;
-
-        _v789s25w111SetCommercialPhaseState(
-          phase
-        );
+      (_phase: 'off' | 'arming' | 'hold' | 'resuming') => {
+        // W121ZLIVE173L: retire commercial hold. Always keep ordinary playback.
+        _v789s25w111CommercialPhaseRef.current = 'off';
+        _v789s25w111SetCommercialPhaseState('off');
       },
       []
     );
@@ -1045,6 +870,8 @@ export default function PlayerScreen() {
         reason: string,
         origin: 'backend' | 'client' = 'client'
       ) => {
+        // W121ZLIVE173L: obsolete commercial quarantine cannot stop live playback.
+        if (!W121ZLIVE173L_ENABLE_COMMERCIAL_OVERLAY) return;
         const previousPhase =
           _v789s25w111CommercialPhaseRef.current;
 
@@ -1572,475 +1399,7 @@ export default function PlayerScreen() {
     ]
   );
 
-  // V785L5_LIVE_CHANNEL_SURF
-  // V789S25W111_STATUS_DRIVEN_HARD_HOLD
-  //
-  // Keep the master relay URL/token in React state while HOLD is active.
-  // That lets this poll continue driving the backend's independent F6 probe
-  // even though the native main player is deliberately absent.
-  useEffect(() => {
-    if (isLive !== 'true') {
-      _v789s25w111CleanPollsRef.current = 0;
-      _v789s25w111ResumeFirstPositionRef.current = null;
-      _v789s25w111SetCommercialPhase('off');
-      return;
-    }
-
-    const currentUrl =
-      String(
-        _v789s25w114StatusSourceUrl ||
-        streamUrl ||
-        ''
-      ).trim();
-
-    if (!currentUrl) {
-      // During an unrelated source replacement, never tear down the gold
-      // overlay merely because streamUrl is temporarily null.
-      return;
-    }
-
-    if (
-      !currentUrl.includes(
-        '/api/live/pluto/master.m3u8'
-      )
-    ) {
-      _v789s25w111CleanPollsRef.current = 0;
-      _v789s25w111ResumeFirstPositionRef.current = null;
-      _v789s25w111SetCommercialPhase('off');
-      return;
-    }
-
-    const tokenMatch =
-      /[?&]token=([^&#]+)/.exec(currentUrl);
-
-    const token =
-      tokenMatch?.[1]
-        ? decodeURIComponent(tokenMatch[1])
-        : '';
-
-    if (!token) {
-      console.warn(
-        '[V789S25W111 STATUS] Pluto master token missing'
-      );
-      return;
-    }
-
-    const backend =
-      (
-        process.env.EXPO_PUBLIC_BACKEND_URL ||
-        'https://api.privastreamsolutions.com'
-      ).replace(/\/$/, '');
-
-    const statusUrl =
-      backend +
-      '/api/live/pluto/commercial-status?token=' +
-      encodeURIComponent(token);
-
-    let cancelled = false;
-    let timer:
-      | ReturnType<typeof setTimeout>
-      | null = null;
-
-    const scheduleNext = () => {
-      if (cancelled) return;
-
-      timer =
-        setTimeout(
-          () => {
-            void poll();
-          },
-          400
-        );
-    };
-
-    const enterHold = (
-      mode: string
-    ) => {
-      _v789s25w112EnterQuarantine(
-        'backend-status:' + mode,
-        'backend'
-      );
-    };
-
-    const beginResume = (
-      mode: string
-    ) => {
-      if (
-        _v789s25w111CommercialPhaseRef.current !==
-        'hold'
-      ) {
-        return;
-      }
-
-      console.log(
-        '[W121ZPLAY10Y70 OVERLAP RESUME START]',
-        'mode=' + mode,
-        'remounting-main-player-behind-break-video clean-gate=pending'
-      );
-
-      _v789s25w111CleanPollsRef.current = 0;
-      _v789s25w111ResumeFirstPositionRef.current =
-        null;
-      _v789s25w112ResumeStableStartedAtRef.current =
-        0;
-      _v789s25w112ResumeLastPositionRef.current =
-        null;
-      _v789s25w112ResumeLastProgressAtRef.current =
-        0;
-      _v789s25w71ResumeHealthProvenRef.current = false;
-      _v789s25w71ResumeFrozenRef.current = false;
-      _v789s25w71SetResumeFrozen(false);
-
-      _v789s25w121zsaResumeModeRef.current =
-        mode;
-
-      console.log(
-        '[V789S25W121ZSA RESUME MODE]',
-        'mode=' + mode
-      );
-
-      const resumeSource =
-        String(
-          _v789s25w114StatusSourceUrlRef.current ||
-          streamUrl ||
-          ''
-        ).trim();
-
-      if (!resumeSource) {
-        console.warn(
-          '[V789S25W118 RESUME PIN] missing source; remain on break video'
-        );
-        return;
-      }
-
-      _v789s25w118SetPinnedResumeSourceUrl(
-        resumeSource
-      );
-
-      console.log(
-        '[V789S25W118 RESUME PIN]',
-        'source-pinned=true'
-      );
-
-      playbackStartedRef.current = false;
-      setPlaybackStarted(false);
-
-      setError(null);
-      setIsEnded(false);
-      setIsLoading(false);
-      setIsRebuffering(false);
-
-      // "resuming" remounts a brand-new native player against the same master
-      // token. The break video stays above it until playback health is proven.
-      _v789s25w111SetCommercialPhase(
-        'resuming'
-      );
-    };
-
-    const poll = async () => {
-      if (cancelled) return;
-
-      try {
-        const response =
-          await fetch(
-            statusUrl,
-            {
-              headers: {
-                'Cache-Control': 'no-cache',
-              },
-            }
-          );
-
-        if (!response.ok) {
-          throw new Error(
-            'HTTP ' + String(response.status)
-          );
-        }
-
-        const data =
-          await response.json();
-
-        const active =
-          data?.active === true;
-
-        const mode =
-          String(
-            data?.mode ||
-            'unknown'
-          )
-            .trim()
-            .toLowerCase();
-
-        const statusKey =
-          String(active) + ':' + mode;
-
-        if (
-          _v789s25w114LastStatusKeyRef.current !==
-          statusKey
-        ) {
-          _v789s25w114LastStatusKeyRef.current =
-            statusKey;
-
-          console.log(
-            '[V789S25W114 STATUS]',
-            'active=' + String(active),
-            'mode=' + mode,
-            'phase=' +
-              _v789s25w111CommercialPhaseRef.current
-          );
-        }
-
-        // W121ZPLAY8_PREFIX_REQUIRES_ACTIVE
-        // Backend mode owns commercial state, with one explicit PREFIX
-        // qualifier: HOLD is commercial; PREFIX is commercial only while
-        // backend status still marks the break active. PASS/BYPASS are clean.
-        // Unknown/inactive PREFIX leaves the current phase unchanged.
-        const commercialMode =
-          mode === 'hold' ||
-          (mode === 'prefix' && active);
-
-        const cleanMode =
-          mode === 'pass' ||
-          mode === 'bypass';
-
-        const currentPhase =
-          _v789s25w111CommercialPhaseRef.current;
-
-        if (commercialMode) {
-          _v789s25w111CleanPollsRef.current = 0;
-          _v789s25w112BackendCleanSinceRef.current = 0;
-
-          if (currentPhase === 'off') {
-            console.warn(
-              '[V789S25W117 BREAK EDGE]',
-              'mode=' + mode,
-              'active=' + String(active),
-              'transition=off->arming'
-            );
-
-            enterHold(mode);
-          } else if (currentPhase === 'resuming') {
-            console.warn(
-              '[V789S25W117 BREAK RETURNED]',
-              'mode=' + mode,
-              'transition=resuming->hold'
-            );
-
-            enterHold(mode);
-          }
-        } else if (cleanMode) {
-          if (
-            currentPhase === 'off' &&
-            _v789s25w74cProvisionalEntryCoverRef.current
-          ) {
-            console.warn(
-              '[W121ZPLAY10Y74C PROVISIONAL ENTRY CANCEL CLEAN]',
-              'mode=' + mode,
-              'active=' + String(active),
-              'action=remove-cover-and-reconnect'
-            );
-
-            _v789s25w74cClearProvisionalEntryCover(
-              'backend-clean'
-            );
-
-            void _v785ReconnectLive(
-              'prefix-source-error-clean'
-            );
-          }
-
-          if (currentPhase === 'arming') {
-            console.log(
-              '[V789S25W117 ARMING CANCELLED CLEAN]',
-              'mode=' + mode,
-              'active=' + String(active)
-            );
-
-            _v789s25w111CleanPollsRef.current = 0;
-            _v789s25w112BackendCleanSinceRef.current = 0;
-            _v789s25w111SetCommercialPhase('off');
-          } else if (currentPhase === 'hold' || currentPhase === 'resuming') {
-            // W121ZPLAY10Y70_OVERLAPPED_CLEAN_AND_RESUME_PROOF
-            //
-            // Keep the full 12-second continuous backend-clean proof,
-            // but start the hidden Media3 resume player immediately on
-            // clean PASS/BYPASS. The break layer remains visible until
-            // BOTH backend-clean and playback-health gates have passed.
-            const holdOrigin =
-              _v789s25w112HoldOriginRef.current;
-
-            const now = Date.now();
-
-            if (
-              _v789s25w112BackendCleanSinceRef.current <= 0
-            ) {
-              _v789s25w112BackendCleanSinceRef.current = now;
-            }
-
-            _v789s25w111CleanPollsRef.current += 1;
-
-            const cleanForMs =
-              now -
-              _v789s25w112BackendCleanSinceRef.current;
-
-            const holdAgeMs =
-              now -
-              _v789s25w112HoldEnteredAtRef.current;
-
-            console.log(
-              '[V789S25W117 CLEAN WINDOW]',
-              'mode=' + mode,
-              'active=' + String(active),
-              'origin=' + holdOrigin,
-              'cleanForMs=' + String(cleanForMs),
-              'holdAgeMs=' + String(holdAgeMs)
-            );
-
-            // W121ZPLAY10Y71C_CLEAN_PROVEN_UNFREEZE
-            if (
-              currentPhase === 'resuming' &&
-              cleanForMs >= 12000 &&
-              _v789s25w71ResumeFrozenRef.current
-            ) {
-              console.log(
-                '[W121ZPLAY10Y71 CLEAN PROVEN UNFREEZE]',
-                'cleanForMs=' + String(cleanForMs),
-                'action=resume-proven-hidden-player'
-              );
-
-              _v789s25w71ResumeFrozenRef.current = false;
-              _v789s25w71SetResumeFrozen(false);
-
-              // W121ZPLAY10Y72K_RESTORE_LIVE_TIMESTAMP
-              const _v789s25w72kLiveTimestamp =
-                _v789s25w72kProvenLiveTimestampRef.current;
-
-              const _v789s25w72kResumePlayer =
-                videoRef.current;
-
-              console.log(
-                '[W121ZPLAY10Y72K LIVE TIMESTAMP RESTORE REQUEST]',
-                'timestampMs=' +
-                  String(_v789s25w72kLiveTimestamp ?? 'null'),
-                'playerAvailable=' +
-                  String(!!_v789s25w72kResumePlayer)
-              );
-
-              if (
-                _v789s25w72kLiveTimestamp !== null &&
-                _v789s25w72kResumePlayer
-              ) {
-                void _v789s25w72kResumePlayer
-                  .restoreLiveTimestampAsync(
-                    _v789s25w72kLiveTimestamp
-                  )
-                  .then((restored) => {
-                    if (restored) {
-                      console.log(
-                        '[W121ZPLAY10Y72K LIVE TIMESTAMP RESTORED]',
-                        'timestampMs=' +
-                          String(_v789s25w72kLiveTimestamp)
-                      );
-                    } else {
-                      console.warn(
-                        '[W121ZPLAY10Y72K LIVE TIMESTAMP UNAVAILABLE]',
-                        'action=ordinary-unfreeze-plus-watchdog'
-                      );
-                    }
-                  })
-                  .catch((error: any) => {
-                    console.warn(
-                      '[W121ZPLAY10Y72K LIVE TIMESTAMP RESTORE FAILED]',
-                      String(error?.message || error),
-                      'action=ordinary-unfreeze-plus-watchdog'
-                    );
-                  });
-              } else {
-                console.warn(
-                  '[W121ZPLAY10Y72K LIVE TIMESTAMP UNAVAILABLE]',
-                  'action=ordinary-unfreeze-plus-watchdog'
-                );
-              }
-            }
-
-            if (currentPhase === 'hold') {
-              beginResume(mode);
-            }
-          }
-        } else {
-          // Unknown/inconclusive mode never changes phase. If we were proving
-          // a clean window, break continuity and require a fresh 12 seconds.
-          if (currentPhase === 'hold' || currentPhase === 'resuming') {
-            _v789s25w111CleanPollsRef.current = 0;
-            _v789s25w112BackendCleanSinceRef.current = 0;
-
-            if (_v789s25w71ResumeFrozenRef.current) {
-              console.warn(
-                '[W121ZPLAY10Y71 CLEAN RESET UNFREEZE]',
-                'reason=inconclusive-status'
-              );
-            }
-
-            _v789s25w71ResumeHealthProvenRef.current = false;
-            _v789s25w71ResumeFrozenRef.current = false;
-            _v789s25w71SetResumeFrozen(false);
-            _v789s25w112ResumeStableStartedAtRef.current = 0;
-            _v789s25w112ResumeLastPositionRef.current = null;
-            _v789s25w112ResumeLastProgressAtRef.current = 0;
-          }
-        }
-      } catch (error) {
-        console.warn(
-          '[V789S25W111 STATUS] poll failed',
-          error
-        );
-
-        if (
-          _v789s25w111CommercialPhaseRef.current === 'hold' ||
-          _v789s25w111CommercialPhaseRef.current === 'resuming'
-        ) {
-          _v789s25w111CleanPollsRef.current = 0;
-          _v789s25w112BackendCleanSinceRef.current = 0;
-
-          if (_v789s25w71ResumeFrozenRef.current) {
-            console.warn(
-              '[W121ZPLAY10Y71 CLEAN RESET UNFREEZE]',
-              'reason=poll-failed'
-            );
-          }
-
-          _v789s25w71ResumeHealthProvenRef.current = false;
-          _v789s25w71ResumeFrozenRef.current = false;
-          _v789s25w71SetResumeFrozen(false);
-          _v789s25w112ResumeStableStartedAtRef.current = 0;
-          _v789s25w112ResumeLastPositionRef.current = null;
-          _v789s25w112ResumeLastProgressAtRef.current = 0;
-        }
-      } finally {
-        scheduleNext();
-      }
-    };
-
-    void poll();
-
-    return () => {
-      cancelled = true;
-
-      if (timer) {
-        clearTimeout(timer);
-      }
-    };
-  }, [
-    isLive,
-    streamUrl,
-    _v789s25w114StatusSourceUrl,
-    _v789s25w111SetCommercialPhase,
-    _v789s25w118SetPinnedResumeSourceUrl,
-    _v789s25w112EnterQuarantine,
-    _v789s25w74cClearProvisionalEntryCover,
-    _v785ReconnectLive,
-  ]);
-
+  // W121ZLIVE173L: commercial-status polling removed; native player handles ordinary Live TV.
   // V789S25W115_PLAYBACK_HEALTH_RESUME_WATCHDOG
   //
   // The freshly-remounted Media3 player must produce healthy playing callbacks.
@@ -6530,7 +5889,7 @@ export default function PlayerScreen() {
             // Actual frozen playback remains protected by the independent
             // V789S20 playhead watchdog, which requires 5 seconds without
             // position advancement before requesting progress-stall recovery.
-            if (_v789n7StalledMs >= 1500) {
+            if (_v789n7StalledMs >= 12000) {
               // W121ZPLAY10Y25A_COMMERCIAL_PHASE_BUFFER_RECOVERY_SUPPRESSED
               //
               // While the backend-confirmed commercial lifecycle owns the
@@ -6572,7 +5931,7 @@ export default function PlayerScreen() {
               // This reuses the Y74C visual-only cover. It does not alter the
               // commercial phase and does not make PREFIX authoritative.
               if (
-                _v789s25w114LastStatusKeyRef.current ===
+                W121ZLIVE173L_ENABLE_COMMERCIAL_OVERLAY && _v789s25w114LastStatusKeyRef.current ===
                   'false:prefix' &&
                 _v789s25w111CommercialPhaseRef.current ===
                   'off'
@@ -9806,10 +9165,10 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                   v457AspectMode === 'stretch' && { transform: [{ scaleY: 1.18 }] },
                 ]}
                 resizeMode={v457ResizeMode} /* v467 - was V397_FULLSCREEN COVER */
-                shouldPlay={!(_v789s25w111CommercialPhase === 'resuming' && _v789s25w71ResumeFrozen)}
+                shouldPlay={true} /* W121ZLIVE173L: no commercial freeze */
                 isLooping={false}
                 volume={1.0}
-                isMuted={_v789s25w111CommercialPhase !== 'off'}
+                isMuted={false} /* W121ZLIVE173L: no commercial mute */
                 /* PATCH_V143C2_STRIPPED ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â reverted v143's interval cadence so FF math + auto-next read accurate playhead values */
                 onPlaybackStatusUpdate={handlePlaybackStatus}
                 onError={(error) => {
@@ -9845,7 +9204,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                     // is already reporting inactive PREFIX, cover the failed
                     // player instead of reconnecting into older live content.
                     const _v789s25w74cPrefixSourceFailure =
-                      _v789s25w114LastStatusKeyRef.current ===
+                      W121ZLIVE173L_ENABLE_COMMERCIAL_OVERLAY && _v789s25w114LastStatusKeyRef.current ===
                         'false:prefix' &&
                       _v789s25w111CommercialPhaseRef.current ===
                         'off';
@@ -9958,6 +9317,20 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
                     }
 
                     videoRetryCountRef.current = 0;
+
+                    // W121ZLIVE178O: Stop deterministic malformed-HLS reconnect loops.
+                    if (/Invalid date\/time format:/i.test(w161bhNativeError) &&
+                        /contentIsMalformed=true/i.test(w161bhNativeError)) {
+                      console.warn('[W121ZLIVE178O] malformed HLS timestamp, skipping reconnect');
+                      setIsLoading(false);
+                      setIsRebuffering(false);
+                      setError('This live channel has a malformed playlist. Choose another channel.');
+                      // 178P: only confirmed malformed terminal source errors count.
+                      if (isLive === 'true') {
+                        void reportLiveTerminalFailure(addonId, contentId);
+                      }
+                      return;
+                    }
 
                     void _v785ReconnectLive(
                       w161btBehindWindow
@@ -11076,40 +10449,7 @@ const response = await api.subtitles.get(cType, cId + (_v417_hint ? ('?release='
         </View>
       </Modal>
 
-      {(
-        _v789s25w111CommercialPhase !== 'off' ||
-        _v789s25w74cProvisionalEntryCover
-      ) && (
-        <V789S25W111CommercialBreakOverlay
-          onFirstFrameReady={() => {
-            if (
-              _v789s25w111CommercialPhaseRef.current ===
-              'arming'
-            ) {
-              console.log(
-                '[V789S25W115 BREAK HANDOFF COMPLETE]',
-                'action=break-video-first-frame-now-owns-screen'
-              );
-
-              _v789s25w111SetCommercialPhase(
-                'hold'
-              );
-            } else if (
-              _v789s25w74cProvisionalEntryCoverRef.current
-            ) {
-              _v789s25w74cProvisionalEntryReadyRef.current =
-                true;
-
-              console.log(
-                '[W121ZPLAY10Y74C PROVISIONAL ENTRY COVER READY]',
-                'phase=' +
-                  _v789s25w111CommercialPhaseRef.current,
-                'authority=pending-backend'
-              );
-            }
-          }}
-        />
-      )}
+      {/* W121ZLIVE173L: custom commercial overlay removed; main player stays visible. */}
     </View>
   );
 }

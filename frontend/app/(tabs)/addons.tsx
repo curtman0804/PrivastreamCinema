@@ -1,6 +1,12 @@
+import { runBU23IOGuideHealthRecheck } from '../../src/liveAddonBackgroundHealth';
+import { loadBU23HZAddonHealth, isAddonConfirmedDown, BU23HZ_ADDON_EVENT } from '../../src/liveAddonGuideStatus';
+import { loadBU23JBGuideCounts, bu23jbRecentLive, BU23JB_COUNT_EVENT } from '../../src/liveAddonGuideCounts';
+import { loadBU23JLNexoSample, runBU23JLNexoSample, BU23JL_NEXO_EVENT } from '../../src/liveNexoScopedHealth';
 import { ToSGate, hasAcceptedToS } from '../../src/components/ToSGate';
 import React, { useEffect, useCallback, useState } from 'react';
 import {
+  AppState,
+  DeviceEventEmitter,
   View,
   Text,
   StyleSheet,
@@ -27,7 +33,6 @@ import { Image } from 'expo-image';
 import { colors } from '../../src/styles/colors';
 import AsyncStorage from '../../src/utils/mmkvStorage';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { probeLiveTvDeviceCandidates } from '../../src/native/devicePlaybackCapabilities';
 import { markLiveTvSourcesDirty } from '../../src/liveTvNav';
 
 // V309_SHORT_SHARE_CODES — replaces the V308 PRIVA on-device share code
@@ -246,8 +251,10 @@ function FocusButton({
 // Catalog presence, EPG presence, installation, and URL existence
 // are NOT health.
 type W115cAddonHealth = {
-  state: 'checking' | 'live' | 'down';
+  state: 'checking' | 'live' | 'degraded' | 'unverified' | 'down';
   available: number;
+  countKnown?: boolean;
+  samplePositive?: number;
 };
 
 // W121ZADDON115F_BASIC_NON_TV_HEALTH
@@ -289,12 +296,6 @@ export default function AddonsScreen() {
     w115cAddonHealth,
     setW115cAddonHealth,
   ] = useState<Record<string, W115cAddonHealth>>({});
-
-  const w115cHealthGenerationRef =
-    React.useRef(0);
-
-  const w115cLastHealthAtRef =
-    React.useRef(0);
 
   const [
     w115fBasicAddonHealth,
@@ -338,430 +339,93 @@ export default function AddonsScreen() {
   
   const { width, height } = useWindowDimensions();
   const isTV = width > height || width > 800;
-  const w115cRefreshTvAddonHealth =
-    useCallback(
-      async (force: boolean = false) => {
-        const tvAddonIds =
-          Array.from(
-            new Set(
-              (addons || [])
-                .filter((addon: Addon) =>
-                  (addon?.manifest?.types || [])
-                    .map((value: any) =>
-                      String(value || '').toLowerCase()
-                    )
-                    .includes('tv')
-                )
-                .map((addon: Addon) =>
-                  String(
-                    addon?.manifest?.id || ''
-                  ).trim()
-                )
-                .filter(Boolean)
-            )
-          );
-
-        if (tvAddonIds.length === 0) {
-          setW115cAddonHealth({});
-          return;
-        }
-
-        const now = Date.now();
-
-        if (
-          !force &&
-          now - w115cLastHealthAtRef.current <
-            30000
-        ) {
-          return;
-        }
-
-        w115cLastHealthAtRef.current = now;
-
-        const generation =
-          ++w115cHealthGenerationRef.current;
-
-        setW115cAddonHealth((previous) => {
-          const next = {
-            ...previous,
-          };
-
-          for (const addonId of tvAddonIds) {
-            next[addonId] = {
-              state: 'checking',
-              available:
-                previous?.[addonId]?.available ||
-                0,
-            };
-          }
-
-          return next;
-        });
-
-        try {
-          let sourceIndex = 0;
-          let skip = 0;
-          let completed = false;
-
-          const visitedCursors =
-            new Set<string>();
-
-          const backendPlayableItems: any[] = [];
-          const deviceCheckItems: any[] = [];
-
-          while (!completed) {
-            const cursor =
-              `${sourceIndex}:${skip}`;
-
-            if (
-              visitedCursors.has(cursor)
-            ) {
-              throw new Error(
-                '[W115C ADDON HEALTH] repeated cursor ' +
-                  cursor
-              );
-            }
-
-            visitedCursors.add(cursor);
-
-            let page: any = null;
-            let lastPageError: any = null;
-
-            for (
-              let attempt = 1;
-              attempt <= 3;
-              attempt += 1
-            ) {
-              try {
-                page =
-                  await api.content.getLiveTvInventoryPage(
-                    sourceIndex,
-                    skip,
-                    400
-                  );
-
-                lastPageError = null;
-                break;
-              } catch (error) {
-                lastPageError = error;
-
-                if (attempt < 3) {
-                  await new Promise<void>(
-                    (resolve) =>
-                      setTimeout(
-                        resolve,
-                        500 * attempt
-                      )
-                  );
-                }
-              }
-            }
-
-            if (page == null) {
-              throw (
-                lastPageError ||
-                new Error(
-                  '[W115C ADDON HEALTH] inventory page unavailable'
-                )
-              );
-            }
-
-            if (
-              generation !==
-              w115cHealthGenerationRef.current
-            ) {
-              return;
-            }
-
-            if (Array.isArray(page?.items)) {
-              backendPlayableItems.push(
-                ...page.items
-              );
-            }
-
-            if (
-              Array.isArray(
-                page?.deviceCheckItems
-              )
-            ) {
-              deviceCheckItems.push(
-                ...page.deviceCheckItems
-              );
-            }
-
-            if (page?.done === true) {
-              completed = true;
-              break;
-            }
-
-            const nextSourceIndex =
-              Number(page?.nextSourceIndex);
-
-            const nextSkip =
-              Number(page?.nextSkip);
-
-            if (
-              !Number.isInteger(
-                nextSourceIndex
-              ) ||
-              nextSourceIndex < 0 ||
-              !Number.isInteger(nextSkip) ||
-              nextSkip < 0
-            ) {
-              throw new Error(
-                '[W115C ADDON HEALTH] invalid inventory cursor'
-              );
-            }
-
-            const nextCursor =
-              `${nextSourceIndex}:${nextSkip}`;
-
-            if (nextCursor === cursor) {
-              throw new Error(
-                '[W115C ADDON HEALTH] inventory cursor did not advance'
-              );
-            }
-
-            sourceIndex =
-              nextSourceIndex;
-
-            skip =
-              nextSkip;
-
-            await new Promise<void>(
-              (resolve) =>
-                setTimeout(resolve, 40)
-            );
-          }
-
-          const playableByAddon =
-            new Map<string, Set<string>>();
-
-          const addPlayable =
-            (raw: any) => {
-              const addonId =
-                String(
-                  raw?.addonId || ''
-                ).trim();
-
-              const id =
-                String(
-                  raw?.imdb_id ||
-                    raw?.id ||
-                    ''
-                ).trim();
-
-              if (
-                !addonId ||
-                !id ||
-                !tvAddonIds.includes(addonId)
-              ) {
-                return;
-              }
-
-              let ids =
-                playableByAddon.get(addonId);
-
-              if (!ids) {
-                ids = new Set<string>();
-
-                playableByAddon.set(
-                  addonId,
-                  ids
-                );
-              }
-
-              ids.add(id);
-            };
-
-          for (
-            const raw of backendPlayableItems
-          ) {
-            addPlayable(raw);
-          }
-
-          if (
-            deviceCheckItems.length > 0
-          ) {
-            const candidateRows: any[] = [];
-
-            for (
-              const raw of deviceCheckItems
-            ) {
-              const id =
-                String(
-                  raw?.id || ''
-                ).trim();
-
-              const addonId =
-                String(
-                  raw?.addonId || ''
-                ).trim();
-
-              if (!id || !addonId) {
-                continue;
-              }
-
-              const identity =
-                addonId + ':' + id;
-
-              const streams =
-                Array.isArray(
-                  raw?.deviceCheckStreams
-                )
-                  ? raw.deviceCheckStreams
-                  : [];
-
-              for (
-                const stream of
-                  streams.slice(0, 4)
-              ) {
-                const url =
-                  String(
-                    stream?.url || ''
-                  ).trim();
-
-                if (!url) {
-                  continue;
-                }
-
-                candidateRows.push({
-                  key: identity,
-                  url,
-                  headers:
-                    stream?.headers &&
-                    typeof stream.headers ===
-                      'object'
-                      ? stream.headers
-                      : {},
-                });
-              }
-            }
-
-            const probeResult =
-              await probeLiveTvDeviceCandidates(
-                candidateRows,
-                2500
-              );
-
-            if (
-              generation !==
-              w115cHealthGenerationRef.current
-            ) {
-              return;
-            }
-
-            const playableKeys =
-              new Set<string>(
-                (
-                  Array.isArray(
-                    probeResult?.playableKeys
-                  )
-                    ? probeResult.playableKeys
-                    : []
-                ).map((value: any) =>
-                  String(value || '')
-                )
-              );
-
-            for (
-              const raw of deviceCheckItems
-            ) {
-              const id =
-                String(
-                  raw?.id || ''
-                ).trim();
-
-              const addonId =
-                String(
-                  raw?.addonId || ''
-                ).trim();
-
-              const identity =
-                addonId && id
-                  ? addonId + ':' + id
-                  : '';
-
-              if (
-                !identity ||
-                !playableKeys.has(identity)
-              ) {
-                continue;
-              }
-
-              addPlayable(raw);
-            }
-          }
-
-          const next:
-            Record<
-              string,
-              W115cAddonHealth
-            > = {};
-
-          for (const addonId of tvAddonIds) {
-            const available =
-              playableByAddon.get(addonId)
-                ?.size || 0;
-
-            next[addonId] = {
-              state:
-                available > 0
-                  ? 'live'
-                  : 'down',
-              available,
-            };
-          }
-
-          if (
-            generation ===
-            w115cHealthGenerationRef.current
-          ) {
-            setW115cAddonHealth(next);
-
-            console.log(
-              '[W121ZADDON115C ADDON HEALTH]',
-              next
-            );
-          }
-        } catch (error) {
-          console.warn(
-            '[W121ZADDON115C ADDON HEALTH] unavailable',
-            error
-          );
-
-          if (
-            generation ===
-            w115cHealthGenerationRef.current
-          ) {
-            // Fail neutral here. A Privastream health-check failure
-            // must not falsely accuse a third-party addon of being DOWN.
-            setW115cAddonHealth({});
-            w115cLastHealthAtRef.current = 0;
-          }
-        }
-      },
-      [addons]
+  // BU23JB: display latest guide counts instantly; do NOT start a network scan.
+  // A cached catalog is not an assertion that every channel plays. Positive
+  // backend/native stream-preflight evidence marks the ADD-ON LIVE.
+  useFocusEffect(useCallback(() => {
+    let mounted = true;
+    const tvIds = new Set(
+      (addons || [])
+        .filter((addon: Addon) => (addon?.manifest?.types || [])
+          .some((value: any) => String(value || '').toLowerCase() === 'tv'))
+        .map((addon: Addon) => String(addon?.manifest?.id || '').trim())
+        .filter(Boolean)
     );
+    let version = 0;
+    const refreshFromRegistry = () => {
+      const callVersion = ++version;
+      void Promise.all([loadBU23HZAddonHealth(), loadBU23JBGuideCounts(), loadBU23JLNexoSample()])
+        .then(([saved, counts, nexoSample]) => {
+          if (!mounted || callVersion !== version) return;
+          const next: Record<string, W115cAddonHealth> = {};
+          for (const id of tvIds) {
+            const record = saved[id];
+            const entry = counts[id];
+            const counted = !!entry && entry.listed >= 0;
+            const currentProof = bu23jbRecentLive(entry, Date.now());
+            const scopedNexoPositive = id === 'community.nexotv' &&
+              !!nexoSample && nexoSample.positive > 0;
+            const recentRegistryProof = record?.state === 'live' &&
+              record?.evidence === 'playable_stream' &&
+              Date.now() - record.lastPlayableMs < 6 * 60 * 60 * 1000;
+            next[id] = {
+              state: isAddonConfirmedDown(saved, id) ? 'down'
+                : currentProof || recentRegistryProof || scopedNexoPositive ? 'live'
+                : record?.evidence === 'terminal_stream_probe' ? 'degraded'
+                : 'unverified',
+              available: counted ? entry.listed : 0,
+              countKnown: counted,
+              samplePositive: scopedNexoPositive ? nexoSample!.positive : 0,
+            };
+          }
+          setW115cAddonHealth(next);
+        }).catch((error) => {
+          console.warn('[BU23JB] cached status unavailable', error);
+          if (mounted && callVersion === version) setW115cAddonHealth(
+            Object.fromEntries(Array.from(tvIds, id =>
+              [id, { state: 'unverified' as const, available: 0, countKnown: false }])));
+        });
+    };
+    refreshFromRegistry();
+    const healthSub = DeviceEventEmitter.addListener(BU23HZ_ADDON_EVENT, refreshFromRegistry);
+    const countsSub = DeviceEventEmitter.addListener(BU23JB_COUNT_EVENT, refreshFromRegistry);
+    const scopedSub = DeviceEventEmitter.addListener(BU23JL_NEXO_EVENT, refreshFromRegistry);
+    // Keep Add-ons responsive. Run one small positive-only Nexo sample after focus.
+    const active = () =>
+      mounted && AppState.currentState === 'active';
 
-  useEffect(() => {
-    if ((addons || []).length > 0) {
-      void w115cRefreshTvAddonHealth(true);
-    } else {
-      setW115cAddonHealth({});
-    }
-  }, [
-    addons,
-    w115cRefreshTvAddonHealth,
-  ]);
+    const verifyProviders = async () => {
+      if (!active() || !tvIds.size) return;
 
-  useFocusEffect(
-    useCallback(() => {
-      void w115cRefreshTvAddonHealth(false);
+      console.log('[BU23KX HEALTH] verification started',
+        Array.from(tvIds));
 
-      return undefined;
-    }, [w115cRefreshTvAddonHealth])
-  );
+      try {
+        const status = await runBU23IOGuideHealthRecheck(active);
+        console.log('[BU23KX SHARED HEALTH]', status);
+      } catch (_) {
+        console.warn('[BU23KX SHARED HEALTH] exception');
+      }
+
+      if (active() && tvIds.has('community.nexotv')) {
+        try {
+          const status = await runBU23JLNexoSample();
+          console.log('[BU23KX NEXO HEALTH]', status);
+        } catch (_) {
+          console.warn('[BU23KX NEXO HEALTH] exception');
+        }
+      }
+
+      if (active()) refreshFromRegistry();
+    };
+
+    const sampleTimer = setTimeout(() => {
+      void verifyProviders();
+    }, 8000);
+    return () => { mounted = false; version += 1; clearTimeout(sampleTimer);
+      healthSub.remove(); countsSub.remove(); scopedSub.remove(); };
+  }, [addons, isLoadingAddons, _v326CurrentUsername]));
+
   const w115fRefreshBasicAddonHealth =
     useCallback(
       async (force: boolean = false) => {
@@ -1307,7 +971,7 @@ export default function AddonsScreen() {
     if (!/^https:\/\//i.test(u)) {
       return {
         ok: false,
-        reason: 'Addon URL must start with https:// or stremio://',
+        reason: 'Enter a valid HTTPS manifest URL or compatible addon installation link.',
       };
     }
 
@@ -1327,7 +991,7 @@ export default function AddonsScreen() {
       return {
         ok: false,
         reason: (
-          'Expected a Stremio manifest or catalog/meta/stream/subtitles JSON URL.'
+          'Expected an addon manifest or supported resource JSON URL.'
         ),
       };
     }
@@ -1733,7 +1397,7 @@ export default function AddonsScreen() {
                 <TextInput
                   style={[styles.modalInput, inputFocused && styles.modalInputFocused]}
                   /* V182_LEGAL_EXAMPLE — Cinemeta (Stremio first-party metadata addon, 100% legal). */
-                  placeholder="https://v3-cinemeta.strem.io/manifest.json"
+                  placeholder="Enter addon manifest URL"
                   placeholderTextColor="#666666"
                   value={addonUrl}
                   onChangeText={setAddonUrl}
@@ -1745,7 +1409,7 @@ export default function AddonsScreen() {
                   numberOfLines={3}
                 />
                 <Text style={styles.modalHint}>
-                  Paste a Stremio addon manifest URL (must end in .json or contain /manifest). Multiple URLs: separate with semicolon or new line.
+                  Paste an addon manifest URL (must end in .json or contain /manifest). Multiple URLs: separate with semicolon or new line.
                 </Text>
                 <FocusButton 
                   onPress={handleInstallAddon} 
@@ -1962,7 +1626,7 @@ function AddonCard({
                 styles.w115cHealthBadge,
                 liveHealth.state === 'live'
                   ? styles.w115cHealthBadgeLive
-                  : styles.w115cHealthBadgeDown,
+                  : liveHealth.state === 'down' ? styles.w115cHealthBadgeDown : null,
               ]}
             >
               <Text
@@ -1970,21 +1634,21 @@ function AddonCard({
                   styles.w115cHealthBadgeText,
                   liveHealth.state === 'live'
                     ? styles.w115cHealthTextLive
-                    : styles.w115cHealthTextDown,
+                    : liveHealth.state === 'down' ? styles.w115cHealthTextDown : null,
                 ]}
               >
-                {liveHealth.state === 'live'
-                  ? 'LIVE'
-                  : 'DOWN'}
+                {liveHealth.state === 'live' ? 'LIVE' : liveHealth.state === 'down' ? 'DOWN' : liveHealth.state === 'unverified' ? 'UNVERIFIED' : 'DEGRADED'}
               </Text>
             </View>
 
             <Text style={styles.w115cHealthCount}>
-              {liveHealth.available}{' '}
-              {liveHealth.available === 1
-                ? 'channel'
-                : 'channels'}{' '}
-              available
+              {liveHealth.countKnown
+                ? (liveHealth.state === 'live'
+                    ? `${liveHealth.available} ${liveHealth.available === 1 ? 'channel' : 'channels'} available in guide`
+                    : `Last guide count: ${liveHealth.available} ${liveHealth.available === 1 ? 'channel' : 'channels'}`)
+                : liveHealth.samplePositive
+                  ? `${liveHealth.samplePositive} confirmed stream candidates in NexoTV sample; full guide count pending`
+                  : 'Channel count not yet cached'}
             </Text>
           </View>
         ) : null}
@@ -2026,7 +1690,7 @@ function AddonCard({
           </View>
         ) : null}
         <Text style={styles.addonDescription} numberOfLines={2}>
-          {addon.manifest.description || 'No description'}
+          {addon.manifest.id === 'community.nexotv' ? 'Stream live IPTV channels directly in Privastream Cinema.' : String(addon.manifest.description || 'No description').replace(/stremio/gi, 'Privastream Cinema')}
         </Text>
         <View style={styles.addonTypes}>
           {(addon.manifest.types || []).map((type, index) => (

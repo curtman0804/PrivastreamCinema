@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import { Tabs, usePathname, useRouter } from 'expo-router';
+import { useBU23ISAppActiveHealth } from '../../src/liveAddonAppActiveHealth'; // BU23IS_APP_ACTIVE_HEALTH_OWNER
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Platform, View, useWindowDimensions, Pressable, BackHandler, ToastAndroid, findNodeHandle, DeviceEventEmitter } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -93,6 +94,7 @@ export default function TabsLayout() {
   //   Non-Discover tabs -> go to Discover
   //   Discover (root) -> return false, OS exits the app
   const pathname = usePathname();
+  useBU23ISAppActiveHealth(pathname); // BU23IS_APP_ACTIVE_HEALTH_OWNER
   const router = useRouter();
   useEffect(() => {
     if (Platform.OS !== "android") return;

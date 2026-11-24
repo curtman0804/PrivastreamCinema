@@ -668,6 +668,47 @@ class PrivastreamLiveTVGuideView(
         }
     }
 
+    // BU23OJ: RN can retain its outer layout while a native RecyclerView's
+    // adapter changes. Complete the pending child layout at its existing
+    // bounds, without remounting the guide, scrolling or requesting focus.
+    private fun bu23ojApplyGuideLayout() {
+        val w = recycler.width
+        val h = recycler.height
+        if (!recycler.isAttachedToWindow || w <= 0 || h <= 0 ||
+            recycler.isComputingLayout || recycler.isLayoutSuppressed) {
+            android.util.Log.i("BU23OJ", "EPG_LAYOUT skipped geometry_or_layout_busy")
+            return
+        }
+        val pending = recycler.hasPendingAdapterUpdates() || recycler.isLayoutRequested
+        if (pending) {
+            // Request layout, then honor it locally because the React parent
+            // need not change dimensions when schedules are updated.
+            recycler.requestLayout()
+            recycler.forceLayout()
+            recycler.measure(
+                View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY)
+            )
+            recycler.layout(recycler.left, recycler.top, recycler.right, recycler.bottom)
+            recycler.postInvalidateOnAnimation()
+        }
+        var expected = 0
+        var bound = 0
+        var laidOut = 0
+        for (i in 0 until recycler.childCount) {
+            val holder = recycler.getChildViewHolder(recycler.getChildAt(i)) as? Holder
+                ?: continue
+            val item = adapter.itemAt(holder.bindingAdapterPosition) ?: continue
+            if (item.programs.any { it.endMs > timelineStartMs && it.startMs < timelineEndMs() }) {
+                expected += 1
+                val programs = holder.programViews.filter { (it.tag as? ProgramTag)?.index?.let { index -> index >= 0 } == true }
+                if (programs.isNotEmpty()) bound += 1
+                if (programs.any { it.width > 0 && it.height > 0 }) laidOut += 1
+            }
+        }
+        android.util.Log.i("BU23OJ", "EPG_LAYOUT pending=$pending expectedRows=$expected boundRows=$bound laidOutRows=$laidOut focusedRow=$focusedRow")
+    }
+
     fun setItems(items: ReadableArray?) {
         val next =
             ArrayList<GuideItem>()
@@ -826,6 +867,7 @@ class PrivastreamLiveTVGuideView(
         )
 
         adapter.replace(next)
+        android.util.Log.i("BU23OJ", "EPG_INPUT rows=${next.size} scheduledRows=${next.count { it.programs.isNotEmpty() }}")
 
         val restored =
             if (oldKey != null) {
@@ -849,6 +891,9 @@ class PrivastreamLiveTVGuideView(
         )
 
         post {
+            // BU23OJ: finish the adapter's pending layout before the existing
+            // keyed focus-restoration logic checks its holder.
+            bu23ojApplyGuideLayout()
             // V788T12D_KEEP_EXISTING_FOCUSED_HOLDER
             //
             // DiffUtil may have shifted this row's adapter position,

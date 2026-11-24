@@ -378,6 +378,48 @@ const supportsSport = (addon: Addon): boolean =>
     .map((value) => value.toLowerCase())
     .includes('sport');
 
+// W121ZSPORTS179F_PREMIUM_REGISTRY_GUARD
+// Stable signature: returning from the player must not refresh the sports rail,
+// but installing a new sports addon must be visible when Sports is focused.
+const sportsCatalogSignature = (catalogs: SportCatalogRef[]): string =>
+  catalogs
+    .map((row) => `${row.key}|${row.addonName}|${row.catalogName}`)
+    .sort()
+    .join('\n');
+
+// Treat Premium as a preference, not an entitlement: only sources actually
+// present on the signed-in user's installed addon list are considered.
+const isPremiumSportsSource = (source: SportEventSource, installed: Addon[]): boolean => {
+  const addon = installed.find((candidate) =>
+    String((candidate as any)?.id || '') === source.addonDbId
+  );
+  const identity = [
+    source.addonName,
+    (addon as any)?.manifest?.id,
+    (addon as any)?.manifest?.name,
+  ].map((part) => String(part || '')).join(' ');
+  return /(?:^|[\s._-])premium(?:$|[\s._-])/i.test(identity);
+};
+
+const sortSportsSourcesPremiumFirst = (
+  sources: SportEventSource[], installed: Addon[]
+): SportEventSource[] =>
+  [...sources].sort((a, b) =>
+    Number(isPremiumSportsSource(b, installed)) -
+    Number(isPremiumSportsSource(a, installed))
+  );
+
+// W121ZSPORTS179G_EVENT_IDENTITY_GUARD
+// Detect only explicit NFL franchise nicknames in an event/stream descriptor.
+// This is not a video-content verifier: opaque/mislabelled provider feeds may
+// still require upstream correction. Never read or log stream URL credentials.
+const sportsNflTeamNames = (value: string): string[] => {
+  const haystack = normalizeMatchText(value);
+  return NFL_FRANCHISE_ALIASES
+    .map((aliases) => String(aliases[0] || '').toLowerCase())
+    .filter((nickname) => !!nickname && haystack.includes(` ${nickname} `));
+};
+
 const collectCatalogs = (addons: Addon[]): SportCatalogRef[] => {
   const result: SportCatalogRef[] = [];
 
@@ -659,6 +701,7 @@ export default function SportsScreen() {
   const router = useRouter();
   const didInitialLoad = useRef(false);
   const hasSportCatalogsRef = useRef(false);
+  const sportsCatalogSignatureRef = useRef('');
   // W121ZNAV145D2: two-step left edge handoff into sports category chip.
   const focusedSportsCard = useRef(-1);
   const [sportsLeftArmed, setSportsLeftArmed] = useState(false);
@@ -702,16 +745,31 @@ export default function SportsScreen() {
   }, [catalogs, selectedPreset]);
 
   const loadAddons = useCallback(async () => {
-    if (!didInitialLoad.current) setLoadingAddons(true);
-    setErrorText('');
+    const initial = !didInitialLoad.current;
+    if (initial) {
+      setLoadingAddons(true);
+      setErrorText('');
+    }
 
     try {
       const installed = await api.addons.getAll();
       const safe = Array.isArray(installed) ? installed : [];
       const nextCatalogs = collectCatalogs(safe);
+      const signature = sportsCatalogSignature(nextCatalogs);
 
+      // W121ZSPORTS179F: Do not refresh Sports on return from Player when
+      // installed sports catalogs are unchanged. Newly installed Premium is
+      // detected without clearing focus or rebuilding the existing rail.
+      if (!initial && signature === sportsCatalogSignatureRef.current) {
+        return;
+      }
+      sportsCatalogSignatureRef.current = signature;
+      setErrorText('');
       setAddons(safe);
       setCatalogs(nextCatalogs);
+      console.log('[W121ZSPORTS179F ADDON REGISTRY]',
+        'sportsCatalogs=' + nextCatalogs.length,
+        'changed=' + !initial);
 
       const availableCatalogIds = new Set(
         nextCatalogs.map((catalog) => catalog.catalogId)
@@ -733,33 +791,31 @@ export default function SportsScreen() {
         return firstAvailable?.id || 'now';
       });
     } catch (error: any) {
-      setAddons([]);
-      setCatalogs([]);
-      setEvents([]);
-      setErrorText(
-        error?.response?.data?.detail ||
-          error?.message ||
-          'Could not load installed sports addons.'
-      );
+      if (initial) {
+        setAddons([]);
+        setCatalogs([]);
+        setEvents([]);
+        setErrorText(
+          error?.response?.data?.detail ||
+            error?.message ||
+            'Could not load installed sports addons.'
+        );
+      } else {
+        // Transient refresh errors must NOT wipe the last working Sports rail.
+        console.warn('[W121ZSPORTS179F ADDON REGISTRY]', 'refresh-failed');
+      }
     } finally {
       didInitialLoad.current = true;
-      setLoadingAddons(false);
+      if (initial) setLoadingAddons(false);
     }
   }, []);
 
-  useEffect(() => {
-    hasSportCatalogsRef.current = catalogs.length > 0;
-  }, [catalogs]);
-
   useFocusEffect(
     useCallback(() => {
-      // W121ZSPORTS134L_PRESERVE_RETURN_STATE
-      // Returning from /player must not refetch/replace the already-loaded
-      // Sports catalog.  This keeps Now Playing/category cards stable and
-      // preserves focus instead of visibly reloading the rail.
-      if (!didInitialLoad.current || !hasSportCatalogsRef.current) {
-        void loadAddons();
-      }
+      // W121ZSPORTS179F: cheap manifest-only check on focus.  The callback
+      // does not set catalog state unless sports addon inventory changed.
+      // No media requests and no Player-return card refetch for stable addons.
+      void loadAddons();
       return undefined;
     }, [loadAddons])
   );
@@ -774,9 +830,31 @@ export default function SportsScreen() {
       }
 
       setLoadingCatalog(true);
+      setEvents([]); // W121ZLIVE173S: do not display events from the prior category.
       setErrorText('');
 
       try {
+        // W121ZLIVE173S: publish a provider's first *real* catalog page while
+        // remaining pages and other providers continue loading. The existing
+        // full-page dedupe, pagination caps, and final merge remain authoritative.
+        const firstPages = new Map<string, SportEvent[]>();
+        const publishFirstPage = (catalog: SportCatalogRef, raw: any[]) => {
+          if (cancelled || firstPages.has(catalog.key)) return;
+          const normalized = raw
+            .map((item: any) => normalizeEvent(item, catalog))
+            .filter((event: SportEvent | null): event is SportEvent => !!event);
+          firstPages.set(catalog.key, normalized);
+          const early = filterEventsForPreset(
+            mergeSportEvents(Array.from(firstPages.values()).flat()),
+            selectedPreset?.id
+          );
+          if (early.length > 0) {
+            setEvents(early);
+            setLoadingCatalog(false);
+            console.log('[W121ZLIVE173S SPORTS FIRST PAGE]',
+              'catalog=' + catalog.catalogId, 'visible=' + early.length);
+          }
+        };
         const results = await Promise.allSettled(
           selectedCatalogs.map(async (catalog) => {
             // W121ZSPORTS140I_PROVIDER_PAGINATION
@@ -816,6 +894,9 @@ export default function SportsScreen() {
                 if (rawItems.length >= 200) break;
               }
 
+              if (page === 0 && freshCount > 0) {
+                publishFirstPage(catalog, rawItems);
+              }
               if (freshCount === 0 || rawItems.length >= 200) break;
               skip += metas.length;
             }
@@ -865,21 +946,24 @@ export default function SportsScreen() {
     };
   }, [selectedCatalogs, selectedPreset?.id]);
 
-  // W121ZSPORTS134D_GENERIC_SPORT_PLAYBACK
+  // W121ZSPORTS179G_EVENT_IDENTITY_GUARD
+  // Never promote an explicitly different NFL matchup merely because its
+  // provider is Premium. Confirm event-specific descriptors before tier.
   const openEvent = useCallback(
     async (event: SportEvent) => {
       try {
         setErrorText('');
-
+        const orderedSources = sortSportsSourcesPremiumFirst(event.sources, addons);
+        const expectedTeams = sportsNflTeamNames(event.name);
+        const checkNflMatch = isNflEvent(event) && expectedTeams.length === 2;
         const sourceResults = await Promise.allSettled(
-          event.sources.map(async (source) => {
+          orderedSources.map(async (source) => {
             const [metaResult, streamResult] = await Promise.all([
               api.addons
                 .getMeta(source.addonDbId, 'sport', source.eventId)
                 .catch(() => ({ meta: null })),
               api.addons.getStreams(source.addonDbId, 'sport', source.eventId),
             ]);
-
             return {
               source,
               meta: metaResult?.meta || null,
@@ -888,14 +972,26 @@ export default function SportsScreen() {
           })
         );
 
-        let meta: any = null;
-        const urls: string[] = [];
+        const candidates: Array<{
+          url: string;
+          confidence: number;
+          premium: boolean;
+          order: number;
+        }> = [];
+        const seenUrls = new Set<string>();
         let rawCount = 0;
+        let rejectedOtherGame = 0;
+        let namedCandidates = 0;
+        let meta: any = null;
+        let sourceOrder = 0;
 
         for (const result of sourceResults) {
           if (result.status !== 'fulfilled') continue;
-          if (!meta && result.value.meta) meta = result.value.meta;
           rawCount += result.value.streams.length;
+          const providerMetaName = String(result.value.meta?.name || result.value.meta?.title || '');
+          const metaTeams = checkNflMatch ? sportsNflTeamNames(providerMetaName) : [];
+          const wrongMeta = checkNflMatch && metaTeams.some((team) => !expectedTeams.includes(team));
+          const premium = isPremiumSportsSource(result.value.source, addons);
 
           for (const stream of result.value.streams) {
             const url = String(
@@ -905,62 +1001,94 @@ export default function SportsScreen() {
                 (stream as any)?.directUrl ||
                 ''
             ).trim();
+            if (!/^https?:\/\//i.test(url)) continue;
 
-            if (/^https?:\/\//i.test(url) && !urls.includes(url)) {
-              urls.push(url);
+            // Provider stream descriptors are safer than a regional-channel
+            // assumption. Include URL pathname only for event words; never
+            // inspect/log signed query parameters, headers or cookies.
+            let pathHint = '';
+            try { pathHint = decodeURIComponent(new URL(url).pathname); } catch (_) { /* opaque URL */ }
+            const streamDescriptor = [
+              (stream as any)?.name,
+              (stream as any)?.title,
+              (stream as any)?.description,
+              (stream as any)?.behaviorHints?.filename,
+              pathHint,
+            ].map((part) => String(part || '')).join(' ');
+            const streamTeams = checkNflMatch ? sportsNflTeamNames(streamDescriptor) : [];
+            const wrongStream = checkNflMatch && streamTeams.some((team) => !expectedTeams.includes(team));
+            if (wrongMeta || wrongStream) {
+              rejectedOtherGame += 1;
+              continue;
             }
+
+            let confidence = 0;
+            if (checkNflMatch) {
+              if (streamTeams.length >= 2) confidence = 3;
+              else if (streamTeams.length === 1) confidence = 2;
+              else if (metaTeams.length >= 2) confidence = 1;
+            }
+            if (confidence) namedCandidates += 1;
+            candidates.push({ url, confidence, premium, order: sourceOrder++ });
           }
+          if (!wrongMeta && !meta && result.value.meta) meta = result.value.meta;
         }
 
-        const name = String(meta?.name || event.name || 'Sports Event').trim();
-        const poster = String(meta?.poster || event.poster || '').trim();
-
-        console.log(
-          '[W121ZSPORTS134J PLAY]',
-          'providers=' + event.sources.length,
+        // Confirmed matching descriptors win over opaque URLs. Within each
+        // confidence tier, the accepted 179F Premium-first policy remains.
+        candidates.sort((a, b) =>
+          b.confidence - a.confidence ||
+          Number(b.premium) - Number(a.premium) ||
+          a.order - b.order
+        );
+        const uniqueCandidates = candidates.filter((candidate) => {
+          if (seenUrls.has(candidate.url)) return false;
+          seenUrls.add(candidate.url);
+          return true;
+        });
+        console.log('[W121ZSPORTS179G MATCH]',
           'event=' + event.id,
+          'providers=' + event.sources.length,
           'raw=' + rawCount,
-          'direct=' + urls.length
+          'matched=' + uniqueCandidates.length,
+          'named=' + namedCandidates,
+          'rejectedOtherGame=' + rejectedOtherGame,
+          'firstConfidence=' + (uniqueCandidates[0]?.confidence ?? -1),
+          'firstPremium=' + (uniqueCandidates[0]?.premium ?? false),
+          'opaqueUnverifiable=' + (checkNflMatch && namedCandidates === 0)
         );
 
-        if (!urls.length) {
-          Alert.alert(
-            'Stream Unavailable',
-            'None of your installed sports providers has a playable stream for this event right now.'
-          );
+        if (!uniqueCandidates.length) {
+          Alert.alert('Stream Unavailable',
+            rejectedOtherGame
+              ? 'Available streams identify a different game. Refusing to play the wrong matchup.'
+              : 'None of the installed sports providers has a playable stream for this event right now.');
           return;
         }
-
-        const primary = urls[0];
-        const fallbacks = urls.slice(1);
-
+        const poster = String(meta?.poster || event.poster || '').trim();
+        // Event card is the authority for the selected title; a provider meta
+        // title may refer to another game or a generic regional network feed.
+        const primary = uniqueCandidates[0].url;
+        const fallbacks = uniqueCandidates.slice(1).map((candidate) => candidate.url);
         router.push({
           pathname: '/player',
           params: {
             directUrl: primary,
-            title: name,
+            title: String(event.name || 'Sports Event').trim(),
             poster,
             backdrop: '',
             logo: poster,
-            fallbackStreams: fallbacks.length
-              ? JSON.stringify(fallbacks)
-              : '',
+            fallbackStreams: fallbacks.length ? JSON.stringify(fallbacks) : '',
           },
         } as any);
       } catch (error: any) {
-        console.warn(
-          '[W121ZSPORTS134J PLAY] failed',
-          error?.message || error
-        );
-        Alert.alert(
-          'Sports Event',
+        console.warn('[W121ZSPORTS179G MATCH] failed', error?.message || error);
+        Alert.alert('Sports Event',
           error?.response?.data?.detail ||
-            error?.message ||
-            'Could not load a playable stream for this event.'
-        );
+          error?.message || 'Could not load a playable stream for this event.');
       }
     },
-    [router]
+    [router, addons]
   );
 
   const hasSportAddon = addons.some(supportsSport);

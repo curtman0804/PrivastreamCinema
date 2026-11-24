@@ -804,6 +804,13 @@ class UserUpdate(BaseModel):
     is_admin: Optional[bool] = None
     premiumize_api_key: Optional[str] = None
 
+# W121ZSPORTS179G per-customer Premium sports provisioning.
+class AdminPremiumSportsConnectRequest(BaseModel):
+    manifest_url: str
+
+class AdminPremiumizeConnectRequest(BaseModel):
+    api_key: str
+
 class PremiumizeCacheCheckRequest(BaseModel):
     items: List[str]
 
@@ -1210,6 +1217,33 @@ async def _v726_safe_addon_get(
     timeout: float,
 ) -> httpx.Response:
     current_url = str(url or "").strip()
+
+    # W121ZADDON165E PRIVATE TPB+ ROUTE: exact retired public hostname only.
+    # Never permit caller-chosen internal host/IP or redirects into this route.
+    # The fixed local instance is on the same private Docker network.
+    original = urlsplit(current_url)
+    if (
+        original.scheme == "https"
+        and original.hostname == "thepiratebay-plus.strem.fun"
+        and original.username is None
+        and original.password is None
+        and original.port in (None, 443)
+        and (
+            original.path == "/manifest.json"
+            or (
+                original.path.startswith("/stream/")
+                and original.path.endswith(".json")
+            )
+        )
+    ):
+        private_url = "http://privastream-tpbplus-isolated:7000" + original.path
+        if original.query:
+            private_url += "?" + original.query
+        return await client.get(
+            private_url,
+            timeout=timeout,
+            follow_redirects=False,
+        )
 
     for redirect_count in range(_V726_MAX_REDIRECTS + 1):
         current_url = await _v726_validate_addon_url(current_url)
@@ -2763,14 +2797,95 @@ async def premiumize_transfer_status(
 
 # ==================== ADDON ROUTES ====================
 
+# W121ZSPORTS179H_USER_PREMIUM_VAULT
+# New administrator-provisioned Highfly manifest URLs are encrypted at rest.
+# Reuse the existing encrypted-credential Fernet key already configured for
+# Premiumize; this avoids a new production secret during the self-only pilot.
+# Keep legacy addons readable; do not mutate existing installed subscriptions.
+_PREMIUM_SPORTS_ID = "community.sports.streamed.premium"
+_PREMIUM_SPORTS_PUBLIC_URL = "https://premium.highfly.to/manifest.json"
+
+
+def _w179h_manifest_url(addon: dict) -> str:
+    encrypted = str(addon.get("manifestUrlEncrypted") or "").strip()
+    if not encrypted:
+        return str(addon.get("manifestUrl") or "")
+    if (addon.get("manifest") or {}).get("id") != _PREMIUM_SPORTS_ID:
+        raise RuntimeError("Encrypted manifest is not a Premium sports addon")
+    try:
+        token_url = _get_premiumize_fernet().decrypt(
+            encrypted.encode("utf-8")
+        ).decode("utf-8")
+    except Exception as exc:
+        raise RuntimeError("Premium sports credential unavailable") from exc
+    parsed = urlsplit(token_url)
+    if (
+        parsed.scheme.lower() != "https"
+        or (parsed.hostname or "").lower() != "premium.highfly.to"
+        or parsed.username is not None or parsed.password is not None
+        or parsed.port not in (None, 443)
+        or parsed.fragment
+        or not parsed.path.lower().endswith("/manifest.json")
+    ):
+        raise RuntimeError("Invalid Premium sports credential destination")
+    return token_url
+
+
 @api_router.get("/addons")
 async def get_addons(current_user: User = Depends(get_current_user)):
     """Get all user's installed addons"""
     addons = await db.addons.find({"userId": current_user.id}).to_list(None)
     for addon in addons:
         addon.pop('_id', None)
+        addon.pop('manifestUrlEncrypted', None)
     return addons
 
+
+# W121ZADDON164B_BACKEND_MANIFEST_REACHABILITY
+# Observe only: never write addon records or affect streams/playback.
+@api_router.get("/addons/{addon_id}/health")
+async def w121zaddon164b_addon_health(
+    addon_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    addon = await db.addons.find_one({"id": addon_id, "userId": current_user.id})
+    if not addon:
+        raise HTTPException(status_code=404, detail="Addon not installed")
+
+    # W121ZSPORTS179M: probe the owner-specific decrypted URL server-side.
+    # The public manifestUrl is intentionally token-free for encrypted Premium.
+    try:
+        manifest_url = _w179h_manifest_url(addon).strip()
+    except Exception:
+        return {"state": "unverified", "reason": "provider_credential_unavailable"}
+    if not manifest_url:
+        return {"state": "unverified", "reason": "missing_manifest_url"}
+
+    try:
+        async with httpx.AsyncClient(follow_redirects=False, trust_env=False) as client:
+            response = await _v726_safe_addon_get(client, manifest_url, timeout=10.0)
+        if response.status_code != 200:
+            return {"state": "unverified", "reason": "manifest_http_error"}
+        payload = response.json()
+        manifest = payload.get("manifest", payload) if isinstance(payload, dict) else {}
+        if not isinstance(manifest, dict) or not manifest.get("id") or not manifest.get("name"):
+            return {"state": "unverified", "reason": "invalid_manifest"}
+        expected_id = str((addon.get("manifest") or {}).get("id") or "").strip()
+        returned_id = str(manifest["id"]).strip()
+        sports_alias_ok = (
+            expected_id == "community.sports.fly"
+            and returned_id == "community.sports.streamed"
+        )
+        if expected_id and returned_id != expected_id and not sports_alias_ok:
+            return {"state": "unverified", "reason": "manifest_id_mismatch"}
+        return {"state": "live", "reason": "backend_manifest_reachable"}
+    except Exception as exc:
+        logger.info("W121ZADDON164B addon health probe failed: %s", type(exc).__name__)
+        return {"state": "unverified", "reason": "probe_failed"}
+
+
+# W121ZLIVE167Q_FAST_PROVIDER_REGISTRY_BRIDGE (disabled by default)
+from fast_provider_bridge import PROVIDER_NAMES as _w167q_provider_names
 
 # V776A_PRIVASTREAM_SHARE_CODES
 @api_router.post("/addons/share-code")
@@ -2780,6 +2895,8 @@ async def create_addon_share_code(
 ):
     """Create or return a stable Privastream 7-digit addon code."""
     manifest_url = _v776a_normalize_addon_input(request.url)
+    if (urlsplit(manifest_url).hostname or '').lower() == 'premium.highfly.to':
+        raise HTTPException(status_code=400, detail="Personal Premium URLs cannot be shared")
 
     try:
         manifest_url = await _v726_validate_addon_url(manifest_url)
@@ -2787,6 +2904,35 @@ async def create_addon_share_code(
         raise HTTPException(
             status_code=400,
             detail=f"Addon URL is not permitted: {exc}",
+        )
+
+    # W121ZLIVE167G_FAST_ONLY_SHARE_CODE_GATE
+    # No outbound fetches; preserve ordinary addon share-code behavior.
+    # Reserved identities in known URLs and previously stored addon manifests
+    # are denied before existing-code lookup or code allocation.
+    _w167g_reserved = frozenset(_w167q_provider_names)
+    from urllib.parse import unquote as _w167g_unquote
+    _w167g_url = manifest_url
+    for _ in range(3):
+        _w167g_decoded = _w167g_unquote(_w167g_url)
+        if _w167g_decoded == _w167g_url:
+            break
+        _w167g_url = _w167g_decoded
+    _w167g_url_lc = _w167g_url.lower()
+    _w167g_url_guarded = any(
+        _w167g_identity in _w167g_url_lc
+        for _w167g_identity in _w167g_reserved
+    )
+    if not _w167g_url_guarded:
+        _w167g_known = await db.addons.find_one({
+            "manifestUrl": manifest_url,
+            "manifest.id": {"$in": sorted(_w167g_reserved)},
+        })
+        _w167g_url_guarded = _w167g_known is not None
+    if _w167g_url_guarded:
+        raise HTTPException(
+            status_code=403,
+            detail="FAST addon share code is not authorized",
         )
 
     existing = await db.addon_share_codes.find_one(
@@ -2839,21 +2985,69 @@ async def resolve_shortener_code(
     """Resolve Privastream share codes first, then AFTVnews codes."""
     clean_code = str(code or "").strip()
 
-    if not clean_code.isdigit() or not (6 <= len(clean_code) <= 8):
+    if not clean_code.isdigit() or not (5 <= len(clean_code) <= 8):
         raise HTTPException(
             status_code=400,
-            detail="Code must contain 6 to 8 digits",
+            detail="Code must contain 5 to 8 digits",
         )
 
     shared = await db.addon_share_codes.find_one(
         {"code": clean_code}
     )
 
+    # W121ZLIVE167J_SAVED_FAST_CODE_RESOLUTION_GATE
+    # Code resolution is not authorization. Reject identifiable reserved FAST
+    # links, including old share-code records. Preserve normal offline URLs.
     if shared and shared.get("url"):
+        _w167j_url = str(shared["url"])
+        # W121ZSPORTS179M: historical share codes must not disclose paid URLs.
+        if (urlsplit(_w167j_url).hostname or '').lower() == 'premium.highfly.to':
+            raise HTTPException(status_code=403, detail="Personal Premium URLs cannot be shared")
+        from urllib.parse import unquote as _w167j_unquote
+        _w167j_decoded = _w167j_url
+        for _w167j_iteration in range(3):
+            _w167j_next = _w167j_unquote(_w167j_decoded)
+            if _w167j_next == _w167j_decoded:
+                break
+            _w167j_decoded = _w167j_next
+        _w167j_fast_ids = frozenset(_w167q_provider_names)
+        _w167j_reserved = any(
+            _w167j_id in _w167j_decoded.lower()
+            for _w167j_id in _w167j_fast_ids
+        )
+        if not _w167j_reserved:
+            _w167j_known = await db.addons.find_one({
+                "manifestUrl": _w167j_url,
+                "manifest.id": {"$in": sorted(_w167j_fast_ids)},
+            })
+            _w167j_reserved = _w167j_known is not None
+        if _w167j_reserved:
+            raise HTTPException(
+                status_code=403,
+                detail="FAST addon code is not authorized",
+            )
         return {
-            "url": str(shared["url"]),
+            "url": _w167j_url,
             "code": clean_code,
             "source": "privastream",
+        }
+
+    # W121ZADDON182F: Verified six-digit Downloader code for TPB Plus.
+    # Preserve stored Privastream code priority; validate the destination
+    # with the same outbound URL safety checks used for all addon installs.
+    if clean_code == "970280":
+        _w182f_manifest = "https://thepiratebay-plus.strem.fun/manifest.json"
+        try:
+            _w182f_manifest = await _v726_validate_addon_url(_w182f_manifest)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Code 970280 destination is not permitted",
+            )
+        return {
+            "url": _w182f_manifest,
+            "code": clean_code,
+            "source": "verified-code-970280",
         }
 
     try:
@@ -2986,6 +3180,17 @@ async def install_addon(addon_data: AddonInstall, current_user: User = Depends(g
     if 'id' not in manifest_data or 'name' not in manifest_data:
         raise HTTPException(status_code=400, detail="Invalid manifest format")
     
+    # W121ZLIVE167E_FAST_AUTHORIZATION_GATE
+    # Reserved FAST identities are disabled until a separately reviewed,
+    # provider-specific authorization integration is promoted. This guard
+    # applies even when a valid manifest URL or share code exists.
+    _w167e_reserved_fast_ids = frozenset(_w167q_provider_names)
+    if str(manifest_data.get("id") or "").strip().lower() in _w167e_reserved_fast_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="FAST addon installation is not authorized",
+        )
+
     # Check if already installed
     existing = await db.addons.find_one({
         "userId": current_user.id,
@@ -3015,6 +3220,16 @@ async def install_addon(addon_data: AddonInstall, current_user: User = Depends(g
         "installedAt": datetime.utcnow().isoformat()
     }
     
+    if (addon.get("manifest") or {}).get("id") == _PREMIUM_SPORTS_ID:
+        try:
+            encrypted_url = _get_premiumize_fernet().encrypt(
+                manifest_url.encode("utf-8")
+            ).decode("utf-8")
+        except Exception:
+            raise HTTPException(status_code=503, detail="Provider credential vault unavailable")
+        addon["manifestUrl"] = _PREMIUM_SPORTS_PUBLIC_URL
+        addon["manifestUrlEncrypted"] = encrypted_url
+
     await db.addons.insert_one(addon)
 
     # V704G_DISCOVER_CACHE_INVALIDATION
@@ -3027,7 +3242,176 @@ async def install_addon(addon_data: AddonInstall, current_user: User = Depends(g
         _discover_cache.pop(discover_key, None)
 
     addon.pop('_id', None)
+    addon.pop('manifestUrlEncrypted', None)
     return addon
+
+# W121ZSPORTS179G_ADMIN_USER_SERVICES
+# Uses existing admin-user ownership, encrypted Premiumize keys, and
+# the same addon-install validation that already works for the owner.
+# Never return personal manifest URLs or API keys from admin endpoints.
+@api_router.get("/admin/users/{user_id}/services")
+async def admin_get_user_services(user_id: str, admin: User = Depends(get_admin_user)):
+    target = await db.users.find_one({"id": user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    premium = await db.addons.find_one({
+        "userId": user_id,
+        "manifest.id": "community.sports.streamed.premium",
+    }, {"_id": 0, "id": 1})
+    return {
+        "premiumize_configured": bool(target.get("premiumize_api_key_encrypted")),
+        "sports_premium_installed": bool(premium),
+    }
+
+
+# W121ZSPORTS179P: encrypted customer-scoped Premiumize linking.
+# This does NOT purchase or provision a Premiumize account.
+@api_router.post("/admin/users/{user_id}/services/premiumize")
+async def admin_connect_user_premiumize(
+    user_id: str,
+    request: AdminPremiumizeConnectRequest,
+    admin: User = Depends(get_admin_user),
+):
+    if admin.username != "choyt":
+        raise HTTPException(status_code=403, detail="Customer service provisioning requires the master administrator")
+    target = await db.users.find_one({"id": user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Add-only. Preserve all existing paid provider connections.
+    if target.get("premiumize_api_key_encrypted"):
+        return {"connected": True, "already_connected": True}
+    raw = str(request.api_key or "").strip()
+    if not raw or len(raw) > 4096 or any(ord(ch) < 33 or ord(ch) > 126 for ch in raw):
+        raise HTTPException(status_code=400, detail="A valid Premiumize API key is required")
+    # Premiumize's API returns HTTP 200 for business-logic failures; inspect status.
+    # Use a Bearer header so the key never appears in URL/query logs.
+    try:
+        async with httpx.AsyncClient(timeout=12.0, follow_redirects=False, trust_env=False) as client:
+            response = await client.get(
+                "https://www.premiumize.me/api/account/info",
+                headers={"Authorization": "Bearer " + raw},
+            )
+        data = response.json() if response.status_code == 200 else {}
+        premium_until = data.get("premium_until") if isinstance(data, dict) else None
+        if (not isinstance(data, dict) or data.get("status") != "success"
+                or not premium_until or float(premium_until) <= time.time()):
+            raise HTTPException(status_code=400, detail="Premiumize key is invalid or the subscription is inactive")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="Premiumize verification is temporarily unavailable")
+    try:
+        encrypted = encrypt_premiumize_key(raw)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Provider credential vault unavailable")
+    # Only set when not already connected. Concurrent requests cannot overwrite.
+    result = await db.users.update_one(
+        {"id": user_id, "$or": [
+            {"premiumize_api_key_encrypted": {"$exists": False}},
+            {"premiumize_api_key_encrypted": None},
+            {"premiumize_api_key_encrypted": ""},
+        ]},
+        {"$set": {"premiumize_api_key_encrypted": encrypted}},
+    )
+    if not result.modified_count:
+        return {"connected": True, "already_connected": True}
+    return {"connected": True, "already_connected": False}
+
+
+@api_router.post("/admin/users/{user_id}/services/sports-premium")
+async def admin_connect_user_premium_sports(
+    user_id: str,
+    request: AdminPremiumSportsConnectRequest,
+    admin: User = Depends(get_admin_user),
+):
+    target = await db.users.find_one({"id": user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.get("username") == "choyt" and admin.username != "choyt":
+        raise HTTPException(status_code=403, detail="Master admin account is protected")
+    # W121ZSPORTS179P: master administrator selects the customer account.
+    # Each customer has their own separately purchased Premium manifest.
+    if admin.username != "choyt":
+        raise HTTPException(status_code=403, detail="Customer service provisioning requires the master administrator")
+
+    # This operation is ADD-ONLY. Never overwrite a paid subscription.
+    installed = await db.addons.find_one({
+        "userId": user_id,
+        "manifest.id": "community.sports.streamed.premium",
+    }, {"_id": 0, "id": 1})
+    if installed:
+        return {"connected": True, "already_connected": True}
+
+    raw = str(request.manifest_url or "").strip()
+    if len(raw) > 4096:
+        raise HTTPException(status_code=400, detail="Premium manifest URL is too long")
+    # Reject arbitrary addon URLs, credentials-in-authority, and insecure URLs.
+    parsed = urlsplit(raw)
+    if (parsed.scheme.lower() != "https"
+            or (parsed.hostname or "").lower() != "premium.highfly.to"
+            or parsed.username is not None or parsed.password is not None
+            or parsed.port not in (None, 443)
+            or parsed.fragment
+            or not parsed.path.lower().endswith("/manifest.json")):
+        raise HTTPException(status_code=400, detail="A personalized Highfly Premium manifest is required")
+
+    try:
+        validated_url = await _v726_validate_addon_url(raw)
+        async with httpx.AsyncClient(
+            follow_redirects=False, timeout=15.0, trust_env=False,
+        ) as client:
+            response = await _v726_safe_addon_get(client, validated_url, timeout=15.0)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Premium manifest could not be verified")
+        manifest = response.json()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Premium manifest could not be verified")
+
+    if not isinstance(manifest, dict) or manifest.get("id") != "community.sports.streamed.premium":
+        raise HTTPException(status_code=400, detail="This link is not Sports Streams Premium")
+
+    # Validate the encryption key and encrypt before any database mutation.
+    # The public manifestUrl is deliberately token-free for /addons clients.
+    # No existing account or addon is modified.
+    try:
+        encrypted_url = _get_premiumize_fernet().encrypt(
+            validated_url.encode("utf-8")
+        ).decode("utf-8")
+    except Exception:
+        raise HTTPException(status_code=503, detail="Provider credential vault unavailable")
+
+    addon = {
+        "id": str(uuid.uuid4()),
+        "userId": user_id,
+        "manifestUrl": _PREMIUM_SPORTS_PUBLIC_URL,
+        "manifestUrlEncrypted": encrypted_url,
+        "manifest": {
+            "id": _PREMIUM_SPORTS_ID,
+            "name": manifest.get("name"),
+            "version": manifest.get("version", "1.0.0"),
+            "description": manifest.get("description", ""),
+            "logo": manifest.get("logo"),
+            "types": manifest.get("types", []),
+            "resources": manifest.get("resources", []),
+            "catalogs": manifest.get("catalogs", []),
+            "idPrefixes": manifest.get("idPrefixes", []),
+            "behaviorHints": manifest.get("behaviorHints", {}),
+        },
+        "installed": True,
+        "installedAt": datetime.utcnow().isoformat(),
+    }
+    # Fail-closed against accidental manifest identity changes.
+    if addon["manifest"]["id"] != "community.sports.streamed.premium":
+        raise HTTPException(status_code=400, detail="Not a Premium sports manifest")
+    await db.addons.insert_one(addon)
+    for discover_key in (
+        user_id, f"{user_id}:adult:0", f"{user_id}:adult:1",
+    ):
+        _discover_cache.pop(discover_key, None)
+    return {"connected": True, "already_connected": False}
+
 
 @api_router.post("/addons/install-multiple")
 async def install_multiple_addons(addon_urls: List[str], current_user: User = Depends(get_current_user)):
@@ -3240,6 +3624,7 @@ def _v786f_pack_token(
     kind: str,
     master_url: str,
     child_url: str = "",
+    audio_child: bool = False,
 ) -> str:
     master = _v786f_validate_master_url(master_url)
 
@@ -3261,6 +3646,10 @@ def _v786f_pack_token(
         "master": master,
         "child": child,
     }
+
+    # Signed audio identity; existing video tokens remain compatible.
+    if kind == "child" and audio_child:
+        payload["audio_child"] = True
 
     raw = json.dumps(
         payload,
@@ -3330,6 +3719,10 @@ def _v786f_unpack_token(
         return {
             "master": master,
             "child": child,
+            "audio_child": (
+                expected_kind == "child"
+                and payload.get("audio_child") is True
+            ),
         }
     except ValueError:
         raise HTTPException(
@@ -3356,11 +3749,13 @@ def _v786f_master_relay_url(
 def _v786f_child_relay_url(
     master_url: str,
     child_url: str,
+    audio_child: bool = False,
 ) -> str:
     token = _v786f_pack_token(
         "child",
         master_url,
         child_url,
+        audio_child=audio_child,
     )
 
     return (
@@ -3378,6 +3773,16 @@ def _v786f_replace_uri_attribute(
 ) -> str:
     pattern = re.compile(
         r'URI="([^"]+)"'
+    )
+
+    # Identify only master-declared separate audio renditions.
+    audio_tag = (
+        relay_playlists
+        and line.lstrip().upper().startswith("#EXT-X-MEDIA:")
+        and bool(re.search(
+            r"(?:^|,)\s*TYPE\s*=\s*AUDIO\s*(?:,|$)",
+            line.split(":", 1)[1], re.I
+        ))
     )
 
     def replace(match):
@@ -3404,6 +3809,7 @@ def _v786f_replace_uri_attribute(
             rewritten = _v786f_child_relay_url(
                 master_url,
                 absolute,
+                audio_child=audio_tag,
             )
         else:
             rewritten = absolute
@@ -16856,14 +17262,16 @@ async def v786f_pluto_child_playlist(
 
     master_url = payload["master"]
     child_url = payload["child"]
+    audio_child = payload.get("audio_child") is True
 
     # V789S25W107F6_REGISTER_ACTIVE_VIDEO_CHILD
     # Keep the exact validated upstream child available to the independent
     # commercial-status probe. Audio children never own this probe.
-    await _v789s25w107f6_register_video_child(
-        master_url,
-        child_url,
-    )
+    if not audio_child:
+        await _v789s25w107f6_register_video_child(
+            master_url,
+            child_url,
+        )
 
     client = await get_shared_http_client()
 
@@ -17026,6 +17434,57 @@ async def v786f_pluto_child_playlist(
                 "Retry-After": "1",
             },
         )
+
+    # Separate audio bypasses video-only timeline transformations.
+    if audio_child:
+        audio_lines = [x.strip() for x in response.text.splitlines() if x.strip()]
+        audio_has_segments = (
+            any(x.startswith("#EXTINF:") for x in audio_lines)
+            and any(x and not x.startswith("#") for x in audio_lines[1:])
+        )
+        audio_has_parts = any(
+            x.startswith("#EXT-X-PART:") and "URI=" in x
+            for x in audio_lines
+        )
+        # ENDLIST is valid when real media segments remain.
+        audio_is_master = any(
+            x.startswith("#EXT-X-STREAM-INF:") for x in audio_lines
+        )
+        if (
+            not audio_lines or audio_lines[0] != "#EXTM3U"
+            or audio_is_master
+            or not (audio_has_segments or audio_has_parts)
+        ):
+            logger.warning("W121ZLIVE182M8T_AUDIO_NON_HLS_UPSTREAM")
+            return Response(
+                status_code=503,
+                headers={**_v786f_playlist_headers(), "Retry-After": "1"},
+            )
+        logger.info("W121ZLIVE182EY1_SIGNED_AUDIO_CHILD_PRESERVED")
+        return Response(
+            content=_v786f_rewrite_media_playlist(
+                response.text, child_url, master_url
+            ),
+            status_code=200,
+            media_type="application/vnd.apple.mpegurl",
+            headers=_v786f_playlist_headers(),
+        )
+
+    # W121ZLIVE182M9R_UPSTREAM_PASSTHROUGH_STAGED_ONLY
+    # Preserve the actual upstream sequence, timestamps and ads.
+    # Resolve segment URIs without generating custom filler.
+    # Exit before old normalization, suppression, gates and snapshots.
+    passthrough_media_text = _v786f_rewrite_media_playlist(
+        response.text,
+        child_url,
+        master_url,
+    )
+    return Response(
+        content=passthrough_media_text,
+        status_code=200,
+        media_type="application/vnd.apple.mpegurl",
+        headers=_v786f_playlist_headers(),
+    )
 
     # V789S25O_PRE_N1_STALE_REENTRY_GUARD
     #
@@ -17610,6 +18069,7 @@ async def v786f_pluto_child_playlist(
 
 def _v786f_wrap_pluto_streams(
     payload: Any,
+    content_id: str = "",
 ) -> Any:
     if not isinstance(payload, dict):
         return payload
@@ -17617,6 +18077,28 @@ def _v786f_wrap_pluto_streams(
     streams = payload.get("streams")
 
     if not isinstance(streams, list):
+        return payload
+
+    # W121ZLIVE181K: Emergency, channel-scoped passthrough for 00s Replay.
+    # This bypasses ONLY the Pluto HLS relay's frozen commercial snapshots.
+    # Native upstream commercials will be visible. A nonmatching/unknown
+    # content identity fails closed to the unchanged relay behavior.
+    # The 24-character channel identifier is public Pluto catalog metadata.
+    _raw_content_id = str(content_id or "").strip().lower()
+    if _raw_content_id == "00s-replay":
+        _raw_content_id = "62ba60f059624e000781c436"
+    _target_channel_id = "62ba60f059624e000781c436"
+    import re as _w121zlive181k_re
+    if _w121zlive181k_re.search(
+        r"(?<![0-9a-f])" + _target_channel_id + r"(?![0-9a-f])",
+        _raw_content_id,
+    ):
+        logger.warning(
+            "W121ZLIVE181K_DIRECT_PLUTO_BYPASS "
+            "channel=00s-replay upstream_advertisements=enabled"
+        )
+        # Do not mutate stream fields or bypass upstream URL safety checks
+        # in other code paths. The addon supplies the original stream URLs.
         return payload
 
     wrapped = 0
@@ -18036,7 +18518,7 @@ async def get_installed_addon_catalog(
         )
 
     base_url = get_base_url(
-        addon["manifestUrl"]
+        _w179h_manifest_url(addon)
     )
 
     catalog_base = (
@@ -18145,7 +18627,7 @@ async def get_installed_addon_meta(
         )
 
     base_url = get_base_url(
-        addon["manifestUrl"]
+        _w179h_manifest_url(addon)
     )
 
     meta_url = (
@@ -18205,6 +18687,97 @@ async def get_installed_addon_meta(
 
 
 # ================= /W121ZSPORTS133C_GENERIC_ADDON_METADATA =================
+# W121ZLIVE181H_FRESH_00S_REPLAY_SESSION_CANDIDATE
+# Channel-scoped only. No relay, no stored tokens, and upstream ads remain.
+async def _w121zlive181h_fresh_00s_master():
+    import datetime as _w181h_dt
+    import uuid as _w181h_uuid
+    from urllib.parse import urljoin as _w181h_join, urlencode as _w181h_encode, parse_qsl as _w181h_qsl
+
+    params = {
+        "appName": "web", "appVersion": "9.1.0",
+        "deviceVersion": "143.0.0", "deviceModel": "web",
+        "deviceMake": "chrome", "deviceType": "web",
+        "clientID": str(_w181h_uuid.uuid4()),
+        "clientModelNumber": "1.0.0", "serverSideAds": "true",
+        "drmCapabilities": "widevine:L3", "blockingMode": "",
+        "notificationVersion": "1", "appLaunchCount": "0",
+        "clientTime": _w181h_dt.datetime.now(
+            _w181h_dt.timezone.utc
+        ).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+    }
+    headers = {
+        "Accept": "application/json",
+        "Origin": "https://pluto.tv", "Referer": "https://pluto.tv/",
+        "User-Agent": "Mozilla/5.0",
+    }
+    try:
+        async with httpx.AsyncClient(
+            timeout=12.0, follow_redirects=False,
+            trust_env=False, headers=headers,
+        ) as session:
+            boot = await session.get(
+                "https://boot.pluto.tv/v4/start", params=params
+            )
+            if boot.status_code != 200:
+                logger.warning("W121ZLIVE181H_BOOT_FAILED code=%s", boot.status_code)
+                return None
+            response_data = boot.json()
+            token = response_data.get("sessionToken")
+            stitcher = (response_data.get("servers") or {}).get("stitcher")
+            if not isinstance(token, str) or not token or not isinstance(stitcher, str):
+                return None
+            master_base = (
+                stitcher.rstrip("/")
+                + "/v2/stitch/hls/channel/62ba60f059624e000781c436/master.m3u8"
+            )
+            query = [("jwt", token), ("masterJWTPassthrough", "true")]
+            extra = response_data.get("stitcherParams") or ""
+            if not isinstance(extra, str) or len(extra) > 4096:
+                return None
+            for key, value in _w181h_qsl(extra.lstrip("?&"), keep_blank_values=True):
+                if not key or len(key) > 64 or not key.replace("_", "").isalnum():
+                    return None
+                if key.lower() in ("jwt", "masterjwtpassthrough"):
+                    return None
+                query.append((key, value))
+            master_url = _v786f_validate_master_url(
+                master_base + "?" + _w181h_encode(query)
+            )
+            master = await session.get(master_url)
+            if master.status_code != 200 or "#EXT-X-STREAM-INF:" not in master.text[:250000]:
+                return None
+            lines = master.text[:250000].splitlines()
+            child_url = None
+            for idx, line in enumerate(lines):
+                if line.startswith("#EXT-X-STREAM-INF:"):
+                    for item in lines[idx+1:]:
+                        candidate = item.strip()
+                        if candidate and not candidate.startswith("#"):
+                            child_url = _v786f_validate_child_url(
+                                master_url, _w181h_join(master_url, candidate)
+                            )
+                            break
+                    break
+            if not child_url:
+                return None
+            child = await session.get(child_url)
+            if (
+                child.status_code != 200
+                or "#EXTINF:" not in child.text[:250000]
+                or "#EXT-X-ENDLIST" in child.text[:250000]
+            ):
+                logger.warning("W121ZLIVE181H_NOT_LIVE")
+                return None
+            logger.info("W121ZLIVE181H_FRESH_SOURCE_READY channel=00s-replay")
+            return master_url
+    except Exception as exc:
+        logger.warning(
+            "W121ZLIVE181H_FRESH_SOURCE_FAILED type=%s",
+            type(exc).__name__,
+        )
+        return None
+
 @api_router.get("/addons/{addon_id}/stream/{content_type}/{content_id}")
 async def get_addon_streams(
     addon_id: str,
@@ -18221,7 +18794,7 @@ async def get_addon_streams(
     if not addon:
         raise HTTPException(status_code=404, detail="Addon not found")
     
-    base_url = get_base_url(addon['manifestUrl'])
+    base_url = get_base_url(_w179h_manifest_url(addon))
     stream_url = f"{base_url}/stream/{content_type}/{content_id}.json"
     
     try:
@@ -18251,8 +18824,28 @@ async def get_addon_streams(
                     and str(content_type).strip().lower() == "tv"
                 ):
                     payload = _v786f_wrap_pluto_streams(
-                        payload
+                        payload,
+                        content_id=content_id,
                     )
+                    # W121ZLIVE181H: only the 00s Replay playback alias.
+                    # Never return the known-intermittent ended addon URL.
+                    if str(content_id or "").strip().lower() == "00s-replay":
+                        payload = dict(payload)
+                        old_streams = payload.get("streams") or []
+                        fresh_master = (
+                            await _w121zlive181h_fresh_00s_master()
+                            if any(isinstance(s, dict) for s in old_streams)
+                            else None
+                        )
+                        if fresh_master:
+                            first = next(s for s in old_streams if isinstance(s, dict))
+                            selected = dict(first)
+                            for name in ("url", "directUrl", "proxyUrl"):
+                                selected.pop(name, None)
+                            selected["url"] = fresh_master
+                            payload["streams"] = [selected]
+                        else:
+                            payload["streams"] = []
 
                 if (
                     manifest_id == "community.usa-tv-next"
@@ -21160,12 +21753,76 @@ async def _v788t13k_set_full_catalog(
             type(exc).__name__,
         )
 
+async def _bu23lt_catalog(client, source, skip, limit):
+    import hashlib, json, time
+    key = "bu23lt:catalog:" + hashlib.sha256(json.dumps([source["baseUrl"], source["catalogId"]]).encode()).hexdigest()
+    def deferred():
+        return {"items": [], "hasMore": False, "nextSkip": skip, "mode": "nexo-deferred", "providerCount": 0, "catalogDeferred": True}
+    try:
+        r = await _v789n1_get_redis()
+        async with r.lock(key + ":lock", timeout=90, blocking_timeout=3):
+            raw = await r.get(key)
+            state = json.loads(raw) if raw else {"rows": [], "offset": 0, "complete": False, "retry": 0}
+            rows = state["rows"]
+            if skip >= len(rows) and not state["complete"]:
+                if skip != len(rows) or time.time() < state["retry"]:
+                    return deferred()
+                offset = state["offset"]
+                base = source["baseUrl"] + "/catalog/tv/" + source["catalogId"]
+                url = base + (".json" if offset == 0 else f"/skip={offset}.json")
+                try:
+                    response = await _v726_safe_addon_get(client, url, timeout=30.0)
+                    if response.status_code != 200:
+                        delay = 1800
+                        try:
+                            from email.utils import parsedate_to_datetime
+                            value = response.headers.get("Retry-After", "0")
+                            delay = max(delay, int(value) if value.isdigit() else parsedate_to_datetime(value).timestamp() - time.time())
+                        except Exception:
+                            pass
+                        state["retry"] = time.time() + delay
+                    else:
+                        payload = response.json()
+                        metas = payload.get("metas") if isinstance(payload, dict) else None
+                        if not isinstance(metas, list) or any(isinstance(m, dict) and str(m.get("id") or "").strip().lower() == "ratelimit_error" for m in metas):
+                            state["retry"] = time.time() + 1800
+                        elif not metas:
+                            state["complete"] = True
+                        else:
+                            known = {str(m["id"]).strip() for m in rows}
+                            fresh = []
+                            for m in metas:
+                                if not isinstance(m, dict):
+                                    continue
+                                cid = str(m.get("id") or "").strip()
+                                if cid and cid not in known:
+                                    known.add(cid)
+                                    fresh.append(m)
+                            if not fresh:
+                                state["retry"] = time.time() + 1800
+                            else:
+                                rows.extend(fresh)
+                                state["offset"] += len(metas)
+                                state["retry"] = 0
+                except Exception:
+                    state["retry"] = time.time() + 1800
+                await r.set(key, json.dumps(state, separators=(",", ":")), ex=604800)
+            items = rows[skip:skip+limit]
+            if not items and not state["complete"]:
+                return deferred()
+            return {"items": items, "hasMore": skip + len(items) < len(rows) or not state["complete"], "nextSkip": skip + len(items), "mode": "nexo-cache", "providerCount": len(rows), "catalogDeferred": False}
+    except Exception:
+        return deferred()
+
+
 async def _v788t11w_fetch_catalog_page(
     client,
     source,
     skip,
     limit,
 ):
+    if source.get("addonId") == "community.nexotv" and source.get("supportsSkip"):
+        return await _bu23lt_catalog(client, source, skip, limit)
     base_url = source["baseUrl"]
     catalog_id = source["catalogId"]
     supports_skip = bool(
@@ -21654,7 +22311,7 @@ async def _v788t16e_stream_health_state(
     )
 
     if value.startswith("/api/"):
-        return "playable"
+        return "device_check" if addon_id == "community.nexotv" else "playable"
 
     lower = value.lower()
     lower_path = lower.split("?", 1)[0]
@@ -21814,6 +22471,9 @@ def _v788t16j_streamability_cache_key(
 
     if manifest_id == "community.usa-tv-next":
         return "v788t16j:" + base_key
+
+    if manifest_id == "community.nexotv":
+        return "bu23mk:" + base_key
 
     return base_key
 
@@ -22636,7 +23296,7 @@ async def _v788t11w_probe_channel_stream(
         #
         # device_check MUST NOT enter the guide until the Android device
         # itself verifies at least one of the candidate URLs.
-        if manifest_id == "community.usa-tv-next":
+        if manifest_id in ("community.usa-tv-next", "community.nexotv"):
             stream_states = await asyncio.gather(
                 *[
                     _v788t16e_stream_health_state(
@@ -22832,6 +23492,9 @@ def _w121zod77_source_fingerprint(
         sort_keys=True,
         separators=(",", ":"),
     )
+
+    if any(x["addonId"] == "community.nexotv" for x in normalized_sources):
+        payload += "|bu23mk-nexo-verification-v1"
 
     return hashlib.sha256(
         payload.encode("utf-8")
@@ -23523,7 +24186,7 @@ async def _w121zod77_record_inventory_page(
 
         seen = set()
 
-        for _step in range(100):
+        for _step in range(len(pages) + 1):
             if cursor in seen:
                 return
 
@@ -23714,6 +24377,7 @@ async def get_live_tv_inventory_page(
     skip: int = 0,
     limit: int = 100,
     adult: int = 0,
+    nexo_only: int = 0,
     current_user: User = Depends(
         get_current_user
     ),
@@ -23747,11 +24411,35 @@ async def get_live_tv_inventory_page(
     sources = await _v788t11w_live_tv_sources(
         current_user.id
     )
+    # BU23JJ_NEXO_SCOPED_SOURCE_SELECT
+    # The caller is already authenticated by the original route. Never guess a
+    # source index: installation order changes and multiple TV catalogs can exist.
+    bu23jj_nexo_only = bool(int(nexo_only or 0))
+    bu23jj_nexo_idx = None
+    if bu23jj_nexo_only:
+        bu23jj_matches = [
+            i for i, item in enumerate(sources)
+            if item.get("addonId") == "community.nexotv"
+        ]
+        if len(bu23jj_matches) != 1:
+            raise HTTPException(
+                status_code=409, detail="BU23JJ_NEXO_SOURCE_NOT_UNIQUE"
+            )
+        bu23jj_nexo_idx = bu23jj_matches[0]
+        if (source_index, skip) == (0, 0):
+            source_index = bu23jj_nexo_idx
+        elif source_index != bu23jj_nexo_idx:
+            raise HTTPException(
+                status_code=400, detail="BU23JJ_CROSS_SOURCE_CURSOR_REFUSED"
+            )
+        # One provider page per request. No thousands-channel background storm.
+        limit = min(limit, 100)
+
 
     # W121ZOD77_FINISHED_SNAPSHOT_HIT
     # Only the natural first cursor may collapse the
     # completed inventory into one response.
-    if source_index == 0 and skip == 0:
+    if source_index == 0 and skip == 0 and not bu23jj_nexo_only:
         finished_snapshot = (
             await _w121zod77_try_finished_snapshot(
                 sources,
@@ -23884,6 +24572,13 @@ async def get_live_tv_inventory_page(
             catalog_page.get("items")
             or []
         )
+        # BU23JJ_NEXO_SYNTHETIC_PLACEHOLDER_EXCLUSION
+        if bu23jj_nexo_only and isinstance(candidates, list):
+            candidates = [
+                row for row in candidates
+                if isinstance(row, dict)
+                and str(row.get("id") or "") != "ratelimit_error"
+            ]
 
         clean_candidates = []
 
@@ -24117,30 +24812,41 @@ async def get_live_tv_inventory_page(
     # W121ZOD77_FINISHED_SNAPSHOT_RECORD
     # Record the already-computed ordinary page result.
     # This does not alter the cold response contract.
-    await _w121zod77_record_inventory_page(
-        sources,
-        current_user.id,
-        adult_enabled,
-        source_index,
-        skip,
-        items,
-        device_check_items,
-        len(candidates),
-        hidden_no_stream,
-        unknown,
-        adult_filtered,
-        done,
-        (
-            None
-            if done
-            else next_source_index
-        ),
-        (
-            None
-            if done
-            else returned_next_skip
-        ),
-    )
+    # BU23JJ_NEXO_BOUNDED_CURSOR_AND_SNAPSHOT_ISOLATION
+    # If the ordinary cursor moves to the next provider, end this Nexo-only run.
+    # Neither an incomplete crawl nor a synthetic 404 may mark NexoTV DOWN.
+    if bu23jj_nexo_only and (
+        done or next_source_index != bu23jj_nexo_idx
+    ):
+        done = True
+        next_source_index = None
+        returned_next_skip = None
+
+    if not bu23jj_nexo_only and not catalog_page.get("catalogDeferred"):
+        await _w121zod77_record_inventory_page(
+            sources,
+            current_user.id,
+            adult_enabled,
+            source_index,
+            skip,
+            items,
+            device_check_items,
+            len(candidates),
+            hidden_no_stream,
+            unknown,
+            adult_filtered,
+            done,
+            (
+                None
+                if done
+                else next_source_index
+            ),
+            (
+                None
+                if done
+                else returned_next_skip
+            ),
+        )
 
     return {
         "items": items,
@@ -24174,6 +24880,7 @@ async def get_live_tv_inventory_page(
         "pagingMode": catalog_page.get(
             "mode"
         ),
+        "catalogDeferred": bool(catalog_page.get("catalogDeferred")),
     }
 
 
@@ -24598,6 +25305,560 @@ def _v788t16n_ax1_pluto_xmltv_guide_title(
 
     return current_title
 
+# W121ZEPG176D - curated exact-ID Open EPG schedules, limited-source cached fallback.
+# Existing native EPG and US2 schedules always take precedence.
+_W176D_SOURCES = [1]
+_W176D_KNOWN = {'cbnnews.us': 'CBN News Channel', 'e.us': 'E!', 'hln.us': 'HLN', 'hsn.us': 'HSN', 'ifc.us': 'IFC', 'msnow.us': 'MS NOW', 'mtv2.us': 'MTV2', 'nbatv.us': 'NBA TV', 'qvc.us': 'QVC'}
+_W176D_REDIS_KEY = "privastream:w121zepg176d:curated-source:v1"
+
+
+def _w176d_read(raw_gz, wanted):
+    import gzip, io, xml.etree.ElementTree as ET
+    from datetime import datetime as DT, timezone as UTC
+    if not raw_gz or len(raw_gz)>7*1024*1024: raise ValueError('SOURCE_COMPRESSED_LIMIT')
+    class Read:
+        def __init__(self, f): self.f=f; self.n=0
+        def read(self, n=-1):
+            b=self.f.read(min(n if n>=0 else 131072, 131072)); self.n+=len(b)
+            if self.n>65*1024*1024: raise ValueError('SOURCE_DECOMPRESSED_LIMIT')
+            return b
+    import re
+    def norm(s): return re.sub(r'[^a-z0-9]', '', str(s).casefold())
+    approved=set()
+    out={}
+    with gzip.GzipFile(fileobj=io.BytesIO(raw_gz)) as gz:
+        items=ET.iterparse(Read(gz), events=('start','end'))
+        _,root=next(items)
+        count=0
+        for event,el in items:
+            if event!='end': continue
+            if el.tag=='programme':
+                sid=str(el.get('channel') or '').casefold()
+                if sid in approved and len(out.get(sid,[]))<160:
+                    try:
+                        sd=DT.strptime(str(el.get('start') or '').strip(),'%Y%m%d%H%M%S %z').astimezone(UTC.utc)
+                        ed=DT.strptime(str(el.get('stop') or '').strip(),'%Y%m%d%H%M%S %z').astimezone(UTC.utc)
+                        title=next(((x.text or '').strip() for x in el if x.tag=='title' and (x.text or '').strip()),'')
+                        if sd < ed and title and (ed-sd).total_seconds() <= 24*3600:
+                            out.setdefault(sid,[]).append({'id':sid+':'+sd.isoformat(), 'title':title[:250], 'startTime':sd.isoformat(), 'endTime':ed.isoformat(), 'overview':'', 'thumbnail':''})
+                    except (ValueError, TypeError): pass
+                count+=1
+                el.clear()
+                if count%256==0: root.clear()
+            elif el.tag=='channel':
+                sid=str(el.get('id') or '').casefold()
+                if sid in wanted:
+                    options={norm(_W176D_KNOWN[sid]),norm(sid)}
+                    labels={norm(child.text or '') for child in el if child.tag=='display-name'}
+                    if labels & options: approved.add(sid)
+                el.clear()
+    return out
+
+
+async def _w176d_augment(client, cache, targets, providers, start, end):
+    import asyncio, json, time
+    from datetime import datetime as DT
+    # Only exact, manually reviewed station ID+name pairs already in installed inventory.
+    already={(str(pid),str(c['id'])) for pid,p in providers.items() for c in p.get('channels',[]) if c.get('programs')}
+    eligible={}
+    for (addon,cid),(row,key) in targets.items():
+        if addon!='com.stremtv.us' or (addon,cid) in already: continue
+        stem=cid.removeprefix('stremtv-us:').casefold()
+        expected=_W176D_KNOWN.get(stem)
+        if expected and _w174a_key(str(row.get('name') or '')+'.us')==_w174a_key(expected+'.us'):
+            eligible[stem]=(addon,cid,row)
+    if not eligible or cache is None: return 0
+    feed=None
+    try:
+        raw=await cache.get(_W176D_REDIS_KEY)
+        if raw: feed=json.loads(raw)
+    except Exception: pass
+    if not isinstance(feed,dict):
+        lock_key=_W176D_REDIS_KEY+':build-lock'
+        acquired=False
+        try: acquired=bool(await cache.set(lock_key,'1',nx=True,ex=90))
+        except Exception: pass
+        if not acquired:
+            for _ in range(5):
+                await asyncio.sleep(0.5)
+                try:
+                    raw=await cache.get(_W176D_REDIS_KEY)
+                    if raw:
+                        feed=json.loads(raw)
+                        break
+                except Exception: break
+            if not isinstance(feed,dict): return 0
+        else:
+            feed={}
+            try:
+                wanted=set(_W176D_KNOWN)
+                for n in _W176D_SOURCES:
+                    url='https://www.open-epg.com/files/unitedstates%d.xml.gz' % n
+                    try:
+                        response=await _v726_safe_addon_get(client,url,timeout=8.0)
+                        if response.status_code!=200: continue
+                        piece=await asyncio.to_thread(_w176d_read, response.content, wanted)
+                        for sid, programs in piece.items():
+                            feed.setdefault(sid,[]).extend(programs)
+                    except Exception as exc:
+                        logger.warning('W121ZEPG176D_SOURCE_FAIL source=%s type=%s',n,type(exc).__name__)
+                for sid in feed:
+                    # Dedup overlaps from split XMLTV files without inventing programs.
+                    by_start={p['startTime']:p for p in feed[sid]}
+                    feed[sid]=sorted(by_start.values(),key=lambda p:p['startTime'])[:160]
+                try: await cache.set(_W176D_REDIS_KEY,json.dumps(feed,separators=(',',':')),ex=8*3600)
+                except Exception: pass
+            finally:
+                try: await cache.delete(lock_key)
+                except Exception: pass
+    added=0
+    for sid,(addon,cid,row) in eligible.items():
+        choices=feed.get(sid,[])
+        programs=[p for p in choices if p.get('startTime') and p.get('endTime') and DT.fromisoformat(p['startTime'])<end and DT.fromisoformat(p['endTime'])>start]
+        if not programs: continue
+        prov=providers.setdefault(addon,{'addonId':addon,'addonName':'StreamTV US','catalogId':'epg176b','catalogName':'Curated XMLTV fallback','channels':[],'error':None,'truncated':False})
+        prov['channels'].append({'id':cid,'name':str(row.get('name') or cid),'type':'tv','logo':str(row.get('logo') or row.get('poster') or ''),'programs':programs})
+        added+=1
+    logger.info('W121ZEPG176D_ADDED channels=%s sources=%s',added,_W176D_SOURCES)
+    return added
+
+# W121ZEPG174D - conservative universal XMLTV schedule adapter, US2 first.
+# No station is assigned EPG by display name, stream host, or fuzzy scoring.
+# Existing USA TV/Pluto/native EPG providers take precedence in the final merge.
+_W174A_GUIDE_URL = 'https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz'
+_W174A_FREE_TV_URL = 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8'
+
+
+def _w174a_key(channel_id):
+    import re as _re
+    raw = str(channel_id or '').strip().casefold()
+    if raw.endswith('.us2'):
+        raw = raw[:-4]
+    elif raw.endswith('.us'):
+        raw = raw[:-3]
+    else:
+        return ''  # Don't equate names across countries or unqualified feeds.
+    if not raw or len(raw) > 160:
+        return ''
+    # Keep semantic '+' distinct: AMC must not inherit AMC+ schedules.
+    raw = raw.replace('+', 'plus')
+    return _re.sub(r'[^a-z0-9]', '', raw)
+
+
+def _w174a_nexo_tvg_map(playlist_bytes, actual_ids):
+    """Reconstruct NexoTV's documented m3{prefix}_{md5(tvg-id|url)[:12]} IDs.
+
+    Map only unique, exact hashed IDs from the user's *loaded* inventory.
+    """
+    import hashlib as _hash
+    import re as _re
+    lookup = {}
+    ambiguous = set()
+    active = None
+    for raw_line in playlist_bytes.decode('utf-8-sig', errors='replace').splitlines():
+        line = raw_line.strip()
+        if line.startswith('#EXTINF:'):
+            m = _re.search(r'tvg-id="([^"]+)"', line)
+            active = m.group(1).strip() if m else ''
+        elif active is not None and line.startswith(('https://', 'http://')):
+            source = active or line
+            suffix = _hash.md5(source.encode('utf-8')).hexdigest()[:12]
+            if active:
+                if suffix in lookup and lookup[suffix] != active:
+                    ambiguous.add(suffix)
+                else:
+                    lookup[suffix] = active
+            active = None
+    matched = {}
+    for item in actual_ids:
+        channel_id = str(item.get('id') or '')
+        m = _re.fullmatch(r'm3[a-f0-9]{8}_([a-f0-9]{12})(?:_[0-9]+)?', channel_id)
+        if not m:
+            continue
+        suffix = m.group(1)
+        if suffix in lookup and suffix not in ambiguous:
+            matched[channel_id] = lookup[suffix]
+    return matched
+
+
+def _w174a_parse_xmltv(raw_gzip, wanted_ids, window_start, window_end):
+    """Bounded XMLTV parser: only keep published programs for exact requested IDs."""
+    import gzip as _gzip
+    import io as _io
+    import xml.etree.ElementTree as _ET
+    from datetime import datetime as _dt, timezone as _tz
+    if not raw_gzip or len(raw_gzip) > 12 * 1024 * 1024:
+        raise ValueError('EPG_GZIP_SIZE_OUT_OF_BOUNDS')
+    wanted_ids = set(wanted_ids)
+    by_id = {key: [] for key in wanted_ids}
+
+    class _BoundedReader:
+        def __init__(self, wrapped):
+            self.wrapped = wrapped
+            self.seen = 0
+        def read(self, n=-1):
+            if n < 0:
+                n = 128 * 1024
+            chunk = self.wrapped.read(min(n, 128 * 1024))
+            self.seen += len(chunk)
+            if self.seen > 110 * 1024 * 1024:
+                raise ValueError('EPG_XML_SIZE_OUT_OF_BOUNDS')
+            return chunk
+
+    with _gzip.GzipFile(fileobj=_io.BytesIO(raw_gzip)) as decompressed:
+        stream = _BoundedReader(decompressed)
+        iterator = _ET.iterparse(stream, events=('start', 'end'))
+        _, root = next(iterator)
+        count = 0
+        for event, elem in iterator:
+            if event != 'end':
+                continue
+            if elem.tag == 'programme':
+                channel = str(elem.get('channel') or '').strip()
+                if channel in wanted_ids and len(by_id[channel]) < 160:
+                    start, stop = elem.get('start', ''), elem.get('stop', '')
+                    try:
+                        def parse_time(value):
+                            return _dt.strptime(value.strip(), '%Y%m%d%H%M%S %z').astimezone(_tz.utc)
+                        sd, ed = parse_time(start), parse_time(stop)
+                        if sd < ed and sd < window_end and ed > window_start:
+                            title = next((e.text or '').strip() for e in elem if e.tag == 'title' and (e.text or '').strip()) if any(e.tag == 'title' and (e.text or '').strip() for e in elem) else ''
+                            if title:
+                                desc = next(((e.text or '').strip() for e in elem if e.tag == 'desc'), '')
+                                by_id[channel].append({
+                                    'id': channel + ':' + sd.isoformat(),
+                                    'title': title[:250],
+                                    'startTime': sd.isoformat(),
+                                    'endTime': ed.isoformat(),
+                                    'overview': desc[:1500],
+                                    'thumbnail': '',
+                                })
+                    except (ValueError, TypeError):
+                        pass
+                count += 1
+                elem.clear()
+                if count % 256 == 0:
+                    root.clear()
+            elif elem.tag == 'channel':
+                elem.clear()
+    return by_id
+
+
+def _w174d_xmltv_station_ids(raw_gzip):
+    """Bounded, worker-thread-only scan of XMLTV channel identities."""
+    import gzip as _gzip
+    import io as _io
+    import xml.etree.ElementTree as _ET
+    if not raw_gzip or len(raw_gzip) > 12 * 1024 * 1024:
+        raise ValueError('EPG_GZIP_SIZE_OUT_OF_BOUNDS')
+    class _Read:
+        def __init__(self, source):
+            self.source = source
+            self.bytes = 0
+        def read(self, amount=-1):
+            data = self.source.read(min(128 * 1024, amount if amount >= 0 else 128 * 1024))
+            self.bytes += len(data)
+            if self.bytes > 110 * 1024 * 1024:
+                raise ValueError('EPG_XML_SIZE_OUT_OF_BOUNDS')
+            return data
+    by_key = {}
+    with _gzip.GzipFile(fileobj=_io.BytesIO(raw_gzip)) as gz:
+        stream = _Read(gz)
+        parser = _ET.iterparse(stream, events=('start', 'end'))
+        _, root = next(parser)
+        num = 0
+        for event, elem in parser:
+            if event != 'end':
+                continue
+            if elem.tag == 'channel':
+                publisher_id = str(elem.get('id') or '').strip()
+                key = _w174a_key(publisher_id)
+                if key:
+                    by_key.setdefault(key, set()).add(publisher_id)
+            elif elem.tag == 'programme':
+                # The source publishes its channel declarations before programs.
+                # No need to scan the entire XMLTV twice.
+                break
+            num += 1
+            elem.clear()
+            if num % 256 == 0:
+                root.clear()
+    return by_key
+
+
+async def _w174a_build_source_independent_epg(current_user, adult_enabled, raw_date, tz):
+    """Use an *existing finished inventory snapshot*, not live stream probes.
+
+    Fail closed on uncertain matches and fail open for the established EPG.
+    """
+    import base64 as _b64
+    import json as _json
+    import re as _re
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    from zoneinfo import ZoneInfo as _ZoneInfo
+    try:
+        zone = _ZoneInfo(str(tz or '').strip())
+        day = _dt.strptime(raw_date, '%Y-%m-%d')
+        start = day.replace(tzinfo=zone).astimezone(_tz.utc)
+        end = (day + _td(days=1)).replace(tzinfo=zone).astimezone(_tz.utc)
+        if not (22*3600 <= (end-start).total_seconds() <= 26*3600):
+            return []
+
+        sources = await _v788t11w_live_tv_sources(current_user.id)
+        key, build_key, fingerprint = _w121zod77_snapshot_keys(current_user.id, adult_enabled, sources)
+        cache = await _w121zod77_redis()
+        if not cache or not key:
+            return []
+        snapshot = await _w121zod77_read_json(cache, key)
+        def valid(doc):
+            return isinstance(doc, dict) and doc.get('version') == 1 and doc.get('sourceFingerprint') == fingerprint and doc.get('sourceCount') == len(sources)
+        rows = []
+        if valid(snapshot) and isinstance(snapshot.get('items'), list):
+            rows = snapshot['items']
+        else:
+            # The completed snapshot can be absent while NexoTV is rate-limited;
+            # re-use the partial page cache when available.
+            build = await _w121zod77_read_json(cache, build_key)
+            if valid(build) and isinstance(build.get('pages'), dict) and len(build['pages']) <= 1000:
+                for page in build['pages'].values():
+                    if isinstance(page, dict) and isinstance(page.get('items'), list):
+                        rows.extend(page['items'])
+        if not rows:
+            # Cold start: fetch at most two bounded StreamTV catalog pages.
+            # This needs no streams, no playback probes and no NexoTV calls.
+            import httpx as _httpx
+            async with _httpx.AsyncClient(follow_redirects=False, trust_env=False, timeout=10.0) as inventory_http:
+                for source in sources:
+                    if source.get('addonId') != 'com.stremtv.us':
+                        continue
+                    skip = 0
+                    for _ in range(2):
+                        page = await _v788t11w_fetch_catalog_page(inventory_http, source, skip, 400)
+                        metas = page.get('items') or []
+                        for meta in metas:
+                            if isinstance(meta, dict) and str(meta.get('id') or '').startswith('stremtv-us:'):
+                                rows.append({**meta, 'addonId': 'com.stremtv.us'})
+                        if not page.get('hasMore') or not metas:
+                            break
+                        next_skip = int(page.get('nextSkip') or 0)
+                        if next_skip <= skip:
+                            break
+                        skip = next_skip
+        if not rows or len(rows) > 10000:
+            return []
+        rows = [r for r in rows if isinstance(r, dict) and r.get('addonId') in ('com.stremtv.us', 'community.nexotv', 'community.privastream.free-tv-direct') and str(r.get('id') or '') != 'ratelimit_error']
+        if not rows:
+            return []
+
+        # Only use NexoTV M3U hash reconstruction if its installed configuration
+        # points to the exact audited public Free-TV playlist.
+        nexotv_is_free_tv = False
+        for source in sources:
+            if source.get('addonId') != 'community.nexotv':
+                continue
+            manifest_url = str((source.get('addon') or {}).get('manifestUrl') or '')
+            try:
+                token = manifest_url.split('://', 1)[1].split('/', 1)[1].split('/', 1)[0]
+                config = _json.loads(_b64.urlsafe_b64decode(token + '=' * (-len(token) % 4)))
+                if config.get('provider') == 'm3u' and config.get('m3uUrl') == _W174A_FREE_TV_URL:
+                    nexotv_is_free_tv = True
+            except Exception:
+                continue
+
+        client = await get_shared_http_client()
+        m3u_map = {}
+        if nexotv_is_free_tv:
+            try:
+                response = await _v726_safe_addon_get(client, _W174A_FREE_TV_URL, timeout=14.0)
+                if response.status_code == 200 and len(response.content) < 2 * 1024 * 1024:
+                    m3u_map = _w174a_nexo_tvg_map(response.content, rows)
+            except Exception:
+                pass
+
+        direct_tvg_map = {}
+        if any(r.get('addonId') == 'community.privastream.free-tv-direct' for r in rows):
+            await _w175b_free_tv_rows()
+            direct_tvg_map = _W175B_CACHE['by_id']
+        targets = {}
+        for r in rows:
+            cid = str(r.get('id') or '').strip()
+            addon_id = str(r['addonId'])
+            raw_identity = ''
+            if addon_id == 'com.stremtv.us' and cid.startswith('stremtv-us:'):
+                raw_identity = cid[len('stremtv-us:'):]
+            elif addon_id == 'community.nexotv':
+                raw_identity = m3u_map.get(cid, '')
+            elif addon_id == 'community.privastream.free-tv-direct':
+                direct_row = direct_tvg_map.get(cid)
+                raw_identity = direct_row.get('tvgId', '') if direct_row else ''
+            canonical = _w174a_key(raw_identity)
+            if canonical:
+                targets[(addon_id, cid)] = (r, canonical)
+        if not targets:
+            return []
+
+        resp = await _v726_safe_addon_get(client, _W174A_GUIDE_URL, timeout=24.0)
+        if resp.status_code != 200:
+            logger.info('W121ZEPG174D_GUIDE_UNAVAILABLE status=%s', resp.status_code)
+            return []
+        # XMLTV parsing is CPU-heavy. Keep it entirely off the asyncio event loop.
+        # The first pass obtains only publisher IDs; the bounded second pass reads
+        # programs only for uniquely matched IDs. Both have compressed/expanded caps.
+        candidates = await __import__('asyncio').to_thread(
+            _w174d_xmltv_station_ids, resp.content
+        )
+        unique = {k: next(iter(ids)) for k, ids in candidates.items() if len(ids) == 1}
+        # W121ZEPG175R: narrow, previously observed exact-name US2 aliases.
+        # Both addon channel ID and present catalog name must match the audit,
+        # and the publisher guide ID must exist uniquely in this XMLTV file.
+        _w175r_known = {
+            'stremtv-us:DareToDreamNetwork.us': ('3ABN Dare To Dream Network', '3ABN.Dare.to.Dream.Network.us2'),
+            'stremtv-us:3ABNInternational.us': ('3ABN International Network', '3ABN.International.Network.us2'),
+            'stremtv-us:3ABNKids.us': ('3ABN Kids Network', '3ABN.Kids.Network.us2'),
+            'stremtv-us:CatholicFaithNetwork.us': ('CFN Catholic Faith Network', 'CFN.CATHOLIC.FAITH.NETWORK.us2'),
+            'stremtv-us:CNN.us': ('CNN HD', 'CNN.HD.us2'),
+            'stremtv-us:DaystarTVEspanol.us': ('Daystar Español', 'Daystar.Español.us2'),
+            'stremtv-us:ESPN2.us': ('ESPN 2 HD', 'ESPN2.HD.us2'),
+            'stremtv-us:ESPN.us': ('ESPN HD', 'ESPN.HD.us2'),
+            'stremtv-us:ESPNU.us': ('ESPNU HD', 'ESPNU.HD.us2'),
+            'stremtv-us:FloRacing.us': ('FloRacing 24/7', 'FloRacing.24/7.us2'),
+            'stremtv-us:OutdoorChannel.us': ('Outdoor Channel HD', 'Outdoor.Channel.HD.us2'),
+            'stremtv-us:XploreTV.us': ('Xplore', 'Xplore.us2'),
+        }
+        # W121ZEPG175V: exact station-name aliases from the 175F US2 guide audit.
+        # Every alias still requires an identical live station name and a unique
+        # publisher guide ID. Conflicting identities remain excluded.
+        _w175r_known.update({
+            'stremtv-us:3ABNInternational.us': ('3ABN International Network', '3ABN.International.Network.us2'),
+            'stremtv-us:3ABNKids.us': ('3ABN Kids Network', '3ABN.Kids.Network.us2'),
+            'stremtv-us:3ABNProclaimNetwork.us': ('3ABN Proclaim! Network', '3ABN.Proclaim.Network.us2'),
+            'stremtv-us:ABCNewsLive.us': ('ABC News Live', 'ABC.News.Live.us2'),
+            'stremtv-us:ACCNetwork.us': ('ACC Network', 'ACC.Network.us2'),
+            'stremtv-us:AMGTV.us': ('AMG TV', 'AMG.TV.us2'),
+            'stremtv-us:AXSTV.us': ('AXS TV', 'AXS.TV.us2'),
+            'stremtv-us:AmericasTestKitchen.us': ("America's Test Kitchen", 'America’s.Test.Kitchen.us2'),
+            'stremtv-us:BYUTV.us': ('BYU TV', 'BYU-TV.us2'),
+            'stremtv-us:BilliardTV.us': ('Billiard TV', 'Billiard.TV.us2'),
+            'stremtv-us:BizTV.us': ('Biz TV', 'Biz.TV.us2'),
+            'stremtv-us:Boomerang.us': ('Boomerang', 'Boomerang.us2'),
+            'stremtv-us:CBSSportsHQ.us': ('CBS Sports HQ', 'CBS.Sports.HQ.us2'),
+            'stremtv-us:CNN.us': ('CNN HD', 'CNN.HD.us2'),
+            'stremtv-us:CNNInternational.us': ('CNN International', 'CNN.International.us2'),
+            'stremtv-us:CatholicFaithNetwork.us': ('CFN Catholic Faith Network', 'CFN.CATHOLIC.FAITH.NETWORK.us2'),
+            'stremtv-us:Charge.us': ('Charge!', 'CHARGE!.us2'),
+            'stremtv-us:Comet.us': ('Comet', 'Comet.us2'),
+            'stremtv-us:CourtTV.us': ('Court TV', 'Court.TV.us2'),
+            'stremtv-us:Create.us': ('Create', 'Create.us2'),
+            'stremtv-us:DangerTV.us': ('DangerTV', 'DangerTV.us2'),
+            'stremtv-us:DareToDreamNetwork.us': ('3ABN Dare To Dream Network', '3ABN.Dare.to.Dream.Network.us2'),
+            'stremtv-us:DaystarTVEspanol.us': ('Daystar Español', 'Daystar.Español.us2'),
+            'stremtv-us:DraftKingsNetwork.us': ('DraftKings Network', 'DraftKings.Network.us2'),
+            'stremtv-us:ESPN.us': ('ESPN HD', 'ESPN.HD.us2'),
+            'stremtv-us:ESPN2.us': ('ESPN 2 HD', 'ESPN2.HD.us2'),
+            'stremtv-us:ESPN8TheOcho.us': ('ESPN8 The Ocho', 'ESPN8.The.Ocho.us2'),
+            'stremtv-us:ESPNU.us': ('ESPNU HD', 'ESPNU.HD.us2'),
+            'stremtv-us:EstrellaNews.us': ('Estrella News', 'ESTRELLA.NEWS.us2'),
+            'stremtv-us:EstrellaTV.us': ('Estrella TV', 'Estrella.TV.us2'),
+            'stremtv-us:FloRacing.us': ('FloRacing 24/7', 'FloRacing.24/7.us2'),
+            'stremtv-us:FoxSoul.us': ('Fox Soul', 'FOX.SOUL.us2'),
+            'stremtv-us:FreeSpeechTV.us': ('Free Speech TV', 'Free.Speech.TV.us2'),
+            'stremtv-us:FunRoads.us': ('Fun Roads', 'Fun.Roads.us2'),
+            'stremtv-us:GreatEntertainmentTelevision.us': ('Great Entertainment Television', 'Great.Entertainment.Television.us2'),
+            'stremtv-us:HSN2.us': ('HSN2', 'HSN2.us2'),
+            'stremtv-us:ImpactNetwork.us': ('Impact Network', 'Impact.Network.us2'),
+            'stremtv-us:JBS.us': ('JBS', 'JBS.us2'),
+            'stremtv-us:KartoonChannel.us': ('Kartoon Channel', 'Kartoon.Channel.us2'),
+            'stremtv-us:MBCAmerica.us': ('MBC America', 'MBC.America.us2'),
+            'stremtv-us:MTVLive.us': ('MTV Live', 'MTVLIVE.us2'),
+            'stremtv-us:MagellanTVNow.us': ('MagellanTV Now', 'MagellanTV.Now.us2'),
+            'stremtv-us:NBCComedyVault.us': ('NBC Comedy Vault', 'NBC.Comedy.Vault.us2'),
+            'stremtv-us:NBCSportsNOW.us': ('NBC Sports NOW', 'NBC.Sports.Now.us2'),
+            'stremtv-us:NRBTV.us': ('NRB TV', 'NRB.TV.us2'),
+            'stremtv-us:News12Bronx.us': ('News12 Bronx', 'News.12.Bronx.us2'),
+            'stremtv-us:News12Brooklyn.us': ('News12 Brooklyn', 'News.12.Brooklyn.us2'),
+            'stremtv-us:News12HudsonValley.us': ('News12 Hudson Valley', 'News.12.Hudson.Valley.us2'),
+            'stremtv-us:News12LongIsland.us': ('News12 Long Island', 'News.12.Long.Island.us2'),
+            'stremtv-us:Nicktoons.us': ('Nicktoons', 'Nicktoons.us2'),
+            'stremtv-us:Nosey.us': ('Nosey', 'Nosey.us2'),
+            'stremtv-us:OutdoorChannel.us': ('Outdoor Channel HD', 'Outdoor.Channel.HD.us2'),
+            'stremtv-us:PositivTV.us': ('Positiv TV', 'Positiv.TV.us2'),
+            'stremtv-us:PursuitChannel.us': ('Pursuit Channel', 'Pursuit.Channel.us2'),
+            'stremtv-us:QVC2.us': ('QVC 2', 'QVC2.us2'),
+            'stremtv-us:QVC3.us': ('QVC 3', 'QVC3.us2'),
+            'stremtv-us:RightNowTV.us': ('RightNow TV', 'Right.Now.TV.us2'),
+            'stremtv-us:SUMtvLatino.us': ('SUMtv Latino', 'SUMtv.Latino.us2'),
+            'stremtv-us:SalemNewsChannel.us': ('Salem News Channel', 'Salem.News.Channel.us2'),
+            'stremtv-us:ScrippsNews.us': ('Scripps News', 'Scripps.News.us2'),
+            'stremtv-us:ShopLC.us': ('Shop LC', 'Shop.LC.us2'),
+            'stremtv-us:SportsGrid.us': ('SportsGrid', 'SportsGrid.us2'),
+            'stremtv-us:StoriesbyAMC.us': ('Stories by AMC', 'Stories.by.AMC.us2'),
+            'stremtv-us:TCT.us': ('TCT', 'TCT.us2'),
+            'stremtv-us:TUDN.us': ('TUDN', 'TUDN.us2'),
+            'stremtv-us:Tastemade.us': ('Tastemade', 'Tastemade.us2'),
+            'stremtv-us:TastemadeTravel.us': ('Tastemade Travel', 'Tastemade.Travel.us2'),
+            'stremtv-us:TheNest.us': ('The Nest', 'The.Nest.us2'),
+            'stremtv-us:TheWordNetwork.us': ('The Word Network', 'The.Word.Network.us2'),
+            'stremtv-us:UniversalCrime.us': ('Universal Crime', 'Universal.Crime.us2'),
+            'stremtv-us:UnivisionTlnovelas.us': ('Univision Tlnovelas', 'Univision.TL.Novelas.us2'),
+            'stremtv-us:Vevo2K.us': ('Vevo 2K', 'Vevo.2K.us2'),
+            'stremtv-us:Vevo70s.us': ("Vevo '70s", 'Vevo.70s.us2'),
+            'stremtv-us:Vevo80s.us': ("Vevo '80s", 'Vevo.80s.us2'),
+            'stremtv-us:Vevo90s.us': ("Vevo '90s", 'Vevo.90s.us2'),
+            'stremtv-us:VevoCountry.us': ('Vevo Country', 'Vevo.Country.us2'),
+            'stremtv-us:VevoHipHop.us': ('Vevo Hip Hop', 'Vevo.Hip-Hop.us2'),
+            'stremtv-us:VevoLatino.us': ('Vevo Latino', 'Vevo.Latino.us2'),
+            'stremtv-us:VevoPop.us': ('Vevo Pop', 'Vevo.Pop.us2'),
+            'stremtv-us:WorldChannel.us': ('World Channel', 'WORLD.Channel.us2'),
+            'stremtv-us:XploreTV.us': ('Xplore', 'Xplore.us2'),
+            'stremtv-us:YesNetwork.us': ('Yes Network', 'Yes.Network.us2'),
+        })
+        _w175r_existing_ids = {pid for ids in candidates.values() for pid in ids}
+        _w175r_aliases = {}
+        for (_w175r_addon, _w175r_cid), (_w175r_row, _w175r_key) in list(targets.items()):
+            if _w175r_addon != 'com.stremtv.us':
+                continue
+            _w175r_name = str(_w175r_row.get('name') or '').strip()
+            # The catalog labels CW.us as KCRA; using the CW guide is wrong.
+            if _w175r_cid == 'stremtv-us:CW.us' and 'KCRA' in _w175r_name.upper():
+                targets.pop((_w175r_addon, _w175r_cid), None)
+                continue
+            _w175r_option = _w175r_known.get(_w175r_cid)
+            if not _w175r_option:
+                continue
+            _w175r_audited_name, _w175r_guide_id = _w175r_option
+            if _w174a_key(_w175r_name + '.us') != _w174a_key(_w175r_audited_name + '.us'):
+                continue
+            if _w175r_guide_id not in _w175r_existing_ids:
+                continue
+            if len(candidates.get(_w174a_key(_w175r_guide_id), ())) != 1:
+                continue
+            _w175r_aliases[(_w175r_addon, _w175r_cid)] = _w175r_guide_id
+        logger.info('W121ZEPG175R_ALIASES resolved=%s', len(_w175r_aliases))
+        wanted = {unique[k] for (_, k) in targets.values() if k in unique}
+        wanted.update(_w175r_aliases.values())
+        if not wanted:
+            return []
+        schedules = await __import__('asyncio').to_thread(
+            _w174a_parse_xmltv, resp.content, wanted, start, end
+        )
+        providers = {}
+        for (addon_id, cid), (r, key) in targets.items():
+            epg_id = unique.get(key) or _w175r_aliases.get((addon_id, cid))
+            programs = schedules.get(epg_id, []) if epg_id else []
+            if not programs:
+                continue
+            prov = providers.setdefault(addon_id, {'addonId':addon_id, 'addonName': 'StreamTV US' if addon_id == 'com.stremtv.us' else 'Free-TV', 'catalogId': 'epg174a', 'catalogName':'Verified XMLTV', 'channels':[], 'error':None, 'truncated':False})
+            prov['channels'].append({'id':cid,'name':str(r.get('name') or cid), 'type':'tv', 'logo':str(r.get('logo') or r.get('poster') or ''), 'programs': programs})
+        try:
+            await _w176d_augment(client, cache, targets, providers, start, end)
+        except Exception as exc:
+            logger.warning('W121ZEPG176D_SAFE_FALLBACK type=%s',type(exc).__name__)
+        logger.info('W121ZEPG174D_RESOLVED sources=%s programs=%s', len(providers), sum(len(c['programs']) for p in providers.values() for c in p['channels']))
+        return list(providers.values())
+    except Exception as exc:
+        logger.warning('W121ZEPG174D_FALLBACK type=%s', type(exc).__name__)
+        return []
+
 @api_router.get("/content/live-tv/epg/{epg_date}")
 async def get_live_tv_epg(
     epg_date: str,
@@ -24643,7 +25904,7 @@ async def get_live_tv_epg(
     _w121zod33_lock_ttl = 300
 
     _w121zod33_cache_key = (
-        "privastream:w121zlive121:epg:v2:"
+        "privastream:w121zlive121:epg:v6:"
         + str(current_user.id)
         + ":"
         + raw_date
@@ -25155,6 +26416,13 @@ async def get_live_tv_epg(
         *(fetch_catalog(target) for target in targets)
     )
 
+    # W121ZEPG174D: bounded source-independent XMLTV lookup; no playback probes.
+    _w174d_task = asyncio.create_task(
+        _w174a_build_source_independent_epg(
+            current_user, adult_enabled, raw_date, tz
+        )
+    )
+
     # ==================== V788T15P USA TV NATIVE EPG ====================
     #
     # Six exact audit-proven mappings only.
@@ -25447,6 +26715,15 @@ async def get_live_tv_epg(
             # Exact V788T16N-T/U audited endpoint mappings.
             # Existing 17 mappings remain unchanged.
             usa_tv_endpoint_map = {
+                # W121ZEPG170S STAGED ONLY: Buzzr / USA TV Next,
+                # exact 4-stream endpoint fingerprint verified in 170P.
+                "ustv-6ef7f0e8-ff2a-4df3-9069-db53ace915a1": {
+                    "source": "pluto_xmltv_buzzr",
+                    "sourceId": "5812bfbe4ced4f7b601b12e6",
+                    "provenanceMode": "endpoint",
+                    "streamCount": 4,
+                    "streamSetSha256": "F2A84B667A2C93DBA0794F603AC28F1328F7E2589D1FCAB905685208E9F18CA6",
+                },
                 "ustv-b1b573fd-f41b-4b86-b857-a4340d586a1f": {
                     "source": "tvguide",
                     "sourceId": "9200004889",
@@ -26230,6 +27507,161 @@ async def get_live_tv_epg(
                 for addon_channel_id
                 in usa_tv_valid
             }
+            # W121ZEPG170S_BUZZR_XMLTV_STAGED_CANDIDATE
+            # Independent of the separately installed Pluto addon.
+            # Only attaches guide entries when the exact USA TV Next
+            # Buzzr stream set passes the existing provenance lock.
+            _w121z170s_id = "ustv-6ef7f0e8-ff2a-4df3-9069-db53ace915a1"
+            if _w121z170s_id in usa_tv_valid:
+                try:
+                    import gzip as _w121z170s_gzip
+                    import io as _w121z170s_io
+                    import xml.etree.ElementTree as _w121z170s_et
+                    from datetime import timezone as _w121z170s_timezone
+                    from zoneinfo import ZoneInfo as _w121z170s_ZoneInfo
+
+                    _w121z170s_tz = _w121z170s_timezone.utc
+                    try:
+                        if tz:
+                            _w121z170s_tz = _w121z170s_ZoneInfo(tz)
+                    except Exception:
+                        pass
+                    _w121z170s_day = parsed_date.date()
+                    _w121z170s_pid = "5812bfbe4ced4f7b601b12e6"
+                    _w121z170s_cache = globals().setdefault(
+                        "_w121z170s_buzzr_xmltv_cache", {}
+                    )
+                    _w121z170s_cache_key = (
+                        raw_date, str(_w121z170s_tz)
+                    )
+                    _w121z170s_now = __import__("time").monotonic()
+                    _w121z170s_existing = _w121z170s_cache.get(
+                        _w121z170s_cache_key
+                    )
+                    if (
+                        isinstance(_w121z170s_existing, tuple)
+                        and _w121z170s_existing[0] > _w121z170s_now
+                    ):
+                        _w121z170s_rows = list(_w121z170s_existing[1])
+                    else:
+                        _w121z170s_rows = []
+                        _w121z170s_url = (
+                            "https://i.mjh.nz/PlutoTV/all.xml.gz"
+                        )
+                        async with httpx.AsyncClient(
+                            timeout=httpx.Timeout(25.0, connect=10.0),
+                            follow_redirects=True,
+                            trust_env=False,
+                        ) as _w121z170s_client:
+                            _w121z170s_response = await _w121z170s_client.get(
+                                _w121z170s_url
+                            )
+                            _w121z170s_response.raise_for_status()
+                            if len(_w121z170s_response.content) > 20000000:
+                                raise ValueError("buzzr_xmltv_size_limit")
+
+                        def _w121z170s_parse_time(value):
+                            for fmt in (
+                                "%Y%m%d%H%M%S %z",
+                                "%Y%m%d%H%M %z",
+                                "%Y%m%d%H%M%S",
+                                "%Y%m%d%H%M",
+                            ):
+                                try:
+                                    dt = datetime.strptime(value.strip(), fmt)
+                                    if dt.tzinfo is None:
+                                        dt = dt.replace(
+                                            tzinfo=_w121z170s_timezone.utc
+                                        )
+                                    return dt
+                                except (ValueError, AttributeError):
+                                    continue
+                            return None
+
+                        with _w121z170s_gzip.GzipFile(
+                            fileobj=_w121z170s_io.BytesIO(
+                                _w121z170s_response.content
+                            )
+                        ) as _w121z170s_stream:
+                            _w121z170s_root = None
+                            for _event, _element in _w121z170s_et.iterparse(
+                                _w121z170s_stream, events=("start", "end")
+                            ):
+                                if _w121z170s_root is None and _event == "start":
+                                    _w121z170s_root = _element
+                                if _event != "end":
+                                    continue
+                                if _element.tag == "programme":
+                                    _w121z170s_channel = str(
+                                        _element.get("channel") or ""
+                                    )
+                                    if _w121z170s_pid in _w121z170s_channel:
+                                        _w121z170s_start = _w121z170s_parse_time(
+                                            str(_element.get("start") or "")
+                                        )
+                                        _w121z170s_end = _w121z170s_parse_time(
+                                            str(_element.get("stop") or "")
+                                        )
+                                        _w121z170s_title = (
+                                            _element.findtext("title") or ""
+                                        ).strip()
+                                        if (
+                                            _w121z170s_start
+                                            and _w121z170s_end
+                                            and _w121z170s_end > _w121z170s_start
+                                            and _w121z170s_title
+                                            and _w121z170s_end.astimezone(
+                                                _w121z170s_tz
+                                            ).date() >= _w121z170s_day
+                                            and _w121z170s_start.astimezone(
+                                                _w121z170s_tz
+                                            ).date() <= _w121z170s_day
+                                        ):
+                                            _w121z170s_rows.append({
+                                                "id": (
+                                                    "buzzr:"
+                                                    + _w121z170s_start.isoformat()
+                                                ),
+                                                "title": _w121z170s_title,
+                                                "released": None,
+                                                "startTime": _w121z170s_start.isoformat(),
+                                                "endTime": _w121z170s_end.isoformat(),
+                                                "overview": None,
+                                                "thumbnail": None,
+                                                "runtime": int(
+                                                    (_w121z170s_end - _w121z170s_start)
+                                                    .total_seconds() // 60
+                                                ),
+                                                "releaseInfo": None,
+                                            })
+                                    _element.clear()
+                                    if _w121z170s_root is not None:
+                                        _w121z170s_root.clear()
+                                elif _element.tag == "channel":
+                                    _element.clear()
+                                    if _w121z170s_root is not None:
+                                        _w121z170s_root.clear()
+                        _w121z170s_rows.sort(
+                            key=lambda item: item["startTime"]
+                        )
+                        # Cache only complete, non-empty results, 15 minutes.
+                        if _w121z170s_rows:
+                            _w121z170s_cache.clear()
+                            _w121z170s_cache[_w121z170s_cache_key] = (
+                                _w121z170s_now + 900,
+                                tuple(_w121z170s_rows),
+                            )
+                    programs_by_addon_id[_w121z170s_id] = _w121z170s_rows
+                    logger.info(
+                        "W121ZEPG170S_BUZZR_XMLTV programs=%s",
+                        len(_w121z170s_rows),
+                    )
+                except Exception as _w121z170s_exc:
+                    logger.warning(
+                        "W121ZEPG170S_BUZZR_XMLTV_ERROR type=%s",
+                        type(_w121z170s_exc).__name__,
+                    )
+            # /W121ZEPG170S_BUZZR_XMLTV_STAGED_CANDIDATE
 
             # ----------------------------------------------------
             # TV Guide JSON:
@@ -28252,6 +29684,31 @@ async def get_live_tv_epg(
         )
 
     # ================== /V788G PLUTO NATIVE EPG ==================
+
+    # W121ZEPG174D: preserve any previously established provider schedules.
+    # Only append new exact-identity programs where legacy programs are absent.
+    _w174d_providers = []
+    try:
+        _w174d_providers = await asyncio.wait_for(_w174d_task, timeout=38.0)
+        _w174d_existing = {
+            (str(_p.get('addonId') or ''), str(_c.get('id') or ''))
+            for _p in providers if isinstance(_p, dict)
+            for _c in (_p.get('channels') or []) if isinstance(_c, dict)
+            and bool(_c.get('programs'))
+        }
+        for _p in _w174d_providers:
+            _p['channels'] = [
+                _c for _c in (_p.get('channels') or [])
+                if (str(_p.get('addonId') or ''), str(_c.get('id') or ''))
+                not in _w174d_existing
+            ]
+            if _p['channels']:
+                providers.append(_p)
+    except Exception as _w174d_exc:
+        _w174d_task.cancel()
+        logger.warning('W121ZEPG174D_TIMEOUT_OR_ERROR type=%s', type(_w174d_exc).__name__)
+    if not _w174d_providers:
+        _w121zod33_cache_ttl = min(_w121zod33_cache_ttl, 300)
 
     # ================== W121ZLIVE121 COMPACT DEVICE EPG ==================
     #
@@ -35228,6 +36685,169 @@ async def _v707_content_ratings(
 
 
 # V707_DETAILS_RATINGS_END
+
+
+
+# W121ZLIVE175B START — first-party read-only Free-TV Stremio addon.
+# Public playlist only, no user credentials and no source-provider proxy.
+_W175B_PUBLIC_PLAYLIST = 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8'
+_W175B_SNAPSHOT_PATH = '/app/backend/free-tv-snapshot.m3u8'
+_W175B_TTL_SECONDS = 4 * 3600
+_W175B_MAX_M3U_BYTES = 2 * 1024 * 1024
+_W175B_CACHE = {'rows': [], 'by_id': {}, 'until': 0, 'source': 'unloaded'}
+_W175B_LOCK = asyncio.Lock()
+
+
+def _w175b_parse_m3u(body):
+    """Parse fixed public M3U, rejecting executable/non-web URL schemes."""
+    import hashlib as _hash
+    import re as _re
+    from urllib.parse import urlsplit as _split
+    if not isinstance(body, bytes) or len(body) > _W175B_MAX_M3U_BYTES:
+        raise ValueError('FREE_TV_PLAYLIST_SIZE_INVALID')
+    lines = body.decode('utf-8-sig', errors='replace').splitlines()
+    if not lines or not lines[0].strip().startswith('#EXTM3U'):
+        raise ValueError('FREE_TV_M3U_HEADER_INVALID')
+    rows = []
+    seen_urls = set()
+    pending = None
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or len(line) > 8192:
+            continue
+        if line.startswith('#EXTINF:'):
+            name = line.split(',', 1)[1].strip() if ',' in line else ''
+            attrs = dict(_re.findall(r'([\w-]+)="([^"]*)"', line.split(',',1)[0]))
+            pending = {'name': name[:180], 'tvgId': attrs.get('tvg-id','')[:180],
+                       'logo': attrs.get('tvg-logo','')[:2048], 'group': attrs.get('group-title','')[:180]}
+            continue
+        if line.startswith('#') or not pending:
+            continue
+        try:
+            url = _split(line)
+            allowed = url.scheme.lower() in ('http', 'https') and bool(url.hostname)
+            allowed &= url.username is None and url.password is None
+            allowed &= len(line) <= 8192
+            # Do not ingest localhost or loopback streams.
+            allowed &= (url.hostname or '').lower() not in ('localhost', '127.0.0.1', '::1')
+        except ValueError:
+            allowed = False
+        if not allowed or line in seen_urls or not pending['name']:
+            pending = None
+            continue
+        seen_urls.add(line)
+        logo = pending['logo']
+        try:
+            parsed_logo = _split(logo)
+            if parsed_logo.scheme.lower() != 'https' or not parsed_logo.hostname:
+                logo = ''
+        except ValueError:
+            logo = ''
+        cid = 'ftv_' + _hash.sha256(line.encode('utf-8')).hexdigest()[:24]
+        rows.append({**pending, 'id': cid, 'url': line, 'logo': logo})
+        pending = None
+        if len(rows) > 6000:
+            raise ValueError('FREE_TV_CATALOG_TOO_LARGE')
+    if len(rows) < 100:
+        raise ValueError('FREE_TV_CATALOG_UNEXPECTEDLY_SMALL')
+    return rows
+
+
+async def _w175b_free_tv_rows():
+    """Four-hour refresh; never replace a known-good catalog with a failed fetch."""
+    import time as _time
+    now = _time.monotonic()
+    if _W175B_CACHE['rows'] and now < _W175B_CACHE['until']:
+        return _W175B_CACHE['rows']
+    async with _W175B_LOCK:
+        if _W175B_CACHE['rows'] and _time.monotonic() < _W175B_CACHE['until']:
+            return _W175B_CACHE['rows']
+        rows = None
+        source = 'upstream'
+        try:
+            http = await get_shared_http_client()
+            r = await _v726_safe_addon_get(http, _W175B_PUBLIC_PLAYLIST, timeout=18.0)
+            if r.status_code == 200:
+                rows = await asyncio.to_thread(_w175b_parse_m3u, r.content)
+        except Exception as exc:
+            logger.info('W175B_UPSTREAM_FAILED type=%s', type(exc).__name__)
+        if rows is None:
+            if _W175B_CACHE['rows']:
+                _W175B_CACHE['until'] = _time.monotonic() + 15 * 60
+                return _W175B_CACHE['rows']
+            source = 'bundled-snapshot'
+            try:
+                def read_snapshot():
+                    with open(_W175B_SNAPSHOT_PATH, 'rb') as f:
+                        return _w175b_parse_m3u(f.read())
+                rows = await asyncio.to_thread(read_snapshot)
+            except Exception as exc:
+                logger.warning('W175B_SNAPSHOT_FAILED type=%s', type(exc).__name__)
+                rows = []
+        if rows:
+            _W175B_CACHE.update(rows=rows, by_id={r['id']:r for r in rows},
+                                until=_time.monotonic()+_W175B_TTL_SECONDS, source=source)
+            logger.info('W175B_FREE_TV_CATALOG count=%s source=%s', len(rows), source)
+        return _W175B_CACHE['rows']
+
+
+def _w175b_meta(row):
+    return {'id': row['id'], 'type':'tv', 'name':row['name'],
+            'poster':row['logo'], 'background':row['logo'], 'logo':row['logo'],
+            'description':'Free-TV live channel' + ((' | tvg-id: ' + row['tvgId']) if row['tvgId'] else ''),
+            'genres':[row['group']] if row['group'] else ['Live TV']}
+
+
+@api_router.get('/free-tv/manifest.json')
+async def w175b_free_tv_manifest():
+    return {
+      'id':'community.privastream.free-tv-direct', 'version':'1.0.0',
+      'name':'Free-TV Direct (Privastream)',
+      'description':'Direct Free-TV public playlist catalog — no NexoTV dependency',
+      'types':['tv'], 'resources':['catalog','stream','meta'],
+      'catalogs':[{'type':'tv','id':'iptv_channels','name':'Free-TV Direct',
+                   'extra':[{'name':'skip'},{'name':'search'},{'name':'genre'}]}],
+      'idPrefixes':['ftv_']}
+
+
+@api_router.get('/free-tv/catalog/tv/iptv_channels.json')
+@api_router.get('/free-tv/catalog/tv/iptv_channels/{extra}.json')
+async def w175b_free_tv_catalog(extra: str = ''):
+    import re as _re
+    rows = await _w175b_free_tv_rows()
+    if not rows:
+        # Empty is honest: do not emit synthetic error stations.
+        return {'metas': []}
+    match = _re.search(r'(?:^|/)skip=(\d+)(?:/|$)',extra)
+    skip = max(0, min(int(match.group(1)), 6000)) if match else 0
+    # Fixed 400-item provider pages to match Privastream inventory limit.
+    return {'metas': [_w175b_meta(x) for x in rows[skip:skip+400]]}
+
+
+@api_router.get('/free-tv/stream/tv/{channel_id}.json')
+async def w175b_free_tv_stream(channel_id: str):
+    await _w175b_free_tv_rows()
+    row = _W175B_CACHE['by_id'].get(channel_id)
+    return {'streams':[{'name':'Free-TV Direct','title':row['name']+' — Live',
+                         'url':row['url'], 'behaviorHints':{'notWebReady':True}}]} if row else {'streams':[]}
+
+
+@api_router.get('/free-tv/meta/tv/{channel_id}.json')
+async def w175b_free_tv_meta(channel_id: str):
+    await _w175b_free_tv_rows()
+    row = _W175B_CACHE['by_id'].get(channel_id)
+    return {'meta':_w175b_meta(row) if row else None}
+
+
+@api_router.get('/free-tv/check.json')
+async def w175b_free_tv_check():
+    rows = await _w175b_free_tv_rows()
+    return {'catalog':'Free-TV Direct', 'channels':len(rows),
+            'withGuideId':sum(bool(r['tvgId']) for r in rows),
+            'withLogo':sum(bool(r['logo']) for r in rows),
+            'source':_W175B_CACHE['source'],
+            'status':'ready' if rows else 'unavailable'}
+# W121ZLIVE175B END
 
 
 app.include_router(api_router)
